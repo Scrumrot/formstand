@@ -2,9 +2,21 @@ import { type ReactElement, useState } from "react";
 import { ArrayForm } from "./forms/ArrayForm";
 import { AsyncForm } from "./forms/AsyncForm";
 import { BasicForm } from "./forms/BasicForm";
+import { ConditionalForm } from "./forms/ConditionalForm";
+import { InvoiceForm } from "./forms/InvoiceForm";
 import { NestedForm } from "./forms/NestedForm";
+import { ServerErrorsForm } from "./forms/ServerErrorsForm";
+import { WizardForm } from "./forms/WizardForm";
 
-type TabKey = "basic" | "nested" | "array" | "async";
+type TabKey =
+  | "basic"
+  | "nested"
+  | "array"
+  | "async"
+  | "wizard"
+  | "conditional"
+  | "invoice"
+  | "server";
 
 type Tab = Readonly<{
   key: TabKey;
@@ -16,7 +28,19 @@ const TABS: readonly Tab[] = [
   { key: "basic", label: "Basic + modes", render: () => <BasicForm /> },
   { key: "nested", label: "Nested + submit", render: () => <NestedForm /> },
   { key: "array", label: "Field array", render: () => <ArrayForm /> },
-  { key: "async", label: "Async validation", render: () => <AsyncForm /> },
+  { key: "async", label: "Async", render: () => <AsyncForm /> },
+  { key: "wizard", label: "Wizard", render: () => <WizardForm /> },
+  {
+    key: "conditional",
+    label: "Conditional",
+    render: () => <ConditionalForm />,
+  },
+  { key: "invoice", label: "Invoice", render: () => <InvoiceForm /> },
+  {
+    key: "server",
+    label: "Server errors",
+    render: () => <ServerErrorsForm />,
+  },
 ];
 
 export const App = () => {
@@ -30,7 +54,7 @@ export const App = () => {
         Local playground. Edit <code>src/</code> in the parent folder and
         changes hot-reload here.
       </p>
-      <div className="tabs">
+      <div className="tabs" style={{ flexWrap: "wrap" }}>
         {TABS.map((tab) => (
           <button
             key={tab.key}
