@@ -20,3 +20,8 @@ export { useForm } from "./react/useForm";
 export { useFormState } from "./react/useFormState";
 export { useField } from "./react/useField";
 export type { UseFieldReturn, FieldFormApi } from "./react/useField";
+export { useFieldArray } from "./react/useFieldArray";
+export type {
+  UseFieldArrayReturn,
+  FieldArrayFormApi,
+} from "./react/useFieldArray";

@@ -1,9 +1,17 @@
 import type { z } from "zod";
 import type { StoreApi } from "zustand/vanilla";
 import { createStore } from "zustand/vanilla";
+import {
+  type IndexMapper,
+  insertAt,
+  moveFromTo,
+  reKeyByArrayPath,
+  removeAt,
+  swapIndices,
+} from "./array";
 import { type ValidationMode } from "./mode";
-import { setAtPath } from "./path";
-import type { ErrorMap, FormState } from "./types";
+import { getAtPath, setAtPath } from "./path";
+import type { BoolMap, ErrorMap, FormState } from "./types";
 import {
   type FieldValidationResult,
   type ValidationResult,
@@ -45,10 +53,17 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
     onValid: SubmitHandler<TSchema>,
     onInvalid?: InvalidSubmitHandler,
   ) => Promise<void>;
+  arrayPush: (path: string, item: unknown) => void;
+  arrayRemove: (path: string, index: number) => void;
+  arrayInsert: (path: string, index: number, item: unknown) => void;
+  arrayMove: (path: string, from: number, to: number) => void;
+  arraySwap: (path: string, a: number, b: number) => void;
 }>;
 
 const emptyErrors = {} as ErrorMap;
-const emptyBools = {} as Readonly<Record<string, boolean>>;
+const emptyBools = {} as BoolMap;
+
+const identityMapper: IndexMapper = (n) => n;
 
 const omitKey = (errors: ErrorMap, key: string): ErrorMap =>
   Object.fromEntries(Object.entries(errors).filter(([k]) => k !== key));
@@ -100,6 +115,25 @@ export const createForm = <TSchema extends z.ZodType>(
     return errorsAtPath.length === 0
       ? { kind: "valid" }
       : { kind: "invalid", errors: errorsAtPath };
+  };
+
+  const applyArrayOp = (
+    path: string,
+    nextArray: (current: readonly unknown[]) => readonly unknown[],
+    mapper: IndexMapper,
+  ): void => {
+    store.setState((state) => {
+      const current = getAtPath(state.values, path);
+      const arr: readonly unknown[] = Array.isArray(current) ? current : [];
+      return {
+        ...state,
+        values: setAtPath(state.values, path, nextArray(arr)),
+        errors: reKeyByArrayPath(state.errors, path, mapper),
+        touched: reKeyByArrayPath(state.touched, path, mapper),
+        dirty: reKeyByArrayPath(state.dirty, path, mapper),
+        isValidating: reKeyByArrayPath(state.isValidating, path, mapper),
+      };
+    });
   };
 
   const submit = async (
@@ -173,5 +207,34 @@ export const createForm = <TSchema extends z.ZodType>(
     validate,
     validateField,
     submit,
+    arrayPush: (path, item) =>
+      applyArrayOp(path, (arr) => [...arr, item], identityMapper),
+    arrayRemove: (path, index) =>
+      applyArrayOp(
+        path,
+        (arr) => [...arr.slice(0, index), ...arr.slice(index + 1)],
+        removeAt(index),
+      ),
+    arrayInsert: (path, index, item) =>
+      applyArrayOp(
+        path,
+        (arr) => [...arr.slice(0, index), item, ...arr.slice(index)],
+        insertAt(index),
+      ),
+    arrayMove: (path, from, to) =>
+      applyArrayOp(
+        path,
+        (arr) => {
+          const without = [...arr.slice(0, from), ...arr.slice(from + 1)];
+          return [...without.slice(0, to), arr[from], ...without.slice(to)];
+        },
+        moveFromTo(from, to),
+      ),
+    arraySwap: (path, a, b) =>
+      applyArrayOp(
+        path,
+        (arr) => arr.map((v, i) => (i === a ? arr[b] : i === b ? arr[a] : v)),
+        swapIndices(a, b),
+      ),
   });
 };
