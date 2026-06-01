@@ -5,11 +5,15 @@ import { AutosaveForm } from "./forms/AutosaveForm";
 import { BasicForm } from "./forms/BasicForm";
 import { ConditionalForm } from "./forms/ConditionalForm";
 import { DependentFieldsForm } from "./forms/DependentFieldsForm";
+import { DerivedFieldForm } from "./forms/DerivedFieldForm";
+import { FileUploadForm } from "./forms/FileUploadForm";
 import { InvoiceForm } from "./forms/InvoiceForm";
 import { NestedArraysForm } from "./forms/NestedArraysForm";
 import { NestedForm } from "./forms/NestedForm";
 import { OptimisticForm } from "./forms/OptimisticForm";
+import { PerfBenchmarkForm } from "./forms/PerfBenchmarkForm";
 import { ServerErrorsForm } from "./forms/ServerErrorsForm";
+import { TagInputForm } from "./forms/TagInputForm";
 import { WizardForm } from "./forms/WizardForm";
 
 type TabKey =
@@ -24,7 +28,11 @@ type TabKey =
   | "server"
   | "autosave"
   | "dependent"
-  | "optimistic";
+  | "optimistic"
+  | "file"
+  | "derived"
+  | "tag"
+  | "perf";
 
 type Tab = Readonly<{
   key: TabKey;
@@ -65,6 +73,10 @@ const TABS: readonly Tab[] = [
     label: "Optimistic",
     render: () => <OptimisticForm />,
   },
+  { key: "file", label: "File upload", render: () => <FileUploadForm /> },
+  { key: "derived", label: "Derived", render: () => <DerivedFieldForm /> },
+  { key: "tag", label: "Tags", render: () => <TagInputForm /> },
+  { key: "perf", label: "Perf", render: () => <PerfBenchmarkForm /> },
 ];
 
 export const App = () => {
