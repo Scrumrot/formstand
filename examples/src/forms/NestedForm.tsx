@@ -19,10 +19,10 @@ export const NestedForm = () => {
     },
   });
 
-  const name = useField<string>(form, "name");
-  const street = useField<string>(form, "address.street");
-  const city = useField<string>(form, "address.city");
-  const zip = useField<string>(form, "address.zip");
+  const name = useField(form, "name");
+  const street = useField(form, "address.street");
+  const city = useField(form, "address.city");
+  const zip = useField(form, "address.zip");
   const isSubmitting = useFormState(form, (s) => s.isSubmitting);
 
   return (

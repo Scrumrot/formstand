@@ -101,14 +101,18 @@ export const useFieldArray = <TItem = unknown>(
   form: FieldArrayFormApi,
   path: string,
 ): UseFieldArrayReturn<TItem> => {
-  const items = useStore(form.store, (state) => {
-    const value = getAtPath(state.values, path);
-    return (Array.isArray(value) ? value : []) as readonly TItem[];
-  });
-  const error = useStore(
+  const slice = useStore(
     form.store,
-    useShallow((state) => state.errors[path]),
+    useShallow((state) => {
+      const value = getAtPath(state.values, path);
+      return {
+        items: (Array.isArray(value) ? value : []) as readonly TItem[],
+        error: state.errors[path],
+      };
+    }),
   );
+  const items = slice.items;
+  const error = slice.error;
 
   const idStateRef = useRef<IdState | null>(null);
   if (idStateRef.current === null) {

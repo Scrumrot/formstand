@@ -119,7 +119,7 @@ export const InvoiceForm = () => {
     },
     mode: "onBlur",
   });
-  const customer = useField<string>(form, "customer");
+  const customer = useField(form, "customer");
   const lineItems = useFieldArray<LineItem>(form, "lineItems");
 
   return (

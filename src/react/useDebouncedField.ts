@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { shouldValidateOn } from "../core/mode";
 import {
   type FieldFormApi,
   type UseFieldReturn,
@@ -18,16 +19,29 @@ export const useDebouncedField = <TValue = unknown>(
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { delayMs } = options;
 
-  useEffect(
-    () => () => {
-      if (timerRef.current !== null) clearTimeout(timerRef.current);
-    },
-    [],
-  );
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [form, path]);
 
   const setValue = useCallback(
     (value: TValue) => {
       form.setValue(path, value);
+      const state = form.store.getState();
+      if (
+        !shouldValidateOn(
+          "change",
+          state.mode,
+          state.reValidateMode,
+          state.submitCount > 0,
+        )
+      ) {
+        return;
+      }
       if (timerRef.current !== null) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
         void form.validateFieldAsync(path);
@@ -37,8 +51,5 @@ export const useDebouncedField = <TValue = unknown>(
     [form, path, delayMs],
   );
 
-  return useMemo(
-    () => ({ ...field, setValue }),
-    [field, setValue],
-  );
+  return useMemo(() => ({ ...field, setValue }), [field, setValue]);
 };

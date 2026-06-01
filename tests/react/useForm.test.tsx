@@ -60,7 +60,7 @@ describe("useField", () => {
   it("reads value, error, touched, dirty for the given path", () => {
     const { result } = renderHook(() => {
       const form = useTestForm();
-      const name = useField<string>(form, "name");
+      const name = useField(form, "name");
       return { form, name };
     });
 
@@ -73,7 +73,7 @@ describe("useField", () => {
   it("setValue updates the field value", () => {
     const { result } = renderHook(() => {
       const form = useTestForm();
-      return { form, name: useField<string>(form, "name") };
+      return { form, name: useField(form, "name") };
     });
 
     act(() => {
@@ -86,7 +86,7 @@ describe("useField", () => {
   it("onBlur marks touched and runs field validation", () => {
     const { result } = renderHook(() => {
       const form = useTestForm();
-      return { form, name: useField<string>(form, "name") };
+      return { form, name: useField(form, "name") };
     });
 
     act(() => {
@@ -104,7 +104,7 @@ describe("useField", () => {
   it("reads nested paths", () => {
     const { result } = renderHook(() => {
       const form = useTestForm();
-      return { form, city: useField<string>(form, "address.city") };
+      return { form, city: useField(form, "address.city") };
     });
 
     expect(result.current.city.value).toBe("NYC");
@@ -118,8 +118,8 @@ describe("useField", () => {
   it("returns a stable object when its own slice has not changed", () => {
     const { result } = renderHook(() => {
       const form = useTestForm();
-      const name = useField<string>(form, "name");
-      const age = useField<number>(form, "age");
+      const name = useField(form, "name");
+      const age = useField(form, "age");
       return { form, name, age };
     });
 

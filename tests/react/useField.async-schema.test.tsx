@@ -18,7 +18,7 @@ describe("useField with an async-refine schema", () => {
   it("onBlur does not throw and surfaces async errors", async () => {
     const { result } = renderHook(() => {
       const form = useForm(asyncSchema, { initialValues: { username: "taken" } });
-      return { form, u: useField<string>(form, "username") };
+      return { form, u: useField(form, "username") };
     });
 
     act(() => {
@@ -36,7 +36,7 @@ describe("useField with an async-refine schema", () => {
         initialValues: { username: "ok" },
         mode: "onChange",
       });
-      return { form, u: useField<string>(form, "username") };
+      return { form, u: useField(form, "username") };
     });
 
     act(() => {
@@ -51,7 +51,7 @@ describe("useField with an async-refine schema", () => {
   it("setError / clearError work on async-schema fields", () => {
     const { result } = renderHook(() => {
       const form = useForm(asyncSchema, { initialValues: { username: "ok" } });
-      return { form, u: useField<string>(form, "username") };
+      return { form, u: useField(form, "username") };
     });
 
     act(() => {

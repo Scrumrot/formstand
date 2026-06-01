@@ -1,6 +1,11 @@
 import type { z } from "zod";
 import type { StoreApi } from "zustand/vanilla";
 import { createStore } from "zustand/vanilla";
+
+export type ReadonlyStoreApi<T> = Pick<
+  StoreApi<T>,
+  "getState" | "getInitialState" | "subscribe"
+>;
 import {
   type IndexMapper,
   insertAt,
@@ -9,6 +14,7 @@ import {
   removeAt,
   swapIndices,
 } from "./array";
+import type { FieldPath, FieldValue } from "./fieldPath";
 import type { ValidationMode } from "./mode";
 import { getAtPath, setAtPath } from "./path";
 import type { BoolMap, ErrorMap, FormState } from "./types";
@@ -33,7 +39,7 @@ export type InvalidSubmitHandler = (errors: ErrorMap) => void;
 
 export type Form<TSchema extends z.ZodType> = Readonly<{
   schema: TSchema;
-  store: StoreApi<FormState<z.input<TSchema>>>;
+  store: ReadonlyStoreApi<FormState<z.input<TSchema>>>;
   getState: () => FormState<z.input<TSchema>>;
   subscribe: (
     listener: (
@@ -41,6 +47,9 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
       prev: FormState<z.input<TSchema>>,
     ) => void,
   ) => () => void;
+  getField: <P extends FieldPath<z.input<TSchema>>>(
+    path: P,
+  ) => FieldValue<z.input<TSchema>, P>;
   setValue: (path: string, value: unknown) => void;
   setValues: (next: z.input<TSchema>) => void;
   setTouched: (path: string, touched?: boolean) => void;
@@ -61,6 +70,7 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
   validateFields: (paths: readonly string[]) => boolean;
   validateAsync: () => Promise<ValidationResult<z.output<TSchema>>>;
   validateFieldAsync: (path: string) => Promise<FieldValidationResult>;
+  validateFieldsAsync: (paths: readonly string[]) => Promise<boolean>;
   submit: (
     onValid: SubmitHandler<TSchema>,
     onInvalid?: InvalidSubmitHandler,
@@ -188,6 +198,28 @@ export const createForm = <TSchema extends z.ZodType>(
     return result;
   };
 
+  const validateFieldsAsync = async (
+    paths: readonly string[],
+  ): Promise<boolean> => {
+    const result = await validateAsync(schema, store.getState().values);
+    const fullErrors = result.kind === "invalid" ? result.errors : emptyErrors;
+    const pathSet = new Set(paths);
+    store.setState((state) => {
+      const next = paths.reduce<Record<string, readonly string[]>>(
+        (acc, path) => {
+          const errs = fullErrors[path] ?? [];
+          if (errs.length === 0) return acc;
+          return { ...acc, [path]: errs };
+        },
+        Object.fromEntries(
+          Object.entries(state.errors).filter(([k]) => !pathSet.has(k)),
+        ),
+      );
+      return { ...state, errors: next };
+    });
+    return paths.every((p) => (fullErrors[p] ?? []).length === 0);
+  };
+
   const validateFieldAsync = async (
     path: string,
   ): Promise<FieldValidationResult> => {
@@ -228,6 +260,13 @@ export const createForm = <TSchema extends z.ZodType>(
   ): void => {
     store.setState((state) => {
       const current = getAtPath(state.values, path);
+      if (current !== undefined && !Array.isArray(current)) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[zustand-forms] array op on "${path}" but the value at that path is not an array (got ${typeof current}). Operation skipped.`,
+        );
+        return state;
+      }
       const arr: readonly unknown[] = Array.isArray(current) ? current : [];
       return {
         ...state,
@@ -271,6 +310,11 @@ export const createForm = <TSchema extends z.ZodType>(
     store,
     getState: store.getState,
     subscribe: store.subscribe,
+    getField: <P extends FieldPath<z.input<TSchema>>>(path: P) =>
+      getAtPath(store.getState().values, path) as FieldValue<
+        z.input<TSchema>,
+        P
+      >,
     setValue: (path, value) =>
       store.setState((state) => ({
         ...state,
@@ -333,6 +377,7 @@ export const createForm = <TSchema extends z.ZodType>(
     validateFields,
     validateAsync: validateAsyncOnForm,
     validateFieldAsync,
+    validateFieldsAsync,
     submit,
     arrayPush: (path, item) =>
       applyArrayOp(path, (arr) => [...arr, item], identityMapper),

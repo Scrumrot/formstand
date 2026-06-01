@@ -8,7 +8,10 @@ import type { FieldPath, FieldValue } from "../core/fieldPath";
 import { shouldValidateOn } from "../core/mode";
 import { getAtPath } from "../core/path";
 import type { FormState } from "../core/types";
-import type { FieldValidationResult } from "../core/validation";
+import {
+  type FieldValidationResult,
+  isAsyncRequiredError,
+} from "../core/validation";
 
 type ReadonlyStore<T> = Pick<
   StoreApi<T>,
@@ -56,7 +59,7 @@ export function useField<
   path: P,
 ): UseFieldReturn<FieldValue<z.input<TSchema>, P>>;
 export function useField<TValue = unknown>(
-  form: FieldFormApi,
+  form: FieldFormApi & { readonly schema?: undefined },
   path: string,
 ): UseFieldReturn<TValue>;
 export function useField<TValue = unknown>(
@@ -79,8 +82,12 @@ export function useField<TValue = unknown>(
   const triggerValidate = useCallback(() => {
     try {
       form.validateField(path);
-    } catch {
-      void form.validateFieldAsync(path);
+    } catch (e) {
+      if (isAsyncRequiredError(e)) {
+        void form.validateFieldAsync(path);
+        return;
+      }
+      throw e;
     }
   }, [form, path]);
 

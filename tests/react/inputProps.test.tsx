@@ -15,7 +15,7 @@ describe("textInputProps", () => {
     const schema = z.object({ name: z.string() });
     const { result } = renderHook(() => {
       const form = useForm(schema, { initialValues: { name: "" } });
-      return { form, name: useField<string>(form, "name") };
+      return { form, name: useField(form, "name") };
     });
 
     const props = textInputProps(result.current.name);
@@ -35,7 +35,7 @@ describe("numberInputProps", () => {
   it("renders empty for undefined and parses on change", () => {
     const { result } = renderHook(() => {
       const form = useForm(schema, { initialValues: { age: undefined } });
-      return { form, age: useField<number | undefined>(form, "age") };
+      return { form, age: useField(form, "age") };
     });
 
     let props = numberInputProps(result.current.age);
@@ -56,7 +56,7 @@ describe("numberInputProps", () => {
   it("clears to undefined on empty string", () => {
     const { result } = renderHook(() => {
       const form = useForm(schema, { initialValues: { age: 30 } });
-      return { form, age: useField<number | undefined>(form, "age") };
+      return { form, age: useField(form, "age") };
     });
 
     const props = numberInputProps(result.current.age);
@@ -71,7 +71,7 @@ describe("numberInputProps", () => {
   it("rejects NaN input by setting undefined", () => {
     const { result } = renderHook(() => {
       const form = useForm(schema, { initialValues: { age: 1 } });
-      return { form, age: useField<number | undefined>(form, "age") };
+      return { form, age: useField(form, "age") };
     });
 
     const props = numberInputProps(result.current.age);
@@ -89,7 +89,7 @@ describe("checkboxProps", () => {
     const schema = z.object({ ok: z.boolean() });
     const { result } = renderHook(() => {
       const form = useForm(schema, { initialValues: { ok: false } });
-      return { form, ok: useField<boolean>(form, "ok") };
+      return { form, ok: useField(form, "ok") };
     });
     let props = checkboxProps(result.current.ok);
     expect(props.checked).toBe(false);
@@ -109,7 +109,7 @@ describe("selectProps", () => {
     type Theme = "light" | "dark";
     const { result } = renderHook(() => {
       const form = useForm(schema, { initialValues: { theme: "light" } });
-      return { form, theme: useField<Theme>(form, "theme") };
+      return { form, theme: useField(form, "theme") };
     });
     const props = selectProps(result.current.theme);
     expect(props.value).toBe("light");

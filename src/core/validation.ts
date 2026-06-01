@@ -42,3 +42,7 @@ export const validateAsync = async <TSchema extends z.ZodType>(
     ? { kind: "valid", data: result.data }
     : { kind: "invalid", errors: flattenIssues(result.error.issues) };
 };
+
+export const isAsyncRequiredError = (e: unknown): boolean =>
+  e instanceof Error &&
+  /Encountered Promise during synchronous parse/i.test(e.message);

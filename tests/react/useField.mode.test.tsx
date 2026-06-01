@@ -10,7 +10,7 @@ describe("useField + validation mode", () => {
   it("default (onBlur) validates on blur but not on change", () => {
     const { result } = renderHook(() => {
       const form = useForm(schema, { initialValues: { name: "ok" } });
-      return { form, name: useField<string>(form, "name") };
+      return { form, name: useField(form, "name") };
     });
 
     act(() => {
@@ -30,7 +30,7 @@ describe("useField + validation mode", () => {
         initialValues: { name: "ok" },
         mode: "onChange",
       });
-      return { form, name: useField<string>(form, "name") };
+      return { form, name: useField(form, "name") };
     });
 
     act(() => {
@@ -45,7 +45,7 @@ describe("useField + validation mode", () => {
         initialValues: { name: "ok" },
         mode: "onSubmit",
       });
-      return { form, name: useField<string>(form, "name") };
+      return { form, name: useField(form, "name") };
     });
 
     act(() => {
@@ -65,7 +65,7 @@ describe("useField + validation mode", () => {
         initialValues: { name: "x" },
         mode: "onSubmit",
       });
-      return { form, name: useField<string>(form, "name") };
+      return { form, name: useField(form, "name") };
     });
 
     await act(async () => {

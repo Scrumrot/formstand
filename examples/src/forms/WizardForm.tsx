@@ -81,8 +81,8 @@ export const WizardForm = () => {
     }
   };
 
-  const newsletter = useField<boolean>(form, "newsletter");
-  const theme = useField<"light" | "dark">(form, "theme");
+  const newsletter = useField(form, "newsletter");
+  const theme = useField(form, "theme");
 
   return (
     <form
