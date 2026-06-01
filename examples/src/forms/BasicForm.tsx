@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { useField, useForm, type ValidationMode } from "zustand-forms";
+import { useField, useForm, useFormState, type ValidationMode } from "zustand-forms";
 import { z } from "zod";
 import { StateDump } from "./StateDump";
 
@@ -8,26 +7,22 @@ const schema = z.object({
   email: z.string().email("must be a valid email"),
 });
 
-type Mode = Extract<ValidationMode, "onChange" | "onBlur" | "onSubmit">;
-
 export const BasicForm = () => {
-  const [mode, setMode] = useState<Mode>("onBlur");
   const form = useForm(schema, {
     initialValues: { name: "", email: "" },
-    mode,
   });
+  const mode = useFormState(form, (s) => s.mode);
   const name = useField<string>(form, "name");
   const email = useField<string>(form, "email");
+  const isSubmitting = useFormState(form, (s) => s.isSubmitting);
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        void form.submit(
-          (data) => {
-            window.alert(`submit ok: ${JSON.stringify(data)}`);
-          },
-        );
+        void form.submit((data) => {
+          window.alert(`submit ok: ${JSON.stringify(data)}`);
+        });
       }}
     >
       <div className="field">
@@ -35,7 +30,7 @@ export const BasicForm = () => {
         <select
           id="mode-select"
           value={mode}
-          onChange={(e) => setMode(e.target.value as Mode)}
+          onChange={(e) => form.setMode(e.target.value as ValidationMode)}
         >
           <option value="onBlur">onBlur (default)</option>
           <option value="onChange">onChange</option>
@@ -51,7 +46,7 @@ export const BasicForm = () => {
           onChange={(e) => name.setValue(e.target.value)}
           onBlur={name.onBlur}
         />
-        <span className="error">{name.error?.[0] ?? " "}</span>
+        <span className="error">{name.error?.[0] ?? " "}</span>
       </div>
 
       <div className="field">
@@ -62,12 +57,12 @@ export const BasicForm = () => {
           onChange={(e) => email.setValue(e.target.value)}
           onBlur={email.onBlur}
         />
-        <span className="error">{email.error?.[0] ?? " "}</span>
+        <span className="error">{email.error?.[0] ?? " "}</span>
       </div>
 
       <div className="row">
-        <button className="primary" type="submit">
-          Submit
+        <button className="primary" type="submit" disabled={isSubmitting}>
+          {isSubmitting ? "Submitting..." : "Submit"}
         </button>
         <button className="secondary" type="button" onClick={() => form.reset()}>
           Reset

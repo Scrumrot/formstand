@@ -1,4 +1,4 @@
-export type ValidationMode = "onChange" | "onBlur" | "onSubmit" | "all";
+export type ValidationMode = "onChange" | "onBlur" | "onSubmit";
 
 export type ValidationTrigger = "change" | "blur";
 
@@ -11,7 +11,6 @@ export const shouldValidateOn = (
   const effective = submitAttempted ? reValidateMode : mode;
   switch (effective) {
     case "onChange":
-    case "all":
       return true;
     case "onBlur":
       return trigger === "blur";

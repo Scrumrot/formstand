@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import type { StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand/react";
 import { useShallow } from "zustand/react/shallow";
-import { type ValidationMode, shouldValidateOn } from "../core/mode";
+import { shouldValidateOn } from "../core/mode";
 import { getAtPath } from "../core/path";
 import type { FormState } from "../core/types";
 import type { FieldValidationResult } from "../core/validation";
@@ -14,10 +14,10 @@ type ReadonlyStore<T> = Pick<
 
 export type FieldFormApi = Readonly<{
   store: ReadonlyStore<FormState<unknown>>;
-  mode: ValidationMode;
-  reValidateMode: ValidationMode;
   setValue: (path: string, value: unknown) => void;
   setTouched: (path: string, touched?: boolean) => void;
+  setError: (path: string, errors: readonly string[]) => void;
+  clearErrors: (path?: string) => void;
   validateField: (path: string) => FieldValidationResult;
   validateFieldAsync: (path: string) => Promise<FieldValidationResult>;
 }>;
@@ -30,6 +30,8 @@ export type UseFieldReturn<TValue> = Readonly<{
   isValidating: boolean;
   setValue: (value: TValue) => void;
   setTouched: (touched?: boolean) => void;
+  setError: (errors: readonly string[]) => void;
+  clearError: () => void;
   validate: () => FieldValidationResult;
   validateAsync: () => Promise<FieldValidationResult>;
   onBlur: () => void;
@@ -60,21 +62,44 @@ export const useField = <TValue = unknown>(
     ),
   );
 
+  const triggerValidate = useCallback(() => {
+    try {
+      form.validateField(path);
+    } catch {
+      void form.validateFieldAsync(path);
+    }
+  }, [form, path]);
+
   const setValue = useCallback(
     (value: TValue) => {
       form.setValue(path, value);
-      const submitAttempted = form.store.getState().submitCount > 0;
+      const state = form.store.getState();
       if (
-        shouldValidateOn("change", form.mode, form.reValidateMode, submitAttempted)
+        shouldValidateOn(
+          "change",
+          state.mode,
+          state.reValidateMode,
+          state.submitCount > 0,
+        )
       ) {
-        form.validateField(path);
+        triggerValidate();
       }
     },
-    [form, path],
+    [form, path, triggerValidate],
   );
 
   const setTouched = useCallback(
     (touched?: boolean) => form.setTouched(path, touched),
+    [form, path],
+  );
+
+  const setError = useCallback(
+    (errors: readonly string[]) => form.setError(path, errors),
+    [form, path],
+  );
+
+  const clearError = useCallback(
+    () => form.clearErrors(path),
     [form, path],
   );
 
@@ -87,16 +112,30 @@ export const useField = <TValue = unknown>(
 
   const onBlur = useCallback(() => {
     form.setTouched(path, true);
-    const submitAttempted = form.store.getState().submitCount > 0;
+    const state = form.store.getState();
     if (
-      shouldValidateOn("blur", form.mode, form.reValidateMode, submitAttempted)
+      shouldValidateOn(
+        "blur",
+        state.mode,
+        state.reValidateMode,
+        state.submitCount > 0,
+      )
     ) {
-      form.validateField(path);
+      triggerValidate();
     }
-  }, [form, path]);
+  }, [form, path, triggerValidate]);
 
   return useMemo(
-    () => ({ ...slice, setValue, setTouched, validate, validateAsync, onBlur }),
-    [slice, setValue, setTouched, validate, validateAsync, onBlur],
+    () => ({
+      ...slice,
+      setValue,
+      setTouched,
+      setError,
+      clearError,
+      validate,
+      validateAsync,
+      onBlur,
+    }),
+    [slice, setValue, setTouched, setError, clearError, validate, validateAsync, onBlur],
   );
 };

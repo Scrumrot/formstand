@@ -1,4 +1,4 @@
-import { useField, useForm } from "zustand-forms";
+import { useField, useForm, useFormState } from "zustand-forms";
 import { z } from "zod";
 import { StateDump } from "./StateDump";
 
@@ -20,9 +20,10 @@ const schema = z.object({
 export const AsyncForm = () => {
   const form = useForm(schema, {
     initialValues: { username: "" },
-    mode: "onBlur",
+    mode: "onChange",
   });
   const username = useField<string>(form, "username");
+  const isSubmitting = useFormState(form, (s) => s.isSubmitting);
 
   return (
     <form
@@ -43,10 +44,7 @@ export const AsyncForm = () => {
         <label>Username</label>
         <input
           value={username.value ?? ""}
-          onChange={(e) => {
-            username.setValue(e.target.value);
-            void username.validateAsync();
-          }}
+          onChange={(e) => username.setValue(e.target.value)}
           onBlur={username.onBlur}
           autoComplete="off"
         />
@@ -57,8 +55,8 @@ export const AsyncForm = () => {
         </span>
       </div>
 
-      <button className="primary" type="submit" disabled={form.getState().isSubmitting}>
-        Sign up
+      <button className="primary" type="submit" disabled={isSubmitting}>
+        {isSubmitting ? "Signing up..." : "Sign up"}
       </button>
 
       <StateDump form={form} />

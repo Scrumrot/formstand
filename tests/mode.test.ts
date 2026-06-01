@@ -17,11 +17,6 @@ describe("shouldValidateOn", () => {
     expect(shouldValidateOn("blur", "onChange", "onChange", false)).toBe(true);
   });
 
-  it("all mode validates on both change and blur", () => {
-    expect(shouldValidateOn("change", "all", "onChange", false)).toBe(true);
-    expect(shouldValidateOn("blur", "all", "onChange", false)).toBe(true);
-  });
-
   it("uses reValidateMode after a submit attempt", () => {
     expect(shouldValidateOn("change", "onSubmit", "onChange", true)).toBe(true);
     expect(shouldValidateOn("change", "onSubmit", "onSubmit", true)).toBe(false);

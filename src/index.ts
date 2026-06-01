@@ -17,7 +17,7 @@ export { shouldValidateOn } from "./core/mode";
 export type { ValidationMode, ValidationTrigger } from "./core/mode";
 
 export { useForm } from "./react/useForm";
-export { useFormState } from "./react/useFormState";
+export { useFormState, useFormStateShallow } from "./react/useFormState";
 export { useField } from "./react/useField";
 export type { UseFieldReturn, FieldFormApi } from "./react/useField";
 export { useFieldArray } from "./react/useFieldArray";

@@ -9,7 +9,7 @@ import {
   removeAt,
   swapIndices,
 } from "./array";
-import { type ValidationMode } from "./mode";
+import type { ValidationMode } from "./mode";
 import { getAtPath, setAtPath } from "./path";
 import type { BoolMap, ErrorMap, FormState } from "./types";
 import {
@@ -34,8 +34,6 @@ export type InvalidSubmitHandler = (errors: ErrorMap) => void;
 export type Form<TSchema extends z.ZodType> = Readonly<{
   schema: TSchema;
   store: StoreApi<FormState<z.input<TSchema>>>;
-  mode: ValidationMode;
-  reValidateMode: ValidationMode;
   getState: () => FormState<z.input<TSchema>>;
   subscribe: (
     listener: (
@@ -47,6 +45,11 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
   setValues: (next: z.input<TSchema>) => void;
   setTouched: (path: string, touched?: boolean) => void;
   setSubmitting: (value: boolean) => void;
+  setMode: (mode: ValidationMode) => void;
+  setReValidateMode: (mode: ValidationMode) => void;
+  setError: (path: string, errors: readonly string[]) => void;
+  setErrors: (errors: ErrorMap) => void;
+  clearErrors: (path?: string) => void;
   reset: (nextInitial?: z.input<TSchema>) => void;
   validate: () => ValidationResult<z.output<TSchema>>;
   validateField: (path: string) => FieldValidationResult;
@@ -82,8 +85,9 @@ export const createForm = <TSchema extends z.ZodType>(
 ): Form<TSchema> => {
   type Values = z.input<TSchema>;
 
-  const mode: ValidationMode = options.mode ?? "onBlur";
-  const reValidateMode: ValidationMode = options.reValidateMode ?? "onChange";
+  const initialMode: ValidationMode = options.mode ?? "onBlur";
+  const initialReValidateMode: ValidationMode =
+    options.reValidateMode ?? "onChange";
 
   const initial: FormState<Values> = {
     values: options.initialValues,
@@ -94,6 +98,8 @@ export const createForm = <TSchema extends z.ZodType>(
     isSubmitting: false,
     submitCount: 0,
     isValidating: emptyBools,
+    mode: initialMode,
+    reValidateMode: initialReValidateMode,
   };
 
   const store = createStore<FormState<Values>>(() => initial);
@@ -216,21 +222,16 @@ export const createForm = <TSchema extends z.ZodType>(
       submitCount: state.submitCount + 1,
     }));
 
-    const result = await validateAsync(schema, store.getState().values);
-
-    if (result.kind === "invalid") {
-      store.setState((state) => ({
-        ...state,
-        errors: result.errors,
-        isSubmitting: false,
-      }));
-      onInvalid?.(result.errors);
-      return;
-    }
-
-    store.setState((state) => ({ ...state, errors: emptyErrors }));
-
     try {
+      const result = await validateAsync(schema, store.getState().values);
+
+      if (result.kind === "invalid") {
+        store.setState((state) => ({ ...state, errors: result.errors }));
+        onInvalid?.(result.errors);
+        return;
+      }
+
+      store.setState((state) => ({ ...state, errors: emptyErrors }));
       await onValid(result.data);
     } finally {
       store.setState((state) => ({ ...state, isSubmitting: false }));
@@ -240,8 +241,6 @@ export const createForm = <TSchema extends z.ZodType>(
   return Object.freeze({
     schema,
     store,
-    mode,
-    reValidateMode,
     getState: store.getState,
     subscribe: store.subscribe,
     setValue: (path, value) =>
@@ -259,6 +258,25 @@ export const createForm = <TSchema extends z.ZodType>(
       })),
     setSubmitting: (value) =>
       store.setState((state) => ({ ...state, isSubmitting: value })),
+    setMode: (mode) => store.setState((state) => ({ ...state, mode })),
+    setReValidateMode: (reValidateMode) =>
+      store.setState((state) => ({ ...state, reValidateMode })),
+    setError: (path, errors) =>
+      store.setState((state) => ({
+        ...state,
+        errors:
+          errors.length === 0
+            ? omitKey(state.errors, path)
+            : { ...state.errors, [path]: errors },
+      })),
+    setErrors: (errors) =>
+      store.setState((state) => ({ ...state, errors })),
+    clearErrors: (path) =>
+      store.setState((state) => ({
+        ...state,
+        errors:
+          path === undefined ? emptyErrors : omitKey(state.errors, path),
+      })),
     reset: (nextInitial) =>
       store.setState((state) => {
         const init = nextInitial ?? state.initialValues;
