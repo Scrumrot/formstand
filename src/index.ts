@@ -8,7 +8,7 @@ export type {
 export type { FormState, ErrorMap, BoolMap } from "./core/types";
 export { parsePath, getAtPath, setAtPath } from "./core/path";
 export type { PathSegment } from "./core/path";
-export { flattenIssues, validateSync } from "./core/validation";
+export { flattenIssues, validateSync, validateAsync } from "./core/validation";
 export type {
   ValidationResult,
   FieldValidationResult,

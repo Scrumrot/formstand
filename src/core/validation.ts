@@ -32,3 +32,13 @@ export const validateSync = <TSchema extends z.ZodType>(
     ? { kind: "valid", data: result.data }
     : { kind: "invalid", errors: flattenIssues(result.error.issues) };
 };
+
+export const validateAsync = async <TSchema extends z.ZodType>(
+  schema: TSchema,
+  values: z.input<TSchema>,
+): Promise<ValidationResult<z.output<TSchema>>> => {
+  const result = await schema.safeParseAsync(values);
+  return result.success
+    ? { kind: "valid", data: result.data }
+    : { kind: "invalid", errors: flattenIssues(result.error.issues) };
+};

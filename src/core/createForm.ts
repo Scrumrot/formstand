@@ -15,6 +15,7 @@ import type { BoolMap, ErrorMap, FormState } from "./types";
 import {
   type FieldValidationResult,
   type ValidationResult,
+  validateAsync,
   validateSync,
 } from "./validation";
 
@@ -49,6 +50,8 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
   reset: (nextInitial?: z.input<TSchema>) => void;
   validate: () => ValidationResult<z.output<TSchema>>;
   validateField: (path: string) => FieldValidationResult;
+  validateAsync: () => Promise<ValidationResult<z.output<TSchema>>>;
+  validateFieldAsync: (path: string) => Promise<FieldValidationResult>;
   submit: (
     onValid: SubmitHandler<TSchema>,
     onInvalid?: InvalidSubmitHandler,
@@ -65,8 +68,13 @@ const emptyBools = {} as BoolMap;
 
 const identityMapper: IndexMapper = (n) => n;
 
-const omitKey = (errors: ErrorMap, key: string): ErrorMap =>
-  Object.fromEntries(Object.entries(errors).filter(([k]) => k !== key));
+const omitKey = <V>(
+  map: Readonly<Record<string, V>>,
+  key: string,
+): Readonly<Record<string, V>> =>
+  Object.fromEntries(Object.entries(map).filter(([k]) => k !== key));
+
+const FORM_SEQ_KEY = "__form__";
 
 export const createForm = <TSchema extends z.ZodType>(
   schema: TSchema,
@@ -117,6 +125,68 @@ export const createForm = <TSchema extends z.ZodType>(
       : { kind: "invalid", errors: errorsAtPath };
   };
 
+  const sequences = new Map<string, number>();
+
+  const nextSeq = (key: string): number => {
+    const next = (sequences.get(key) ?? 0) + 1;
+    sequences.set(key, next);
+    return next;
+  };
+
+  const validateAsyncOnForm = async (): Promise<
+    ValidationResult<z.output<TSchema>>
+  > => {
+    const seq = nextSeq(FORM_SEQ_KEY);
+    store.setState((state) => ({
+      ...state,
+      isValidating: { ...state.isValidating, [FORM_SEQ_KEY]: true },
+    }));
+
+    const result = await validateAsync(schema, store.getState().values);
+
+    if (sequences.get(FORM_SEQ_KEY) !== seq) return result;
+
+    store.setState((state) => ({
+      ...state,
+      errors: result.kind === "invalid" ? result.errors : emptyErrors,
+      isValidating: omitKey(state.isValidating, FORM_SEQ_KEY),
+    }));
+    return result;
+  };
+
+  const validateFieldAsync = async (
+    path: string,
+  ): Promise<FieldValidationResult> => {
+    const seq = nextSeq(path);
+    store.setState((state) => ({
+      ...state,
+      isValidating: { ...state.isValidating, [path]: true },
+    }));
+
+    const result = await validateAsync(schema, store.getState().values);
+    const errorsAtPath =
+      result.kind === "invalid" ? (result.errors[path] ?? []) : [];
+
+    if (sequences.get(path) !== seq) {
+      return errorsAtPath.length === 0
+        ? { kind: "valid" }
+        : { kind: "invalid", errors: errorsAtPath };
+    }
+
+    store.setState((state) => ({
+      ...state,
+      errors:
+        errorsAtPath.length === 0
+          ? omitKey(state.errors, path)
+          : { ...state.errors, [path]: errorsAtPath },
+      isValidating: omitKey(state.isValidating, path),
+    }));
+
+    return errorsAtPath.length === 0
+      ? { kind: "valid" }
+      : { kind: "invalid", errors: errorsAtPath };
+  };
+
   const applyArrayOp = (
     path: string,
     nextArray: (current: readonly unknown[]) => readonly unknown[],
@@ -146,7 +216,7 @@ export const createForm = <TSchema extends z.ZodType>(
       submitCount: state.submitCount + 1,
     }));
 
-    const result = validateSync(schema, store.getState().values);
+    const result = await validateAsync(schema, store.getState().values);
 
     if (result.kind === "invalid") {
       store.setState((state) => ({
@@ -206,6 +276,8 @@ export const createForm = <TSchema extends z.ZodType>(
       }),
     validate,
     validateField,
+    validateAsync: validateAsyncOnForm,
+    validateFieldAsync,
     submit,
     arrayPush: (path, item) =>
       applyArrayOp(path, (arr) => [...arr, item], identityMapper),

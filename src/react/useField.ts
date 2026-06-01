@@ -19,6 +19,7 @@ export type FieldFormApi = Readonly<{
   setValue: (path: string, value: unknown) => void;
   setTouched: (path: string, touched?: boolean) => void;
   validateField: (path: string) => FieldValidationResult;
+  validateFieldAsync: (path: string) => Promise<FieldValidationResult>;
 }>;
 
 export type UseFieldReturn<TValue> = Readonly<{
@@ -30,6 +31,7 @@ export type UseFieldReturn<TValue> = Readonly<{
   setValue: (value: TValue) => void;
   setTouched: (touched?: boolean) => void;
   validate: () => FieldValidationResult;
+  validateAsync: () => Promise<FieldValidationResult>;
   onBlur: () => void;
 }>;
 
@@ -78,6 +80,11 @@ export const useField = <TValue = unknown>(
 
   const validate = useCallback(() => form.validateField(path), [form, path]);
 
+  const validateAsync = useCallback(
+    () => form.validateFieldAsync(path),
+    [form, path],
+  );
+
   const onBlur = useCallback(() => {
     form.setTouched(path, true);
     const submitAttempted = form.store.getState().submitCount > 0;
@@ -89,7 +96,7 @@ export const useField = <TValue = unknown>(
   }, [form, path]);
 
   return useMemo(
-    () => ({ ...slice, setValue, setTouched, validate, onBlur }),
-    [slice, setValue, setTouched, validate, onBlur],
+    () => ({ ...slice, setValue, setTouched, validate, validateAsync, onBlur }),
+    [slice, setValue, setTouched, validate, validateAsync, onBlur],
   );
 };
