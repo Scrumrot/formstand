@@ -5,6 +5,7 @@ export type {
   SubmitHandler,
   InvalidSubmitHandler,
   ReadonlyStoreApi,
+  FieldSnapshot,
 } from "./core/createForm";
 export type { FormState, ErrorMap, BoolMap } from "./core/types";
 export { parsePath, getAtPath, setAtPath } from "./core/path";

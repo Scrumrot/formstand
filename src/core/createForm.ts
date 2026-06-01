@@ -37,6 +37,24 @@ export type SubmitHandler<TSchema extends z.ZodType> = (
 
 export type InvalidSubmitHandler = (errors: ErrorMap) => void;
 
+export type FieldSnapshot<TValue> = Readonly<{
+  value: TValue;
+  error: readonly string[] | undefined;
+  touched: boolean;
+  dirty: boolean;
+  isValidating: boolean;
+}>;
+
+const shallowFieldEqual = <TValue>(
+  a: FieldSnapshot<TValue>,
+  b: FieldSnapshot<TValue>,
+): boolean =>
+  Object.is(a.value, b.value) &&
+  a.error === b.error &&
+  a.touched === b.touched &&
+  a.dirty === b.dirty &&
+  a.isValidating === b.isValidating;
+
 export type Form<TSchema extends z.ZodType> = Readonly<{
   schema: TSchema;
   store: ReadonlyStoreApi<FormState<z.input<TSchema>>>;
@@ -50,6 +68,10 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
   getField: <P extends FieldPath<z.input<TSchema>>>(
     path: P,
   ) => FieldValue<z.input<TSchema>, P>;
+  watchField: <P extends FieldPath<z.input<TSchema>>>(
+    path: P,
+    listener: (snapshot: FieldSnapshot<FieldValue<z.input<TSchema>, P>>) => void,
+  ) => () => void;
   setValue: (path: string, value: unknown) => void;
   setValues: (next: z.input<TSchema>) => void;
   setTouched: (path: string, touched?: boolean) => void;
@@ -168,6 +190,17 @@ export const createForm = <TSchema extends z.ZodType>(
       ? { kind: "valid" }
       : { kind: "invalid", errors: errorsAtPath };
   };
+
+  const snapshotField = (
+    state: FormState<Values>,
+    path: string,
+  ): FieldSnapshot<unknown> => ({
+    value: getAtPath(state.values, path),
+    error: state.errors[path],
+    touched: state.touched[path] ?? false,
+    dirty: state.dirty[path] ?? false,
+    isValidating: state.isValidating[path] ?? false,
+  });
 
   const sequences = new Map<string, number>();
 
@@ -315,6 +348,21 @@ export const createForm = <TSchema extends z.ZodType>(
         z.input<TSchema>,
         P
       >,
+    watchField: <P extends FieldPath<z.input<TSchema>>>(
+      path: P,
+      listener: (snapshot: FieldSnapshot<FieldValue<z.input<TSchema>, P>>) => void,
+    ) => {
+      const ref: { current: FieldSnapshot<unknown> } = {
+        current: snapshotField(store.getState(), path),
+      };
+      return store.subscribe((state) => {
+        const next = snapshotField(state, path);
+        if (!shallowFieldEqual(ref.current, next)) {
+          ref.current = next;
+          listener(next as FieldSnapshot<FieldValue<z.input<TSchema>, P>>);
+        }
+      });
+    },
     setValue: (path, value) =>
       store.setState((state) => ({
         ...state,

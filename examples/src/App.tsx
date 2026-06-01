@@ -4,6 +4,7 @@ import { AsyncForm } from "./forms/AsyncForm";
 import { BasicForm } from "./forms/BasicForm";
 import { ConditionalForm } from "./forms/ConditionalForm";
 import { InvoiceForm } from "./forms/InvoiceForm";
+import { NestedArraysForm } from "./forms/NestedArraysForm";
 import { NestedForm } from "./forms/NestedForm";
 import { ServerErrorsForm } from "./forms/ServerErrorsForm";
 import { WizardForm } from "./forms/WizardForm";
@@ -16,6 +17,7 @@ type TabKey =
   | "wizard"
   | "conditional"
   | "invoice"
+  | "nestedArrays"
   | "server";
 
 type Tab = Readonly<{
@@ -36,6 +38,11 @@ const TABS: readonly Tab[] = [
     render: () => <ConditionalForm />,
   },
   { key: "invoice", label: "Invoice", render: () => <InvoiceForm /> },
+  {
+    key: "nestedArrays",
+    label: "Nested arrays",
+    render: () => <NestedArraysForm />,
+  },
   {
     key: "server",
     label: "Server errors",

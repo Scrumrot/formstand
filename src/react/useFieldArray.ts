@@ -115,11 +115,13 @@ export const useFieldArray = <TItem = unknown>(
   const error = slice.error;
 
   const idStateRef = useRef<IdState | null>(null);
-  if (idStateRef.current === null) {
-    idStateRef.current = padIds({ ids: [], counter: 0 }, items.length);
-  }
+  const pathRef = useRef<string | null>(null);
 
-  if (items.length > idStateRef.current.ids.length) {
+  if (idStateRef.current === null || pathRef.current !== path) {
+    pathRef.current = path;
+    const counter = idStateRef.current?.counter ?? 0;
+    idStateRef.current = padIds({ ids: [], counter }, items.length);
+  } else if (items.length > idStateRef.current.ids.length) {
     idStateRef.current = padIds(idStateRef.current, items.length);
   } else if (items.length < idStateRef.current.ids.length) {
     idStateRef.current = trimIds(idStateRef.current, items.length);
