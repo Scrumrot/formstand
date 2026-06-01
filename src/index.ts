@@ -24,4 +24,5 @@ export { useFieldArray } from "./react/useFieldArray";
 export type {
   UseFieldArrayReturn,
   FieldArrayFormApi,
+  FieldArrayEntry,
 } from "./react/useFieldArray";
