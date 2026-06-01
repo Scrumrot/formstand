@@ -48,6 +48,7 @@ export type UseFieldReturn<TValue> = Readonly<{
 }>;
 
 type FieldSlice<TValue> = Readonly<{
+  path: string;
   value: TValue;
   error: readonly string[] | undefined;
   touched: boolean;
@@ -79,22 +80,22 @@ export function useField<TValue = unknown>(
   form: FieldFormApi,
   pathArg: string | ((state: FormState<unknown>) => string),
 ): UseFieldReturn<TValue> {
-  const path = useStore(form.store, (state) =>
-    typeof pathArg === "function" ? pathArg(state) : pathArg,
-  );
-
   const slice = useStore(
     form.store,
-    useShallow(
-      (state): FieldSlice<TValue> => ({
-        value: getAtPath(state.values, path) as TValue,
-        error: state.errors[path],
-        touched: state.touched[path] ?? false,
-        dirty: state.dirty[path] ?? false,
-        isValidating: state.isValidating[path] ?? false,
-      }),
-    ),
+    useShallow((state): FieldSlice<TValue> => {
+      const p =
+        typeof pathArg === "function" ? pathArg(state) : pathArg;
+      return {
+        path: p,
+        value: getAtPath(state.values, p) as TValue,
+        error: state.errors[p],
+        touched: state.touched[p] ?? false,
+        dirty: state.dirty[p] ?? false,
+        isValidating: state.isValidating[p] ?? false,
+      };
+    }),
   );
+  const path = slice.path;
 
   const triggerValidate = useCallback(() => {
     try {
@@ -165,7 +166,11 @@ export function useField<TValue = unknown>(
 
   return useMemo(
     () => ({
-      ...slice,
+      value: slice.value,
+      error: slice.error,
+      touched: slice.touched,
+      dirty: slice.dirty,
+      isValidating: slice.isValidating,
       setValue,
       setTouched,
       setError,
