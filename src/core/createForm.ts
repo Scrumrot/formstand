@@ -1,7 +1,12 @@
 import type { z } from "zod";
 import { createStore } from "zustand/vanilla";
 import { setAtPath } from "./path";
-import type { FormState } from "./types";
+import type { ErrorMap, FormState } from "./types";
+import {
+  type FieldValidationResult,
+  type ValidationResult,
+  validateSync,
+} from "./validation";
 
 export type CreateFormOptions<TSchema extends z.ZodType> = Readonly<{
   initialValues: z.input<TSchema>;
@@ -19,10 +24,15 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
   setValue: (path: string, value: unknown) => void;
   setValues: (next: z.input<TSchema>) => void;
   reset: (nextInitial?: z.input<TSchema>) => void;
+  validate: () => ValidationResult<z.output<TSchema>>;
+  validateField: (path: string) => FieldValidationResult;
 }>;
 
-const emptyErrors = {} as Readonly<Record<string, readonly string[]>>;
+const emptyErrors = {} as ErrorMap;
 const emptyBools = {} as Readonly<Record<string, boolean>>;
+
+const omitKey = (errors: ErrorMap, key: string): ErrorMap =>
+  Object.fromEntries(Object.entries(errors).filter(([k]) => k !== key));
 
 export const createForm = <TSchema extends z.ZodType>(
   schema: TSchema,
@@ -42,6 +52,33 @@ export const createForm = <TSchema extends z.ZodType>(
   };
 
   const store = createStore<FormState<Values>>(() => initial);
+
+  const validate = (): ValidationResult<z.output<TSchema>> => {
+    const result = validateSync(schema, store.getState().values);
+    store.setState((state) => ({
+      ...state,
+      errors: result.kind === "invalid" ? result.errors : emptyErrors,
+    }));
+    return result;
+  };
+
+  const validateField = (path: string): FieldValidationResult => {
+    const result = validateSync(schema, store.getState().values);
+    const errorsAtPath =
+      result.kind === "invalid" ? (result.errors[path] ?? []) : [];
+
+    store.setState((state) => ({
+      ...state,
+      errors:
+        errorsAtPath.length === 0
+          ? omitKey(state.errors, path)
+          : { ...state.errors, [path]: errorsAtPath },
+    }));
+
+    return errorsAtPath.length === 0
+      ? { kind: "valid" }
+      : { kind: "invalid", errors: errorsAtPath };
+  };
 
   return Object.freeze({
     schema,
@@ -70,5 +107,7 @@ export const createForm = <TSchema extends z.ZodType>(
           isValidating: emptyBools,
         };
       }),
+    validate,
+    validateField,
   });
 };
