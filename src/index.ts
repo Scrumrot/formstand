@@ -29,6 +29,12 @@ export { useForm } from "./react/useForm";
 export { useFormState, useFormStateShallow } from "./react/useFormState";
 export type { FormStateApi } from "./react/useFormState";
 export { useFormError } from "./react/useFormError";
+export {
+  useIsDirty,
+  useIsValid,
+  useIsSubmitting,
+  useSubmitCount,
+} from "./react/useFormFlags";
 export { useField } from "./react/useField";
 export type {
   UseFieldReturn,

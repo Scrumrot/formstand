@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { type FieldFormApi, useField, useForm } from "zustand-forms";
 import { z } from "zod";
 
@@ -74,16 +75,16 @@ const Benchmark = ({ size, appendResult }: BenchmarkProps) => {
     const before = renderCounterRef.current.count;
     const start = performance.now();
     Array.from({ length: 100 }).forEach((_, i) => {
-      form.setValue(path, `iter-${i}`);
+      flushSync(() => {
+        form.setValue(path, `iter-${i}`);
+      });
     });
     const ms = performance.now() - start;
-    requestAnimationFrame(() => {
-      const rendersInLoop = renderCounterRef.current.count - before - size;
-      appendResult({
-        size,
-        ms: ms / 100,
-        renderCount: rendersInLoop / 100,
-      });
+    const rendersInLoop = renderCounterRef.current.count - before;
+    appendResult({
+      size,
+      ms: ms / 100,
+      renderCount: rendersInLoop / 100,
     });
   };
 

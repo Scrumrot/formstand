@@ -390,7 +390,10 @@ export const createForm = <TSchema extends z.ZodType>(
     });
   };
 
-  const inFlight: { count: number } = { count: 0 };
+  const inFlight: { count: number; baseline: boolean } = {
+    count: 0,
+    baseline: false,
+  };
 
   const submit = async (
     onValid: SubmitHandler<TSchema>,
@@ -398,6 +401,9 @@ export const createForm = <TSchema extends z.ZodType>(
     submitOptions?: SubmitOptions,
   ): Promise<boolean> => {
     if (inFlight.count > 0 && submitOptions?.force !== true) return false;
+    if (inFlight.count === 0) {
+      inFlight.baseline = store.getState().isSubmitting;
+    }
     inFlight.count += 1;
     store.setState((state) => ({
       ...state,
@@ -420,7 +426,8 @@ export const createForm = <TSchema extends z.ZodType>(
     } finally {
       inFlight.count -= 1;
       if (inFlight.count === 0) {
-        store.setState((state) => ({ ...state, isSubmitting: false }));
+        const baseline = inFlight.baseline;
+        store.setState((state) => ({ ...state, isSubmitting: baseline }));
       }
     }
   };
