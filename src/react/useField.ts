@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react";
 import type { StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand/react";
 import { useShallow } from "zustand/react/shallow";
+import { type ValidationMode, shouldValidateOn } from "../core/mode";
 import { getAtPath } from "../core/path";
 import type { FormState } from "../core/types";
 import type { FieldValidationResult } from "../core/validation";
@@ -13,6 +14,8 @@ type ReadonlyStore<T> = Pick<
 
 export type FieldFormApi = Readonly<{
   store: ReadonlyStore<FormState<unknown>>;
+  mode: ValidationMode;
+  reValidateMode: ValidationMode;
   setValue: (path: string, value: unknown) => void;
   setTouched: (path: string, touched?: boolean) => void;
   validateField: (path: string) => FieldValidationResult;
@@ -56,7 +59,15 @@ export const useField = <TValue = unknown>(
   );
 
   const setValue = useCallback(
-    (value: TValue) => form.setValue(path, value),
+    (value: TValue) => {
+      form.setValue(path, value);
+      const submitAttempted = form.store.getState().submitCount > 0;
+      if (
+        shouldValidateOn("change", form.mode, form.reValidateMode, submitAttempted)
+      ) {
+        form.validateField(path);
+      }
+    },
     [form, path],
   );
 
@@ -69,7 +80,12 @@ export const useField = <TValue = unknown>(
 
   const onBlur = useCallback(() => {
     form.setTouched(path, true);
-    form.validateField(path);
+    const submitAttempted = form.store.getState().submitCount > 0;
+    if (
+      shouldValidateOn("blur", form.mode, form.reValidateMode, submitAttempted)
+    ) {
+      form.validateField(path);
+    }
   }, [form, path]);
 
   return useMemo(
