@@ -28,6 +28,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc --noEmit",
+    "examples": "npm --prefix examples run dev",
+    "examples:build": "npm --prefix examples run build",
     "prepublishOnly": "npm run build"
   },
   "peerDependencies": {

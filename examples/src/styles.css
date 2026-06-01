@@ -1,0 +1,125 @@
+* { box-sizing: border-box; }
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  margin: 0;
+  background: #0b0d12;
+  color: #d8dde6;
+}
+.layout {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 24px 96px;
+}
+h1 {
+  font-size: 28px;
+  margin: 0 0 8px;
+}
+.subtitle {
+  color: #8b94a7;
+  margin: 0 0 28px;
+  font-size: 14px;
+}
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #1f2530;
+  margin-bottom: 24px;
+}
+.tab {
+  background: transparent;
+  border: 0;
+  color: #8b94a7;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 14px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab.active {
+  color: #e6ebf5;
+  border-color: #4f8cff;
+}
+.card {
+  background: #11151c;
+  border: 1px solid #1f2530;
+  border-radius: 10px;
+  padding: 24px;
+}
+.field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.field label {
+  font-size: 13px;
+  color: #b0b8c7;
+}
+.field input,
+.field select {
+  background: #0b0d12;
+  border: 1px solid #2a3140;
+  color: #e6ebf5;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+}
+.field input:focus,
+.field select:focus {
+  border-color: #4f8cff;
+}
+.field .error {
+  color: #ff7878;
+  font-size: 12px;
+  min-height: 14px;
+}
+.field .pending {
+  color: #c89b3c;
+  font-size: 12px;
+}
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+button.primary {
+  background: #4f8cff;
+  color: white;
+  border: 0;
+  padding: 10px 18px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+button.primary[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+button.secondary {
+  background: transparent;
+  border: 1px solid #2a3140;
+  color: #d8dde6;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.array-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.state-dump {
+  margin-top: 24px;
+  background: #07090d;
+  border: 1px solid #1f2530;
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: #8b94a7;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
