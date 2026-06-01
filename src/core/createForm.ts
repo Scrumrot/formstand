@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { StoreApi } from "zustand/vanilla";
 import { createStore } from "zustand/vanilla";
 import { setAtPath } from "./path";
 import type { ErrorMap, FormState } from "./types";
@@ -14,6 +15,7 @@ export type CreateFormOptions<TSchema extends z.ZodType> = Readonly<{
 
 export type Form<TSchema extends z.ZodType> = Readonly<{
   schema: TSchema;
+  store: StoreApi<FormState<z.input<TSchema>>>;
   getState: () => FormState<z.input<TSchema>>;
   subscribe: (
     listener: (
@@ -23,6 +25,7 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
   ) => () => void;
   setValue: (path: string, value: unknown) => void;
   setValues: (next: z.input<TSchema>) => void;
+  setTouched: (path: string, touched?: boolean) => void;
   reset: (nextInitial?: z.input<TSchema>) => void;
   validate: () => ValidationResult<z.output<TSchema>>;
   validateField: (path: string) => FieldValidationResult;
@@ -82,6 +85,7 @@ export const createForm = <TSchema extends z.ZodType>(
 
   return Object.freeze({
     schema,
+    store,
     getState: store.getState,
     subscribe: store.subscribe,
     setValue: (path, value) =>
@@ -92,6 +96,11 @@ export const createForm = <TSchema extends z.ZodType>(
       })),
     setValues: (next) =>
       store.setState((state) => ({ ...state, values: next })),
+    setTouched: (path, touched = true) =>
+      store.setState((state) => ({
+        ...state,
+        touched: { ...state.touched, [path]: touched },
+      })),
     reset: (nextInitial) =>
       store.setState((state) => {
         const init = nextInitial ?? state.initialValues;
