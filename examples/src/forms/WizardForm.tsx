@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { type FieldFormApi, useField, useForm } from "zustand-forms";
+import {
+  type FieldFormApi,
+  checkboxProps,
+  numberInputProps,
+  selectProps,
+  textInputProps,
+  useField,
+  useForm,
+} from "zustand-forms";
 import { z } from "zod";
 import { StateDump } from "./StateDump";
 
@@ -26,42 +34,27 @@ type TextFieldProps = Readonly<{
   type?: string;
 }>;
 
-const TextField = ({ form, path, label, type = "text" }: TextFieldProps) => {
+const TextField = ({ form, path, label, type }: TextFieldProps) => {
   const field = useField<string>(form, path);
   return (
     <div className="field">
       <label>{label}</label>
-      <input
-        type={type}
-        value={field.value ?? ""}
-        onChange={(e) => field.setValue(e.target.value)}
-        onBlur={field.onBlur}
-      />
+      <input type={type} {...textInputProps(field)} />
       <span className="error">{field.error?.[0] ?? " "}</span>
     </div>
   );
 };
 
-type NumberFieldProps = Readonly<{
-  form: FieldFormApi;
-  path: string;
-  label: string;
-}>;
-
-const NumberField = ({ form, path, label }: NumberFieldProps) => {
+const NumberField = ({
+  form,
+  path,
+  label,
+}: Readonly<{ form: FieldFormApi; path: string; label: string }>) => {
   const field = useField<number | undefined>(form, path);
   return (
     <div className="field">
       <label>{label}</label>
-      <input
-        type="number"
-        value={field.value ?? ""}
-        onChange={(e) => {
-          const raw = e.target.value;
-          field.setValue(raw === "" ? undefined : Number(raw));
-        }}
-        onBlur={field.onBlur}
-      />
+      <input {...numberInputProps(field)} />
       <span className="error">{field.error?.[0] ?? " "}</span>
     </div>
   );
@@ -82,30 +75,24 @@ export const WizardForm = () => {
   });
   const [step, setStep] = useState<0 | 1 | 2>(0);
 
-  const validateCurrentStep = (): boolean => {
-    const paths = STEP_PATHS[step];
-    const results = paths.map((p) => form.validateField(p));
-    return results.every((r) => r.kind === "valid");
-  };
-
   const handleNext = () => {
-    if (validateCurrentStep()) {
+    if (form.validateFields(STEP_PATHS[step])) {
       setStep((s) => (s + 1) as 0 | 1 | 2);
     }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    void form.submit((data) => {
-      window.alert(`signed up: ${JSON.stringify(data, null, 2)}`);
-    });
   };
 
   const newsletter = useField<boolean>(form, "newsletter");
   const theme = useField<"light" | "dark">(form, "theme");
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        void form.submit((data) => {
+          window.alert(`signed up: ${JSON.stringify(data, null, 2)}`);
+        });
+      }}
+    >
       <div className="subtitle">Step {step + 1} of 3</div>
 
       {step === 0 ? (
@@ -132,22 +119,12 @@ export const WizardForm = () => {
         <>
           <div className="field">
             <label>
-              <input
-                type="checkbox"
-                checked={newsletter.value ?? false}
-                onChange={(e) => newsletter.setValue(e.target.checked)}
-              />
-              {" "}Subscribe to newsletter
+              <input {...checkboxProps(newsletter)} /> Subscribe to newsletter
             </label>
           </div>
           <div className="field">
             <label>Theme</label>
-            <select
-              value={theme.value ?? "light"}
-              onChange={(e) =>
-                theme.setValue(e.target.value as "light" | "dark")
-              }
-            >
+            <select {...selectProps(theme)}>
               <option value="light">Light</option>
               <option value="dark">Dark</option>
             </select>

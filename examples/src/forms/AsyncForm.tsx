@@ -1,4 +1,9 @@
-import { useField, useForm, useFormState } from "zustand-forms";
+import {
+  textInputProps,
+  useDebouncedField,
+  useForm,
+  useFormState,
+} from "zustand-forms";
 import { z } from "zod";
 import { StateDump } from "./StateDump";
 
@@ -22,7 +27,7 @@ export const AsyncForm = () => {
     initialValues: { username: "" },
     mode: "onChange",
   });
-  const username = useField<string>(form, "username");
+  const username = useDebouncedField<string>(form, "username", { delayMs: 300 });
   const isSubmitting = useFormState(form, (s) => s.isSubmitting);
 
   return (
@@ -35,23 +40,20 @@ export const AsyncForm = () => {
       }}
     >
       <p className="subtitle">
-        Reserved names: <code>admin</code>, <code>root</code>, <code>tim</code>.
-        The check takes ~600ms. Race-handling means typing fast cancels stale
-        results.
+        Reserved: <code>admin</code>, <code>root</code>, <code>tim</code>.
+        Server check is ~600ms. Validation debounces 300ms after typing stops;
+        race-handling means only the last request wins.
       </p>
 
       <div className="field">
         <label>Username</label>
-        <input
-          value={username.value ?? ""}
-          onChange={(e) => username.setValue(e.target.value)}
-          onBlur={username.onBlur}
-          autoComplete="off"
-        />
+        <input {...textInputProps(username)} autoComplete="off" />
         <span className="error">
-          {username.isValidating
-            ? <span className="pending">checking...</span>
-            : (username.error?.[0] ?? " ")}
+          {username.isValidating ? (
+            <span className="pending">checking...</span>
+          ) : (
+            (username.error?.[0] ?? " ")
+          )}
         </span>
       </div>
 

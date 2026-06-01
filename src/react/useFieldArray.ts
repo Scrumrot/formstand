@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef } from "react";
 import type { StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand/react";
+import { useShallow } from "zustand/react/shallow";
 import { getAtPath } from "../core/path";
 import type { FormState } from "../core/types";
 
@@ -27,6 +28,7 @@ export type UseFieldArrayReturn<TItem> = Readonly<{
   fields: readonly FieldArrayEntry<TItem>[];
   items: readonly TItem[];
   length: number;
+  error: readonly string[] | undefined;
   push: (item: TItem) => void;
   remove: (index: number) => void;
   insert: (index: number, item: TItem) => void;
@@ -103,6 +105,10 @@ export const useFieldArray = <TItem = unknown>(
     const value = getAtPath(state.values, path);
     return (Array.isArray(value) ? value : []) as readonly TItem[];
   });
+  const error = useStore(
+    form.store,
+    useShallow((state) => state.errors[path]),
+  );
 
   const idStateRef = useRef<IdState | null>(null);
   if (idStateRef.current === null) {
@@ -178,12 +184,13 @@ export const useFieldArray = <TItem = unknown>(
       fields,
       items,
       length: items.length,
+      error,
       push,
       remove,
       insert,
       move,
       swap,
     }),
-    [fields, items, push, remove, insert, move, swap],
+    [fields, items, error, push, remove, insert, move, swap],
   );
 };

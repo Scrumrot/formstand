@@ -1,5 +1,7 @@
 import {
   type FieldFormApi,
+  numberInputProps,
+  textInputProps,
   useField,
   useFieldArray,
   useForm,
@@ -55,9 +57,7 @@ const LineItemRow = ({ form, index, onRemove }: LineItemRowProps) => {
       <div>
         <input
           placeholder="description"
-          value={description.value ?? ""}
-          onChange={(e) => description.setValue(e.target.value)}
-          onBlur={description.onBlur}
+          {...textInputProps(description)}
           style={{ width: "100%" }}
         />
         <div className="error" style={{ marginTop: 4 }}>
@@ -66,14 +66,8 @@ const LineItemRow = ({ form, index, onRemove }: LineItemRowProps) => {
       </div>
       <div>
         <input
-          type="number"
           placeholder="qty"
-          value={quantity.value ?? ""}
-          onChange={(e) => {
-            const raw = e.target.value;
-            quantity.setValue(raw === "" ? undefined : Number(raw));
-          }}
-          onBlur={quantity.onBlur}
+          {...numberInputProps(quantity)}
           style={{ width: "100%" }}
         />
         <div className="error" style={{ marginTop: 4 }}>
@@ -82,15 +76,9 @@ const LineItemRow = ({ form, index, onRemove }: LineItemRowProps) => {
       </div>
       <div>
         <input
-          type="number"
-          step="0.01"
           placeholder="price"
-          value={unitPrice.value ?? ""}
-          onChange={(e) => {
-            const raw = e.target.value;
-            unitPrice.setValue(raw === "" ? undefined : Number(raw));
-          }}
-          onBlur={unitPrice.onBlur}
+          {...numberInputProps(unitPrice)}
+          step="0.01"
           style={{ width: "100%" }}
         />
         <div className="error" style={{ marginTop: 4 }}>
@@ -107,13 +95,13 @@ const LineItemRow = ({ form, index, onRemove }: LineItemRowProps) => {
   );
 };
 
-type InvoiceForm = ReturnType<typeof useForm<typeof schema>>;
-
-const Total = ({ form }: Readonly<{ form: InvoiceForm }>) => {
-  const items = useFormStateShallow(form, (s) => s.values.lineItems);
+const Total = ({ form }: Readonly<{ form: FieldFormApi }>) => {
+  const items = useFormStateShallow(form, (s) => {
+    const list = (s.values as { lineItems?: readonly LineItem[] }).lineItems;
+    return list ?? [];
+  });
   const total = items.reduce(
-    (acc, item) =>
-      acc + (item.quantity ?? 0) * (item.unitPrice ?? 0),
+    (acc, item) => acc + (item.quantity ?? 0) * (item.unitPrice ?? 0),
     0,
   );
   return (
@@ -145,11 +133,7 @@ export const InvoiceForm = () => {
     >
       <div className="field">
         <label>Customer</label>
-        <input
-          value={customer.value ?? ""}
-          onChange={(e) => customer.setValue(e.target.value)}
-          onBlur={customer.onBlur}
-        />
+        <input {...textInputProps(customer)} />
         <span className="error">{customer.error?.[0] ?? " "}</span>
       </div>
 
@@ -165,6 +149,12 @@ export const InvoiceForm = () => {
           onRemove={() => lineItems.remove(index)}
         />
       ))}
+
+      {lineItems.error ? (
+        <div className="error" style={{ marginBottom: 8 }}>
+          {lineItems.error[0]}
+        </div>
+      ) : null}
 
       <div className="row" style={{ marginTop: 8 }}>
         <button

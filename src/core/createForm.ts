@@ -50,9 +50,15 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
   setError: (path: string, errors: readonly string[]) => void;
   setErrors: (errors: ErrorMap) => void;
   clearErrors: (path?: string) => void;
-  reset: (nextInitial?: z.input<TSchema>) => void;
+  updateState: (
+    updater: (
+      state: FormState<z.input<TSchema>>,
+    ) => Partial<FormState<z.input<TSchema>>>,
+  ) => void;
+  reset: (nextInitial?: Partial<z.input<TSchema>>) => void;
   validate: () => ValidationResult<z.output<TSchema>>;
   validateField: (path: string) => FieldValidationResult;
+  validateFields: (paths: readonly string[]) => boolean;
   validateAsync: () => Promise<ValidationResult<z.output<TSchema>>>;
   validateFieldAsync: (path: string) => Promise<FieldValidationResult>;
   submit: (
@@ -111,6 +117,28 @@ export const createForm = <TSchema extends z.ZodType>(
       errors: result.kind === "invalid" ? result.errors : emptyErrors,
     }));
     return result;
+  };
+
+  const validateFields = (paths: readonly string[]): boolean => {
+    const result = validateSync(schema, store.getState().values);
+    const fullErrors = result.kind === "invalid" ? result.errors : emptyErrors;
+    const pathSet = new Set(paths);
+    store.setState((state) => {
+      const next = paths.reduce<Record<string, readonly string[]>>(
+        (acc, path) => {
+          const errs = fullErrors[path] ?? [];
+          if (errs.length === 0) {
+            return acc;
+          }
+          return { ...acc, [path]: errs };
+        },
+        Object.fromEntries(
+          Object.entries(state.errors).filter(([k]) => !pathSet.has(k)),
+        ),
+      );
+      return { ...state, errors: next };
+    });
+    return paths.every((p) => (fullErrors[p] ?? []).length === 0);
   };
 
   const validateField = (path: string): FieldValidationResult => {
@@ -277,9 +305,17 @@ export const createForm = <TSchema extends z.ZodType>(
         errors:
           path === undefined ? emptyErrors : omitKey(state.errors, path),
       })),
+    updateState: (updater) =>
+      store.setState((state) => ({ ...state, ...updater(state) })),
     reset: (nextInitial) =>
       store.setState((state) => {
-        const init = nextInitial ?? state.initialValues;
+        const init: typeof state.initialValues =
+          nextInitial === undefined
+            ? state.initialValues
+            : ({
+                ...(state.initialValues as object),
+                ...(nextInitial as object),
+              } as typeof state.initialValues);
         return {
           ...state,
           values: init,
@@ -294,6 +330,7 @@ export const createForm = <TSchema extends z.ZodType>(
       }),
     validate,
     validateField,
+    validateFields,
     validateAsync: validateAsyncOnForm,
     validateFieldAsync,
     submit,

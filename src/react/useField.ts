@@ -1,7 +1,10 @@
 import { useCallback, useMemo } from "react";
+import type { z } from "zod";
 import type { StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand/react";
 import { useShallow } from "zustand/react/shallow";
+import type { Form } from "../core/createForm";
+import type { FieldPath, FieldValue } from "../core/fieldPath";
 import { shouldValidateOn } from "../core/mode";
 import { getAtPath } from "../core/path";
 import type { FormState } from "../core/types";
@@ -45,10 +48,21 @@ type FieldSlice<TValue> = Readonly<{
   isValidating: boolean;
 }>;
 
-export const useField = <TValue = unknown>(
+export function useField<
+  TSchema extends z.ZodType,
+  P extends FieldPath<z.input<TSchema>>,
+>(
+  form: Form<TSchema>,
+  path: P,
+): UseFieldReturn<FieldValue<z.input<TSchema>, P>>;
+export function useField<TValue = unknown>(
   form: FieldFormApi,
   path: string,
-): UseFieldReturn<TValue> => {
+): UseFieldReturn<TValue>;
+export function useField<TValue = unknown>(
+  form: FieldFormApi,
+  path: string,
+): UseFieldReturn<TValue> {
   const slice = useStore(
     form.store,
     useShallow(
@@ -138,4 +152,4 @@ export const useField = <TValue = unknown>(
     }),
     [slice, setValue, setTouched, setError, clearError, validate, validateAsync, onBlur],
   );
-};
+}

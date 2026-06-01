@@ -1,15 +1,45 @@
 import type { z } from "zod";
+import type { StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand/react";
 import { useShallow } from "zustand/react/shallow";
 import type { Form } from "../core/createForm";
 import type { FormState } from "../core/types";
 
-export const useFormState = <TSchema extends z.ZodType, U>(
-  form: Form<TSchema>,
-  selector: (state: FormState<z.input<TSchema>>) => U,
-): U => useStore(form.store, selector);
+type ReadonlyStore<T> = Pick<
+  StoreApi<T>,
+  "getState" | "getInitialState" | "subscribe"
+>;
 
-export const useFormStateShallow = <TSchema extends z.ZodType, U>(
+export type FormStateApi = Readonly<{
+  store: ReadonlyStore<FormState<unknown>>;
+}>;
+
+export function useFormState<TSchema extends z.ZodType, U>(
   form: Form<TSchema>,
   selector: (state: FormState<z.input<TSchema>>) => U,
-): U => useStore(form.store, useShallow(selector));
+): U;
+export function useFormState<U>(
+  form: FormStateApi,
+  selector: (state: FormState<unknown>) => U,
+): U;
+export function useFormState<U>(
+  form: FormStateApi,
+  selector: (state: FormState<unknown>) => U,
+): U {
+  return useStore(form.store, selector);
+}
+
+export function useFormStateShallow<TSchema extends z.ZodType, U>(
+  form: Form<TSchema>,
+  selector: (state: FormState<z.input<TSchema>>) => U,
+): U;
+export function useFormStateShallow<U>(
+  form: FormStateApi,
+  selector: (state: FormState<unknown>) => U,
+): U;
+export function useFormStateShallow<U>(
+  form: FormStateApi,
+  selector: (state: FormState<unknown>) => U,
+): U {
+  return useStore(form.store, useShallow(selector));
+}
