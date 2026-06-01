@@ -19,7 +19,7 @@ export function useFormState<TSchema extends z.ZodType, U>(
   selector: (state: FormState<z.input<TSchema>>) => U,
 ): U;
 export function useFormState<U>(
-  form: FormStateApi,
+  form: FormStateApi & { readonly schema?: undefined },
   selector: (state: FormState<unknown>) => U,
 ): U;
 export function useFormState<U>(
@@ -34,7 +34,7 @@ export function useFormStateShallow<TSchema extends z.ZodType, U>(
   selector: (state: FormState<z.input<TSchema>>) => U,
 ): U;
 export function useFormStateShallow<U>(
-  form: FormStateApi,
+  form: FormStateApi & { readonly schema?: undefined },
   selector: (state: FormState<unknown>) => U,
 ): U;
 export function useFormStateShallow<U>(

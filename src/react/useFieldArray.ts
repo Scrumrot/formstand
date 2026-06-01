@@ -99,8 +99,11 @@ const swapId = (state: IdState, a: number, b: number): IdState => ({
 
 export const useFieldArray = <TItem = unknown>(
   form: FieldArrayFormApi,
-  path: string,
+  pathArg: string | ((state: FormState<unknown>) => string),
 ): UseFieldArrayReturn<TItem> => {
+  const path = useStore(form.store, (state) =>
+    typeof pathArg === "function" ? pathArg(state) : pathArg,
+  );
   const slice = useStore(
     form.store,
     useShallow((state) => {

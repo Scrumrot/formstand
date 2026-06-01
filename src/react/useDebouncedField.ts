@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useStore } from "zustand/react";
 import { shouldValidateOn } from "../core/mode";
+import type { FormState } from "../core/types";
 import {
   type FieldFormApi,
   type UseFieldReturn,
@@ -12,10 +14,16 @@ export type UseDebouncedFieldOptions = Readonly<{
 
 export const useDebouncedField = <TValue = unknown>(
   form: FieldFormApi,
-  path: string,
+  pathArg: string | ((state: FormState<unknown>) => string),
   options: UseDebouncedFieldOptions,
 ): UseFieldReturn<TValue> => {
-  const field = useField<TValue>(form, path);
+  const path = useStore(form.store, (state) =>
+    typeof pathArg === "function" ? pathArg(state) : pathArg,
+  );
+  const field = useField<TValue>(
+    form as FieldFormApi & { readonly schema?: undefined },
+    path,
+  );
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { delayMs } = options;
 

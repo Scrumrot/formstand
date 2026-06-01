@@ -1,0 +1,139 @@
+import { useEffect, useState } from "react";
+import {
+  textInputProps,
+  useField,
+  useForm,
+  useFormState,
+} from "zustand-forms";
+import { z } from "zod";
+import { StateDump } from "./StateDump";
+
+const STORAGE_KEY = "zustand-forms:autosave-demo";
+const DEBOUNCE_MS = 800;
+
+const schema = z.object({
+  title: z.string().min(1, "title required"),
+  body: z.string().min(1, "body required"),
+});
+
+type Values = z.input<typeof schema>;
+
+const loadDraft = (): Values => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw === null) return { title: "", body: "" };
+    const parsed = JSON.parse(raw) as unknown;
+    const result = schema.partial().safeParse(parsed);
+    if (!result.success) return { title: "", body: "" };
+    return { title: result.data.title ?? "", body: result.data.body ?? "" };
+  } catch {
+    return { title: "", body: "" };
+  }
+};
+
+export const AutosaveForm = () => {
+  const [initial] = useState(loadDraft);
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [pending, setPending] = useState(false);
+
+  const form = useForm(schema, { initialValues: initial, mode: "onBlur" });
+  const title = useField(form, "title");
+  const body = useField(form, "body");
+  const values = useFormState(form, (s) => s.values);
+
+  useEffect(() => {
+    const timerRef: { current: ReturnType<typeof setTimeout> | null } = {
+      current: null,
+    };
+    const unsub = form.watchValues((next) => {
+      setPending(true);
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        setLastSavedAt(Date.now());
+        setPending(false);
+      }, DEBOUNCE_MS);
+    });
+    return () => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      unsub();
+    };
+  }, [form]);
+
+  const discardDraft = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    form.reset({ title: "", body: "" });
+    setLastSavedAt(null);
+  };
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        void form.submit((data) => {
+          window.alert(`published: ${JSON.stringify(data)}`);
+          localStorage.removeItem(STORAGE_KEY);
+          setLastSavedAt(null);
+        });
+      }}
+    >
+      <p className="subtitle">
+        Draft is restored from localStorage on mount and persisted{" "}
+        {DEBOUNCE_MS}ms after each edit. Refresh the page to test restore.
+      </p>
+
+      <div className="field">
+        <label>Title</label>
+        <input {...textInputProps(title)} />
+        <span className="error">{title.error?.[0] ?? " "}</span>
+      </div>
+
+      <div className="field">
+        <label>Body</label>
+        <textarea
+          rows={5}
+          {...textInputProps(body)}
+          style={{
+            background: "#0b0d12",
+            border: "1px solid #2a3140",
+            color: "#e6ebf5",
+            padding: "10px 12px",
+            borderRadius: 6,
+            fontSize: 14,
+            fontFamily: "inherit",
+          }}
+        />
+        <span className="error">{body.error?.[0] ?? " "}</span>
+      </div>
+
+      <div
+        className="row"
+        style={{ justifyContent: "space-between", alignItems: "center" }}
+      >
+        <div style={{ fontSize: 12, color: "#8b94a7" }}>
+          {pending
+            ? "Saving..."
+            : lastSavedAt !== null
+              ? `Draft saved at ${new Date(lastSavedAt).toLocaleTimeString()}`
+              : values.title || values.body
+                ? "Unsaved changes"
+                : "No draft"}
+        </div>
+        <div className="row">
+          <button
+            className="secondary"
+            type="button"
+            onClick={discardDraft}
+          >
+            Discard draft
+          </button>
+          <button className="primary" type="submit">
+            Publish
+          </button>
+        </div>
+      </div>
+
+      <StateDump form={form} />
+    </form>
+  );
+};

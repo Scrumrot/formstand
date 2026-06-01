@@ -37,6 +37,10 @@ export type SubmitHandler<TSchema extends z.ZodType> = (
 
 export type InvalidSubmitHandler = (errors: ErrorMap) => void;
 
+export type SubmitOptions = Readonly<{
+  force?: boolean;
+}>;
+
 export type FieldSnapshot<TValue> = Readonly<{
   value: TValue;
   error: readonly string[] | undefined;
@@ -72,6 +76,19 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
     path: P,
     listener: (snapshot: FieldSnapshot<FieldValue<z.input<TSchema>, P>>) => void,
   ) => () => void;
+  watchValue: <P extends FieldPath<z.input<TSchema>>>(
+    path: P,
+    listener: (
+      value: FieldValue<z.input<TSchema>, P>,
+      previous: FieldValue<z.input<TSchema>, P>,
+    ) => void,
+  ) => () => void;
+  watchValues: (
+    listener: (
+      values: z.input<TSchema>,
+      previous: z.input<TSchema>,
+    ) => void,
+  ) => () => void;
   setValue: (path: string, value: unknown) => void;
   setValues: (next: z.input<TSchema>) => void;
   setTouched: (path: string, touched?: boolean) => void;
@@ -87,6 +104,7 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
     ) => Partial<FormState<z.input<TSchema>>>,
   ) => void;
   reset: (nextInitial?: Partial<z.input<TSchema>>) => void;
+  adoptValues: (values: z.input<TSchema>) => void;
   validate: () => ValidationResult<z.output<TSchema>>;
   validateField: (path: string) => FieldValidationResult;
   validateFields: (paths: readonly string[]) => boolean;
@@ -96,6 +114,7 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
   submit: (
     onValid: SubmitHandler<TSchema>,
     onInvalid?: InvalidSubmitHandler,
+    options?: SubmitOptions,
   ) => Promise<void>;
   arrayPush: (path: string, item: unknown) => void;
   arrayRemove: (path: string, index: number) => void;
@@ -152,6 +171,7 @@ export const createForm = <TSchema extends z.ZodType>(
   };
 
   const validateFields = (paths: readonly string[]): boolean => {
+    if (paths.length === 0) return true;
     const result = validateSync(schema, store.getState().values);
     const fullErrors = result.kind === "invalid" ? result.errors : emptyErrors;
     const pathSet = new Set(paths);
@@ -315,7 +335,9 @@ export const createForm = <TSchema extends z.ZodType>(
   const submit = async (
     onValid: SubmitHandler<TSchema>,
     onInvalid?: InvalidSubmitHandler,
+    submitOptions?: SubmitOptions,
   ): Promise<void> => {
+    if (store.getState().isSubmitting && submitOptions?.force !== true) return;
     store.setState((state) => ({
       ...state,
       isSubmitting: true,
@@ -363,6 +385,38 @@ export const createForm = <TSchema extends z.ZodType>(
         }
       });
     },
+    watchValue: <P extends FieldPath<z.input<TSchema>>>(
+      path: P,
+      listener: (
+        value: FieldValue<z.input<TSchema>, P>,
+        previous: FieldValue<z.input<TSchema>, P>,
+      ) => void,
+    ) => {
+      const ref: { current: unknown } = {
+        current: getAtPath(store.getState().values, path),
+      };
+      return store.subscribe((state) => {
+        const next = getAtPath(state.values, path);
+        if (!Object.is(ref.current, next)) {
+          const prev = ref.current;
+          ref.current = next;
+          listener(
+            next as FieldValue<z.input<TSchema>, P>,
+            prev as FieldValue<z.input<TSchema>, P>,
+          );
+        }
+      });
+    },
+    watchValues: (listener) => {
+      const ref: { current: Values } = { current: store.getState().values };
+      return store.subscribe((state) => {
+        if (state.values !== ref.current) {
+          const prev = ref.current;
+          ref.current = state.values;
+          listener(state.values, prev);
+        }
+      });
+    },
     setValue: (path, value) =>
       store.setState((state) => ({
         ...state,
@@ -398,7 +452,19 @@ export const createForm = <TSchema extends z.ZodType>(
           path === undefined ? emptyErrors : omitKey(state.errors, path),
       })),
     updateState: (updater) =>
-      store.setState((state) => ({ ...state, ...updater(state) })),
+      store.setState((state) => {
+        const patch = updater(state);
+        if (Object.keys(patch).length === 0) return state;
+        return { ...state, ...patch };
+      }),
+    adoptValues: (values) =>
+      store.setState((state) => ({
+        ...state,
+        values,
+        initialValues: values,
+        errors: emptyErrors,
+        dirty: emptyBools,
+      })),
     reset: (nextInitial) =>
       store.setState((state) => {
         const init: typeof state.initialValues =

@@ -28,6 +28,10 @@ export type FieldFormApi = Readonly<{
   validateFieldAsync: (path: string) => Promise<FieldValidationResult>;
 }>;
 
+export type FieldPathArg<TValues> =
+  | string
+  | ((state: FormState<TValues>) => string);
+
 export type UseFieldReturn<TValue> = Readonly<{
   value: TValue;
   error: readonly string[] | undefined;
@@ -58,14 +62,22 @@ export function useField<
   form: Form<TSchema>,
   path: P,
 ): UseFieldReturn<FieldValue<z.input<TSchema>, P>>;
+export function useField<TSchema extends z.ZodType>(
+  form: Form<TSchema>,
+  pathSelector: (state: FormState<z.input<TSchema>>) => FieldPath<z.input<TSchema>>,
+): UseFieldReturn<unknown>;
 export function useField<TValue = unknown>(
   form: FieldFormApi & { readonly schema?: undefined },
-  path: string,
+  path: string | ((state: FormState<unknown>) => string),
 ): UseFieldReturn<TValue>;
 export function useField<TValue = unknown>(
   form: FieldFormApi,
-  path: string,
+  pathArg: string | ((state: FormState<unknown>) => string),
 ): UseFieldReturn<TValue> {
+  const path = useStore(form.store, (state) =>
+    typeof pathArg === "function" ? pathArg(state) : pathArg,
+  );
+
   const slice = useStore(
     form.store,
     useShallow(

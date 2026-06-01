@@ -1,11 +1,14 @@
 import { type ReactElement, useState } from "react";
 import { ArrayForm } from "./forms/ArrayForm";
 import { AsyncForm } from "./forms/AsyncForm";
+import { AutosaveForm } from "./forms/AutosaveForm";
 import { BasicForm } from "./forms/BasicForm";
 import { ConditionalForm } from "./forms/ConditionalForm";
+import { DependentFieldsForm } from "./forms/DependentFieldsForm";
 import { InvoiceForm } from "./forms/InvoiceForm";
 import { NestedArraysForm } from "./forms/NestedArraysForm";
 import { NestedForm } from "./forms/NestedForm";
+import { OptimisticForm } from "./forms/OptimisticForm";
 import { ServerErrorsForm } from "./forms/ServerErrorsForm";
 import { WizardForm } from "./forms/WizardForm";
 
@@ -18,7 +21,10 @@ type TabKey =
   | "conditional"
   | "invoice"
   | "nestedArrays"
-  | "server";
+  | "server"
+  | "autosave"
+  | "dependent"
+  | "optimistic";
 
 type Tab = Readonly<{
   key: TabKey;
@@ -47,6 +53,17 @@ const TABS: readonly Tab[] = [
     key: "server",
     label: "Server errors",
     render: () => <ServerErrorsForm />,
+  },
+  { key: "autosave", label: "Autosave", render: () => <AutosaveForm /> },
+  {
+    key: "dependent",
+    label: "Dependent",
+    render: () => <DependentFieldsForm />,
+  },
+  {
+    key: "optimistic",
+    label: "Optimistic",
+    render: () => <OptimisticForm />,
   },
 ];
 

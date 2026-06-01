@@ -4,6 +4,7 @@ export type {
   CreateFormOptions,
   SubmitHandler,
   InvalidSubmitHandler,
+  SubmitOptions,
   ReadonlyStoreApi,
   FieldSnapshot,
 } from "./core/createForm";
@@ -29,7 +30,11 @@ export { useFormState, useFormStateShallow } from "./react/useFormState";
 export type { FormStateApi } from "./react/useFormState";
 export { useFormError } from "./react/useFormError";
 export { useField } from "./react/useField";
-export type { UseFieldReturn, FieldFormApi } from "./react/useField";
+export type {
+  UseFieldReturn,
+  FieldFormApi,
+  FieldPathArg,
+} from "./react/useField";
 export { useFieldArray } from "./react/useFieldArray";
 export type {
   UseFieldArrayReturn,
