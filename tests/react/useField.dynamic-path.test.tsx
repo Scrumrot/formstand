@@ -20,7 +20,7 @@ describe("useField with dynamic path selector", () => {
       });
       const email = useField(
         form,
-        (s) => `users.${s.values.selectedIndex}.email` as const,
+        (s) => `users.${s.values.selectedIndex}.email`,
       );
       return { form, email };
     });
@@ -44,7 +44,7 @@ describe("useField with dynamic path selector", () => {
       });
       const email = useField(
         form,
-        (s) => `users.${s.values.selectedIndex}.email` as const,
+        (s) => `users.${s.values.selectedIndex}.email`,
       );
       return { form, email };
     });

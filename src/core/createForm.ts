@@ -243,7 +243,14 @@ export const createForm = <TSchema extends z.ZodType>(
     const result = await validateAsync(schema, valuesAtStart);
 
     const live = store.getState();
-    if (sequences.get(FORM_SEQ_KEY) !== seq || live.values !== valuesAtStart) {
+    const stillOwns = sequences.get(FORM_SEQ_KEY) === seq;
+    if (!stillOwns || live.values !== valuesAtStart) {
+      if (stillOwns) {
+        store.setState((state) => ({
+          ...state,
+          isValidating: omitKey(state.isValidating, FORM_SEQ_KEY),
+        }));
+      }
       return result;
     }
 
@@ -289,6 +296,7 @@ export const createForm = <TSchema extends z.ZodType>(
     }
 
     const stillCurrent = paths.filter((p) => sequences.get(p) === seqs.get(p));
+    const stillCurrentSet = new Set(stillCurrent);
 
     store.setState((state) => {
       const errors = stillCurrent.reduce<Record<string, readonly string[]>>(
@@ -299,7 +307,7 @@ export const createForm = <TSchema extends z.ZodType>(
         },
         Object.fromEntries(
           Object.entries(state.errors).filter(
-            ([k]) => !pathSet.has(k) || !stillCurrent.includes(k),
+            ([k]) => !pathSet.has(k) || !stillCurrentSet.has(k),
           ),
         ),
       );
@@ -328,7 +336,14 @@ export const createForm = <TSchema extends z.ZodType>(
       result.kind === "invalid" ? (result.errors[path] ?? []) : [];
 
     const live = store.getState();
-    if (sequences.get(path) !== seq || live.values !== valuesAtStart) {
+    const stillOwns = sequences.get(path) === seq;
+    if (!stillOwns || live.values !== valuesAtStart) {
+      if (stillOwns) {
+        store.setState((state) => ({
+          ...state,
+          isValidating: omitKey(state.isValidating, path),
+        }));
+      }
       return errorsAtPath.length === 0
         ? { kind: "valid" }
         : { kind: "invalid", errors: errorsAtPath };
@@ -375,15 +390,15 @@ export const createForm = <TSchema extends z.ZodType>(
     });
   };
 
-  const submitInFlight: { current: boolean } = { current: false };
+  const inFlight: { count: number } = { count: 0 };
 
   const submit = async (
     onValid: SubmitHandler<TSchema>,
     onInvalid?: InvalidSubmitHandler,
     submitOptions?: SubmitOptions,
   ): Promise<boolean> => {
-    if (submitInFlight.current && submitOptions?.force !== true) return false;
-    submitInFlight.current = true;
+    if (inFlight.count > 0 && submitOptions?.force !== true) return false;
+    inFlight.count += 1;
     store.setState((state) => ({
       ...state,
       isSubmitting: true,
@@ -403,8 +418,10 @@ export const createForm = <TSchema extends z.ZodType>(
       await onValid(result.data);
       return true;
     } finally {
-      submitInFlight.current = false;
-      store.setState((state) => ({ ...state, isSubmitting: false }));
+      inFlight.count -= 1;
+      if (inFlight.count === 0) {
+        store.setState((state) => ({ ...state, isSubmitting: false }));
+      }
     }
   };
 

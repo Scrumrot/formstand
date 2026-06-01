@@ -64,7 +64,7 @@ export function useField<
 ): UseFieldReturn<FieldValue<z.input<TSchema>, P>>;
 export function useField<TSchema extends z.ZodType>(
   form: Form<TSchema>,
-  pathSelector: (state: FormState<z.input<TSchema>>) => FieldPath<z.input<TSchema>>,
+  pathSelector: (state: FormState<z.input<TSchema>>) => string,
 ): UseFieldReturn<unknown>;
 // The `schema?: undefined` brand below forces TS to bind the typed
 // Form<TSchema> overloads above when a real Form is passed (Form has

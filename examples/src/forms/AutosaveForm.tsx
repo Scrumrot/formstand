@@ -35,6 +35,7 @@ export const AutosaveForm = () => {
   const [initial] = useState(loadDraft);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [pending, setPending] = useState(false);
+  const [titleChanges, setTitleChanges] = useState(0);
 
   const form = useForm(schema, { initialValues: initial, mode: "onBlur" });
   const title = useField(form, "title");
@@ -45,7 +46,7 @@ export const AutosaveForm = () => {
     const timerRef: { current: ReturnType<typeof setTimeout> | null } = {
       current: null,
     };
-    const unsub = form.watchValues((next) => {
+    const unsubAll = form.watchValues((next) => {
       setPending(true);
       if (timerRef.current !== null) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
@@ -54,9 +55,13 @@ export const AutosaveForm = () => {
         setPending(false);
       }, DEBOUNCE_MS);
     });
+    const unsubTitle = form.watchValue("title", () => {
+      setTitleChanges((n) => n + 1);
+    });
     return () => {
       if (timerRef.current !== null) clearTimeout(timerRef.current);
-      unsub();
+      unsubAll();
+      unsubTitle();
     };
   }, [form]);
 
@@ -80,6 +85,8 @@ export const AutosaveForm = () => {
       <p className="subtitle">
         Draft is restored from localStorage on mount and persisted{" "}
         {DEBOUNCE_MS}ms after each edit. Refresh the page to test restore.
+        Title edits: {titleChanges} (tracked via{" "}
+        <code>form.watchValue("title", ...)</code>).
       </p>
 
       <div className="field">
