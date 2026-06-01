@@ -2,57 +2,6 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Commands
-
-```bash
-npm run dev              # Start Vite dev server (app)
-npm run build            # TypeScript check + Vite production build (app)
-npm run typecheck        # tsc --noEmit (app)
-npm run test             # Vitest watch mode (app)
-npm run test:run         # Vitest single run (app)
-npm run lint             # ESLint (all workspaces)
-npm run build:packages   # Build all SDK packages (via Turborepo)
-npm run clean:packages   # Clean all SDK package dist/ (via Turborepo)
-```
-
-## Project Structure
-
-```
-sdk/                            # @storefront/* workspace packages (npm workspaces)
-  accessibility/                # WCAG helpers, color contrast
-  datatable-pro/                # In-app table library (Material React Table)
-  form-generator/               # Form component code generator (CLI)
-  micro-frontend/               # MFE shell, iframe/dynamic-import infra
-  ui/                           # Shared UI components (form, layout, feedback, nav)
-  type-parser/                  # TypeScript/JSON Schema browser parser
-  validation/                   # Validation store, tiered validation
-  zod-generator/                # Zod schema code generator
-  zustand-devtools/             # Zustand selector debugger
-  zustand-form/                 # Form state management (Zustand + Zod)
-  zustand-generator/            # Zustand store code generator
-app/                            # Main SPA application (workspace: @storefront/web)
-  src/
-    features/table-builder-wizard/  # Code generator wizard for tables
-    components/
-      DataTable/              # Legacy MUI X DataGrid wrapper (being replaced)
-      tables/                 # Generated table components (10+ tables)
-  scripts/                    # CLI code generation scripts
-  vite.config.ts
-  tsconfig.json
-iac/                            # Infrastructure as code (placeholder)
-```
-
-- Path alias: `@/` → `app/src/`
-- Package alias: `@storefront/*` → `sdk/*/src` (npm workspace packages)
-- Workspaces: `sdk/*` + `app`
-- Routing: TanStack Router (`@tanstack/react-router`)
-- State: Zustand with persist middleware
-- UI: MUI Material v7 (`@mui/material ^7.3.6`) — use v7 docs/APIs
-- Tables: Material React Table (`material-react-table`) wrapping TanStack Table v8
-- Data fetching: TanStack React Query (`@tanstack/react-query`)
-- Validation: Zod v4 (`zod ^4.2`)
-- Scripts: Always TypeScript, run with `tsx`
-
 ## Code Style
 
 ### Functional / Declarative
