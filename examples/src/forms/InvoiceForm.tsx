@@ -12,7 +12,7 @@ import { StateDump } from "./StateDump";
 
 const lineItemSchema = z.object({
   description: z.string().min(1, "required"),
-  quantity: z.number().int().positive("must be > 0"),
+  quantity: z.int().positive("must be > 0"),
   unitPrice: z.number().nonnegative("must be >= 0"),
 });
 

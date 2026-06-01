@@ -4,7 +4,7 @@ import { StateDump } from "./StateDump";
 
 const schema = z.object({
   name: z.string().min(2, "name must be at least 2 chars"),
-  email: z.string().email("must be a valid email"),
+  email: z.email("must be a valid email"),
 });
 
 export const BasicForm = () => {

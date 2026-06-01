@@ -14,7 +14,7 @@ const usernameTakenSchema = z.object({
 
 const simpleSchema = z.object({
   name: z.string().min(2),
-  age: z.number().int().nonnegative(),
+  age: z.int().nonnegative(),
 });
 
 describe("form.validateAsync", () => {

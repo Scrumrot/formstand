@@ -4,7 +4,7 @@ import { createForm } from "../src/core/createForm";
 
 const schema = z.object({
   name: z.string().min(2),
-  age: z.number().int().nonnegative(),
+  age: z.int().nonnegative(),
 });
 
 const validValues = { name: "Tim", age: 30 };

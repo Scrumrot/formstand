@@ -10,7 +10,7 @@ const asyncSchema = z.object({
     },
     { message: "taken" },
   ),
-  email: z.string().email(),
+  email: z.email(),
 });
 
 describe("form.validateFieldsAsync", () => {

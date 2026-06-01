@@ -4,8 +4,8 @@ import { createForm } from "../src/core/createForm";
 
 const schema = z.object({
   name: z.string().min(2),
-  email: z.string().email(),
-  age: z.number().int().nonnegative(),
+  email: z.email(),
+  age: z.int().nonnegative(),
 });
 
 describe("form.validateFields", () => {

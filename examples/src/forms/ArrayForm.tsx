@@ -11,7 +11,7 @@ const schema = z.object({
   users: z
     .array(
       z.object({
-        email: z.string().email("must be a valid email"),
+        email: z.email("must be a valid email"),
       }),
     )
     .min(1, "at least one user required"),

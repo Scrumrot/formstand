@@ -3,7 +3,7 @@ import { z } from "zod";
 import { StateDump } from "./StateDump";
 
 const schema = z.object({
-  email: z.string().email("must be a valid email"),
+  email: z.email("must be a valid email"),
   username: z.string().min(3, "min 3 chars"),
 });
 

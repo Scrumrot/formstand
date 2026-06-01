@@ -12,11 +12,11 @@ import { z } from "zod";
 import { StateDump } from "./StateDump";
 
 const schema = z.object({
-  email: z.string().email("valid email required"),
+  email: z.email("valid email required"),
   password: z.string().min(8, "min 8 chars"),
   firstName: z.string().min(1, "required"),
   lastName: z.string().min(1, "required"),
-  age: z.number().int().min(13, "must be 13+"),
+  age: z.int().min(13, "must be 13+"),
   newsletter: z.boolean(),
   theme: z.enum(["light", "dark"]),
 });

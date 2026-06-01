@@ -4,7 +4,7 @@ import { createForm } from "../src/core/createForm";
 
 const schema = z.object({
   name: z.string().min(2),
-  age: z.number().int(),
+  age: z.int(),
 });
 
 describe("form.setError", () => {
