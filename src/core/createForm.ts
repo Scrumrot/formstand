@@ -1,11 +1,6 @@
 import type { z } from "zod";
 import type { StoreApi } from "zustand/vanilla";
 import { createStore } from "zustand/vanilla";
-
-export type ReadonlyStoreApi<T> = Pick<
-  StoreApi<T>,
-  "getState" | "getInitialState" | "subscribe"
->;
 import {
   type IndexMapper,
   insertAt,
@@ -24,6 +19,11 @@ import {
   validateAsync,
   validateSync,
 } from "./validation";
+
+export type ReadonlyStoreApi<T> = Pick<
+  StoreApi<T>,
+  "getState" | "getInitialState" | "subscribe"
+>;
 
 export type CreateFormOptions<TSchema extends z.ZodType> = Readonly<{
   initialValues: z.input<TSchema>;
@@ -115,7 +115,7 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
     onValid: SubmitHandler<TSchema>,
     onInvalid?: InvalidSubmitHandler,
     options?: SubmitOptions,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   arrayPush: (path: string, item: unknown) => void;
   arrayRemove: (path: string, index: number) => void;
   arrayInsert: (path: string, index: number, item: unknown) => void;
@@ -234,14 +234,18 @@ export const createForm = <TSchema extends z.ZodType>(
     ValidationResult<z.output<TSchema>>
   > => {
     const seq = nextSeq(FORM_SEQ_KEY);
+    const valuesAtStart = store.getState().values;
     store.setState((state) => ({
       ...state,
       isValidating: { ...state.isValidating, [FORM_SEQ_KEY]: true },
     }));
 
-    const result = await validateAsync(schema, store.getState().values);
+    const result = await validateAsync(schema, valuesAtStart);
 
-    if (sequences.get(FORM_SEQ_KEY) !== seq) return result;
+    const live = store.getState();
+    if (sequences.get(FORM_SEQ_KEY) !== seq || live.values !== valuesAtStart) {
+      return result;
+    }
 
     store.setState((state) => ({
       ...state,
@@ -254,22 +258,58 @@ export const createForm = <TSchema extends z.ZodType>(
   const validateFieldsAsync = async (
     paths: readonly string[],
   ): Promise<boolean> => {
-    const result = await validateAsync(schema, store.getState().values);
+    if (paths.length === 0) return true;
+    const seqs = new Map(paths.map((p) => [p, nextSeq(p)]));
+    const valuesAtStart = store.getState().values;
+    store.setState((state) => ({
+      ...state,
+      isValidating: paths.reduce<Record<string, boolean>>(
+        (acc, p) => ({ ...acc, [p]: true }),
+        { ...state.isValidating },
+      ),
+    }));
+
+    const result = await validateAsync(schema, valuesAtStart);
     const fullErrors = result.kind === "invalid" ? result.errors : emptyErrors;
     const pathSet = new Set(paths);
+
+    const live = store.getState();
+    if (live.values !== valuesAtStart) {
+      const stillCurrent = paths.filter((p) => sequences.get(p) === seqs.get(p));
+      if (stillCurrent.length > 0) {
+        store.setState((state) => ({
+          ...state,
+          isValidating: stillCurrent.reduce(
+            (acc, p) => omitKey(acc, p),
+            state.isValidating,
+          ),
+        }));
+      }
+      return paths.every((p) => (fullErrors[p] ?? []).length === 0);
+    }
+
+    const stillCurrent = paths.filter((p) => sequences.get(p) === seqs.get(p));
+
     store.setState((state) => {
-      const next = paths.reduce<Record<string, readonly string[]>>(
+      const errors = stillCurrent.reduce<Record<string, readonly string[]>>(
         (acc, path) => {
           const errs = fullErrors[path] ?? [];
           if (errs.length === 0) return acc;
           return { ...acc, [path]: errs };
         },
         Object.fromEntries(
-          Object.entries(state.errors).filter(([k]) => !pathSet.has(k)),
+          Object.entries(state.errors).filter(
+            ([k]) => !pathSet.has(k) || !stillCurrent.includes(k),
+          ),
         ),
       );
-      return { ...state, errors: next };
+      const isValidating = stillCurrent.reduce(
+        (acc, p) => omitKey(acc, p),
+        state.isValidating,
+      );
+      return { ...state, errors, isValidating };
     });
+
     return paths.every((p) => (fullErrors[p] ?? []).length === 0);
   };
 
@@ -277,16 +317,18 @@ export const createForm = <TSchema extends z.ZodType>(
     path: string,
   ): Promise<FieldValidationResult> => {
     const seq = nextSeq(path);
+    const valuesAtStart = store.getState().values;
     store.setState((state) => ({
       ...state,
       isValidating: { ...state.isValidating, [path]: true },
     }));
 
-    const result = await validateAsync(schema, store.getState().values);
+    const result = await validateAsync(schema, valuesAtStart);
     const errorsAtPath =
       result.kind === "invalid" ? (result.errors[path] ?? []) : [];
 
-    if (sequences.get(path) !== seq) {
+    const live = store.getState();
+    if (sequences.get(path) !== seq || live.values !== valuesAtStart) {
       return errorsAtPath.length === 0
         ? { kind: "valid" }
         : { kind: "invalid", errors: errorsAtPath };
@@ -311,16 +353,17 @@ export const createForm = <TSchema extends z.ZodType>(
     nextArray: (current: readonly unknown[]) => readonly unknown[],
     mapper: IndexMapper,
   ): void => {
+    const current = getAtPath(store.getState().values, path);
+    if (current !== undefined && !Array.isArray(current)) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[zustand-forms] array op on "${path}" but the value at that path is not an array (got ${typeof current}). Operation skipped.`,
+      );
+      return;
+    }
     store.setState((state) => {
-      const current = getAtPath(state.values, path);
-      if (current !== undefined && !Array.isArray(current)) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[zustand-forms] array op on "${path}" but the value at that path is not an array (got ${typeof current}). Operation skipped.`,
-        );
-        return state;
-      }
-      const arr: readonly unknown[] = Array.isArray(current) ? current : [];
+      const live = getAtPath(state.values, path);
+      const arr: readonly unknown[] = Array.isArray(live) ? live : [];
       return {
         ...state,
         values: setAtPath(state.values, path, nextArray(arr)),
@@ -332,12 +375,15 @@ export const createForm = <TSchema extends z.ZodType>(
     });
   };
 
+  const submitInFlight: { current: boolean } = { current: false };
+
   const submit = async (
     onValid: SubmitHandler<TSchema>,
     onInvalid?: InvalidSubmitHandler,
     submitOptions?: SubmitOptions,
-  ): Promise<void> => {
-    if (store.getState().isSubmitting && submitOptions?.force !== true) return;
+  ): Promise<boolean> => {
+    if (submitInFlight.current && submitOptions?.force !== true) return false;
+    submitInFlight.current = true;
     store.setState((state) => ({
       ...state,
       isSubmitting: true,
@@ -350,12 +396,14 @@ export const createForm = <TSchema extends z.ZodType>(
       if (result.kind === "invalid") {
         store.setState((state) => ({ ...state, errors: result.errors }));
         onInvalid?.(result.errors);
-        return;
+        return true;
       }
 
       store.setState((state) => ({ ...state, errors: emptyErrors }));
       await onValid(result.data);
+      return true;
     } finally {
+      submitInFlight.current = false;
       store.setState((state) => ({ ...state, isSubmitting: false }));
     }
   };

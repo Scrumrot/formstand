@@ -66,6 +66,11 @@ export function useField<TSchema extends z.ZodType>(
   form: Form<TSchema>,
   pathSelector: (state: FormState<z.input<TSchema>>) => FieldPath<z.input<TSchema>>,
 ): UseFieldReturn<unknown>;
+// The `schema?: undefined` brand below forces TS to bind the typed
+// Form<TSchema> overloads above when a real Form is passed (Form has
+// `schema: TSchema`, not undefined). Without it, a Form<TSchema> with
+// an invalid path would silently fall through to this widened
+// overload and return UseFieldReturn<unknown>.
 export function useField<TValue = unknown>(
   form: FieldFormApi & { readonly schema?: undefined },
   path: string | ((state: FormState<unknown>) => string),

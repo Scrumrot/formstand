@@ -1,0 +1,103 @@
+import { describe, expect, it } from "vitest";
+import { z } from "zod";
+import { createForm } from "../src/core/createForm";
+
+const asyncSchema = z.object({
+  username: z.string().min(2).refine(
+    async (v) => {
+      await new Promise((r) => setTimeout(r, 20));
+      return v !== "taken";
+    },
+    { message: "taken" },
+  ),
+  email: z.string(),
+});
+
+describe("async validate stale-write guard", () => {
+  it("validateFieldAsync drops result when values mutate during await", async () => {
+    const form = createForm(asyncSchema, {
+      initialValues: { username: "taken", email: "t@t.com" },
+    });
+    const promise = form.validateFieldAsync("username");
+    form.setValue("username", "ok");
+    await promise;
+    expect(form.getState().errors["username"]).toBeUndefined();
+  });
+
+  it("validateFieldAsync drops result when reset() runs during await", async () => {
+    const form = createForm(asyncSchema, {
+      initialValues: { username: "taken", email: "t@t.com" },
+    });
+    const promise = form.validateFieldAsync("username");
+    form.reset({ username: "ok", email: "t@t.com" });
+    await promise;
+    expect(form.getState().errors["username"]).toBeUndefined();
+  });
+
+  it("validateFieldAsync drops result when adoptValues runs during await", async () => {
+    const form = createForm(asyncSchema, {
+      initialValues: { username: "taken", email: "t@t.com" },
+    });
+    const promise = form.validateFieldAsync("username");
+    form.adoptValues({ username: "fresh", email: "t@t.com" });
+    await promise;
+    expect(form.getState().errors["username"]).toBeUndefined();
+  });
+
+  it("validateAsync (form-level) drops result when values mutate during await", async () => {
+    const form = createForm(asyncSchema, {
+      initialValues: { username: "taken", email: "t@t.com" },
+    });
+    const promise = form.validateAsync();
+    form.setValue("username", "ok");
+    await promise;
+    expect(form.getState().errors).toEqual({});
+  });
+
+  it("validateFieldsAsync clears isValidating and drops stale on values change", async () => {
+    const form = createForm(asyncSchema, {
+      initialValues: { username: "taken", email: "t@t.com" },
+    });
+    const promise = form.validateFieldsAsync(["username", "email"]);
+    expect(form.getState().isValidating["username"]).toBe(true);
+    form.setValue("username", "ok");
+    await promise;
+    expect(form.getState().errors["username"]).toBeUndefined();
+    expect(form.getState().isValidating["username"]).toBeUndefined();
+  });
+});
+
+describe("submit boolean return", () => {
+  it("returns true when submit ran", async () => {
+    const form = createForm(asyncSchema, {
+      initialValues: { username: "ok", email: "t@t.com" },
+    });
+    const ran = await form.submit(() => {});
+    expect(ran).toBe(true);
+  });
+
+  it("returns false when submit was skipped due to in-flight", async () => {
+    const form = createForm(asyncSchema, {
+      initialValues: { username: "ok", email: "t@t.com" },
+    });
+    const first = form.submit(
+      () => new Promise<void>((r) => setTimeout(r, 30)),
+    );
+    const second = form.submit(() => {});
+    const [a, b] = await Promise.all([first, second]);
+    expect(a).toBe(true);
+    expect(b).toBe(false);
+  });
+});
+
+describe("submit guard decoupled from external setSubmitting", () => {
+  it("setSubmitting(true) does not block submit", async () => {
+    const form = createForm(asyncSchema, {
+      initialValues: { username: "ok", email: "t@t.com" },
+    });
+    form.setSubmitting(true);
+    expect(form.getState().isSubmitting).toBe(true);
+    const ran = await form.submit(() => {});
+    expect(ran).toBe(true);
+  });
+});
