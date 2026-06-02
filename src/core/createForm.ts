@@ -121,6 +121,15 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
   arrayInsert: (path: string, index: number, item: unknown) => void;
   arrayMove: (path: string, from: number, to: number) => void;
   arraySwap: (path: string, a: number, b: number) => void;
+  handleSubmit: (
+    onValid: SubmitHandler<TSchema>,
+    onInvalid?: InvalidSubmitHandler,
+    options?: SubmitOptions,
+  ) => (event?: { preventDefault: () => void }) => Promise<boolean>;
+  diff: () => Readonly<Record<string, unknown>>;
+  dirtyFields: () => readonly string[];
+  snapshot: () => FormState<z.input<TSchema>>;
+  restore: (snapshot: FormState<z.input<TSchema>>) => void;
 }>;
 
 const emptyErrors = {} as ErrorMap;
@@ -594,5 +603,27 @@ export const createForm = <TSchema extends z.ZodType>(
         (arr) => arr.map((v, i) => (i === a ? arr[b] : i === b ? arr[a] : v)),
         swapIndices(a, b),
       ),
+    handleSubmit:
+      (onValid, onInvalid, opts) =>
+      async (event) => {
+        event?.preventDefault();
+        return submit(onValid, onInvalid, opts);
+      },
+    diff: () => {
+      const state = store.getState();
+      return Object.fromEntries(
+        Object.keys(state.dirty)
+          .filter((path) => state.dirty[path] === true)
+          .map((path) => [path, getAtPath(state.values, path)]),
+      );
+    },
+    dirtyFields: () => {
+      const state = store.getState();
+      return Object.keys(state.dirty).filter(
+        (path) => state.dirty[path] === true,
+      );
+    },
+    snapshot: () => store.getState(),
+    restore: (snap) => store.setState(() => snap),
   });
 };

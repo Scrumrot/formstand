@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { z } from "zod";
 import type { StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand/react";
@@ -32,6 +32,10 @@ export type FieldPathArg<TValues> =
   | string
   | ((state: FormState<TValues>) => string);
 
+export type UseFieldOptions = Readonly<{
+  debounceMs?: number;
+}>;
+
 export type UseFieldReturn<TValue> = Readonly<{
   value: TValue;
   error: readonly string[] | undefined;
@@ -62,10 +66,12 @@ export function useField<
 >(
   form: Form<TSchema>,
   path: P,
+  options?: UseFieldOptions,
 ): UseFieldReturn<FieldValue<z.input<TSchema>, P>>;
 export function useField<TSchema extends z.ZodType>(
   form: Form<TSchema>,
   pathSelector: (state: FormState<z.input<TSchema>>) => string,
+  options?: UseFieldOptions,
 ): UseFieldReturn<unknown>;
 // The `schema?: undefined` brand below forces TS to bind the typed
 // Form<TSchema> overloads above when a real Form is passed (Form has
@@ -75,10 +81,12 @@ export function useField<TSchema extends z.ZodType>(
 export function useField<TValue = unknown>(
   form: FieldFormApi & { readonly schema?: undefined },
   path: string | ((state: FormState<unknown>) => string),
+  options?: UseFieldOptions,
 ): UseFieldReturn<TValue>;
 export function useField<TValue = unknown>(
   form: FieldFormApi,
   pathArg: string | ((state: FormState<unknown>) => string),
+  options?: UseFieldOptions,
 ): UseFieldReturn<TValue> {
   const slice = useStore(
     form.store,
@@ -97,7 +105,29 @@ export function useField<TValue = unknown>(
   );
   const path = slice.path;
 
+  const debounceMs = options?.debounceMs;
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current !== null) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+    };
+  }, [form, path]);
+
   const triggerValidate = useCallback(() => {
+    if (debounceMs !== undefined && debounceMs > 0) {
+      if (debounceTimerRef.current !== null) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      debounceTimerRef.current = setTimeout(() => {
+        void form.validateFieldAsync(path);
+        debounceTimerRef.current = null;
+      }, debounceMs);
+      return;
+    }
     try {
       form.validateField(path);
     } catch (e) {
@@ -107,7 +137,7 @@ export function useField<TValue = unknown>(
       }
       throw e;
     }
-  }, [form, path]);
+  }, [form, path, debounceMs]);
 
   const setValue = useCallback(
     (value: TValue) => {

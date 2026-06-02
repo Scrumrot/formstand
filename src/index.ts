@@ -40,7 +40,21 @@ export type {
   UseFieldReturn,
   FieldFormApi,
   FieldPathArg,
+  UseFieldOptions,
 } from "./react/useField";
+export {
+  TextField,
+  NumberField,
+  CheckboxField,
+  SelectField,
+} from "./react/fields";
+export type {
+  TextFieldProps,
+  NumberFieldProps,
+  CheckboxFieldProps,
+  SelectFieldProps,
+  SelectFieldOption,
+} from "./react/fields";
 export { useFieldArray } from "./react/useFieldArray";
 export type {
   UseFieldArrayReturn,
