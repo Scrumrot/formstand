@@ -73,7 +73,7 @@ export function useField<TSchema extends z.ZodType>(
   pathSelector: (state: FormState<z.input<TSchema>>) => string,
   options?: UseFieldOptions,
 ): UseFieldReturn<unknown>;
-// The `schema?: undefined` brand below forces TS to bind the typed
+// The `schema?: undefined` brand below forces TS to bind the typed      no
 // Form<TSchema> overloads above when a real Form is passed (Form has
 // `schema: TSchema`, not undefined). Without it, a Form<TSchema> with
 // an invalid path would silently fall through to this widened

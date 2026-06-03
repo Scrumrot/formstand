@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import type { Form } from "zustand-forms";
-import { useFormState } from "zustand-forms";
+import { useFormStateShallow } from "zustand-forms";
 
 export type StateDumpProps<TSchema extends z.ZodType> = Readonly<{
   form: Form<TSchema>;
@@ -9,7 +9,7 @@ export type StateDumpProps<TSchema extends z.ZodType> = Readonly<{
 export const StateDump = <TSchema extends z.ZodType>({
   form,
 }: StateDumpProps<TSchema>) => {
-  const snapshot = useFormState(form, (state) => ({
+  const snapshot = useFormStateShallow(form, (state) => ({
     values: state.values,
     errors: state.errors,
     touched: state.touched,
