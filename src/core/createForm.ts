@@ -498,7 +498,7 @@ export const createForm = <TSchema extends z.ZodType>(
         }
       });
     },
-    setValue: (path, value) =>
+    setValue: (path: string, value: unknown) =>
       store.setState((state) => ({
         ...state,
         values: setAtPath(state.values, path, value),
@@ -506,7 +506,7 @@ export const createForm = <TSchema extends z.ZodType>(
       })),
     setValues: (next) =>
       store.setState((state) => ({ ...state, values: next })),
-    setTouched: (path, touched = true) =>
+    setTouched: (path: string, touched: boolean = true) =>
       store.setState((state) => ({
         ...state,
         touched: { ...state.touched, [path]: touched },
@@ -516,7 +516,7 @@ export const createForm = <TSchema extends z.ZodType>(
     setMode: (mode) => store.setState((state) => ({ ...state, mode })),
     setReValidateMode: (reValidateMode) =>
       store.setState((state) => ({ ...state, reValidateMode })),
-    setError: (path, errors) =>
+    setError: (path: string, errors: readonly string[]) =>
       store.setState((state) => ({
         ...state,
         errors:
@@ -526,7 +526,7 @@ export const createForm = <TSchema extends z.ZodType>(
       })),
     setErrors: (errors) =>
       store.setState((state) => ({ ...state, errors })),
-    clearErrors: (path) =>
+    clearErrors: (path?: string) =>
       store.setState((state) => ({
         ...state,
         errors:
@@ -574,21 +574,21 @@ export const createForm = <TSchema extends z.ZodType>(
     validateFieldAsync,
     validateFieldsAsync,
     submit,
-    arrayPush: (path, item) =>
+    arrayPush: (path: string, item: unknown) =>
       applyArrayOp(path, (arr) => [...arr, item], identityMapper),
-    arrayRemove: (path, index) =>
+    arrayRemove: (path: string, index: number) =>
       applyArrayOp(
         path,
         (arr) => [...arr.slice(0, index), ...arr.slice(index + 1)],
         removeAt(index),
       ),
-    arrayInsert: (path, index, item) =>
+    arrayInsert: (path: string, index: number, item: unknown) =>
       applyArrayOp(
         path,
         (arr) => [...arr.slice(0, index), item, ...arr.slice(index)],
         insertAt(index),
       ),
-    arrayMove: (path, from, to) =>
+    arrayMove: (path: string, from: number, to: number) =>
       applyArrayOp(
         path,
         (arr) => {
@@ -597,7 +597,7 @@ export const createForm = <TSchema extends z.ZodType>(
         },
         moveFromTo(from, to),
       ),
-    arraySwap: (path, a, b) =>
+    arraySwap: (path: string, a: number, b: number) =>
       applyArrayOp(
         path,
         (arr) => arr.map((v, i) => (i === a ? arr[b] : i === b ? arr[a] : v)),
@@ -625,5 +625,5 @@ export const createForm = <TSchema extends z.ZodType>(
     },
     snapshot: () => store.getState(),
     restore: (snap) => store.setState(() => snap),
-  });
+  }) as Form<TSchema>;
 };

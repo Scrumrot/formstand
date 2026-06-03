@@ -26,6 +26,11 @@ export { shouldValidateOn } from "./core/mode";
 export type { ValidationMode, ValidationTrigger } from "./core/mode";
 
 export { useForm } from "./react/useForm";
+export { createFormContext } from "./react/FormContext";
+export type {
+  FormProviderProps,
+  FormContextApi,
+} from "./react/FormContext";
 export { useFormState, useFormStateShallow } from "./react/useFormState";
 export type { FormStateApi } from "./react/useFormState";
 export { useFormError } from "./react/useFormError";
