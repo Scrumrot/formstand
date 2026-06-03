@@ -48,8 +48,11 @@ const TrackRow = ({
   canUp,
   canDown,
 }: TrackRowProps) => {
-  const title = useField(form, `${basePath}.${index}.title`);
-  const durationMin = useField(form, `${basePath}.${index}.durationMin`);
+  const title = useField<string>(form, `${basePath}.${index}.title`);
+  const durationMin = useField<number | undefined>(
+    form,
+    `${basePath}.${index}.durationMin`,
+  );
   return (
     <div
       style={{
@@ -63,7 +66,7 @@ const TrackRow = ({
       <div>
         <input
           placeholder="track title"
-          {...textInputProps(title as never)}
+          {...textInputProps(title)}
           style={{ width: "100%" }}
         />
         <div className="error" style={{ marginTop: 2 }}>
@@ -73,7 +76,7 @@ const TrackRow = ({
       <div>
         <input
           placeholder="min"
-          {...numberInputProps(durationMin as never)}
+          {...numberInputProps(durationMin)}
           style={{ width: "100%" }}
         />
         <div className="error" style={{ marginTop: 2 }}>
@@ -117,7 +120,7 @@ const AlbumRow = ({
   canUp,
   canDown,
 }: AlbumRowProps) => {
-  const albumTitle = useField(form, `albums.${index}.title`);
+  const albumTitle = useField<string>(form, `albums.${index}.title`);
   const tracks = useFieldArray<Track>(form, `albums.${index}.tracks`);
 
   return (
@@ -132,7 +135,7 @@ const AlbumRow = ({
       <div className="row" style={{ marginBottom: 12 }}>
         <input
           placeholder="album title"
-          {...textInputProps(albumTitle as never)}
+          {...textInputProps(albumTitle)}
           style={{ flex: 1 }}
         />
         <button className="secondary" type="button" onClick={onUp} disabled={!canUp}>
