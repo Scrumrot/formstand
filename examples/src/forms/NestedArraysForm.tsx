@@ -1,6 +1,5 @@
 import {
-  type FieldFormApi,
-  type FieldArrayFormApi,
+  type Form,
   numberInputProps,
   textInputProps,
   useField,
@@ -24,13 +23,14 @@ const schema = z.object({
   albums: z.array(albumSchema).min(1, "at least one album"),
 });
 
+type Schema = typeof schema;
 type Album = z.input<typeof albumSchema>;
 type Track = z.input<typeof trackSchema>;
 
 type TrackRowProps = Readonly<{
-  form: FieldFormApi;
-  basePath: string;
-  index: number;
+  form: Form<Schema>;
+  albumIndex: number;
+  trackIndex: number;
   onRemove: () => void;
   onUp: () => void;
   onDown: () => void;
@@ -40,18 +40,21 @@ type TrackRowProps = Readonly<{
 
 const TrackRow = ({
   form,
-  basePath,
-  index,
+  albumIndex,
+  trackIndex,
   onRemove,
   onUp,
   onDown,
   canUp,
   canDown,
 }: TrackRowProps) => {
-  const title = useField<string>(form, `${basePath}.${index}.title`);
-  const durationMin = useField<number | undefined>(
+  const title = useField(
     form,
-    `${basePath}.${index}.durationMin`,
+    `albums.${albumIndex}.tracks.${trackIndex}.title`,
+  );
+  const durationMin = useField(
+    form,
+    `albums.${albumIndex}.tracks.${trackIndex}.durationMin`,
   );
   return (
     <div
@@ -102,7 +105,7 @@ const TrackRow = ({
 };
 
 type AlbumRowProps = Readonly<{
-  form: FieldFormApi & FieldArrayFormApi;
+  form: Form<Schema>;
   index: number;
   onRemove: () => void;
   onUp: () => void;
@@ -120,7 +123,7 @@ const AlbumRow = ({
   canUp,
   canDown,
 }: AlbumRowProps) => {
-  const albumTitle = useField<string>(form, `albums.${index}.title`);
+  const albumTitle = useField(form, `albums.${index}.title`);
   const tracks = useFieldArray<Track>(form, `albums.${index}.tracks`);
 
   return (
@@ -162,8 +165,8 @@ const AlbumRow = ({
           <TrackRow
             key={field.id}
             form={form}
-            basePath={`albums.${index}.tracks`}
-            index={trackIndex}
+            albumIndex={index}
+            trackIndex={trackIndex}
             onRemove={() => tracks.remove(trackIndex)}
             onUp={() => tracks.move(trackIndex, trackIndex - 1)}
             onDown={() => tracks.move(trackIndex, trackIndex + 1)}
