@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef } from "react";
 import type { z } from "zod";
 import {
   type CreateFormOptions,
@@ -10,6 +10,6 @@ export const useForm = <TSchema extends z.ZodType>(
   schema: TSchema,
   options: CreateFormOptions<TSchema>,
 ): Form<TSchema> => {
-  const [form] = useState(() => createForm(schema, options));
-  return form;
+  const formRef = useRef<Form<TSchema> | null>(null);
+  return (formRef.current ??= createForm(schema, options));
 };
