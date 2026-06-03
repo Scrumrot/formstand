@@ -192,6 +192,71 @@ Or roll your own with the prop helpers:
 <select {...selectProps(useField(form, "theme"))}>...</select>
 ```
 
+## Sharing a form across components
+
+`useForm(schema, options)` creates a form bound to the calling component's lifetime. Calling `useForm` twice — even with the same schema — gives you **two independent forms with two independent stores**. The hook uses `useState(() => createForm(...))` under the hood, and `useState` is per-component-instance.
+
+To share one form between components, use one of these patterns:
+
+### 1. Lift the form up and pass it down as a prop
+
+```tsx
+const Parent = () => {
+  const form = useForm(schema, { initialValues });
+  return (
+    <>
+      <NameField form={form} />
+      <EmailField form={form} />
+    </>
+  );
+};
+```
+
+Each child takes `form: FieldFormApi` (or the typed `Form<typeof schema>`) and calls `useField(form, "...")` on it. Works for small trees; gets noisy if the tree is deep.
+
+### 2. `createFormContext` — no prop drilling, full typing
+
+```tsx
+import { createFormContext } from "zustand-forms";
+
+const { Provider, useFormContext } = createFormContext<typeof schema>();
+
+const Parent = () => {
+  const form = useForm(schema, { initialValues });
+  return (
+    <Provider form={form}>
+      <NameField />
+      <EmailField />
+    </Provider>
+  );
+};
+
+// In NameField.tsx — no form prop:
+const NameField = () => {
+  const form = useFormContext();          // typed Form<typeof schema>
+  const name = useField(form, "name");
+  return <input {...textInputProps(name)} />;
+};
+```
+
+The factory pattern (one `createFormContext` per form shape) preserves the schema's type information through the context. Children can `useField` directly without losing path inference.
+
+### 3. Module-scope `createForm` (rare)
+
+```ts
+// formStore.ts
+export const profileForm = createForm(schema, { initialValues });
+```
+
+Import and use anywhere. The form lives for the lifetime of the module — useful for single-instance "app-wide" forms (e.g., a global filter bar), bad for forms that should reset between page mounts.
+
+## Common pitfalls
+
+- **Object-returning selectors must use `useFormStateShallow`.** `useFormState(form, (s) => ({ values: s.values, errors: s.errors }))` returns a fresh object on every call; React's `useSyncExternalStore` will detect snapshot churn and bail with *"Maximum update depth exceeded"*. Use `useFormStateShallow` instead — it caches by shallow equality.
+- **Synchronous `validate` / `validateField` throws on async schemas.** `useField`'s internal triggers catch this and route to async automatically. Calling these methods directly on a form whose schema has `async .refine` will throw — use `validateAsync` / `validateFieldAsync` instead.
+- **`form.submit()` short-circuits when one is already in flight.** Pass `{ force: true }` as the third argument to bypass.
+- **Typed paths exist on hooks, not imperative form methods.** `useField(form, "naem")` errors at compile time; `form.setValue("naem", "x")` does not. Use `useField`/`useFieldArray`/`form.getField`/`form.watchField`/`form.watchValue` for typo-catching paths.
+
 ## Subscriptions (non-React)
 
 ```ts
