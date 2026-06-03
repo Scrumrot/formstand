@@ -61,8 +61,6 @@ export type {
   FieldArrayFormApi,
   FieldArrayEntry,
 } from "./react/useFieldArray";
-export { useDebouncedField } from "./react/useDebouncedField";
-export type { UseDebouncedFieldOptions } from "./react/useDebouncedField";
 export {
   textInputProps,
   numberInputProps,

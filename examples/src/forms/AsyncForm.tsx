@@ -1,6 +1,6 @@
 import {
   textInputProps,
-  useDebouncedField,
+  useField,
   useForm,
   useFormState,
 } from "zustand-forms";
@@ -27,7 +27,7 @@ export const AsyncForm = () => {
     initialValues: { username: "" },
     mode: "onChange",
   });
-  const username = useDebouncedField<string>(form, "username", { delayMs: 300 });
+  const username = useField(form, "username", { debounceMs: 300 });
   const isSubmitting = useFormState(form, (s) => s.isSubmitting);
 
   return (
