@@ -16,6 +16,7 @@ import type { BoolMap, ErrorMap, FormState } from "./types";
 import {
   type FieldValidationResult,
   type ValidationResult,
+  isAsyncRequiredError,
   validateAsync,
   validateSync,
 } from "./validation";
@@ -29,6 +30,12 @@ export type CreateFormOptions<TSchema extends z.ZodType> = Readonly<{
   initialValues: z.input<TSchema>;
   mode?: ValidationMode;
   reValidateMode?: ValidationMode;
+  // Run a full validation pass at creation so the error map (and flags derived
+  // from it, like `useIsValid`) reflect the initial values immediately rather
+  // than reading as error-free until the first blur/change/submit. Async
+  // schemas validate in the background. Note this surfaces errors for untouched
+  // fields right away — gate error display on `touched` if that's not wanted.
+  validateOnMount?: boolean;
 }>;
 
 export type SubmitHandler<TSchema extends z.ZodType> = (
@@ -440,6 +447,18 @@ export const createForm = <TSchema extends z.ZodType>(
       }
     }
   };
+
+  if (options.validateOnMount === true) {
+    try {
+      validate();
+    } catch (e) {
+      if (isAsyncRequiredError(e)) {
+        void validateAsyncOnForm();
+      } else {
+        throw e;
+      }
+    }
+  }
 
   return Object.freeze({
     schema,

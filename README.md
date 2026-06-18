@@ -66,6 +66,7 @@ const form = createForm(schema, {
   initialValues,
   mode: "onBlur",          // "onChange" | "onBlur" | "onSubmit"
   reValidateMode: "onChange", // mode used after the first submit attempt
+  validateOnMount: false,  // run a validation pass at creation (see below)
 });
 ```
 
@@ -175,10 +176,21 @@ Shortcut for the root-level error (errors at the `""` key from a schema-level `.
 
 ```ts
 useIsDirty(form);       // any field dirty
-useIsValid(form);       // no errors currently
+useIsValid(form);       // no errors currently in the error map
 useIsSubmitting(form);
 useSubmitCount(form);
 ```
+
+> **`useIsValid` reflects the error map, not a fresh validation.** It returns
+> `true` when no errors are currently recorded — covering both schema errors and
+> server errors set via `setError`. But the error map is empty until validation
+> runs, so a never-validated form reads as valid even if its initial values
+> would fail the schema. If you gate a submit button on `!useIsValid(form)`,
+> pass `validateOnMount: true` to `useForm`/`createForm` so the initial values
+> are checked up front. (`submit`/`handleSubmit` always re-validate regardless,
+> so an invalid form can't actually be submitted either way.) `validateOnMount`
+> surfaces errors for untouched fields immediately — gate error display on
+> `touched` if you don't want them shown before interaction.
 
 ### Bound input components
 
