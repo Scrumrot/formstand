@@ -412,7 +412,6 @@ export const createForm = <TSchema extends z.ZodType>(
   ): void => {
     const current = getAtPath(store.getState().values, path);
     if (current !== undefined && !Array.isArray(current)) {
-      // eslint-disable-next-line no-console
       console.warn(
         `[zustand-forms] array op on "${path}" but the value at that path is not an array (got ${typeof current}). Operation skipped.`,
       );
