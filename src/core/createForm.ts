@@ -590,15 +590,21 @@ export const createForm = <TSchema extends z.ZodType>(
         if (Object.keys(patch).length === 0) return state;
         return { ...state, ...patch };
       }),
-    adoptValues: (values) =>
+    adoptValues: (values) => {
+      // Rebasing values invalidates any in-flight async validation (the
+      // values-reference guard drops its write), so the per-path sequence
+      // counters can be released too rather than growing without bound.
+      sequences.clear();
       store.setState((state) => ({
         ...state,
         values,
         initialValues: values,
         errors: emptyErrors,
         dirty: emptyBools,
-      })),
-    reset: (nextInitial) =>
+      }));
+    },
+    reset: (nextInitial) => {
+      sequences.clear();
       store.setState((state) => {
         const init: typeof state.initialValues =
           nextInitial === undefined
@@ -618,7 +624,8 @@ export const createForm = <TSchema extends z.ZodType>(
           submitCount: 0,
           isValidating: emptyBools,
         };
-      }),
+      });
+    },
     validate,
     validateField,
     validateFields,
