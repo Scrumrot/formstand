@@ -36,66 +36,75 @@ export type UseFieldArrayReturn<TItem> = Readonly<{
   swap: (a: number, b: number) => void;
 }>;
 
-type IdState = Readonly<{ ids: readonly string[]; counter: number }>;
+type IdState = Readonly<{
+  items: readonly unknown[];
+  ids: readonly string[];
+  counter: number;
+}>;
 
-const advance = (state: IdState): Readonly<{ next: IdState; id: string }> => {
-  const counter = state.counter + 1;
-  return {
-    next: { ids: state.ids, counter },
-    id: `__zfa_${counter}`,
-  };
+const EMPTY_ID_STATE: IdState = { items: [], ids: [], counter: 0 };
+
+// Derive a stable id per item by reconciling the live items against the
+// previous render's items. Ids follow items by identity/value, so reorders,
+// resets, and mutations that bypass this hook all keep keys glued to their
+// rows — not just length-preserving appends/truncations. A positional
+// fallback hands a vanished item's id to a still-unmatched one, so editing a
+// field (which produces a fresh item reference) keeps its row instead of
+// remounting it.
+const reconcileIds = (prev: IdState, nextItems: readonly unknown[]): IdState => {
+  if (prev.items === nextItems) return prev;
+  if (
+    prev.items.length === nextItems.length &&
+    prev.items.every((item, i) => Object.is(item, nextItems[i]))
+  ) {
+    return prev;
+  }
+
+  // Bucket prev positions by item so duplicate primitives match in order.
+  const buckets = prev.items.reduce<Map<unknown, number[]>>((acc, item, i) => {
+    const bucket = acc.get(item);
+    if (bucket === undefined) {
+      acc.set(item, [i]);
+    } else {
+      bucket.push(i);
+    }
+    return acc;
+  }, new Map());
+
+  // First pass: reuse the id of the matching prev item, consuming that slot so
+  // each id is reused at most once (`shift` empties the bucket as we go).
+  const matchedIds: readonly (string | null)[] = nextItems.map((item) => {
+    const prevIndex = buckets.get(item)?.shift();
+    return prevIndex === undefined ? null : (prev.ids[prevIndex] ?? null);
+  });
+
+  // Whatever prev ids remain belong to items that vanished; feed them to the
+  // still-unmatched items in order, in-place edits before fresh mints.
+  const leftover = [...buckets.values()]
+    .flat()
+    .sort((a, b) => a - b)
+    .map((i) => prev.ids[i])
+    .filter((id): id is string => id !== undefined);
+
+  const assigned = matchedIds.reduce<{
+    ids: readonly string[];
+    counter: number;
+    cursor: number;
+  }>(
+    (acc, id) => {
+      if (id !== null) return { ...acc, ids: [...acc.ids, id] };
+      const reused = leftover[acc.cursor];
+      if (reused !== undefined) {
+        return { ...acc, ids: [...acc.ids, reused], cursor: acc.cursor + 1 };
+      }
+      const counter = acc.counter + 1;
+      return { ...acc, ids: [...acc.ids, `__zfa_${counter}`], counter };
+    },
+    { ids: [], counter: prev.counter, cursor: 0 },
+  );
+
+  return { items: nextItems, ids: assigned.ids, counter: assigned.counter };
 };
-
-const padIds = (state: IdState, target: number): IdState => {
-  if (target <= state.ids.length) return state;
-  const additions = Array.from({ length: target - state.ids.length });
-  return additions.reduce<IdState>((acc) => {
-    const stepped = advance(acc);
-    return { ids: [...stepped.next.ids, stepped.id], counter: stepped.next.counter };
-  }, state);
-};
-
-const trimIds = (state: IdState, target: number): IdState =>
-  target >= state.ids.length
-    ? state
-    : { ids: state.ids.slice(0, target), counter: state.counter };
-
-const insertId = (state: IdState, index: number): IdState => {
-  const stepped = advance(state);
-  return {
-    ids: [
-      ...stepped.next.ids.slice(0, index),
-      stepped.id,
-      ...stepped.next.ids.slice(index),
-    ],
-    counter: stepped.next.counter,
-  };
-};
-
-const removeId = (state: IdState, index: number): IdState => ({
-  ids: [...state.ids.slice(0, index), ...state.ids.slice(index + 1)],
-  counter: state.counter,
-});
-
-const moveId = (state: IdState, from: number, to: number): IdState => {
-  const moved = state.ids[from];
-  const without = [...state.ids.slice(0, from), ...state.ids.slice(from + 1)];
-  return {
-    ids: [
-      ...without.slice(0, to),
-      ...(moved === undefined ? [] : [moved]),
-      ...without.slice(to),
-    ],
-    counter: state.counter,
-  };
-};
-
-const swapId = (state: IdState, a: number, b: number): IdState => ({
-  ids: state.ids.map((v, i) =>
-    i === a ? (state.ids[b] ?? v) : i === b ? (state.ids[a] ?? v) : v,
-  ),
-  counter: state.counter,
-});
 
 export const useFieldArray = <TItem = unknown>(
   form: FieldArrayFormApi,
@@ -117,65 +126,42 @@ export const useFieldArray = <TItem = unknown>(
   const items = slice.items;
   const error = slice.error;
 
-  const idStateRef = useRef<IdState | null>(null);
+  const idStateRef = useRef<IdState>(EMPTY_ID_STATE);
   const pathRef = useRef<string | null>(null);
 
-  if (idStateRef.current === null || pathRef.current !== path) {
-    pathRef.current = path;
-    const counter = idStateRef.current?.counter ?? 0;
-    idStateRef.current = padIds({ ids: [], counter }, items.length);
-  } else if (items.length > idStateRef.current.ids.length) {
-    idStateRef.current = padIds(idStateRef.current, items.length);
-  } else if (items.length < idStateRef.current.ids.length) {
-    idStateRef.current = trimIds(idStateRef.current, items.length);
-  }
-
+  // Reconcile ids against the live items every render. When the path changes,
+  // drop the previous array's ids but carry the counter forward so freshly
+  // minted ids never collide with ids handed out for the old path.
+  const base =
+    pathRef.current === path
+      ? idStateRef.current
+      : { items: [], ids: [], counter: idStateRef.current.counter };
+  pathRef.current = path;
+  idStateRef.current = reconcileIds(base, items);
   const ids = idStateRef.current.ids;
 
   const push = useCallback(
-    (item: TItem) => {
-      idStateRef.current = padIds(
-        idStateRef.current ?? { ids: [], counter: 0 },
-        (idStateRef.current?.ids.length ?? 0) + 1,
-      );
-      form.arrayPush(path, item);
-    },
+    (item: TItem) => form.arrayPush(path, item),
     [form, path],
   );
 
   const remove = useCallback(
-    (index: number) => {
-      const current = idStateRef.current ?? { ids: [], counter: 0 };
-      idStateRef.current = removeId(current, index);
-      form.arrayRemove(path, index);
-    },
+    (index: number) => form.arrayRemove(path, index),
     [form, path],
   );
 
   const insert = useCallback(
-    (index: number, item: TItem) => {
-      const current = idStateRef.current ?? { ids: [], counter: 0 };
-      idStateRef.current = insertId(current, index);
-      form.arrayInsert(path, index, item);
-    },
+    (index: number, item: TItem) => form.arrayInsert(path, index, item),
     [form, path],
   );
 
   const move = useCallback(
-    (from: number, to: number) => {
-      const current = idStateRef.current ?? { ids: [], counter: 0 };
-      idStateRef.current = moveId(current, from, to);
-      form.arrayMove(path, from, to);
-    },
+    (from: number, to: number) => form.arrayMove(path, from, to),
     [form, path],
   );
 
   const swap = useCallback(
-    (a: number, b: number) => {
-      const current = idStateRef.current ?? { ids: [], counter: 0 };
-      idStateRef.current = swapId(current, a, b);
-      form.arraySwap(path, a, b);
-    },
+    (a: number, b: number) => form.arraySwap(path, a, b),
     [form, path],
   );
 

@@ -157,6 +157,13 @@ users.error;   // array-level error (e.g. min(1))
 ```
 
 ### `useFormState(form, selector)` / `useFormStateShallow(form, selector)`
+`fields` IDs are reconciled against item identity each render, so a row's `id`
+stays glued to its item across reorders, inserts, and removes — including
+mutations made outside this hook (`form.arrayMove`, `setValue`, `restore`, or a
+second `useFieldArray` on the same path). Editing a field keeps its row's `id`
+(the row updates instead of remounting); a genuinely new item gets a fresh `id`.
+IDs reset when the hook's `path` changes.
+
 
 Selector-style subscription. Use `useFormStateShallow` for selectors that return objects/arrays.
 
