@@ -30,6 +30,34 @@ describe("form.adoptValues", () => {
     form.adoptValues({ name: "Jane", age: 31 });
     expect(form.getState().submitCount).toBe(before);
   });
+
+  it("rebases value state but preserves interaction state (vs reset)", () => {
+    const form = createForm(schema, { initialValues: { name: "Tim", age: 30 } });
+    form.setValue("name", "x");
+    form.setError("name", ["bad"]);
+    form.setTouched("name", true);
+    form.setMode("onChange");
+    void form.submit(() => {});
+
+    form.adoptValues({ name: "Jane", age: 31 });
+    const after = form.getState();
+
+    // Value-derived state is reset/rebased...
+    expect(after.values).toEqual({ name: "Jane", age: 31 });
+    expect(after.initialValues).toEqual({ name: "Jane", age: 31 });
+    expect(after.errors).toEqual({});
+    expect(after.dirty).toEqual({});
+    // ...but interaction/session state is intentionally preserved.
+    expect(after.touched.name).toBe(true);
+    expect(after.submitCount).toBe(1);
+    expect(after.mode).toBe("onChange");
+
+    // reset(), by contrast, is the full wipe.
+    form.reset();
+    const reset = form.getState();
+    expect(reset.touched).toEqual({});
+    expect(reset.submitCount).toBe(0);
+  });
 });
 
 describe("form.submit concurrent guard", () => {

@@ -81,7 +81,7 @@ const form = createForm(schema, {
 | `setError(path, errors)` / `setErrors(map)` / `clearErrors(path?)` | error map control (server errors) |
 | `setMode` / `setReValidateMode` | switch modes at runtime |
 | `reset(nextInitial?)` | reset to initial; optional partial overrides |
-| `adoptValues(values)` | new baseline: values + initialValues, clears errors/dirty |
+| `adoptValues(values)` | mid-session rebase: replaces `values` + `initialValues` and clears `errors`/`dirty`, but **preserves** interaction state (`touched`, `submitCount`, `isSubmitting`, `isValidating`, `mode`). Use `reset()` for a full wipe |
 | `updateState(updater)` | atomic multi-field patch |
 | `validate()` / `validateField(path)` / `validateFields(paths)` | sync validation; sync-schema only |
 | `validateAsync()` / `validateFieldAsync(path)` / `validateFieldsAsync(paths)` | async; supports `async .refine` |
