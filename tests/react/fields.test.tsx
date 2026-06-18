@@ -67,6 +67,41 @@ describe("bound input components", () => {
     expect(input.value).toBe("42");
   });
 
+  it("NumberField keeps a lone minus sign visible while typing", () => {
+    render(<Harness />);
+    const input = screen.getByPlaceholderText("age") as HTMLInputElement;
+    act(() => {
+      fireEvent.change(input, { target: { value: "-" } });
+    });
+    // The partial entry survives instead of being coerced away.
+    expect(input.value).toBe("-");
+    act(() => {
+      fireEvent.change(input, { target: { value: "-5" } });
+    });
+    expect(input.value).toBe("-5");
+  });
+
+  it("NumberField keeps a trailing decimal point while typing", () => {
+    render(<Harness />);
+    const input = screen.getByPlaceholderText("age") as HTMLInputElement;
+    act(() => {
+      fireEvent.change(input, { target: { value: "1." } });
+    });
+    expect(input.value).toBe("1.");
+    // ...and on blur the display snaps to the form's canonical number.
+    act(() => {
+      fireEvent.blur(input);
+    });
+    expect(input.value).toBe("1");
+  });
+
+  it("NumberField uses an inputMode-decimal text input", () => {
+    render(<Harness />);
+    const input = screen.getByPlaceholderText("age") as HTMLInputElement;
+    expect(input.type).toBe("text");
+    expect(input.inputMode).toBe("decimal");
+  });
+
   it("CheckboxField toggles", () => {
     render(<Harness />);
     const checkbox = screen.getByRole("checkbox") as HTMLInputElement;

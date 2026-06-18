@@ -157,7 +157,6 @@ users.insert(i, item);
 users.error;   // array-level error (e.g. min(1))
 ```
 
-### `useFormState(form, selector)` / `useFormStateShallow(form, selector)`
 `fields` IDs are reconciled against item identity each render, so a row's `id`
 stays glued to its item across reorders, inserts, and removes — including
 mutations made outside this hook (`form.arrayMove`, `setValue`, `restore`, or a
@@ -165,6 +164,7 @@ second `useFieldArray` on the same path). Editing a field keeps its row's `id`
 (the row updates instead of remounting); a genuinely new item gets a fresh `id`.
 IDs reset when the hook's `path` changes.
 
+### `useFormState(form, selector)` / `useFormStateShallow(form, selector)`
 
 Selector-style subscription. Use `useFormStateShallow` for selectors that return objects/arrays.
 
@@ -202,13 +202,25 @@ useSubmitCount(form);
   options={[{ value: "light", label: "Light" }, { value: "dark", label: "Dark" }]} />
 ```
 
+`NumberField` renders a `type="text"` input with `inputMode="decimal"` and keeps
+the raw text while you type, so partial entries (`-`, `1.`, `1e`) survive instead
+of being coerced away by a controlled `<input type="number">`. It parses to a
+`number` for the form on each keystroke and snaps the display to the canonical
+value on blur.
+
 Or roll your own with the prop helpers:
 
 ```tsx
 <input {...textInputProps(useField(form, "name"))} />
-<input {...numberInputProps(useField(form, "age"))} />
 <input {...checkboxProps(useField(form, "agree"))} />
 <select {...selectProps(useField(form, "theme"))}>...</select>
+```
+
+`numberInputProps` is also exported as a stateless `<input type="number">` binding
+(native stepper + `step`), at the cost of the intermediate-entry behaviour above:
+
+```tsx
+<input {...numberInputProps(useField(form, "age"))} type="number" step="1" />
 ```
 
 ## Sharing a form across components

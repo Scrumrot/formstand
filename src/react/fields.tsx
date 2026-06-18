@@ -1,11 +1,6 @@
-import { type ReactNode, useId } from "react";
-import {
-  checkboxProps,
-  numberInputProps,
-  selectProps,
-  textInputProps,
-} from "./inputProps";
-import { type FieldFormApi, useField } from "./useField";
+import { type ChangeEvent, type ReactNode, useId, useState } from "react";
+import { checkboxProps, selectProps, textInputProps } from "./inputProps";
+import { type FieldFormApi, type UseFieldReturn, useField } from "./useField";
 
 const ErrorText = ({
   error,
@@ -57,18 +52,64 @@ export type NumberFieldProps = Readonly<{
   path: string;
   label?: ReactNode;
   placeholder?: string;
+  // No longer applied: NumberField renders a text input with
+  // inputMode="decimal" so partial entries ("-", "1.", "1e") survive while
+  // typing. For a native numeric stepper, spread `numberInputProps` onto your
+  // own <input type="number" step={...} />.
   step?: number | string;
 }>;
+
+type NumberInputBinding = Readonly<{
+  value: string;
+  inputMode: "decimal";
+  onChange: (e: ChangeEvent<HTMLInputElement>) => void;
+  onBlur: () => void;
+}>;
+
+// Holds the raw text while editing so intermediate, not-yet-valid numbers
+// ("-", "1.", "1e") stay visible instead of being coerced to "". Each keystroke
+// that parses to a finite number is pushed to the form; partial input is kept
+// locally without writing NaN/undefined. On blur the display snaps back to the
+// form's canonical value.
+const useNumberInput = (
+  field: UseFieldReturn<number | undefined>,
+): NumberInputBinding => {
+  const [raw, setRaw] = useState<string | null>(null);
+  const canonical =
+    field.value === undefined || Number.isNaN(field.value)
+      ? ""
+      : String(field.value);
+  return {
+    value: raw ?? canonical,
+    inputMode: "decimal",
+    onChange: (e) => {
+      const text = e.target.value;
+      setRaw(text);
+      if (text === "") {
+        field.setValue(undefined);
+        return;
+      }
+      const parsed = Number(text);
+      if (!Number.isNaN(parsed)) {
+        field.setValue(parsed);
+      }
+    },
+    onBlur: () => {
+      setRaw(null);
+      field.onBlur();
+    },
+  };
+};
 
 export const NumberField = ({
   form,
   path,
   label,
   placeholder,
-  step,
 }: NumberFieldProps) => {
   const id = useId();
   const field = useField<number | undefined>(form, path);
+  const binding = useNumberInput(field);
   return (
     <div className="zf-field">
       {label !== undefined ? (
@@ -76,12 +117,7 @@ export const NumberField = ({
           {label}
         </label>
       ) : null}
-      <input
-        id={id}
-        {...numberInputProps(field)}
-        placeholder={placeholder}
-        step={step}
-      />
+      <input id={id} type="text" {...binding} placeholder={placeholder} />
       <ErrorText error={field.error} />
     </div>
   );
