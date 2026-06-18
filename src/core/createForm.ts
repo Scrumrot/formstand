@@ -139,6 +139,32 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
   restore: (snapshot: FormState<z.input<TSchema>>) => void;
 }>;
 
+const isPlainObject = (v: unknown): v is Record<string, unknown> => {
+  if (typeof v !== "object" || v === null) return false;
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
+};
+
+// Structural equality used to decide whether a field still matches its initial
+// value. Recurses into arrays and plain objects only; Dates, class instances,
+// and other exotic objects fall back to Object.is so a real change is never
+// mistaken for "unchanged".
+const valuesEqual = (a: unknown, b: unknown): boolean => {
+  if (Object.is(a, b)) return true;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((v, i) => valuesEqual(v, b[i]));
+  }
+  if (isPlainObject(a) && isPlainObject(b)) {
+    const aKeys = Object.keys(a);
+    const bKeys = Object.keys(b);
+    return (
+      aKeys.length === bKeys.length &&
+      aKeys.every((k) => valuesEqual(a[k], b[k]))
+    );
+  }
+  return false;
+};
+
 const emptyErrors = {} as ErrorMap;
 const emptyBools = {} as BoolMap;
 
@@ -518,11 +544,19 @@ export const createForm = <TSchema extends z.ZodType>(
       });
     },
     setValue: (path: string, value: unknown) =>
-      store.setState((state) => ({
-        ...state,
-        values: setAtPath(state.values, path, value),
-        dirty: { ...state.dirty, [path]: true },
-      })),
+      store.setState((state) => {
+        const matchesInitial = valuesEqual(
+          value,
+          getAtPath(state.initialValues, path),
+        );
+        return {
+          ...state,
+          values: setAtPath(state.values, path, value),
+          dirty: matchesInitial
+            ? omitKey(state.dirty, path)
+            : { ...state.dirty, [path]: true },
+        };
+      }),
     setValues: (next) =>
       store.setState((state) => ({ ...state, values: next })),
     setTouched: (path: string, touched: boolean = true) =>

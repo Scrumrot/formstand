@@ -75,7 +75,7 @@ const form = createForm(schema, {
 | Method | Notes |
 |---|---|
 | `getState()` / `subscribe(listener)` | the underlying zustand store |
-| `setValue(path, value)` | updates one field; marks it dirty |
+| `setValue(path, value)` | updates one field; marks it dirty, or clears dirty if the value equals `initialValues` at that path (structural equality for arrays/plain objects, `Object.is` otherwise) |
 | `setValues(next)` | replace the entire values object |
 | `setTouched(path, touched?)` | marks a path touched |
 | `setError(path, errors)` / `setErrors(map)` / `clearErrors(path?)` | error map control (server errors) |
@@ -89,7 +89,7 @@ const form = createForm(schema, {
 | `handleSubmit(onValid, onInvalid?)(event?)` | event handler wrapper that calls `preventDefault` |
 | `getField(path)` | typed one-shot value read |
 | `watchField` / `watchValue` / `watchValues` | subscriptions; see below |
-| `diff()` / `dirtyFields()` | PATCH-style helpers |
+| `diff()` / `dirtyFields()` | PATCH-style helpers; reflect only fields whose value currently differs from initial (reverting a field drops it) |
 | `snapshot()` / `restore(snap)` | full state capture/restore for undo/rollback |
 | `arrayPush` / `arrayRemove` / `arrayInsert` / `arrayMove` / `arraySwap` | array ops with meta-key re-keying |
 
