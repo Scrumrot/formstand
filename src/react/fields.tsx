@@ -152,6 +152,10 @@ export type SelectFieldProps<T extends string> = Readonly<{
   path: string;
   label?: ReactNode;
   options: readonly SelectFieldOption<T>[];
+  // Shown as a disabled first option while the field value is undefined, so
+  // the select stays controlled and the blank state is visible instead of
+  // silently displaying the first option.
+  placeholder?: string;
 }>;
 
 export const SelectField = <T extends string>({
@@ -159,9 +163,11 @@ export const SelectField = <T extends string>({
   path,
   label,
   options,
+  placeholder,
 }: SelectFieldProps<T>) => {
   const id = useId();
-  const field = useField<T>(form, path);
+  const field = useField<T | undefined>(form, path);
+  const showEmptyOption = field.value === undefined || placeholder !== undefined;
   return (
     <div className="zf-field">
       {label !== undefined ? (
@@ -170,6 +176,11 @@ export const SelectField = <T extends string>({
         </label>
       ) : null}
       <select id={id} {...selectProps(field)}>
+        {showEmptyOption ? (
+          <option value="" disabled>
+            {placeholder ?? ""}
+          </option>
+        ) : null}
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>
             {opt.label}

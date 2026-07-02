@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand/react";
 import { useShallow } from "zustand/react/shallow";
@@ -126,19 +126,24 @@ export const useFieldArray = <TItem = unknown>(
   const items = slice.items;
   const error = slice.error;
 
-  const idStateRef = useRef<IdState>(EMPTY_ID_STATE);
-  const pathRef = useRef<string | null>(null);
-
-  // Reconcile ids against the live items every render. When the path changes,
-  // drop the previous array's ids but carry the counter forward so freshly
-  // minted ids never collide with ids handed out for the old path.
+  // Reconcile ids against the live items every render, using the
+  // derived-state-from-props pattern (a render-phase setState, which React
+  // supports and immediately re-renders with) instead of mutating a ref during
+  // render — a discarded concurrent render must not advance id bookkeeping.
+  // When the form or path changes, drop the previous array's ids but carry the
+  // counter forward so freshly minted ids never collide with old ones.
+  const [idEntry, setIdEntry] = useState<
+    Readonly<{ form: FieldArrayFormApi; path: string; state: IdState }>
+  >({ form, path, state: EMPTY_ID_STATE });
   const base =
-    pathRef.current === path
-      ? idStateRef.current
-      : { items: [], ids: [], counter: idStateRef.current.counter };
-  pathRef.current = path;
-  idStateRef.current = reconcileIds(base, items);
-  const ids = idStateRef.current.ids;
+    idEntry.form === form && idEntry.path === path
+      ? idEntry.state
+      : { items: [], ids: [], counter: idEntry.state.counter };
+  const nextIdState = reconcileIds(base, items);
+  if (idEntry.form !== form || idEntry.path !== path || idEntry.state !== nextIdState) {
+    setIdEntry({ form, path, state: nextIdState });
+  }
+  const ids = nextIdState.ids;
 
   const push = useCallback(
     (item: TItem) => form.arrayPush(path, item),

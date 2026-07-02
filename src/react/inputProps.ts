@@ -21,8 +21,8 @@ export type CheckboxProps = Readonly<{
   onBlur: () => void;
 }>;
 
-export type SelectProps<T extends string> = Readonly<{
-  value: T;
+export type SelectProps = Readonly<{
+  value: string;
   onChange: (e: ChangeEvent<HTMLSelectElement>) => void;
   onBlur: () => void;
 }>;
@@ -64,10 +64,13 @@ export const checkboxProps = <T extends boolean | undefined>(
   onBlur: field.onBlur,
 });
 
-export const selectProps = <T extends string>(
+// `?? ""` keeps the <select> controlled when the field has no value yet;
+// pair it with an <option value=""> (SelectField renders one) so the blank
+// state is a real option instead of silently showing the first entry.
+export const selectProps = <T extends string | undefined>(
   field: UseFieldReturn<T>,
-): SelectProps<T> => ({
-  value: field.value,
+): SelectProps => ({
+  value: field.value ?? "",
   onChange: (e) => field.setValue(e.target.value as T),
   onBlur: field.onBlur,
 });

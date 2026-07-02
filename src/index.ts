@@ -20,7 +20,9 @@ export {
 } from "./core/validation";
 export type {
   ValidationResult,
+  SettledValidationResult,
   FieldValidationResult,
+  SettledFieldValidationResult,
 } from "./core/validation";
 export { shouldValidateOn } from "./core/mode";
 export type { ValidationMode, ValidationTrigger } from "./core/mode";

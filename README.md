@@ -76,14 +76,14 @@ const form = createForm(schema, {
 |---|---|
 | `getState()` / `subscribe(listener)` | the underlying zustand store |
 | `setValue(path, value)` | updates one field; marks it dirty, or clears dirty if the value equals `initialValues` at that path (structural equality for arrays/plain objects, `Object.is` otherwise) |
-| `setValues(next)` | replace the entire values object |
+| `setValues(next)` | replace the entire values object; dirtiness is recomputed per top-level key against `initialValues` |
 | `setTouched(path, touched?)` | marks a path touched |
 | `setError(path, errors)` / `setErrors(map)` / `clearErrors(path?)` | error map control (server errors) |
 | `setMode` / `setReValidateMode` | switch modes at runtime |
 | `reset(nextInitial?)` | reset to initial; optional partial overrides |
 | `adoptValues(values)` | mid-session rebase: replaces `values` + `initialValues` and clears `errors`/`dirty`, but **preserves** interaction state (`touched`, `submitCount`, `isSubmitting`, `isValidating`, `mode`). Use `reset()` for a full wipe |
 | `updateState(updater)` | atomic multi-field patch |
-| `validate()` / `validateField(path)` / `validateFields(paths)` | sync validation; sync-schema only |
+| `validate()` / `validateField(path)` / `validateFields(paths)` | sync validation; on an async schema they transparently start the async pass instead (`validate`/`validateField` return `{ kind: "pending", promise }`, `validateFields` returns the `Promise<boolean>` itself) |
 | `validateAsync()` / `validateFieldAsync(path)` / `validateFieldsAsync(paths)` | async; supports `async .refine` |
 | `submit(onValid, onInvalid?, { force? })` → `Promise<boolean>` | full submit flow; returns `true` if ran, `false` if skipped (in-flight) |
 | `handleSubmit(onValid, onInvalid?)(event?)` | event handler wrapper that calls `preventDefault` |
@@ -91,7 +91,7 @@ const form = createForm(schema, {
 | `watchField` / `watchValue` / `watchValues` | subscriptions; see below |
 | `diff()` / `dirtyFields()` | PATCH-style helpers; reflect only fields whose value currently differs from initial (reverting a field drops it) |
 | `snapshot()` / `restore(snap)` | full state capture/restore for undo/rollback |
-| `arrayPush` / `arrayRemove` / `arrayInsert` / `arrayMove` / `arraySwap` | array ops with meta-key re-keying |
+| `arrayPush` / `arrayRemove` / `arrayInsert` / `arrayMove` / `arraySwap` | array ops with meta-key re-keying; the array path's dirtiness is recomputed against `initialValues` (push + remove reverts to clean) |
 
 ### Validation modes
 
@@ -100,7 +100,7 @@ const form = createForm(schema, {
 - `mode: "onSubmit"`: validate only on submit.
 - `reValidateMode` (default `"onChange"`) kicks in once `submitCount > 0`.
 
-For schemas with `async .refine`, the React layer transparently routes to async validation when sync would throw. Direct calls to sync `validate()` / `validateField()` will throw on async schemas; use the `*Async` variants.
+For schemas with `async .refine`, sync `validate()` / `validateField()` / `validateFields()` no longer throw: they detect the async requirement, start the async pass themselves, and hand you the in-flight work (`{ kind: "pending", promise }` from `validate`/`validateField`; the `Promise<boolean>` itself from `validateFields`). If the *field being validated* is itself sync, `validateField` still settles synchronously even when other fields carry async refines — field validation parses just that field's subschema when it can (see below).
 
 ## React hooks
 
@@ -198,9 +198,13 @@ useSubmitCount(form);
 <TextField form={form} path="email" label="Email" type="email" />
 <NumberField form={form} path="age" label="Age" />
 <CheckboxField form={form} path="agree" label="I agree" />
-<SelectField form={form} path="theme" label="Theme"
+<SelectField form={form} path="theme" label="Theme" placeholder="Pick a theme"
   options={[{ value: "light", label: "Light" }, { value: "dark", label: "Dark" }]} />
 ```
+
+`SelectField` stays controlled while the field value is `undefined` by rendering
+a disabled empty option (with your `placeholder` text, if given), so the blank
+state is visible instead of the browser silently showing the first option.
 
 `NumberField` renders a `type="text"` input with `inputMode="decimal"` and keeps
 the raw text while you type, so partial entries (`-`, `1.`, `1e`) survive instead
@@ -284,7 +288,7 @@ Import and use anywhere. The form lives for the lifetime of the module — usefu
 ## Common pitfalls
 
 - **Object-returning selectors must use `useFormStateShallow`.** `useFormState(form, (s) => ({ values: s.values, errors: s.errors }))` returns a fresh object on every call; React's `useSyncExternalStore` will detect snapshot churn and bail with *"Maximum update depth exceeded"*. Use `useFormStateShallow` instead — it caches by shallow equality.
-- **Synchronous `validate` / `validateField` throws on async schemas.** `useField`'s internal triggers catch this and route to async automatically. Calling these methods directly on a form whose schema has `async .refine` will throw — use `validateAsync` / `validateFieldAsync` instead.
+- **Synchronous `validate` / `validateField` return `pending` on async schemas.** They start the async pass for you and return `{ kind: "pending", promise }` — check `result.kind` (or use the `*Async` variants directly) rather than assuming `valid`/`invalid`.
 - **`form.submit()` short-circuits when one is already in flight.** Pass `{ force: true }` as the third argument to bypass.
 - **Typed paths exist on hooks, not imperative form methods.** `useField(form, "naem")` errors at compile time; `form.setValue("naem", "x")` does not. Use `useField`/`useFieldArray`/`form.getField`/`form.watchField`/`form.watchValue` for typo-catching paths.
 
@@ -311,7 +315,8 @@ const schema = z.object({
 ```
 
 - `form.submit` uses `safeParseAsync` internally, so async refines work transparently.
-- `form.validateFieldAsync(path)` runs full-form parse but writes errors only for that path.
+- `form.validateFieldAsync(path)` parses **just that field's subschema** when the path is reachable through refinement-free objects/arrays — so an async username check doesn't fire when you validate an unrelated field. When a traversed level carries a refinement (cross-field rules), it falls back to a full-form parse and scopes the written errors to the path and its descendants.
+- `validateField("address")` also **sets and clears errors for descendant paths** (`address.city`, …), not just the exact key.
 - Per-path **sequence numbers** ensure stale "username was taken" results don't overwrite a newer "ok" result.
 - A **values-reference guard** drops the write if `values` mutated during the await (so `reset`/`adoptValues`/`setValue` during an in-flight validate doesn't corrupt the error map).
 
@@ -330,7 +335,14 @@ form.handleSubmit(async (data) => {
 });
 ```
 
-`useField`'s built-in validation triggers will clear server errors on the next blur/change. To make a server error sticky, set it after validation runs.
+Errors set via `setError`/`setErrors` are tracked as **manual** errors and survive full-form validation passes the schema is silent on — a background `validateAsync()` resolving no longer wipes a "username taken" message. A manual error is released when:
+
+- the field's value changes (`setValue` on the path or an ancestor/descendant),
+- a field-scoped validation (`validateField`/`validateFieldAsync`) targets its path,
+- a schema error lands on the same key (the schema message wins), or
+- you call `clearErrors` / `reset` / `adoptValues`.
+
+Note `submit` still proceeds when the schema is valid even if manual errors are present (the server gets to re-judge); they simply remain in the error map, so `useIsValid` stays `false` until the user edits the field.
 
 ## Field arrays with nested arrays
 
