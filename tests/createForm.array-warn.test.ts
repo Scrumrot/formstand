@@ -15,7 +15,10 @@ describe("array op on non-array value", () => {
       z.object({ name: z.string() }),
       { initialValues: { name: "Tim" } },
     );
-    form.arrayPush("name", "x");
+    // The typed surface rejects this at compile time ("name" is not an array
+    // path); the cast simulates a dynamic/untyped caller hitting the runtime
+    // guard.
+    form.arrayPush("name", "x" as never);
     expect(console.warn).toHaveBeenCalledOnce();
     expect(form.getState().values).toEqual({ name: "Tim" });
   });

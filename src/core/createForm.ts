@@ -53,6 +53,19 @@ export type SubmitOptions = Readonly<{
   force?: boolean;
 }>;
 
+// "valid": validation passed and onValid ran. "invalid": validation failed
+// (onInvalid ran, errors written and their fields marked touched).
+// "skipped": another submit was already in flight and force wasn't set.
+export type SubmitResult<TOutput> =
+  | Readonly<{ kind: "valid"; data: TOutput }>
+  | Readonly<{ kind: "invalid"; errors: ErrorMap }>
+  | Readonly<{ kind: "skipped" }>;
+
+type ArrayItemOf<T> = T extends readonly (infer U)[] ? U : never;
+
+// Root-level errors (schema-wide .refine) live at the "" key.
+type ErrorPath<TValues> = FieldPath<TValues> | "";
+
 export type FieldSnapshot<TValue> = Readonly<{
   value: TValue;
   error: readonly string[] | undefined;
@@ -101,15 +114,21 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
       previous: z.input<TSchema>,
     ) => void,
   ) => () => void;
-  setValue: (path: string, value: unknown) => void;
+  setValue: <P extends FieldPath<z.input<TSchema>>>(
+    path: P,
+    value: FieldValue<z.input<TSchema>, P>,
+  ) => void;
   setValues: (next: z.input<TSchema>) => void;
-  setTouched: (path: string, touched?: boolean) => void;
+  setTouched: (path: FieldPath<z.input<TSchema>>, touched?: boolean) => void;
   setSubmitting: (value: boolean) => void;
   setMode: (mode: ValidationMode) => void;
   setReValidateMode: (mode: ValidationMode) => void;
-  setError: (path: string, errors: readonly string[]) => void;
+  setError: (
+    path: ErrorPath<z.input<TSchema>>,
+    errors: readonly string[],
+  ) => void;
   setErrors: (errors: ErrorMap) => void;
-  clearErrors: (path?: string) => void;
+  clearErrors: (path?: ErrorPath<z.input<TSchema>>) => void;
   updateState: (
     updater: (
       state: FormState<z.input<TSchema>>,
@@ -118,28 +137,47 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
   reset: (nextInitial?: Partial<z.input<TSchema>>) => void;
   adoptValues: (values: z.input<TSchema>) => void;
   validate: () => ValidationResult<z.output<TSchema>>;
-  validateField: (path: string) => FieldValidationResult;
+  validateField: (path: ErrorPath<z.input<TSchema>>) => FieldValidationResult;
   // Returns a Promise (the async pass, already started) when the schema needs
   // async parsing — mirroring the "pending" result of validate/validateField.
-  validateFields: (paths: readonly string[]) => boolean | Promise<boolean>;
+  validateFields: (
+    paths: readonly FieldPath<z.input<TSchema>>[],
+  ) => boolean | Promise<boolean>;
   validateAsync: () => Promise<ValidationResult<z.output<TSchema>>>;
-  validateFieldAsync: (path: string) => Promise<FieldValidationResult>;
-  validateFieldsAsync: (paths: readonly string[]) => Promise<boolean>;
+  validateFieldAsync: (
+    path: ErrorPath<z.input<TSchema>>,
+  ) => Promise<FieldValidationResult>;
+  validateFieldsAsync: (
+    paths: readonly FieldPath<z.input<TSchema>>[],
+  ) => Promise<boolean>;
   submit: (
     onValid: SubmitHandler<TSchema>,
     onInvalid?: InvalidSubmitHandler,
     options?: SubmitOptions,
-  ) => Promise<boolean>;
-  arrayPush: (path: string, item: unknown) => void;
-  arrayRemove: (path: string, index: number) => void;
-  arrayInsert: (path: string, index: number, item: unknown) => void;
-  arrayMove: (path: string, from: number, to: number) => void;
-  arraySwap: (path: string, a: number, b: number) => void;
+  ) => Promise<SubmitResult<z.output<TSchema>>>;
+  arrayPush: <P extends FieldPath<z.input<TSchema>>>(
+    path: P,
+    item: ArrayItemOf<NonNullable<FieldValue<z.input<TSchema>, P>>>,
+  ) => void;
+  arrayRemove: (path: FieldPath<z.input<TSchema>>, index: number) => void;
+  arrayInsert: <P extends FieldPath<z.input<TSchema>>>(
+    path: P,
+    index: number,
+    item: ArrayItemOf<NonNullable<FieldValue<z.input<TSchema>, P>>>,
+  ) => void;
+  arrayMove: (
+    path: FieldPath<z.input<TSchema>>,
+    from: number,
+    to: number,
+  ) => void;
+  arraySwap: (path: FieldPath<z.input<TSchema>>, a: number, b: number) => void;
   handleSubmit: (
     onValid: SubmitHandler<TSchema>,
     onInvalid?: InvalidSubmitHandler,
     options?: SubmitOptions,
-  ) => (event?: { preventDefault: () => void }) => Promise<boolean>;
+  ) => (event?: {
+    preventDefault: () => void;
+  }) => Promise<SubmitResult<z.output<TSchema>>>;
   diff: () => Readonly<Record<string, unknown>>;
   dirtyFields: () => readonly string[];
   snapshot: () => FormState<z.input<TSchema>>;
@@ -589,8 +627,10 @@ export const createForm = <TSchema extends z.ZodType>(
     onValid: SubmitHandler<TSchema>,
     onInvalid?: InvalidSubmitHandler,
     submitOptions?: SubmitOptions,
-  ): Promise<boolean> => {
-    if (inFlight.count > 0 && submitOptions?.force !== true) return false;
+  ): Promise<SubmitResult<z.output<TSchema>>> => {
+    if (inFlight.count > 0 && submitOptions?.force !== true) {
+      return { kind: "skipped" };
+    }
     if (inFlight.count === 0) {
       inFlight.baseline = store.getState().isSubmitting;
     }
@@ -609,9 +649,23 @@ export const createForm = <TSchema extends z.ZodType>(
           result.errors,
           store.getState().errors,
         );
-        store.setState((state) => ({ ...state, errors: merged }));
+        store.setState((state) => ({
+          ...state,
+          errors: merged,
+          // Mark every errored field touched so touched-gated error UIs show
+          // something after the canonical first failed submit. The "" key
+          // (schema-level refine) has no field to touch.
+          touched: {
+            ...state.touched,
+            ...Object.fromEntries(
+              Object.keys(merged)
+                .filter((k) => k !== "")
+                .map((k) => [k, true]),
+            ),
+          },
+        }));
         onInvalid?.(merged);
-        return true;
+        return { kind: "invalid", errors: merged };
       }
 
       store.setState((state) => ({
@@ -619,7 +673,7 @@ export const createForm = <TSchema extends z.ZodType>(
         errors: preserveManualErrors(emptyErrors, state.errors),
       }));
       await onValid(result.data);
-      return true;
+      return { kind: "valid", data: result.data };
     } finally {
       inFlight.count -= 1;
       if (inFlight.count === 0) {

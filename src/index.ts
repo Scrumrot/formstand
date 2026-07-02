@@ -5,6 +5,7 @@ export type {
   SubmitHandler,
   InvalidSubmitHandler,
   SubmitOptions,
+  SubmitResult,
   ReadonlyStoreApi,
   FieldSnapshot,
 } from "./core/createForm";
@@ -61,7 +62,9 @@ export type {
   CheckboxFieldProps,
   SelectFieldProps,
   SelectFieldOption,
+  FieldRef,
 } from "./react/fields";
+export { focusFirstError } from "./react/focusError";
 export { useFieldArray } from "./react/useFieldArray";
 export type {
   UseFieldArrayReturn,

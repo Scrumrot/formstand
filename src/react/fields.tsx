@@ -2,11 +2,29 @@ import { type ChangeEvent, type ReactNode, useId, useState } from "react";
 import { checkboxProps, selectProps, textInputProps } from "./inputProps";
 import { type FieldFormApi, type UseFieldReturn, useField } from "./useField";
 
+// Structural stand-in for React.Ref<T>: accepts useRef objects and callback
+// refs (including React 19 cleanup-returning ones — any return type is
+// assignable to a void-returning signature). Declared structurally instead of
+// as React.Ref so it unifies even when the consumer resolves a different
+// @types/react copy than the library.
+export type FieldRef<T> =
+  | ((instance: T | null) => void)
+  | Readonly<{ current: T | null }>
+  | null;
+
+const hasError = (error: readonly string[] | undefined): boolean =>
+  error !== undefined && error.length > 0;
+
+// role="alert" announces the message to assistive tech when it appears; the
+// id lets the input point at it via aria-describedby.
 const ErrorText = ({
+  id,
   error,
-}: Readonly<{ error: readonly string[] | undefined }>) =>
-  error !== undefined && error.length > 0 ? (
-    <span className="zf-error">{error[0]}</span>
+}: Readonly<{ id: string; error: readonly string[] | undefined }>) =>
+  hasError(error) ? (
+    <span className="zf-error" id={id} role="alert">
+      {error?.[0]}
+    </span>
   ) : null;
 
 export type TextFieldProps = Readonly<{
@@ -16,6 +34,7 @@ export type TextFieldProps = Readonly<{
   placeholder?: string;
   type?: "text" | "password" | "email" | "url" | "tel";
   autoComplete?: string;
+  ref?: FieldRef<HTMLInputElement>;
 }>;
 
 export const TextField = ({
@@ -25,8 +44,10 @@ export const TextField = ({
   placeholder,
   type = "text",
   autoComplete,
+  ref,
 }: TextFieldProps) => {
   const id = useId();
+  const errorId = `${id}-error`;
   const field = useField<string | undefined>(form, path);
   return (
     <div className="zf-field">
@@ -37,12 +58,14 @@ export const TextField = ({
       ) : null}
       <input
         id={id}
+        ref={ref}
         {...textInputProps(field)}
         type={type}
         placeholder={placeholder}
         autoComplete={autoComplete}
+        aria-describedby={hasError(field.error) ? errorId : undefined}
       />
-      <ErrorText error={field.error} />
+      <ErrorText id={errorId} error={field.error} />
     </div>
   );
 };
@@ -57,11 +80,14 @@ export type NumberFieldProps = Readonly<{
   // typing. For a native numeric stepper, spread `numberInputProps` onto your
   // own <input type="number" step={...} />.
   step?: number | string;
+  ref?: FieldRef<HTMLInputElement>;
 }>;
 
 type NumberInputBinding = Readonly<{
+  name: string;
   value: string;
   inputMode: "decimal";
+  "aria-invalid": true | undefined;
   onChange: (e: ChangeEvent<HTMLInputElement>) => void;
   onBlur: () => void;
 }>;
@@ -80,8 +106,10 @@ const useNumberInput = (
       ? ""
       : String(field.value);
   return {
+    name: field.path,
     value: raw ?? canonical,
     inputMode: "decimal",
+    "aria-invalid": hasError(field.error) ? true : undefined,
     onChange: (e) => {
       const text = e.target.value;
       setRaw(text);
@@ -106,8 +134,10 @@ export const NumberField = ({
   path,
   label,
   placeholder,
+  ref,
 }: NumberFieldProps) => {
   const id = useId();
+  const errorId = `${id}-error`;
   const field = useField<number | undefined>(form, path);
   const binding = useNumberInput(field);
   return (
@@ -117,8 +147,15 @@ export const NumberField = ({
           {label}
         </label>
       ) : null}
-      <input id={id} type="text" {...binding} placeholder={placeholder} />
-      <ErrorText error={field.error} />
+      <input
+        id={id}
+        ref={ref}
+        type="text"
+        {...binding}
+        placeholder={placeholder}
+        aria-describedby={hasError(field.error) ? errorId : undefined}
+      />
+      <ErrorText id={errorId} error={field.error} />
     </div>
   );
 };
@@ -127,17 +164,25 @@ export type CheckboxFieldProps = Readonly<{
   form: FieldFormApi;
   path: string;
   label?: ReactNode;
+  ref?: FieldRef<HTMLInputElement>;
 }>;
 
-export const CheckboxField = ({ form, path, label }: CheckboxFieldProps) => {
+export const CheckboxField = ({ form, path, label, ref }: CheckboxFieldProps) => {
   const id = useId();
+  const errorId = `${id}-error`;
   const field = useField<boolean | undefined>(form, path);
   return (
     <div className="zf-field">
       <label htmlFor={id} className="zf-label">
-        <input id={id} {...checkboxProps(field)} /> {label}
+        <input
+          id={id}
+          ref={ref}
+          {...checkboxProps(field)}
+          aria-describedby={hasError(field.error) ? errorId : undefined}
+        />{" "}
+        {label}
       </label>
-      <ErrorText error={field.error} />
+      <ErrorText id={errorId} error={field.error} />
     </div>
   );
 };
@@ -156,6 +201,7 @@ export type SelectFieldProps<T extends string> = Readonly<{
   // the select stays controlled and the blank state is visible instead of
   // silently displaying the first option.
   placeholder?: string;
+  ref?: FieldRef<HTMLSelectElement>;
 }>;
 
 export const SelectField = <T extends string>({
@@ -164,8 +210,10 @@ export const SelectField = <T extends string>({
   label,
   options,
   placeholder,
+  ref,
 }: SelectFieldProps<T>) => {
   const id = useId();
+  const errorId = `${id}-error`;
   const field = useField<T | undefined>(form, path);
   const showEmptyOption = field.value === undefined || placeholder !== undefined;
   return (
@@ -175,7 +223,12 @@ export const SelectField = <T extends string>({
           {label}
         </label>
       ) : null}
-      <select id={id} {...selectProps(field)}>
+      <select
+        id={id}
+        ref={ref}
+        {...selectProps(field)}
+        aria-describedby={hasError(field.error) ? errorId : undefined}
+      >
         {showEmptyOption ? (
           <option value="" disabled>
             {placeholder ?? ""}
@@ -187,7 +240,7 @@ export const SelectField = <T extends string>({
           </option>
         ))}
       </select>
-      <ErrorText error={field.error} />
+      <ErrorText id={errorId} error={field.error} />
     </div>
   );
 };

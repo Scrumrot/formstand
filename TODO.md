@@ -13,7 +13,7 @@ Critical — correctness bugs worth fixing first (items 1–7 DONE, 2026-07-02)
 7. Render-phase ref mutation in useFieldArray (src/react/useFieldArray.ts:135-141). The id reconciler writes refs during render — under concurrent React a discarded render still advances id state, causing key instability/remounts in exactly the reorder cases it's built to protect. Use the render-phase
    setState derived-state pattern, or mint ids in the store.
 
-High — API gaps users will hit immediately
+High — API gaps users will hit immediately (items 8–13 DONE, 2026-07-02)
 
 8. Zero accessibility wiring in the bound field components (src/react/fields.tsx, inputProps.ts): no aria-invalid, no aria-describedby linking errors, no role="alert", no name attribute (breaks autofill/password managers). This is table stakes for a form library.
 9. submit returns true for an invalid submission (createForm.ts:461) — true means "ran", false means "skipped". Nearly everyone will write if (await form.submit(...)) expecting validity. Return a discriminated result.

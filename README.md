@@ -85,7 +85,7 @@ const form = createForm(schema, {
 | `updateState(updater)` | atomic multi-field patch |
 | `validate()` / `validateField(path)` / `validateFields(paths)` | sync validation; on an async schema they transparently start the async pass instead (`validate`/`validateField` return `{ kind: "pending", promise }`, `validateFields` returns the `Promise<boolean>` itself) |
 | `validateAsync()` / `validateFieldAsync(path)` / `validateFieldsAsync(paths)` | async; supports `async .refine` |
-| `submit(onValid, onInvalid?, { force? })` → `Promise<boolean>` | full submit flow; returns `true` if ran, `false` if skipped (in-flight) |
+| `submit(onValid, onInvalid?, { force? })` → `Promise<SubmitResult>` | full submit flow; resolves `{ kind: "valid", data }`, `{ kind: "invalid", errors }` (errored fields are also marked touched), or `{ kind: "skipped" }` when another submit is in flight |
 | `handleSubmit(onValid, onInvalid?)(event?)` | event handler wrapper that calls `preventDefault` |
 | `getField(path)` | typed one-shot value read |
 | `watchField` / `watchValue` / `watchValues` | subscriptions; see below |
@@ -202,6 +202,12 @@ useSubmitCount(form);
   options={[{ value: "light", label: "Light" }, { value: "dark", label: "Dark" }]} />
 ```
 
+All bound components ship with accessibility wiring: `name={path}` (autofill,
+password managers, native form posts), `aria-invalid` while errored,
+`aria-describedby` pointing at the error message, and the error rendered with
+`role="alert"` so it's announced when it appears. Each also accepts a `ref`
+to the underlying `<input>`/`<select>`.
+
 `SelectField` stays controlled while the field value is `undefined` by rendering
 a disabled empty option (with your `placeholder` text, if given), so the blank
 state is visible instead of the browser silently showing the first option.
@@ -226,6 +232,18 @@ Or roll your own with the prop helpers:
 ```tsx
 <input {...numberInputProps(useField(form, "age"))} type="number" step="1" />
 ```
+
+### Focus management
+
+`focusFirstError(errors, root?)` focuses the first control (in DOM order) whose
+`name` matches an errored path — the bound components set `name={path}` so this
+works out of the box. Wire it into the invalid-submit handler:
+
+```tsx
+<form onSubmit={form.handleSubmit(onValid, (errors) => focusFirstError(errors))}>
+```
+
+For custom focus logic, every bound component also takes a `ref` to its input.
 
 ## Sharing a form across components
 
@@ -289,8 +307,8 @@ Import and use anywhere. The form lives for the lifetime of the module — usefu
 
 - **Object-returning selectors must use `useFormStateShallow`.** `useFormState(form, (s) => ({ values: s.values, errors: s.errors }))` returns a fresh object on every call; React's `useSyncExternalStore` will detect snapshot churn and bail with *"Maximum update depth exceeded"*. Use `useFormStateShallow` instead — it caches by shallow equality.
 - **Synchronous `validate` / `validateField` return `pending` on async schemas.** They start the async pass for you and return `{ kind: "pending", promise }` — check `result.kind` (or use the `*Async` variants directly) rather than assuming `valid`/`invalid`.
-- **`form.submit()` short-circuits when one is already in flight.** Pass `{ force: true }` as the third argument to bypass.
-- **Typed paths exist on hooks, not imperative form methods.** `useField(form, "naem")` errors at compile time; `form.setValue("naem", "x")` does not. Use `useField`/`useFieldArray`/`form.getField`/`form.watchField`/`form.watchValue` for typo-catching paths.
+- **`form.submit()` short-circuits when one is already in flight** — it resolves `{ kind: "skipped" }`. Pass `{ force: true }` as the third argument to bypass.
+- **The imperative write surface is typed.** `form.setValue("naem", "x")` and `form.setValue("age", "thirty")` are compile errors, as are `setTouched`/`setError`/`clearErrors`/`validateField(s)`/array ops with bad paths. Dynamic array paths still typecheck (`` `users.${i}.email` `` with `i: number` matches the template-literal path type); for a fully runtime-built string, cast: `form.setValue(path as FieldPath<z.input<typeof schema>>, value as never)`.
 
 ## Subscriptions (non-React)
 
@@ -329,7 +347,8 @@ form.handleSubmit(async (data) => {
   const res = await api.create(data);
   if (!res.ok) {
     for (const err of res.errors) {
-      form.setError(err.field, [err.message]);
+      // setError's path is typed; a server-provided string needs a cast
+      form.setError(err.field as FieldPath<z.input<typeof schema>>, [err.message]);
     }
   }
 });

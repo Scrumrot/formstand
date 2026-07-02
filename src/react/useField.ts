@@ -18,14 +18,18 @@ type ReadonlyStore<T> = Pick<
   "getState" | "getInitialState" | "subscribe"
 >;
 
+// Method (shorthand) syntax on purpose: method parameters are checked
+// bivariantly, so a Form<TSchema> — whose write methods take the narrower
+// FieldPath<...> instead of string — still satisfies this API. Prefer calling
+// these through a typed Form when you have one.
 export type FieldFormApi = Readonly<{
   store: ReadonlyStore<FormState<unknown>>;
-  setValue: (path: string, value: unknown) => void;
-  setTouched: (path: string, touched?: boolean) => void;
-  setError: (path: string, errors: readonly string[]) => void;
-  clearErrors: (path?: string) => void;
-  validateField: (path: string) => FieldValidationResult;
-  validateFieldAsync: (path: string) => Promise<FieldValidationResult>;
+  setValue(path: string, value: unknown): void;
+  setTouched(path: string, touched?: boolean): void;
+  setError(path: string, errors: readonly string[]): void;
+  clearErrors(path?: string): void;
+  validateField(path: string): FieldValidationResult;
+  validateFieldAsync(path: string): Promise<FieldValidationResult>;
 }>;
 
 export type FieldPathArg<TValues> =
@@ -37,6 +41,9 @@ export type UseFieldOptions = Readonly<{
 }>;
 
 export type UseFieldReturn<TValue> = Readonly<{
+  // The resolved field path — useful as an input's `name` attribute (the
+  // bound prop builders spread it as `name`).
+  path: string;
   value: TValue;
   error: readonly string[] | undefined;
   touched: boolean;
@@ -196,6 +203,7 @@ export function useField<TValue = unknown>(
 
   return useMemo(
     () => ({
+      path: slice.path,
       value: slice.value,
       error: slice.error,
       touched: slice.touched,

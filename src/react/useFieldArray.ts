@@ -10,13 +10,16 @@ type ReadonlyStore<T> = Pick<
   "getState" | "getInitialState" | "subscribe"
 >;
 
+// Method (shorthand) syntax on purpose: method parameters are checked
+// bivariantly, so a Form<TSchema> — whose array ops take the narrower
+// FieldPath<...> instead of string — still satisfies this API.
 export type FieldArrayFormApi = Readonly<{
   store: ReadonlyStore<FormState<unknown>>;
-  arrayPush: (path: string, item: unknown) => void;
-  arrayRemove: (path: string, index: number) => void;
-  arrayInsert: (path: string, index: number, item: unknown) => void;
-  arrayMove: (path: string, from: number, to: number) => void;
-  arraySwap: (path: string, a: number, b: number) => void;
+  arrayPush(path: string, item: unknown): void;
+  arrayRemove(path: string, index: number): void;
+  arrayInsert(path: string, index: number, item: unknown): void;
+  arrayMove(path: string, from: number, to: number): void;
+  arraySwap(path: string, a: number, b: number): void;
 }>;
 
 export type FieldArrayEntry<TItem> = Readonly<{

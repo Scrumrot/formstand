@@ -67,16 +67,16 @@ describe("async validate stale-write guard", () => {
   });
 });
 
-describe("submit boolean return", () => {
-  it("returns true when submit ran", async () => {
+describe("submit result kinds", () => {
+  it("returns kind 'valid' when submit ran on valid values", async () => {
     const form = createForm(asyncSchema, {
       initialValues: { username: "ok", email: "t@t.com" },
     });
-    const ran = await form.submit(() => {});
-    expect(ran).toBe(true);
+    const result = await form.submit(() => {});
+    expect(result.kind).toBe("valid");
   });
 
-  it("returns false when submit was skipped due to in-flight", async () => {
+  it("returns kind 'skipped' when another submit is in flight", async () => {
     const form = createForm(asyncSchema, {
       initialValues: { username: "ok", email: "t@t.com" },
     });
@@ -85,8 +85,8 @@ describe("submit boolean return", () => {
     );
     const second = form.submit(() => {});
     const [a, b] = await Promise.all([first, second]);
-    expect(a).toBe(true);
-    expect(b).toBe(false);
+    expect(a.kind).toBe("valid");
+    expect(b.kind).toBe("skipped");
   });
 });
 
@@ -97,7 +97,7 @@ describe("submit guard decoupled from external setSubmitting", () => {
     });
     form.setSubmitting(true);
     expect(form.getState().isSubmitting).toBe(true);
-    const ran = await form.submit(() => {});
-    expect(ran).toBe(true);
+    const result = await form.submit(() => {});
+    expect(result.kind).toBe("valid");
   });
 });
