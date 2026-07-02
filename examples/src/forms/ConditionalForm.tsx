@@ -1,4 +1,4 @@
-import { type FieldFormApi, useField, useForm, useFormState } from "zustand-forms";
+import { SelectField, TextField, useForm, useFormSelector } from "zustand-forms";
 import { z } from "zod";
 import { StateDump } from "./StateDump";
 
@@ -48,27 +48,6 @@ const schema = z
     }
   });
 
-type TextFieldProps = Readonly<{
-  form: FieldFormApi;
-  path: string;
-  label: string;
-}>;
-
-const TextField = ({ form, path, label }: TextFieldProps) => {
-  const field = useField<string>(form, path);
-  return (
-    <div className="field">
-      <label>{label}</label>
-      <input
-        value={field.value ?? ""}
-        onChange={(e) => field.setValue(e.target.value)}
-        onBlur={field.onBlur}
-      />
-      <span className="error">{field.error?.[0] ?? " "}</span>
-    </div>
-  );
-};
-
 export const ConditionalForm = () => {
   const form = useForm(schema, {
     initialValues: {
@@ -80,29 +59,29 @@ export const ConditionalForm = () => {
     },
     mode: "onBlur",
   });
-  const method = useFormState(form, (s) => s.values.paymentMethod);
+  const method = useFormSelector(form, (s) => s.values.paymentMethod);
 
   return (
     <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        void form.submit((data) => {
-          window.alert(`paid: ${JSON.stringify(data)}`);
-        });
-      }}
+      onSubmit={form.handleSubmit((data) => {
+        window.alert(`paid: ${JSON.stringify(data)}`);
+      })}
     >
-      <div className="field">
-        <label>Payment method</label>
-        <select
-          value={method}
-          onChange={(e) =>
-            form.setValue("paymentMethod", e.target.value as "card" | "bank")
-          }
-        >
-          <option value="card">Card</option>
-          <option value="bank">Bank transfer</option>
-        </select>
-      </div>
+      <p className="subtitle">
+        Uses the library&apos;s bound <code>SelectField</code> /{" "}
+        <code>TextField</code> — labels, ids, <code>name</code>,{" "}
+        <code>aria-invalid</code> and error text come wired for free.
+      </p>
+
+      <SelectField
+        form={form}
+        path="paymentMethod"
+        label="Payment method"
+        options={[
+          { value: "card", label: "Card" },
+          { value: "bank", label: "Bank transfer" },
+        ]}
+      />
 
       {method === "card" ? (
         <>

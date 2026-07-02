@@ -1,4 +1,4 @@
-import { useField, useForm, useFormState } from "zustand-forms";
+import { useField, useForm, useFormSelector } from "zustand-forms";
 import { z } from "zod";
 import { StateDump } from "./StateDump";
 
@@ -20,7 +20,7 @@ export const FileUploadForm = () => {
   });
   const caption = useField(form, "caption");
   const file = useField(form, "file");
-  const isSubmitting = useFormState(form, (s) => s.isSubmitting);
+  const isSubmitting = useFormSelector(form, (s) => s.isSubmitting);
 
   return (
     <form

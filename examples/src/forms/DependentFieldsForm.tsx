@@ -2,7 +2,7 @@ import {
   textInputProps,
   useField,
   useForm,
-  useFormState,
+  useFormSelector,
 } from "zustand-forms";
 import { z } from "zod";
 import { StateDump } from "./StateDump";
@@ -29,7 +29,7 @@ export const DependentFieldsForm = () => {
   const country = useField(form, "country");
   const region = useField(form, "region");
   const city = useField(form, "city");
-  const currentCountry = useFormState(form, (s) => s.values.country);
+  const currentCountry = useFormSelector(form, (s) => s.values.country);
 
   const onCountryChange = (next: Country) => {
     country.setValue(next);

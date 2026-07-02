@@ -3,7 +3,7 @@ import {
   textInputProps,
   useField,
   useForm,
-  useFormState,
+  useFormSelector,
 } from "zustand-forms";
 import { z } from "zod";
 import { StateDump } from "./StateDump";
@@ -36,7 +36,7 @@ export const OptimisticForm = () => {
   });
   const displayName = useField(form, "displayName");
   const bio = useField(form, "bio");
-  const isSubmitting = useFormState(form, (s) => s.isSubmitting);
+  const isSubmitting = useFormSelector(form, (s) => s.isSubmitting);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

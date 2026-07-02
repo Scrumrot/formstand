@@ -3,7 +3,9 @@ import { ArrayForm } from "./forms/ArrayForm";
 import { AsyncForm } from "./forms/AsyncForm";
 import { AutosaveForm } from "./forms/AutosaveForm";
 import { BasicForm } from "./forms/BasicForm";
+import { BoundFieldsForm } from "./forms/BoundFieldsForm";
 import { ConditionalForm } from "./forms/ConditionalForm";
+import { ContextForm } from "./forms/ContextForm";
 import { DependentFieldsForm } from "./forms/DependentFieldsForm";
 import { DerivedFieldForm } from "./forms/DerivedFieldForm";
 import { FileUploadForm } from "./forms/FileUploadForm";
@@ -18,6 +20,8 @@ import { WizardForm } from "./forms/WizardForm";
 
 type TabKey =
   | "basic"
+  | "bound"
+  | "context"
   | "nested"
   | "array"
   | "async"
@@ -42,6 +46,8 @@ type Tab = Readonly<{
 
 const TABS: readonly Tab[] = [
   { key: "basic", label: "Basic + modes", render: () => <BasicForm /> },
+  { key: "bound", label: "Bound fields", render: () => <BoundFieldsForm /> },
+  { key: "context", label: "Form context", render: () => <ContextForm /> },
   { key: "nested", label: "Nested + submit", render: () => <NestedForm /> },
   { key: "array", label: "Field array", render: () => <ArrayForm /> },
   { key: "async", label: "Async", render: () => <AsyncForm /> },

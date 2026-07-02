@@ -2,7 +2,7 @@ import {
   textInputProps,
   useField,
   useForm,
-  useFormState,
+  useFormSelector,
 } from "zustand-forms";
 import { z } from "zod";
 import { StateDump } from "./StateDump";
@@ -28,7 +28,7 @@ export const AsyncForm = () => {
     mode: "onChange",
   });
   const username = useField(form, "username", { debounceMs: 300 });
-  const isSubmitting = useFormState(form, (s) => s.isSubmitting);
+  const isSubmitting = useFormSelector(form, (s) => s.isSubmitting);
 
   return (
     <form

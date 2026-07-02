@@ -1,4 +1,4 @@
-import { useField, useForm, useFormState } from "zustand-forms";
+import { useField, useForm, useFormSelector } from "zustand-forms";
 import { z } from "zod";
 import { StateDump } from "./StateDump";
 
@@ -23,7 +23,7 @@ export const NestedForm = () => {
   const street = useField(form, "address.street");
   const city = useField(form, "address.city");
   const zip = useField(form, "address.zip");
-  const isSubmitting = useFormState(form, (s) => s.isSubmitting);
+  const isSubmitting = useFormSelector(form, (s) => s.isSubmitting);
 
   return (
     <form

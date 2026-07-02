@@ -5,7 +5,7 @@ import {
   useField,
   useFieldArray,
   useForm,
-  useFormStateShallow,
+  useFormSelectorShallow,
 } from "zustand-forms";
 import { z } from "zod";
 import { StateDump } from "./StateDump";
@@ -96,7 +96,7 @@ const LineItemRow = ({ form, index, onRemove }: LineItemRowProps) => {
 };
 
 const Total = ({ form }: Readonly<{ form: FieldFormApi }>) => {
-  const items = useFormStateShallow(form, (s) => {
+  const items = useFormSelectorShallow(form, (s) => {
     const list = (s.values as { lineItems?: readonly LineItem[] }).lineItems;
     return list ?? [];
   });

@@ -132,3 +132,25 @@ What this batch changed
 
 That closes out everything through item 24. What's left on the list is the testing batch (25–28: fake timers, a vitest setup file with auto-cleanup, coverage for useFormSelectorShallow/restore-during-async) and tooling/packaging (29–34: CI workflow, ESLint, publish metadata, changesets, dependency bumps,
 coverage reporting), plus the examples/docs items (35–37). Say the word and I'll keep going.
+
+
+Items 25–34 are done and committed as 689dced — 325 tests across 63 files, typecheck, lint, examples, and build all green.
+
+Testing (25–28)
+
+- Auto-cleanup fixed at the root — vitest.config.ts now loads tests/setup.ts, which registers Testing Library's cleanup() in afterEach. The globals: false setting had silently disabled it, so 15 React test files were accumulating mounted trees; now every test unmounts cleanly.
+- Fake timers for debounce — the debounce test no longer races a real 50ms timer against a 500ms waitFor. It now uses vi.useFakeTimers() with assertions on actual refine invocations, including a new test proving keystrokes inside the window reset the timer.
+- Coverage gaps closed — new tests for useFormSelectorShallow's contract (object selectors don't churn, unrelated store changes don't re-render), restore() during in-flight async validation (both field-level and whole-form — the values-reference guard correctly drops the stale write), and
+  useForm/useField/validateOnMount under StrictMode.
+
+Tooling (29–34)
+
+- CI — .github/workflows/ci.yml runs typecheck → lint → test → build on push/PR with Node 22 and npm caching.
+- ESLint — flat config with typescript-eslint and eslint-plugin-react-hooks v7; lint script is now a real linter instead of a tsc alias. Satisfying validation of the earlier review: the react-hooks/refs rule immediately caught a ref-read-during-render in the useForm schema warning I'd added, which is now
+  correctly an effect. One documented eslint-disable remains for the sanctioned lazy-init useRef pattern.
+- Dependencies — vitest 2 → 4 and jsdom 25 → 29 (both passed with zero migration changes), plus @vitest/coverage-v8 and a test:coverage script with V8 coverage scoped to src/.
+- Package metadata — author, repository, homepage, bugs, engines: node >=18, and properly split types conditions (.d.ts for ESM, .d.cts for CJS). I verified the whole thing with arethetypeswrong — "No problems found" across node10/node16-CJS/node16-ESM/bundler resolution.
+- CHANGELOG.md created documenting 0.2.0 (with a proper Breaking section for the submit result, typed writes, and renames), and version bumped to 0.2.0.
+
+One thing to check: the repository/homepage/bugs URLs assume github.com/Scrumrot/zustand-forms (from your git username) — there's no git remote configured, so I couldn't verify. Correct those if the repo will live elsewhere, and once you add a remote and push, CI activates on its own. I left a note about
+this in TODO.md too.

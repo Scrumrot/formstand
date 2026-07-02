@@ -1,4 +1,4 @@
-import { useField, useForm, useFormState, type ValidationMode } from "zustand-forms";
+import { useField, useForm, useFormSelector, type ValidationMode } from "zustand-forms";
 import { z } from "zod";
 import { StateDump } from "./StateDump";
 
@@ -11,10 +11,10 @@ export const BasicForm = () => {
   const form = useForm(schema, {
     initialValues: { name: "", email: "" },
   });
-  const mode = useFormState(form, (s) => s.mode);
+  const mode = useFormSelector(form, (s) => s.mode);
   const name = useField(form, "name");
   const email = useField(form, "email");
-  const isSubmitting = useFormState(form, (s) => s.isSubmitting);
+  const isSubmitting = useFormSelector(form, (s) => s.isSubmitting);
 
   return (
     <form

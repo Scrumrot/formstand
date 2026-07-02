@@ -1,4 +1,9 @@
-import { type FieldFormApi, useField, useForm, useFormState } from "zustand-forms";
+import {
+  TextField,
+  focusFirstError,
+  useForm,
+  useIsSubmitting,
+} from "zustand-forms";
 import { z } from "zod";
 import { StateDump } from "./StateDump";
 
@@ -31,42 +36,17 @@ const fakeServer = async (
   return { ok: true };
 };
 
-type TextFieldProps = Readonly<{
-  form: FieldFormApi;
-  path: string;
-  label: string;
-}>;
-
-const TextField = ({ form, path, label }: TextFieldProps) => {
-  const field = useField<string>(form, path);
-  return (
-    <div className="field">
-      <label>{label}</label>
-      <input
-        value={field.value ?? ""}
-        onChange={(e) => {
-          field.setValue(e.target.value);
-          field.clearError();
-        }}
-        onBlur={field.onBlur}
-      />
-      <span className="error">{field.error?.[0] ?? " "}</span>
-    </div>
-  );
-};
-
 export const ServerErrorsForm = () => {
   const form = useForm(schema, {
     initialValues: { email: "", username: "" },
     mode: "onBlur",
   });
-  const isSubmitting = useFormState(form, (s) => s.isSubmitting);
+  const isSubmitting = useIsSubmitting(form);
 
   return (
     <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        void form.submit(async (data) => {
+      onSubmit={form.handleSubmit(
+        async (data) => {
           const result = await fakeServer(data);
           if (result.ok) {
             window.alert("registered!");
@@ -74,17 +54,23 @@ export const ServerErrorsForm = () => {
             return;
           }
           for (const err of result.errors) {
-            form.setError(err.field, [err.message]);
+            form.setError(err.field, err.message);
           }
-        });
-      }}
+          focusFirstError(form.getState().errors);
+        },
+        // Schema-invalid submit: jump to the first offending input.
+        (errors) => focusFirstError(errors),
+      )}
     >
       <p className="subtitle">
         Try <code>admin</code> as username, or any <code>@banned.com</code>{" "}
-        email — the fake server rejects with field-level errors.
+        email — the fake server rejects with field-level errors. Server errors
+        survive background revalidation and release when you edit the field;
+        the first offending input is focused via{" "}
+        <code>focusFirstError</code>.
       </p>
 
-      <TextField form={form} path="email" label="Email" />
+      <TextField form={form} path="email" label="Email" type="email" />
       <TextField form={form} path="username" label="Username" />
 
       <button className="primary" type="submit" disabled={isSubmitting}>

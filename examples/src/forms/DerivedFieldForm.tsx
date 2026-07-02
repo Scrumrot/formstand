@@ -3,7 +3,7 @@ import {
   textInputProps,
   useField,
   useForm,
-  useFormState,
+  useFormSelector,
 } from "zustand-forms";
 import { z } from "zod";
 import { StateDump } from "./StateDump";
@@ -21,7 +21,7 @@ export const DerivedFieldForm = () => {
   });
   const firstName = useField(form, "firstName");
   const lastName = useField(form, "lastName");
-  const displayName = useFormState(form, (s) => s.values.displayName);
+  const displayName = useFormSelector(form, (s) => s.values.displayName);
 
   useEffect(() => {
     const unsubFirst = form.watchValue("firstName", (next) => {

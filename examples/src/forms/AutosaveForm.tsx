@@ -3,7 +3,9 @@ import {
   textInputProps,
   useField,
   useForm,
-  useFormState,
+  useFormSelector,
+  useFormSelectorShallow,
+  useIsDirty,
 } from "zustand-forms";
 import { z } from "zod";
 import { StateDump } from "./StateDump";
@@ -40,7 +42,11 @@ export const AutosaveForm = () => {
   const form = useForm(schema, { initialValues: initial, mode: "onBlur" });
   const title = useField(form, "title");
   const body = useField(form, "body");
-  const values = useFormState(form, (s) => s.values);
+  const values = useFormSelector(form, (s) => s.values);
+  const dirty = useIsDirty(form);
+  const dirtyPaths = useFormSelectorShallow(form, (s) =>
+    Object.keys(s.dirty).filter((k) => s.dirty[k] === true),
+  );
 
   useEffect(() => {
     const timerRef: { current: ReturnType<typeof setTimeout> | null } = {
@@ -86,7 +92,10 @@ export const AutosaveForm = () => {
         Draft is restored from localStorage on mount and persisted{" "}
         {DEBOUNCE_MS}ms after each edit. Refresh the page to test restore.
         Title edits: {titleChanges} (tracked via{" "}
-        <code>form.watchValue("title", ...)</code>).
+        <code>form.watchValue("title", ...)</code>). Changed since the restored
+        draft: {dirtyPaths.length > 0 ? dirtyPaths.join(", ") : "nothing"}{" "}
+        (from the <code>dirty</code> map — <code>form.diff()</code> would give
+        the matching PATCH payload).
       </p>
 
       <div className="field">
@@ -122,7 +131,7 @@ export const AutosaveForm = () => {
             ? "Saving..."
             : lastSavedAt !== null
               ? `Draft saved at ${new Date(lastSavedAt).toLocaleTimeString()}`
-              : values.title || values.body
+              : dirty || values.title || values.body
                 ? "Unsaved changes"
                 : "No draft"}
         </div>
