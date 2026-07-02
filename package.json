@@ -1,8 +1,20 @@
 {
   "name": "zustand-forms",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Zod-schema-first React 19 form library backed by zustand",
   "license": "MIT",
+  "author": "Tim Frank <timfrankdev@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Scrumrot/zustand-forms.git"
+  },
+  "homepage": "https://github.com/Scrumrot/zustand-forms#readme",
+  "bugs": {
+    "url": "https://github.com/Scrumrot/zustand-forms/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.cjs",
@@ -10,16 +22,22 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./package.json": "./package.json"
   },
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsup",
@@ -27,7 +45,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint .",
     "examples": "npm --prefix examples run dev",
     "examples:build": "npm --prefix examples run build",
     "prepublishOnly": "npm run build"
@@ -40,12 +59,16 @@
   "devDependencies": {
     "@testing-library/react": "^16.1.0",
     "@types/react": "^19.0.0",
-    "jsdom": "^25.0.0",
+    "@vitest/coverage-v8": "^4.1.9",
+    "eslint": "^10.6.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "jsdom": "^29.1.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tsup": "^8.3.0",
     "typescript": "^5.7.0",
-    "vitest": "^2.1.0",
+    "typescript-eslint": "^8.62.1",
+    "vitest": "^4.1.9",
     "zod": "^4.2.0",
     "zustand": "^5.0.0"
   },

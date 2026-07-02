@@ -91,7 +91,7 @@ describe("checkboxProps", () => {
       const form = useForm(schema, { initialValues: { ok: false } });
       return { form, ok: useField(form, "ok") };
     });
-    let props = checkboxProps(result.current.ok);
+    const props = checkboxProps(result.current.ok);
     expect(props.checked).toBe(false);
     expect(props.type).toBe("checkbox");
     act(() => {
@@ -106,7 +106,6 @@ describe("checkboxProps", () => {
 describe("selectProps", () => {
   it("derives value and casts on change", () => {
     const schema = z.object({ theme: z.enum(["light", "dark"]) });
-    type Theme = "light" | "dark";
     const { result } = renderHook(() => {
       const form = useForm(schema, { initialValues: { theme: "light" } });
       return { form, theme: useField(form, "theme") };

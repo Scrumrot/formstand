@@ -5,5 +5,11 @@ export default defineConfig({
     environment: "jsdom",
     globals: false,
     include: ["tests/**/*.test.{ts,tsx}", "src/**/*.test.{ts,tsx}"],
+    setupFiles: ["tests/setup.ts"],
+    coverage: {
+      provider: "v8",
+      include: ["src/**"],
+      reporter: ["text", "html"],
+    },
   },
 });

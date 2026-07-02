@@ -37,14 +37,14 @@ Medium — robustness and polish (items 14–24 DONE, 2026-07-02)
 24. Smaller items: Date values never compare equal in valuesEqual (permanently-dirty date fields); clearErrors(path) doesn't clear child keys; setErrors replaces rather than merges; debounce timer not cleared when debounceMs changes; no "onTouched"/"all" validation modes; missing getFieldState/setFocus
     equivalents.
 
-Testing
+Testing (items 25–28 DONE, 2026-07-02)
 
 25. Untested public APIs: useFormStateShallow (zero references — its shallow-equality contract is exactly what silently regresses), isAsyncRequiredError, restore() during in-flight async validation.
 26. No StrictMode tests at all — the examples run under StrictMode but the tests never do; double-mount behavior matters for useForm stability and useFieldArray ids.
 27. Missing cleanup() in 15 of 17 React test files — globals: false disables Testing Library auto-cleanup. Fix once with a vitest setup file (afterEach(cleanup)).
 28. No fake timers — the debounce test races real 50ms timers against waitFor; a plausible CI flake. Convert to vi.useFakeTimers().
 
-Tooling, packaging, and repo hygiene
+Tooling, packaging, and repo hygiene (items 29–34 DONE, 2026-07-02; repository URL in package.json assumes github.com/Scrumrot/zustand-forms — correct if wrong)
 
 29. No CI — there's no .github/workflows/ (and no git remote configured). A minimal GitHub Actions workflow running typecheck + test + build on push/PR is the single highest-leverage infra addition before publishing.
 30. No real linter — the lint script is just tsc --noEmit. Add ESLint with eslint-plugin-react-hooks (it would have flagged the useFieldArray render-phase mutation) and Prettier or Biome.
@@ -102,3 +102,33 @@ What items 8–13 added
 The only test casualty across the whole batch was the intentional arrayPush-on-a-string test, which now needs an as never cast — i.e., the type system catches at compile time what used to be only a runtime warning.
 
 Next up whenever you want: the medium batch (14–24: path parsing edge cases, reset options, index validation, error-identity churn, NumberField polish, useForm dev-warn) or the testing/tooling items (25–34: CI workflow, ESLint, vitest setup file, coverage).
+
+Items 14–24 are done and committed as 6b380b3 — 317 tests across 60 files passing, library and examples typecheck clean.
+
+What this batch changed
+
+14. Path semantics (path.ts) — The existing container now decides how a segment is interpreted: arrays take numeric segments as indices, plain objects take any segment as a string key. A z.record keyed "0" reads/writes the record key instead of being silently replaced by an array. String-key writes into
+    arrays warn and no-op, and array writes past index 100,000 are refused instead of allocating gigabytes on a typo'd path. The dot-in-key limitation is now documented.
+
+15. reset overhaul — reset(partial) only spreads when both sides are plain records; an array-rooted schema replaces wholesale instead of corrupting into {0: ..., 1: ...}. New ResetOptions (keepErrors/keepTouched/keepDirty/keepSubmitCount), plus resetField(path) (restores the initial value and clears the
+    field's and descendants' meta) and getFieldState(path) (typed one-shot field slice).
+
+16. Array index validation — arrayRemove(path, -1) used to grow the array and corrupt the error/touched maps; all indexed ops now validate integer-and-in-range before anything mutates, warning and no-op-ing otherwise.
+
+17. Error identity stability — Every validation write now reuses the previous error-array references (and the whole map) when messages are unchanged, so fields showing an error no longer re-render on every full pass, and watchField doesn't re-fire — there's a test pinning that.
+
+18. NumberField — Gates on Number.isFinite (no more Infinity), treats whitespace as empty instead of 0, and external writes (reset/adoptValues) now win over in-progress raw text via the same derived-state pattern used in useFieldArray. The dead step prop is gone. numberInputProps got the same parsing
+    guards.
+
+19. useForm footgun warning — Warns once (per component instance) when a different schema reference shows up after mount, pointing at adoptValues/reset for late-arriving values and noting that inline schemas are harmless but worth hoisting.
+
+20. Rename — useFormSelector/useFormSelectorShallow are the new names; useFormState/useFormStateShallow remain as @deprecated aliases so the examples and existing users keep working.
+
+21. isValidatingForm — Whole-form async validation state is now a proper boolean on FormState instead of the "__form__" sentinel key squatting in the field map.
+
+22–23. The stale src/react/index.ts barrel is deleted, and useFieldArray uses a hoisted constant empty array so forms with not-yet-created array paths stop re-rendering on every store change.
+
+24. Grab bag — Dates compare by timestamp in dirty tracking (re-picking the same date reads clean), clearErrors("items") clears items.0.name too, setError accepts a single string, the debounce cleanup tracks debounceMs changes, and "onTouched" / "all" join the validation modes.
+
+That closes out everything through item 24. What's left on the list is the testing batch (25–28: fake timers, a vitest setup file with auto-cleanup, coverage for useFormSelectorShallow/restore-during-async) and tooling/packaging (29–34: CI workflow, ESLint, publish metadata, changesets, dependency bumps,
+coverage reporting), plus the examples/docs items (35–37). Say the word and I'll keep going.
