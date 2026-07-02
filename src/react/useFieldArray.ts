@@ -47,6 +47,10 @@ type IdState = Readonly<{
 
 const EMPTY_ID_STATE: IdState = { items: [], ids: [], counter: 0 };
 
+// Stable reference for "path holds no array yet" — a fresh [] per selector
+// run would defeat useShallow and re-render on every store change.
+const EMPTY_ITEMS: readonly never[] = [];
+
 // Derive a stable id per item by reconciling the live items against the
 // previous render's items. Ids follow items by identity/value, so reorders,
 // resets, and mutations that bypass this hook all keep keys glued to their
@@ -121,7 +125,7 @@ export const useFieldArray = <TItem = unknown>(
     useShallow((state) => {
       const value = getAtPath(state.values, path);
       return {
-        items: (Array.isArray(value) ? value : []) as readonly TItem[],
+        items: (Array.isArray(value) ? value : EMPTY_ITEMS) as readonly TItem[],
         error: state.errors[path],
       };
     }),

@@ -29,10 +29,10 @@ describe("isValidating cleared on values-change branch (B39)", () => {
       initialValues: { username: "taken" },
     });
     const promise = form.validateAsync();
-    expect(form.getState().isValidating["__form__"]).toBe(true);
+    expect(form.getState().isValidatingForm).toBe(true);
     form.setValue("username", "ok");
     await promise;
-    expect(form.getState().isValidating["__form__"]).toBeUndefined();
+    expect(form.getState().isValidatingForm).toBe(false);
   });
 
   it("validateFieldAsync does not clear isValidating when a newer call has superseded", async () => {

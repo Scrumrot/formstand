@@ -6,10 +6,25 @@ import {
   createForm,
 } from "../core/createForm";
 
+// Lazy-creates a Form bound to this component instance. Schema and options are
+// locked in on the first render; later changes are ignored (warned once below).
 export const useForm = <TSchema extends z.ZodType>(
   schema: TSchema,
   options: CreateFormOptions<TSchema>,
 ): Form<TSchema> => {
   const formRef = useRef<Form<TSchema> | null>(null);
-  return (formRef.current ??= createForm(schema, options));
+  const warnedRef = useRef(false);
+  const form = (formRef.current ??= createForm(schema, options));
+  if (!warnedRef.current && form.schema !== schema) {
+    warnedRef.current = true;
+    console.warn(
+      "[zustand-forms] useForm received a different schema reference after the " +
+        "first render; schema and options changes are ignored for the life of " +
+        "the component. If the schema is defined inline this is harmless (but " +
+        "consider hoisting it to module scope). For initial values that arrive " +
+        "later (e.g. from a fetch), call form.adoptValues(values) or " +
+        "form.reset(values) instead.",
+    );
+  }
+  return form;
 };

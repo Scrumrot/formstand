@@ -78,9 +78,10 @@ const form = createForm(schema, {
 | `setValue(path, value)` | updates one field; marks it dirty, or clears dirty if the value equals `initialValues` at that path (structural equality for arrays/plain objects, `Object.is` otherwise) |
 | `setValues(next)` | replace the entire values object; dirtiness is recomputed per top-level key against `initialValues` |
 | `setTouched(path, touched?)` | marks a path touched |
-| `setError(path, errors)` / `setErrors(map)` / `clearErrors(path?)` | error map control (server errors) |
+| `setError(path, errors)` / `setErrors(map)` / `clearErrors(path?)` | error map control (server errors); `setError` accepts a single string or an array; `clearErrors(path)` also clears descendant keys; `setErrors` replaces the whole map |
 | `setMode` / `setReValidateMode` | switch modes at runtime |
-| `reset(nextInitial?)` | reset to initial; optional partial overrides |
+| `reset(nextInitial?, options?)` | reset to initial; optional partial overrides (shallow-merged for record roots, replaced wholesale otherwise) and `{ keepErrors, keepTouched, keepDirty, keepSubmitCount }` |
+| `resetField(path)` | reset one field to its initial value, clearing its (and descendants') error/touched/dirty state |
 | `adoptValues(values)` | mid-session rebase: replaces `values` + `initialValues` and clears `errors`/`dirty`, but **preserves** interaction state (`touched`, `submitCount`, `isSubmitting`, `isValidating`, `mode`). Use `reset()` for a full wipe |
 | `updateState(updater)` | atomic multi-field patch |
 | `validate()` / `validateField(path)` / `validateFields(paths)` | sync validation; on an async schema they transparently start the async pass instead (`validate`/`validateField` return `{ kind: "pending", promise }`, `validateFields` returns the `Promise<boolean>` itself) |
@@ -88,6 +89,7 @@ const form = createForm(schema, {
 | `submit(onValid, onInvalid?, { force? })` → `Promise<SubmitResult>` | full submit flow; resolves `{ kind: "valid", data }`, `{ kind: "invalid", errors }` (errored fields are also marked touched), or `{ kind: "skipped" }` when another submit is in flight |
 | `handleSubmit(onValid, onInvalid?)(event?)` | event handler wrapper that calls `preventDefault` |
 | `getField(path)` | typed one-shot value read |
+| `getFieldState(path)` | typed one-shot read of a field's full slice (value/error/touched/dirty/isValidating) |
 | `watchField` / `watchValue` / `watchValues` | subscriptions; see below |
 | `diff()` / `dirtyFields()` | PATCH-style helpers; reflect only fields whose value currently differs from initial (reverting a field drops it) |
 | `snapshot()` / `restore(snap)` | full state capture/restore for undo/rollback |
@@ -98,6 +100,8 @@ const form = createForm(schema, {
 - `mode: "onBlur"` (default): validate on blur and on submit.
 - `mode: "onChange"`: validate on every change AND blur AND submit.
 - `mode: "onSubmit"`: validate only on submit.
+- `mode: "onTouched"`: validate on blur always; on change only once the field has been touched.
+- `mode: "all"`: validate on every change and blur.
 - `reValidateMode` (default `"onChange"`) kicks in once `submitCount > 0`.
 
 For schemas with `async .refine`, sync `validate()` / `validateField()` / `validateFields()` no longer throw: they detect the async requirement, start the async pass themselves, and hand you the in-flight work (`{ kind: "pending", promise }` from `validate`/`validateField`; the `Promise<boolean>` itself from `validateFields`). If the *field being validated* is itself sync, `validateField` still settles synchronously even when other fields carry async refines — field validation parses just that field's subschema when it can (see below).
@@ -164,9 +168,13 @@ second `useFieldArray` on the same path). Editing a field keeps its row's `id`
 (the row updates instead of remounting); a genuinely new item gets a fresh `id`.
 IDs reset when the hook's `path` changes.
 
-### `useFormState(form, selector)` / `useFormStateShallow(form, selector)`
+### `useFormSelector(form, selector)` / `useFormSelectorShallow(form, selector)`
 
-Selector-style subscription. Use `useFormStateShallow` for selectors that return objects/arrays.
+Selector-style subscription. Use `useFormSelectorShallow` for selectors that return objects/arrays.
+
+> Formerly `useFormState` / `useFormStateShallow` — renamed because React DOM
+> ships its own (deprecated) `useFormState` and auto-imports regularly grabbed
+> the wrong one. The old names still work as deprecated aliases.
 
 ### `useFormError(form)`
 
@@ -214,9 +222,12 @@ state is visible instead of the browser silently showing the first option.
 
 `NumberField` renders a `type="text"` input with `inputMode="decimal"` and keeps
 the raw text while you type, so partial entries (`-`, `1.`, `1e`) survive instead
-of being coerced away by a controlled `<input type="number">`. It parses to a
-`number` for the form on each keystroke and snaps the display to the canonical
-value on blur.
+of being coerced away by a controlled `<input type="number">`. Each keystroke
+that parses to a **finite** number is pushed to the form (whitespace counts as
+empty → `undefined`; `Infinity` is rejected), and the display snaps to the
+canonical value on blur. If something else writes the field while you're typing
+(`reset`, `adoptValues`, another component), the external value wins and the
+input updates immediately.
 
 Or roll your own with the prop helpers:
 
@@ -305,10 +316,21 @@ Import and use anywhere. The form lives for the lifetime of the module — usefu
 
 ## Common pitfalls
 
-- **Object-returning selectors must use `useFormStateShallow`.** `useFormState(form, (s) => ({ values: s.values, errors: s.errors }))` returns a fresh object on every call; React's `useSyncExternalStore` will detect snapshot churn and bail with *"Maximum update depth exceeded"*. Use `useFormStateShallow` instead — it caches by shallow equality.
+- **Object-returning selectors must use `useFormSelectorShallow`.** `useFormSelector(form, (s) => ({ values: s.values, errors: s.errors }))` returns a fresh object on every call; React's `useSyncExternalStore` will detect snapshot churn and bail with *"Maximum update depth exceeded"*. Use `useFormSelectorShallow` instead — it caches by shallow equality.
 - **Synchronous `validate` / `validateField` return `pending` on async schemas.** They start the async pass for you and return `{ kind: "pending", promise }` — check `result.kind` (or use the `*Async` variants directly) rather than assuming `valid`/`invalid`.
 - **`form.submit()` short-circuits when one is already in flight** — it resolves `{ kind: "skipped" }`. Pass `{ force: true }` as the third argument to bypass.
 - **The imperative write surface is typed.** `form.setValue("naem", "x")` and `form.setValue("age", "thirty")` are compile errors, as are `setTouched`/`setError`/`clearErrors`/`validateField(s)`/array ops with bad paths. Dynamic array paths still typecheck (`` `users.${i}.email` `` with `i: number` matches the template-literal path type); for a fully runtime-built string, cast: `form.setValue(path as FieldPath<z.input<typeof schema>>, value as never)`.
+
+## Path semantics
+
+Paths are dot-separated (`"users.0.email"`). How a segment is interpreted is
+decided by the **existing container**: arrays take numeric segments as indices,
+plain objects take any segment as a string key — so a `z.record` keyed `"0"`
+reads and writes the record key instead of silently becoming an array. Only
+when the container doesn't exist yet does the segment type pick what's created
+(numeric → array, otherwise object). Two limitations: keys containing `.` are
+not addressable, and array writes beyond index 100 000 are refused (a typo'd
+index must not allocate gigabytes).
 
 ## Subscriptions (non-React)
 

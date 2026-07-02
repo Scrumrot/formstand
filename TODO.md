@@ -22,7 +22,7 @@ High — API gaps users will hit immediately (items 8–13 DONE, 2026-07-02)
 12. Typed paths only cover reads — setValue, setError, validateField, array ops all take bare string/unknown. The FieldPath machinery exists; extend it to the write surface (with untyped escape hatches for dynamic paths).
 13. FieldPath can't see inside optional objects (fieldPath.ts:12-18) — profile: z.object({...}).optional() makes "profile.name" a type error even though runtime handles it. Recurse on NonNullable<T[K]>.
 
-Medium — robustness and polish
+Medium — robustness and polish (items 14–24 DONE, 2026-07-02)
 
 14. Path edge cases (src/core/path.ts): numeric string keys on a z.record get converted to array indices (silently replacing the record with an array); keys containing . are unaddressable; a huge index can allocate gigabytes. Decide index-vs-key from the existing container.
 15. reset(nextInitial) corrupts array-rooted schemas (spreading an array into {...}) and merges only shallowly; consider RHF-style keepErrors/keepTouched options and a resetField(path).
@@ -82,3 +82,23 @@ ____________________________
 Two small API notes: validateFields' return type widened to boolean | Promise<boolean>, and consumers of validate/validateField should handle the new "pending" kind — both documented in the README, both strictly better than the previous "throws" behavior.
 
 
+What items 8–13 added
+
+8. Accessibility — All four bound components now render name={path} (autofill/password managers/native posts), aria-invalid when errored, and aria-describedby pointing at the error text, which renders with role="alert" so screen readers announce it. The prop builders (textInputProps etc.) emit name and
+   aria-invalid too, via a new path property on UseFieldReturn.
+
+9. submit result — Now resolves a discriminated SubmitResult: { kind: "valid", data }, { kind: "invalid", errors }, or { kind: "skipped" }. No more true-for-invalid trap; the parsed data comes back on success.
+
+10. Touched on failed submit — An invalid submit marks every errored field touched (skipping the "" root-refine key), so touched-gated error UIs show errors after the canonical first submit.
+
+11. Focus management — Field components accept a ref to the underlying input/select (React 19 ref-as-prop, typed as a structural FieldRef<T> so it works even when a consumer resolves a different @types/react copy — that bit came out of a real type conflict with the examples app). New
+    focusFirstError(errors, root?) helper focuses the first errored control in DOM order by its name; one line in the onInvalid handler wires it up.
+
+12. Typed write surface — setValue, setTouched, setError, clearErrors, validateField(s), and all array ops now take FieldPath-typed paths with value types checked (setValue("age", "thirty") and arrayPush("tags", 42) are compile errors). Dynamic array paths like `users.${i}.email` still typecheck via
+    template-literal types. FieldFormApi/FieldArrayFormApi switched to method-shorthand syntax so the narrowed Form still satisfies them — zero casts in the React layer.
+
+13. Optional-object paths — FieldPath recurses through optional/nullable levels ("profile.name" works for profile: z.object({...}).optional()), and FieldValue honestly widens those values with | undefined.
+
+The only test casualty across the whole batch was the intentional arrayPush-on-a-string test, which now needs an as never cast — i.e., the type system catches at compile time what used to be only a runtime warning.
+
+Next up whenever you want: the medium batch (14–24: path parsing edge cases, reset options, index validation, error-identity churn, NumberField polish, useForm dev-warn) or the testing/tooling items (25–34: CI workflow, ESLint, vitest setup file, coverage).

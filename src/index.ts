@@ -6,6 +6,7 @@ export type {
   InvalidSubmitHandler,
   SubmitOptions,
   SubmitResult,
+  ResetOptions,
   ReadonlyStoreApi,
   FieldSnapshot,
 } from "./core/createForm";
@@ -34,7 +35,13 @@ export type {
   FormProviderProps,
   FormContextApi,
 } from "./react/FormContext";
-export { useFormState, useFormStateShallow } from "./react/useFormState";
+export {
+  useFormSelector,
+  useFormSelectorShallow,
+  // Deprecated aliases — prefer useFormSelector / useFormSelectorShallow.
+  useFormState,
+  useFormStateShallow,
+} from "./react/useFormState";
 export type { FormStateApi } from "./react/useFormState";
 export { useFormError } from "./react/useFormError";
 export {

@@ -60,12 +60,13 @@ export const numberInputProps = <T extends number | undefined>(
   "aria-invalid": ariaInvalid(field),
   onChange: (e) => {
     const raw = e.target.value;
-    if (raw === "") {
+    // Whitespace counts as empty (Number("  ") is 0); Infinity is rejected.
+    if (raw.trim() === "") {
       field.setValue(undefined as T);
       return;
     }
     const parsed = Number(raw);
-    field.setValue((Number.isNaN(parsed) ? undefined : parsed) as T);
+    field.setValue((Number.isFinite(parsed) ? parsed : undefined) as T);
   },
   onBlur: field.onBlur,
 });

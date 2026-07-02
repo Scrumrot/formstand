@@ -122,7 +122,7 @@ export function useField<TValue = unknown>(
         debounceTimerRef.current = null;
       }
     };
-  }, [form, path]);
+  }, [form, path, debounceMs]);
 
   const triggerValidate = useCallback(() => {
     if (debounceMs !== undefined && debounceMs > 0) {
@@ -156,6 +156,7 @@ export function useField<TValue = unknown>(
           state.mode,
           state.reValidateMode,
           state.submitCount > 0,
+          state.touched[path] ?? false,
         )
       ) {
         triggerValidate();
@@ -195,6 +196,7 @@ export function useField<TValue = unknown>(
         state.mode,
         state.reValidateMode,
         state.submitCount > 0,
+        true,
       )
     ) {
       triggerValidate();

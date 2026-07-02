@@ -75,11 +75,6 @@ export type NumberFieldProps = Readonly<{
   path: string;
   label?: ReactNode;
   placeholder?: string;
-  // No longer applied: NumberField renders a text input with
-  // inputMode="decimal" so partial entries ("-", "1.", "1e") survive while
-  // typing. For a native numeric stepper, spread `numberInputProps` onto your
-  // own <input type="number" step={...} />.
-  step?: number | string;
   ref?: FieldRef<HTMLInputElement>;
 }>;
 
@@ -92,15 +87,33 @@ type NumberInputBinding = Readonly<{
   onBlur: () => void;
 }>;
 
+type NumberEditState = Readonly<{
+  raw: string | null;
+  // The form value this hook last wrote (or observed when it kept a partial
+  // entry). When field.value diverges, an external writer (reset/adoptValues/
+  // another field) changed it — drop the raw text so the input shows it.
+  pushed: number | undefined;
+}>;
+
+const IDLE_EDIT: NumberEditState = { raw: null, pushed: undefined };
+
 // Holds the raw text while editing so intermediate, not-yet-valid numbers
-// ("-", "1.", "1e") stay visible instead of being coerced to "". Each keystroke
-// that parses to a finite number is pushed to the form; partial input is kept
-// locally without writing NaN/undefined. On blur the display snaps back to the
-// form's canonical value.
+// ("-", "1.", "1e") stay visible instead of being coerced to "". Keystrokes
+// that parse to a finite number are pushed to the form (whitespace counts as
+// empty; Infinity is rejected); partial input is kept locally. On blur the
+// display snaps back to the form's canonical value, and an external value
+// change while editing wins over the local text (render-phase derived-state
+// reset).
 const useNumberInput = (
   field: UseFieldReturn<number | undefined>,
 ): NumberInputBinding => {
-  const [raw, setRaw] = useState<string | null>(null);
+  const [edit, setEdit] = useState<NumberEditState>(IDLE_EDIT);
+  const externallyChanged =
+    edit.raw !== null && !Object.is(field.value, edit.pushed);
+  if (externallyChanged) {
+    setEdit(IDLE_EDIT);
+  }
+  const raw = externallyChanged ? null : edit.raw;
   const canonical =
     field.value === undefined || Number.isNaN(field.value)
       ? ""
@@ -112,18 +125,23 @@ const useNumberInput = (
     "aria-invalid": hasError(field.error) ? true : undefined,
     onChange: (e) => {
       const text = e.target.value;
-      setRaw(text);
-      if (text === "") {
+      if (text.trim() === "") {
+        setEdit({ raw: text, pushed: undefined });
         field.setValue(undefined);
         return;
       }
       const parsed = Number(text);
-      if (!Number.isNaN(parsed)) {
+      if (Number.isFinite(parsed)) {
+        setEdit({ raw: text, pushed: parsed });
         field.setValue(parsed);
+      } else {
+        // Partial entry: keep the text, remember the untouched form value so
+        // it doesn't read as an external change.
+        setEdit({ raw: text, pushed: field.value });
       }
     },
     onBlur: () => {
-      setRaw(null);
+      setEdit(IDLE_EDIT);
       field.onBlur();
     },
   };

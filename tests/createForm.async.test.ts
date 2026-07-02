@@ -41,9 +41,9 @@ describe("form.validateAsync", () => {
       initialValues: { username: "ok" },
     });
     const promise = form.validateAsync();
-    expect(form.getState().isValidating["__form__"]).toBe(true);
+    expect(form.getState().isValidatingForm).toBe(true);
     await promise;
-    expect(form.getState().isValidating["__form__"]).toBeUndefined();
+    expect(form.getState().isValidatingForm).toBe(false);
   });
 });
 
