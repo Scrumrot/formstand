@@ -83,7 +83,7 @@ const form = createForm(schema, {
 | `reset(nextInitial?, options?)` | reset to initial; optional partial overrides (shallow-merged for record roots, replaced wholesale otherwise) and `{ keepErrors, keepTouched, keepSubmitCount }` (no `keepDirty` — dirtiness derives from values vs initial, and reset makes them equal) |
 | `resetField(path)` | reset one field to its initial value, clearing its (and descendants') error/touched state (dirtiness clears by definition — the value now equals initial) |
 | `adoptValues(values)` | mid-session rebase: replaces `values` + `initialValues` and clears `errors`, but **preserves** interaction state (`touched`, `submitCount`, `isSubmitting`, `isValidating`, `mode`). Use `reset()` for a full wipe |
-| `updateState(updater)` | atomic multi-field patch; `errors` is derived from `schemaErrors`/`serverErrors`, so patch the channels — a direct `errors` patch is ignored (with a dev warning) |
+| `updateState(updater)` | atomic multi-field patch; `errors` is derived from `schemaErrors`/`serverErrors`, so patch the channels — the patch type omits `errors` entirely, and a plain-JS `errors` patch is warned about and ignored |
 | `validate()` / `validateField(path)` / `validateFields(paths)` | sync validation; on an async schema they transparently start the async pass instead (`validate`/`validateField` return `{ kind: "pending", promise }`, `validateFields` returns the `Promise<boolean>` itself) |
 | `validateAsync()` / `validateFieldAsync(path)` / `validateFieldsAsync(paths)` | async; supports `async .refine` |
 | `submit(onValid, onInvalid?, { force? })` → `Promise<SubmitResult>` | full submit flow; resolves `{ kind: "valid", data }`, `{ kind: "invalid", errors }` (errored fields are also marked touched), or `{ kind: "skipped" }` when another submit is in flight |
@@ -377,11 +377,12 @@ form.handleSubmit(async (data) => {
 });
 ```
 
-Errors live in two channels. `schemaErrors` is owned by validation: every pass rebuilds it (full passes wholesale, field-scoped passes splice their scope). `serverErrors` is owned by you: `setError`/`setErrors` write it and validation never reads or writes it — which is the entire preservation story. A background `validateAsync()` can't wipe a "username taken" message because it physically can't touch that channel; there are no marks or bookkeeping to get wrong. The `errors` map every hook reads is derived from both on each write: the schema's message wins at a key, server entries show where the schema is silent.
+Errors live in two channels. `schemaErrors` is owned by validation: every pass rebuilds it (full passes wholesale, field-scoped passes splice their scope). `serverErrors` is owned by you: `setError`/`setErrors` write it and validation never reads or writes it — which is the entire preservation story. A background `validateAsync()` can't wipe a "username taken" message because it physically can't touch that channel; there are no marks or bookkeeping to get wrong. The `errors` map every hook reads is derived from both on each write: the schema's message wins at a key, server entries show where the schema is silent. The merge is order-independent — `setError` on a key the schema currently rejects stores the verdict (visible in `state.serverErrors`) behind the schema message, and if the schema later clears at that key without the value changing, the stored verdict resurfaces, since the value it judged is unchanged.
 
 A server error is released when:
 
 - the value on its spine changes (`setValue`/`resetField`/array op on the path, a descendant, or an ancestor — editing `address.street` releases a verdict on `address`; array ops release verdicts on the array itself while row-level entries follow their rows through re-indexing),
+- a `setValues` bulk write changes its value slice (entries on untouched fields survive),
 - a field-scoped validation (`validateField`/`validateFieldAsync`/`validateFields`) targets its path (`validateField("")` counts as a full pass and leaves the server channel alone, like `validate()`), or
 - you call `clearErrors` / `reset` / `adoptValues`.
 

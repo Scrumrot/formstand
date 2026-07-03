@@ -11,7 +11,11 @@ The result of a full-repo review pass (see `TODO.md` items 1–34).
   (app-owned via `setError`/`setErrors`, invisible to validation).
   `FormState.errors` remains the map hooks read but is now derived from the
   channels (schema wins at a key, server shows where the schema is silent) —
-  patch the channels through `updateState`, not `errors`.
+  patch the channels through `updateState` (its patch type omits `errors`),
+  not `errors`. Consequences: `setErrors` replaces only the server channel
+  (schema errors persist until the next pass), and `restore` re-derives the
+  merged map from the snapshot's channels — snapshots persisted under an
+  older state shape lose their error state on restore.
 - `FormState.dirty` is removed; dirtiness is derived from `values` vs
   `initialValues` everywhere (`useField().dirty`, `useIsDirty`,
   `dirtyFields()`, `diff()`).

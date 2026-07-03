@@ -99,7 +99,7 @@ describe("manual (server) errors vs validation passes", () => {
     expect(form.getState().errors).toEqual({});
   });
 
-  it("restore brings manual marks back with the snapshot", async () => {
+  it("restore brings server errors back with the snapshot", async () => {
     const form = makeForm();
     form.setError("username", ["taken"]);
     const snap = form.snapshot();
@@ -108,6 +108,24 @@ describe("manual (server) errors vs validation passes", () => {
     const result = await form.validateAsync();
     expect(result.kind).toBe("valid");
     expect(form.getState().errors["username"]).toEqual(["taken"]);
+  });
+
+  it("restore re-derives errors so an inconsistent snapshot can't install phantoms", () => {
+    const form = makeForm();
+    const snap = form.snapshot();
+    // Hand-built snapshot whose merged map disagrees with its channels
+    // (e.g. persisted under an older shape, or edited in devtools).
+    form.restore({ ...snap, errors: { username: ["phantom"] } });
+    expect(form.getState().errors).toEqual({});
+    // And a channel-less legacy shape must not crash the next write.
+    const legacy = Object.fromEntries(
+      Object.entries(snap).filter(
+        ([k]) => k !== "schemaErrors" && k !== "serverErrors",
+      ),
+    );
+    form.restore(legacy as never);
+    form.setValue("username", "tim2");
+    expect(form.getState().errors).toEqual({});
   });
 
   it("server errors written through updateState survive validation like setError", () => {
@@ -119,7 +137,20 @@ describe("manual (server) errors vs validation passes", () => {
     expect(form.getState().errors["username"]).toEqual(["taken"]);
   });
 
-  it("schema errors stay schema-owned no matter how state is patched", () => {
+  it("the schema message wins at a shared key regardless of write order", () => {
+    const form = createForm(schema, {
+      initialValues: { username: "tim", name: "x" }, // name too short
+    });
+    form.validate();
+    const schemaMessage = form.getState().errors["name"];
+    form.setError("name", ["server rejected"]);
+    // The merge is order-independent: the verdict is stored, the schema
+    // message stays visible.
+    expect(form.getState().errors["name"]).toBe(schemaMessage);
+    expect(form.getState().serverErrors["name"]).toEqual(["server rejected"]);
+  });
+
+  it("a masked server verdict resurfaces when the schema clears without the field changing", () => {
     const refineSchema = z
       .object({ password: z.string(), confirm: z.string() })
       .refine((v) => v.password === v.confirm, {
@@ -129,15 +160,25 @@ describe("manual (server) errors vs validation passes", () => {
     const form = createForm(refineSchema, {
       initialValues: { password: "a", confirm: "b" },
     });
-    form.validate();
-    expect(form.getState().errors["confirm"]).toBeDefined();
-    // A touched-only patch (or any patch) can't convert schema errors into
-    // surviving server errors — the channels are separate.
-    form.updateState((s) => ({ touched: { ...s.touched, confirm: true } }));
-    // Fix the refine WITHOUT touching confirm's own value.
+    form.validate(); // schema error at confirm
+    form.setError("confirm", ["code rejected"]); // masked by the schema message
+    expect(form.getState().errors["confirm"]).toEqual([
+      "passwords do not match",
+    ]);
+    // Fixing password clears the refine; confirm's own value never changed,
+    // so the stored server verdict about it is still valid and resurfaces.
     form.setValue("password", "b");
     form.validate();
-    expect(form.getState().errors["confirm"]).toBeUndefined();
+    expect(form.getState().errors["confirm"]).toEqual(["code rejected"]);
+  });
+
+  it("setValues releases only the verdicts whose value slice changed", () => {
+    const form = makeForm();
+    form.setError("username", ["taken"]);
+    form.setError("name", ["bad name"]);
+    form.setValues({ username: "tim", name: "Timothy" }); // username unchanged
+    expect(form.getState().errors["username"]).toEqual(["taken"]);
+    expect(form.getState().errors["name"]).toBeUndefined();
   });
 
   it("validateField('') is a full pass: manual errors are preserved", () => {

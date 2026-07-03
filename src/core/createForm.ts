@@ -139,10 +139,13 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
   ) => void;
   setErrors: (errors: ErrorMap) => void;
   clearErrors: (path?: ErrorPath<z.input<TSchema>>) => void;
+  // The patch type omits `errors`: the merged map is derived from
+  // schemaErrors/serverErrors, so writing it directly is unrepresentable for
+  // TS callers (plain-JS writes are ignored with a warning).
   updateState: (
     updater: (
       state: FormState<z.input<TSchema>>,
-    ) => Partial<FormState<z.input<TSchema>>>,
+    ) => Partial<Omit<FormState<z.input<TSchema>>, "errors">>,
   ) => void;
   reset: (
     nextInitial?: Partial<z.input<TSchema>>,
@@ -298,6 +301,7 @@ const stringArraysEqual = (
 // change (and the previous map itself when nothing changed at all), so field
 // subscriptions comparing errors by identity don't re-fire on every pass.
 const reuseErrorRefs = (next: ErrorMap, prev: ErrorMap): ErrorMap => {
+  if (next === prev) return prev;
   const entries = Object.entries(next).map(([k, v]) => {
     const old = prev[k];
     return [
@@ -353,6 +357,14 @@ const errorChannels = (
 ): ErrorChannels => {
   const schemaErrors = patch.schemaErrors ?? state.schemaErrors;
   const serverErrors = patch.serverErrors ?? state.serverErrors;
+  // Unchanged channels mean an unchanged merge — skip it, so no-op writes
+  // (every keystroke with an empty server channel) don't rescan the map.
+  if (
+    schemaErrors === state.schemaErrors &&
+    serverErrors === state.serverErrors
+  ) {
+    return { errors: state.errors, schemaErrors, serverErrors };
+  }
   return {
     schemaErrors,
     serverErrors,
@@ -361,6 +373,31 @@ const errorChannels = (
       state.errors,
     ),
   };
+};
+
+// The release contract for a value write at `path`: server entries at the
+// path or below go (that subtree was replaced), entries at ancestors go too
+// (container verdicts are stale), and a runtime "" path (the imperative
+// surface is string-typed) releases everything.
+const releaseSpine = (server: ErrorMap, path: string): ErrorMap =>
+  path === ""
+    ? emptyErrors
+    : releaseAncestorEntries(omitScope(server, [path]), path);
+
+// A bulk values write releases only the verdicts whose value slice actually
+// changed — a server error on an untouched field survives a setValues that
+// rewrites its siblings. The "" entry compares the whole values object, so
+// any change releases a form-level verdict.
+const releaseChangedSlices = (
+  server: ErrorMap,
+  prevValues: unknown,
+  nextValues: unknown,
+): ErrorMap => {
+  const entries = Object.entries(server);
+  const kept = entries.filter(([k]) =>
+    valuesEqual(getAtPath(prevValues, k), getAtPath(nextValues, k)),
+  );
+  return kept.length === entries.length ? server : Object.fromEntries(kept);
 };
 
 export const createForm = <TSchema extends z.ZodType>(
@@ -789,24 +826,27 @@ export const createForm = <TSchema extends z.ZodType>(
       const result = await validateAsync(schema, store.getState().values);
 
       if (result.kind === "invalid") {
-        const committed = commitFullPass(store.getState(), result.errors);
-        store.setState((state) => ({
-          ...state,
-          ...committed,
-          // Mark every errored field touched so touched-gated error UIs show
-          // something after the canonical first failed submit. The "" key
-          // (schema-level refine) has no field to touch.
-          touched: {
-            ...state.touched,
-            ...Object.fromEntries(
-              Object.keys(committed.errors)
-                .filter((k) => k !== "")
-                .map((k) => [k, true]),
-            ),
-          },
-        }));
-        onInvalid?.(committed.errors);
-        return { kind: "invalid", errors: committed.errors };
+        store.setState((state) => {
+          const committed = commitFullPass(state, result.errors);
+          return {
+            ...state,
+            ...committed,
+            // Mark every errored field touched so touched-gated error UIs
+            // show something after the canonical first failed submit. The
+            // "" key (schema-level refine) has no field to touch.
+            touched: {
+              ...state.touched,
+              ...Object.fromEntries(
+                Object.keys(committed.errors)
+                  .filter((k) => k !== "")
+                  .map((k) => [k, true]),
+              ),
+            },
+          };
+        });
+        const merged = store.getState().errors;
+        onInvalid?.(merged);
+        return { kind: "invalid", errors: merged };
       }
 
       store.setState((state) => ({
@@ -895,26 +935,21 @@ export const createForm = <TSchema extends z.ZodType>(
       store.setState((state) => ({
         ...state,
         values: setAtPath(state.values, path, value),
-        // The value changed, so server errors on this path's spine — the
-        // path itself, its descendants (subtree replaced), and its ancestors
-        // (container verdicts) — are no longer vouched for. A runtime ""
-        // path (the FieldFormApi surface is string-typed) replaces
-        // everything.
         ...errorChannels(state, {
-          serverErrors:
-            path === ""
-              ? emptyErrors
-              : releaseAncestorEntries(
-                  omitScope(state.serverErrors, [path]),
-                  path,
-                ),
+          serverErrors: releaseSpine(state.serverErrors, path),
         }),
       })),
     setValues: (next) =>
       store.setState((state) => ({
         ...state,
         values: next,
-        ...errorChannels(state, { serverErrors: emptyErrors }),
+        ...errorChannels(state, {
+          serverErrors: releaseChangedSlices(
+            state.serverErrors,
+            state.values,
+            next,
+          ),
+        }),
       })),
     setTouched: (path: string, touched: boolean = true) =>
       store.setState((state) => ({
@@ -944,39 +979,46 @@ export const createForm = <TSchema extends z.ZodType>(
         ...errorChannels(state, { serverErrors: errors }),
       })),
     clearErrors: (path?: string) =>
-      store.setState((state) => ({
-        ...state,
+      store.setState((state) => {
         // Clears both channels (schema errors return on the next validation
         // pass). A field path also clears its descendants ("items" covers
         // "items.0.name"), consistent with field-scoped validation; the root
         // "" is a single key (the schema-level refine slot, symmetric with
         // setError("")); clearing everything is clearErrors() with no
         // argument.
-        ...errorChannels(state, {
-          schemaErrors:
-            path === undefined
-              ? emptyErrors
-              : omitScope(state.schemaErrors, [path]),
-          serverErrors:
-            path === undefined
-              ? emptyErrors
-              : omitScope(state.serverErrors, [path]),
-        }),
-      })),
+        const scrub = (map: ErrorMap): ErrorMap =>
+          path === undefined ? emptyErrors : omitScope(map, [path]);
+        return {
+          ...state,
+          ...errorChannels(state, {
+            schemaErrors: scrub(state.schemaErrors),
+            serverErrors: scrub(state.serverErrors),
+          }),
+        };
+      }),
     updateState: (updater) =>
       store.setState((state) => {
-        const patch = updater(state);
+        const patch: Partial<FormState<Values>> = updater(state);
         if (Object.keys(patch).length === 0) return state;
-        if (patch.errors !== undefined) {
+        // Spread-style updaters carry `errors` with its current reference —
+        // only a genuinely foreign map (a plain-JS write; TS forbids it via
+        // the patch type) earns the warning.
+        if (patch.errors !== undefined && patch.errors !== state.errors) {
           console.warn(
             "[zustand-forms] `errors` is derived from schemaErrors/serverErrors — patch those channels instead; the direct `errors` patch is ignored.",
           );
         }
-        // `errors` is always re-derived from the (possibly patched)
-        // channels, so the merged map can't drift no matter what the patch
-        // contains.
+        // Re-derive against the CURRENT merged map (not the patched one), so
+        // an ignored `errors` patch can't leak even its object identity into
+        // state and re-fire identity-based subscribers.
         const next = { ...state, ...patch };
-        return { ...next, ...errorChannels(next, {}) };
+        return {
+          ...next,
+          ...errorChannels(state, {
+            schemaErrors: next.schemaErrors,
+            serverErrors: next.serverErrors,
+          }),
+        };
       }),
     adoptValues: (values) => {
       // Rebasing values invalidates any in-flight async validation (the
@@ -1038,18 +1080,11 @@ export const createForm = <TSchema extends z.ZodType>(
         ),
         // A runtime "" path scopes the whole form (the imperative surface is
         // string-typed even though FieldPath excludes ""). Server entries
-        // follow the setValue release contract: the value at this path
-        // changed, so ancestor-level verdicts are stale too.
+        // follow the setValue release contract (releaseSpine).
         ...errorChannels(state, {
           schemaErrors:
             path === "" ? emptyErrors : omitScope(state.schemaErrors, [path]),
-          serverErrors:
-            path === ""
-              ? emptyErrors
-              : releaseAncestorEntries(
-                  omitScope(state.serverErrors, [path]),
-                  path,
-                ),
+          serverErrors: releaseSpine(state.serverErrors, path),
         }),
         touched:
           path === "" ? emptyBools : omitScope(state.touched, [path]),
@@ -1128,6 +1163,24 @@ export const createForm = <TSchema extends z.ZodType>(
       return dirtyPathsOf(state.values, state.initialValues, "");
     },
     snapshot: () => store.getState(),
-    restore: (snap) => store.setState(() => snap),
+    restore: (snap) =>
+      store.setState(() => {
+        // Snapshots can come from persistence or hand construction: default
+        // missing channels (pre-channel shapes) and re-derive the merged map
+        // so the errors-is-derived invariant holds at this boundary too —
+        // otherwise an inconsistent snapshot renders phantom errors until
+        // the next write silently rewrites them (or crashes a channel scan).
+        const schemaErrors = snap.schemaErrors ?? emptyErrors;
+        const serverErrors = snap.serverErrors ?? emptyErrors;
+        return {
+          ...snap,
+          schemaErrors,
+          serverErrors,
+          errors: reuseErrorRefs(
+            mergeErrorChannels(schemaErrors, serverErrors),
+            snap.errors ?? emptyErrors,
+          ),
+        };
+      }),
   }) as Form<TSchema>;
 };

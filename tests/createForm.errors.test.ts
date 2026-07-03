@@ -36,13 +36,26 @@ describe("form.setError", () => {
 });
 
 describe("form.setErrors", () => {
-  it("replaces the whole error map", () => {
+  it("replaces the whole server channel", () => {
     const form = createForm(schema, {
       initialValues: { name: "Tim", age: 30 },
     });
     form.setError("name", ["x"]);
     form.setErrors({ age: ["new"] });
     expect(form.getState().errors).toEqual({ age: ["new"] });
+  });
+
+  it("leaves schema errors alone — the channels are separate", () => {
+    const invalid = createForm(schema, {
+      initialValues: { name: "T", age: 30 }, // name too short
+    });
+    invalid.validate();
+    expect(invalid.getState().errors["name"]).toBeDefined();
+    invalid.setErrors({});
+    // The server channel is emptied, but the schema's verdict stands until
+    // the next validation pass says otherwise.
+    expect(invalid.getState().errors["name"]).toBeDefined();
+    expect(invalid.getState().serverErrors).toEqual({});
   });
 });
 

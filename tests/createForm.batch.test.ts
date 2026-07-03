@@ -76,9 +76,39 @@ describe("form.updateState", () => {
     const form = createForm(schema, {
       initialValues: { name: "Tim", email: "t@t.com", age: 30 },
     });
-    form.updateState(() => ({ errors: { name: ["custom"] } }));
+    // The patch type forbids `errors` for TS callers; the cast simulates a
+    // plain-JS write, which is warned about and discarded.
+    form.updateState((() => ({ errors: { name: ["custom"] } })) as never);
     expect(form.getState().errors).toEqual({});
     expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+  });
+
+  it("does not warn for spread-style updaters that carry errors unchanged", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const form = createForm(schema, {
+      initialValues: { name: "Tim", email: "t@t.com", age: 30 },
+    });
+    form.updateState((s) => ({ ...s, touched: { ...s.touched, name: true } }));
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("an ignored errors patch leaves the merged map's identity untouched", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const form = createForm(schema, {
+      initialValues: { name: "T", email: "t@t.com", age: 30 }, // name too short
+    });
+    form.validate();
+    const before = form.getState().errors;
+    // A clone-style patch (fresh map + fresh arrays, equal content) must not
+    // leak its object identity into state and re-fire subscribers.
+    form.updateState(((s: Readonly<{ errors: Readonly<Record<string, readonly string[]>> }>) => ({
+      errors: Object.fromEntries(
+        Object.entries(s.errors).map(([k, v]) => [k, [...v]]),
+      ),
+    })) as never);
+    expect(form.getState().errors).toBe(before);
     warn.mockRestore();
   });
 });
