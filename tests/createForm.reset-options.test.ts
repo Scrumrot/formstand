@@ -26,21 +26,22 @@ describe("reset options", () => {
     expect(state.submitCount).toBe(0);
   });
 
-  it("keepErrors / keepTouched / keepDirty / keepSubmitCount preserve slices", async () => {
+  it("keepErrors / keepTouched / keepSubmitCount preserve slices", async () => {
     const form = await makeDirtyForm();
     form.reset(undefined, {
       keepErrors: true,
       keepTouched: true,
-      keepDirty: true,
       keepSubmitCount: true,
     });
     const state = form.getState();
     expect(state.errors["name"]).toBeDefined();
     expect(state.touched["age"]).toBe(true);
-    expect(state.dirty["age"]).toBe(true);
     expect(state.submitCount).toBe(1);
-    // Values still reset.
+    // Values still reset, and dirtiness always clears with them — a field
+    // whose value equals its initial value is clean by definition.
     expect(state.values).toEqual({ name: "x", age: 1 });
+    expect(state.dirty).toEqual({});
+    expect(form.getFieldState("age").dirty).toBe(false);
   });
 
   it("replaces wholesale for array-rooted schemas instead of spreading", () => {

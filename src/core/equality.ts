@@ -27,3 +27,31 @@ export const valuesEqual = (a: unknown, b: unknown): boolean => {
   }
   return false;
 };
+
+// The deep compare for a container-valued field runs inside store selectors
+// and watch subscriptions, i.e. on every store change — cache the verdict per
+// value object against the initial-slice reference it was computed for. Form
+// state is immutable, so identical references always mean an identical
+// verdict; the WeakMap lets discarded value objects release their entries.
+const dirtyCache = new WeakMap<
+  object,
+  Readonly<{ initial: unknown; dirty: boolean }>
+>();
+
+// The single definition of per-field dirtiness: the field's current value
+// slice differs structurally from its initial-values slice. Derived (rather
+// than read from the form-level dirty map) so reads are accurate at any
+// depth, regardless of which writer (setValue/setValues/array op) recorded
+// dirtiness in the map.
+export const isFieldDirty = (value: unknown, initialValue: unknown): boolean => {
+  if (typeof value !== "object" || value === null) {
+    return !valuesEqual(value, initialValue);
+  }
+  const cached = dirtyCache.get(value);
+  if (cached !== undefined && Object.is(cached.initial, initialValue)) {
+    return cached.dirty;
+  }
+  const dirty = !valuesEqual(value, initialValue);
+  dirtyCache.set(value, { initial: initialValue, dirty });
+  return dirty;
+};

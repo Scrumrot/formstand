@@ -18,6 +18,21 @@ const Harness = () => {
   return <NumberField form={form} path="amount" label="Amount" />;
 };
 
+describe("NumberField with a null (nullable) value", () => {
+  const nullableSchema = z.object({ qty: z.number().nullable() });
+
+  const NullableHarness = () => {
+    const form = useForm(nullableSchema, { initialValues: { qty: null } });
+    return <NumberField form={form} path="qty" label="Qty" />;
+  };
+
+  it("renders blank, not the literal text 'null'", () => {
+    render(<NullableHarness />);
+    const input = screen.getByLabelText("Qty") as HTMLInputElement;
+    expect(input.value).toBe("");
+  });
+});
+
 describe("NumberField input parsing", () => {
   it("treats whitespace as empty instead of zero", () => {
     render(<Harness />);

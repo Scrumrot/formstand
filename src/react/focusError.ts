@@ -4,9 +4,12 @@ import { isPathOrChild } from "../core/validation";
 // Focus the first form control (in DOM order) whose `name` attribute matches
 // an entry in the error map — either exactly, or as a descendant of an
 // errored container path, so array-level errors ("lineItems" from
-// z.array().min()), object-level refines ("address"), and the root "" key
-// land on their first rendered field. The bound components and prop builders
-// set name={path}, so this works out of the box:
+// z.array().min()) and object-level refines ("address") land on their first
+// rendered field. Most specific wins: the root "" key (a form-wide refine)
+// falls back to the first control only when no field-keyed error matches
+// anything — otherwise a root error would steal focus from the actually
+// errored field. The bound components and prop builders set name={path}, so
+// this works out of the box:
 //
 //   form.handleSubmit(onValid, (errors) => focusFirstError(errors))
 //
@@ -19,16 +22,19 @@ export const focusFirstError = (
 ): boolean => {
   const scope = root ?? document;
   const erroredPaths = Object.keys(errors).filter(
-    (k) => (errors[k]?.length ?? 0) > 0,
+    (k) => k !== "" && (errors[k]?.length ?? 0) > 0,
   );
-  const target = [
+  const hasRootError = (errors[""]?.length ?? 0) > 0;
+  const controls = [
     ...scope.querySelectorAll<HTMLElement>(
       "input[name], select[name], textarea[name]",
     ),
-  ].find((el) => {
+  ];
+  const fieldMatch = controls.find((el) => {
     const name = el.getAttribute("name");
     return name !== null && erroredPaths.some((k) => isPathOrChild(name, k));
   });
+  const target = fieldMatch ?? (hasRootError ? controls[0] : undefined);
   target?.focus();
   return target !== undefined;
 };

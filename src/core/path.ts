@@ -35,19 +35,24 @@ const readSegment = (obj: unknown, segment: PathSegment): unknown => {
 export const getAtPath = (obj: unknown, path: string): unknown =>
   parsePath(path).reduce<unknown>(readSegment, obj);
 
-// True when every array traversed by `path` is long enough for its index.
-// Object properties may be legitimately absent (an empty optional field is
-// still a real, addressable field), but an out-of-range array index addresses
-// no slot at all — a full-form parse would never key an error there.
+// True when every numeric segment of `path` addresses a real slot: an
+// in-range array index, or a record key (containers decide, mirroring
+// readSegment). An out-of-range index — including any index into an absent
+// or non-container value — addresses no slot at all: a full-form parse would
+// never key an error there. Object properties reached by STRING segments may
+// be legitimately absent (an empty optional field is still addressable).
 export const arrayIndicesInBounds = (obj: unknown, path: string): boolean =>
   parsePath(path).reduce<Readonly<{ ok: boolean; current: unknown }>>(
-    (acc, segment) =>
-      !acc.ok ||
-      (Array.isArray(acc.current) &&
+    (acc, segment) => {
+      const outOfBounds =
         typeof segment === "number" &&
-        segment >= acc.current.length)
+        (Array.isArray(acc.current)
+          ? segment >= acc.current.length
+          : !isPlainRecord(acc.current));
+      return !acc.ok || outOfBounds
         ? { ok: false, current: undefined }
-        : { ok: true, current: readSegment(acc.current, segment) },
+        : { ok: true, current: readSegment(acc.current, segment) };
+    },
     { ok: true, current: obj },
   ).ok;
 

@@ -38,10 +38,13 @@ export type SelectProps = Readonly<{
 const ariaInvalid = (field: Readonly<{ error: readonly string[] | undefined }>): true | undefined =>
   field.error !== undefined && field.error.length > 0 ? true : undefined;
 
-// Canonical display text for a numeric field value ("" for empty/NaN).
+// Canonical display text for a numeric field value ("" for empty/NaN; null
+// counts as empty so nullable fields don't render the literal text "null").
 // Shared with NumberField so the two number bindings can't drift.
-export const numberToInputText = (value: number | undefined): string =>
-  value === undefined || Number.isNaN(value) ? "" : String(value);
+export const numberToInputText = (value: number | null | undefined): string =>
+  value === undefined || value === null || Number.isNaN(value)
+    ? ""
+    : String(value);
 
 export type ParsedNumberText =
   | Readonly<{ kind: "empty" }>
@@ -61,7 +64,7 @@ export const parseNumberText = (text: string): ParsedNumberText => {
     : { kind: "invalid" };
 };
 
-export const textInputProps = <T extends string | undefined>(
+export const textInputProps = <T extends string | null | undefined>(
   field: UseFieldReturn<T>,
 ): TextInputProps => ({
   name: field.path,
@@ -71,7 +74,7 @@ export const textInputProps = <T extends string | undefined>(
   onBlur: field.onBlur,
 });
 
-export const numberInputProps = <T extends number | undefined>(
+export const numberInputProps = <T extends number | null | undefined>(
   field: UseFieldReturn<T>,
 ): NumberInputProps => ({
   type: "number",
@@ -85,7 +88,7 @@ export const numberInputProps = <T extends number | undefined>(
   onBlur: field.onBlur,
 });
 
-export const checkboxProps = <T extends boolean | undefined>(
+export const checkboxProps = <T extends boolean | null | undefined>(
   field: UseFieldReturn<T>,
 ): CheckboxProps => ({
   type: "checkbox",

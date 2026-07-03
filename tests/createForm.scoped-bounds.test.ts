@@ -43,4 +43,15 @@ describe("field-scoped validation of paths that no longer exist", () => {
     expect(result.kind).toBe("invalid");
     expect(form.getState().errors["tags.1"]).toBeDefined();
   });
+
+  it("an index into an absent array is out of bounds too", () => {
+    // Bypasses the typed initialValues the way a stale serialized draft or
+    // an `as` cast would.
+    const form = createForm(schema, {
+      initialValues: {} as { tags: string[] },
+    });
+    const result = form.validateField("tags.0");
+    expect(result.kind).toBe("valid");
+    expect(form.getState().errors).toEqual({});
+  });
 });

@@ -51,4 +51,20 @@ describe("focusFirstError", () => {
     render(<Harness initial={{ name: "ok name", email: "a@b.c" }} />);
     expect(focusFirstError({})).toBe(false);
   });
+
+  it("a root '' error does not steal focus from the actually errored field", () => {
+    render(<Harness initial={{ name: "long enough", email: "y" }} />);
+    focusFirstError({
+      "": ["form-wide refine failed"],
+      email: ["email too short"],
+    });
+    expect(document.activeElement).toBe(screen.getByLabelText("Email"));
+  });
+
+  it("a root-only error falls back to the first control", () => {
+    render(<Harness initial={{ name: "long enough", email: "a@b.c" }} />);
+    expect(focusFirstError({ "": ["form-wide refine failed"] })).toBe(true);
+    expect(document.activeElement).toBe(screen.getByLabelText("Name"));
+  });
+
 });

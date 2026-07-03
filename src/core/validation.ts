@@ -93,9 +93,12 @@ export const isAsyncRequiredError = (e: unknown): boolean =>
   (e instanceof Error &&
     /Encountered Promise during synchronous parse/i.test(e.message));
 
-// True when `key` is `path` itself or a descendant ("a.b" under "a").
+// True when `key` is `path` itself or a descendant ("a.b" under "a"). The
+// root "" matches only the "" key — whole-form scope is never implicit;
+// call sites that want it (validateField(""), focusFirstError's fallback)
+// handle the root explicitly instead of inheriting a wildcard.
 export const isPathOrChild = (key: string, path: string): boolean =>
-  path === "" || key === path || key.startsWith(`${path}.`);
+  key === path || key.startsWith(`${path}.`);
 
 // Re-key an error map produced by parsing a field's subschema so its keys are
 // absolute form paths ("" becomes the field path itself).

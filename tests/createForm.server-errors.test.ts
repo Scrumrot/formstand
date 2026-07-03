@@ -107,6 +107,31 @@ describe("manual (server) errors vs validation passes", () => {
     expect(form.getState().errors["username"]).toEqual(["taken"]);
   });
 
+  it("an updateState that merely clones error arrays does not mark schema errors manual", () => {
+    const refineSchema = z
+      .object({ password: z.string(), confirm: z.string() })
+      .refine((v) => v.password === v.confirm, {
+        message: "passwords do not match",
+        path: ["confirm"],
+      });
+    const form = createForm(refineSchema, {
+      initialValues: { password: "a", confirm: "b" },
+    });
+    form.validate();
+    expect(form.getState().errors["confirm"]).toBeDefined();
+    // Rebuild the map with fresh array instances but identical content.
+    form.updateState((s) => ({
+      errors: Object.fromEntries(
+        Object.entries(s.errors).map(([k, v]) => [k, [...v]]),
+      ),
+    }));
+    // Fix the refine WITHOUT touching confirm's own value: if the clone had
+    // wrongly marked the schema error manual, it would now survive forever.
+    form.setValue("password", "b");
+    form.validate();
+    expect(form.getState().errors["confirm"]).toBeUndefined();
+  });
+
   it("validateField('') is a full pass: manual errors are preserved", () => {
     const form = makeForm();
     form.setError("username", ["taken"]);
@@ -138,6 +163,15 @@ describe("manual errors on container paths", () => {
     const form = makeNestedForm();
     form.setError("address", ["invalid address"]);
     form.setValue("address.street", "Elm");
+    form.validate();
+    expect(form.getState().errors["address"]).toBeUndefined();
+  });
+
+  it("resetField on a child releases the ancestor mark like setValue", () => {
+    const form = makeNestedForm();
+    form.setValue("address.street", "Elm");
+    form.setError("address", ["invalid address"]);
+    form.resetField("address.street");
     form.validate();
     expect(form.getState().errors["address"]).toBeUndefined();
   });

@@ -54,7 +54,7 @@ export const TextField = ({
 }: TextFieldProps) => {
   const id = useId();
   const errorId = `${id}-error`;
-  const field = useField<string | undefined>(form, path);
+  const field = useField<string | null | undefined>(form, path);
   return (
     <div className="zf-field">
       {label !== undefined ? (
@@ -98,7 +98,7 @@ type NumberEditState = Readonly<{
   // The form value this hook last wrote (or observed when it kept a partial
   // entry). When field.value diverges, an external writer (reset/adoptValues/
   // another field) changed it — drop the raw text so the input shows it.
-  pushed: number | undefined;
+  pushed: number | null | undefined;
 }>;
 
 const IDLE_EDIT: NumberEditState = { raw: null, pushed: undefined };
@@ -110,7 +110,7 @@ const IDLE_EDIT: NumberEditState = { raw: null, pushed: undefined };
 // the form's canonical value, and an external value change while editing wins
 // over the local text (render-phase derived-state reset).
 const useNumberInput = (
-  field: UseFieldReturn<number | undefined>,
+  field: UseFieldReturn<number | null | undefined>,
 ): NumberInputBinding => {
   const [edit, setEdit] = useState<NumberEditState>(IDLE_EDIT);
   const externallyChanged =
@@ -159,7 +159,7 @@ export const NumberField = ({
 }: NumberFieldProps) => {
   const id = useId();
   const errorId = `${id}-error`;
-  const field = useField<number | undefined>(form, path);
+  const field = useField<number | null | undefined>(form, path);
   const binding = useNumberInput(field);
   return (
     <div className="zf-field">
@@ -191,7 +191,7 @@ export type CheckboxFieldProps = Readonly<{
 export const CheckboxField = ({ form, path, label, ref }: CheckboxFieldProps) => {
   const id = useId();
   const errorId = `${id}-error`;
-  const field = useField<boolean | undefined>(form, path);
+  const field = useField<boolean | null | undefined>(form, path);
   return (
     <div className="zf-field">
       <label htmlFor={id} className="zf-label">
