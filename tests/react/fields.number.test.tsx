@@ -46,6 +46,22 @@ describe("NumberField with a null (nullable) value", () => {
     expect(capturedNullable.form?.getFieldState("qty").dirty).toBe(false);
     expect(capturedNullable.form?.validate().kind).toBe("valid");
   });
+
+  it("clearing writes null even when the initial value was a number (schema-introspected)", () => {
+    const NumericInitialHarness = () => {
+      const form = useForm(nullableSchema, { initialValues: { qty: 5 } });
+      capturedNullable.form = form;
+      return <NumberField form={form} path="qty" label="Qty" />;
+    };
+    render(<NumericInitialHarness />);
+    const input = screen.getByLabelText("Qty") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "" } });
+    // The schema says .nullable(), so the empty write is null regardless of
+    // what the field started as — the old initial-value heuristic would
+    // have written undefined here and failed validation.
+    expect(capturedNullable.form?.getState().values.qty).toBeNull();
+    expect(capturedNullable.form?.validate().kind).toBe("valid");
+  });
 });
 
 describe("NumberField input parsing", () => {

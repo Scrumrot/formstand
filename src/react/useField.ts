@@ -11,6 +11,8 @@ import { getAtPath } from "../core/path";
 import type { FormState } from "../core/types";
 import {
   type FieldValidationResult,
+  emptyValueForSchema,
+  fieldSchemaAtPath,
   isAsyncRequiredError,
 } from "../core/validation";
 
@@ -46,10 +48,13 @@ export type UseFieldReturn<TValue> = Readonly<{
   // bound prop builders spread it as `name`).
   path: string;
   value: TValue;
-  // The slice of initialValues at this path. The prop builders use it to
-  // pick the field's empty representation (null when the field started as
-  // null) when the user clears the input.
+  // The slice of initialValues at this path (what `dirty` compares against).
   initialValue: TValue;
+  // What a cleared input writes back: null when the field's schema is
+  // nullable (introspected when the form carries its schema — the zod-first
+  // source of truth), undefined when it is optional or unknown. Falls back
+  // to "the initial value was null" for schema-less FieldFormApi forms.
+  emptyValue: null | undefined;
   error: readonly string[] | undefined;
   touched: boolean;
   dirty: boolean;
@@ -120,6 +125,18 @@ export function useField<TValue = unknown>(
     }),
   );
   const path = slice.path;
+
+  // Schema introspection wins over the runtime heuristic when the form
+  // carries its schema (Form<TSchema> does; a bare FieldFormApi may not).
+  const formSchema = (form as Readonly<{ schema?: z.ZodType }>).schema;
+  const initialValue = slice.initialValue;
+  const emptyValue = useMemo(() => {
+    if (formSchema !== undefined) {
+      const sub = fieldSchemaAtPath(formSchema, path);
+      if (sub !== null) return emptyValueForSchema(sub);
+    }
+    return initialValue === null ? null : undefined;
+  }, [formSchema, path, initialValue]);
 
   const debounceMs = options?.debounceMs;
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -217,6 +234,7 @@ export function useField<TValue = unknown>(
       path: slice.path,
       value: slice.value,
       initialValue: slice.initialValue,
+      emptyValue,
       error: slice.error,
       touched: slice.touched,
       dirty: slice.dirty,
@@ -229,6 +247,6 @@ export function useField<TValue = unknown>(
       validateAsync,
       onBlur,
     }),
-    [slice, setValue, setTouched, setError, clearError, validate, validateAsync, onBlur],
+    [slice, emptyValue, setValue, setTouched, setError, clearError, validate, validateAsync, onBlur],
   );
 }

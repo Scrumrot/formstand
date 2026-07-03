@@ -112,6 +112,22 @@ export const prefixErrorKeys = (errors: ErrorMap, path: string): ErrorMap =>
         ]),
       );
 
+// The empty representation a field's schema accepts: undefined when the
+// field is optional (or the wrappers are unrecognized — undefined is the
+// library-wide default empty), null when it is nullable but not optional.
+// Lets a cleared input round-trip to a valid blank based on what the schema
+// states rather than guessing from runtime values.
+export const emptyValueForSchema = (schema: z.ZodType): null | undefined => {
+  const walk = (s: z.ZodType, sawNullable: boolean): null | undefined => {
+    if (s instanceof z.ZodOptional) return undefined;
+    if (s instanceof z.ZodNullable) {
+      return walk(s.unwrap() as z.ZodType, true);
+    }
+    return sawNullable ? null : undefined;
+  };
+  return walk(schema, false);
+};
+
 const hasChecks = (s: z.ZodType): boolean => {
   const checks = (s.def as Readonly<{ checks?: readonly unknown[] }>).checks;
   return checks !== undefined && checks.length > 0;
