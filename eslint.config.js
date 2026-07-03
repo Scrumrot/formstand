@@ -3,7 +3,14 @@ import reactHooks from "eslint-plugin-react-hooks";
 
 export default tseslint.config(
   {
-    ignores: ["dist/**", "node_modules/**", "examples/**", "coverage/**"],
+    ignores: [
+      "dist/**",
+      "node_modules/**",
+      "examples/**",
+      "coverage/**",
+      "docs/.vitepress/cache/**",
+      "docs/.vitepress/dist/**",
+    ],
   },
   ...tseslint.configs.recommended,
   {

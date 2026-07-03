@@ -49,7 +49,10 @@
     "lint": "eslint .",
     "examples": "npm --prefix examples run dev",
     "examples:build": "npm --prefix examples run build",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "peerDependencies": {
     "react": "^19.0.0",
@@ -68,6 +71,7 @@
     "tsup": "^8.3.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.62.1",
+    "vitepress": "^1.6.4",
     "vitest": "^4.1.9",
     "zod": "^4.2.0",
     "zustand": "^5.0.0"
