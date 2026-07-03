@@ -6,11 +6,11 @@ import {
   useFormSelector,
   useFormSelectorShallow,
   useIsDirty,
-} from "zustand-forms";
+} from "formstand";
 import { z } from "zod";
 import { StateDump } from "./StateDump";
 
-const STORAGE_KEY = "zustand-forms:autosave-demo";
+const STORAGE_KEY = "formstand:autosave-demo";
 const DEBOUNCE_MS = 800;
 
 const schema = z.object({

@@ -1,4 +1,4 @@
-import { useField, useForm, useFormSelector, type ValidationMode } from "zustand-forms";
+import { useField, useForm, useFormSelector, type ValidationMode } from "formstand";
 import { z } from "zod";
 import { StateDump } from "./StateDump";
 

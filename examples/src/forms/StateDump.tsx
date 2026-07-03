@@ -1,6 +1,6 @@
 import type { z } from "zod";
-import type { Form } from "zustand-forms";
-import { useFormSelectorShallow } from "zustand-forms";
+import type { Form } from "formstand";
+import { useFormSelectorShallow } from "formstand";
 
 export type StateDumpProps<TSchema extends z.ZodType> = Readonly<{
   form: Form<TSchema>;

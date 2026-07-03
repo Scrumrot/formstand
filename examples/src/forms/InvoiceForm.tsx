@@ -6,7 +6,7 @@ import {
   useFieldArray,
   useForm,
   useFormSelectorShallow,
-} from "zustand-forms";
+} from "formstand";
 import { z } from "zod";
 import { StateDump } from "./StateDump";
 

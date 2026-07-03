@@ -91,7 +91,7 @@ export const App = () => {
 
   return (
     <div className="layout">
-      <h1>zustand-forms</h1>
+      <h1>formstand</h1>
       <p className="subtitle">
         Local playground. Edit <code>src/</code> in the parent folder and
         changes hot-reload here.

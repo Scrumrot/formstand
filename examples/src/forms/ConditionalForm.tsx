@@ -1,4 +1,4 @@
-import { SelectField, TextField, useForm, useFormSelector } from "zustand-forms";
+import { SelectField, TextField, useForm, useFormSelector } from "formstand";
 import { z } from "zod";
 import { StateDump } from "./StateDump";
 

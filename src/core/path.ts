@@ -81,7 +81,7 @@ const writeIntoArray = (
 const refusesHugeIndex = (index: number): boolean => {
   if (index > MAX_ARRAY_INDEX) {
     console.warn(
-      `[zustand-forms] refusing to write array index ${index} (max ${MAX_ARRAY_INDEX}); value left unchanged.`,
+      `[formstand] refusing to write array index ${index} (max ${MAX_ARRAY_INDEX}); value left unchanged.`,
     );
     return true;
   }
@@ -99,7 +99,7 @@ const writeSegments = (
   if (Array.isArray(obj)) {
     if (typeof head !== "number") {
       console.warn(
-        `[zustand-forms] cannot write string key "${head}" into an array; value left unchanged.`,
+        `[formstand] cannot write string key "${head}" into an array; value left unchanged.`,
       );
       return obj;
     }

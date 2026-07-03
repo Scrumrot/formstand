@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { type FieldFormApi, useField, useForm } from "zustand-forms";
+import { type FieldFormApi, useField, useForm } from "formstand";
 import { z } from "zod";
 
 const SIZES = [10, 50, 200, 500] as const;

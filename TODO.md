@@ -44,7 +44,7 @@ Testing (items 25–28 DONE, 2026-07-02)
 27. Missing cleanup() in 15 of 17 React test files — globals: false disables Testing Library auto-cleanup. Fix once with a vitest setup file (afterEach(cleanup)).
 28. No fake timers — the debounce test races real 50ms timers against waitFor; a plausible CI flake. Convert to vi.useFakeTimers().
 
-Tooling, packaging, and repo hygiene (items 29–34 DONE, 2026-07-02; repository URL in package.json assumes github.com/Scrumrot/zustand-forms — correct if wrong)
+Tooling, packaging, and repo hygiene (items 29–34 DONE, 2026-07-02; repository URL in package.json assumes github.com/Scrumrot/formstand — correct if wrong)
 
 29. No CI — there's no .github/workflows/ (and no git remote configured). A minimal GitHub Actions workflow running typecheck + test + build on push/PR is the single highest-leverage infra addition before publishing.
 30. No real linter — the lint script is just tsc --noEmit. Add ESLint with eslint-plugin-react-hooks (it would have flagged the useFieldArray render-phase mutation) and Prettier or Biome.
@@ -152,7 +152,7 @@ Tooling (29–34)
 - Package metadata — author, repository, homepage, bugs, engines: node >=18, and properly split types conditions (.d.ts for ESM, .d.cts for CJS). I verified the whole thing with arethetypeswrong — "No problems found" across node10/node16-CJS/node16-ESM/bundler resolution.
 - CHANGELOG.md created documenting 0.2.0 (with a proper Breaking section for the submit result, typed writes, and renames), and version bumped to 0.2.0.
 
-One thing to check: the repository/homepage/bugs URLs assume github.com/Scrumrot/zustand-forms (from your git username) — there's no git remote configured, so I couldn't verify. Correct those if the repo will live elsewhere, and once you add a remote and push, CI activates on its own. I left a note about
+One thing to check: the repository/homepage/bugs URLs assume github.com/Scrumrot/formstand (from your git username) — there's no git remote configured, so I couldn't verify. Correct those if the repo will live elsewhere, and once you add a remote and push, CI activates on its own. I left a note about
 this in TODO.md too.
 
 
@@ -184,6 +184,6 @@ All 37 review items are now closed across five commits (ab02039 → b222a0b): 7 
 tooling/packaging items, and 3 docs/examples items. The suite grew from 234 to 325 tests, and the repo now has CI, a real linter, coverage, current
 dependencies, clean package resolution (verified with arethetypeswrong), and a 0.2.0 CHANGELOG.
 
-Two loose ends that need you rather than me: add a git remote and push so CI starts running (and correct the guessed github.com/Scrumrot/zustand-forms URLs in
+Two loose ends that need you rather than me: add a git remote and push so CI starts running (and correct the guessed github.com/Scrumrot/formstand URLs in
 package.json if that's not where it'll live), and when you're ready to publish, npm publish will build via prepublishOnly automatically.
     

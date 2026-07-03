@@ -764,14 +764,14 @@ export const createForm = <TSchema extends z.ZodType>(
     const current = getAtPath(store.getState().values, path);
     if (current !== undefined && !Array.isArray(current)) {
       console.warn(
-        `[zustand-forms] array op on "${path}" but the value at that path is not an array (got ${typeof current}). Operation skipped.`,
+        `[formstand] array op on "${path}" but the value at that path is not an array (got ${typeof current}). Operation skipped.`,
       );
       return;
     }
     const length = Array.isArray(current) ? current.length : 0;
     if (indexInBounds !== undefined && !indexInBounds(length)) {
       console.warn(
-        `[zustand-forms] array op on "${path}" with an out-of-range or non-integer index (length ${length}). Operation skipped.`,
+        `[formstand] array op on "${path}" with an out-of-range or non-integer index (length ${length}). Operation skipped.`,
       );
       return;
     }
@@ -1005,7 +1005,7 @@ export const createForm = <TSchema extends z.ZodType>(
         // the patch type) earns the warning.
         if (patch.errors !== undefined && patch.errors !== state.errors) {
           console.warn(
-            "[zustand-forms] `errors` is derived from schemaErrors/serverErrors — patch those channels instead; the direct `errors` patch is ignored.",
+            "[formstand] `errors` is derived from schemaErrors/serverErrors — patch those channels instead; the direct `errors` patch is ignored.",
           );
         }
         // Re-derive against the CURRENT merged map (not the patched one), so

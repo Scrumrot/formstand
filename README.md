@@ -1,4 +1,4 @@
-# zustand-forms
+# formstand
 
 Zod-schema-first form state for React 19, backed by zustand.
 
@@ -11,7 +11,7 @@ Zod-schema-first form state for React 19, backed by zustand.
 ## Install
 
 ```bash
-npm install zustand-forms zustand zod react
+npm install formstand zustand zod react
 ```
 
 Peer-dep ranges: `zod ^4.2`, `zustand ^5.0`, `react ^19.0`.
@@ -25,7 +25,7 @@ import {
   NumberField,
   useForm,
   useIsSubmitting,
-} from "zustand-forms";
+} from "formstand";
 
 const schema = z.object({
   name: z.string().min(2, "min 2 chars"),
@@ -76,7 +76,7 @@ const form = createForm(schema, {
 |---|---|
 | `getState()` / `subscribe(listener)` | the underlying zustand store |
 | `setValue(path, value)` | updates one field. Dirtiness is derived, not stored: a field reads as dirty while its value differs structurally from `initialValues` at that path (arrays/plain objects compare deep, Dates by timestamp, `Object.is` otherwise) |
-| `setValues(next)` | replace the entire values object; dirtiness is recomputed per top-level key against `initialValues` |
+| `setValues(next)` | replace the entire values object; server errors release only where a value slice actually changed |
 | `setTouched(path, touched?)` | marks a path touched |
 | `setError(path, errors)` / `setErrors(map)` / `clearErrors(path?)` | the app-owned **server error channel** (`state.serverErrors`) — validation never touches it; `setError` accepts a single string or an array; `clearErrors(path)` clears both channels at the path and its descendants (`clearErrors("")` clears just the root entry; `clearErrors()` clears everything); `setErrors` replaces the whole server channel |
 | `setMode` / `setReValidateMode` | switch modes at runtime |
@@ -93,7 +93,7 @@ const form = createForm(schema, {
 | `watchField` / `watchValue` / `watchValues` | subscriptions; see below |
 | `diff()` / `dirtyFields()` | PATCH-style helpers, derived by comparing `values` against `initialValues`: minimal divergent paths (objects recurse to the changed leaves; arrays report their base path). Reverting a field drops it |
 | `snapshot()` / `restore(snap)` | full state capture/restore for undo/rollback |
-| `arrayPush` / `arrayRemove` / `arrayInsert` / `arrayMove` / `arraySwap` | array ops with meta-key re-keying; the array path's dirtiness is recomputed against `initialValues` (push + remove reverts to clean) |
+| `arrayPush` / `arrayRemove` / `arrayInsert` / `arrayMove` / `arraySwap` | array ops with meta-key re-keying (errors/touched/server verdicts follow their rows); dirtiness is derived, so push + remove reads clean again |
 
 ### Validation modes
 
@@ -281,7 +281,7 @@ Each child takes `form: FieldFormApi` (or the typed `Form<typeof schema>`) and c
 ### 2. `createFormContext` — no prop drilling, full typing
 
 ```tsx
-import { createFormContext } from "zustand-forms";
+import { createFormContext } from "formstand";
 
 const { Provider, useFormContext } = createFormContext<typeof schema>();
 

@@ -6,6 +6,8 @@ The result of a full-repo review pass (see `TODO.md` items 1–34).
 
 ### Breaking
 
+- The package is named **formstand** (`zustand-forms` is taken on npm) —
+  update imports accordingly.
 - Errors are split into two stored channels: `FormState.schemaErrors`
   (validation-owned, rebuilt every pass) and `FormState.serverErrors`
   (app-owned via `setError`/`setErrors`, invisible to validation).

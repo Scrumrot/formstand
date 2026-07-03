@@ -27,7 +27,7 @@ export const useForm = <TSchema extends z.ZodType>(
     if (!warnedRef.current && form.schema !== schema) {
       warnedRef.current = true;
       console.warn(
-        "[zustand-forms] useForm received a different schema reference after " +
+        "[formstand] useForm received a different schema reference after " +
           "the first render; schema and options changes are ignored for the " +
           "life of the component. If the schema is defined inline this is " +
           "harmless (but consider hoisting it to module scope). For initial " +

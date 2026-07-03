@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "zustand-forms": fileURLToPath(new URL("../src/index.ts", import.meta.url)),
+      "formstand": fileURLToPath(new URL("../src/index.ts", import.meta.url)),
     },
   },
 });

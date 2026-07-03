@@ -15,7 +15,7 @@
     "resolveJsonModule": true,
     "noEmit": true,
     "paths": {
-      "zustand-forms": ["../src/index.ts"]
+      "formstand": ["../src/index.ts"]
     }
   },
   "include": ["src", "vite.config.ts"]

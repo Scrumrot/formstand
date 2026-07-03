@@ -1,16 +1,16 @@
 {
-  "name": "zustand-forms",
+  "name": "formstand",
   "version": "0.2.0",
   "description": "Zod-schema-first React 19 form library backed by zustand",
   "license": "MIT",
   "author": "Tim Frank <timfrankdev@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Scrumrot/zustand-forms.git"
+    "url": "git+https://github.com/Scrumrot/formstand.git"
   },
-  "homepage": "https://github.com/Scrumrot/zustand-forms#readme",
+  "homepage": "https://github.com/Scrumrot/formstand#readme",
   "bugs": {
-    "url": "https://github.com/Scrumrot/zustand-forms/issues"
+    "url": "https://github.com/Scrumrot/formstand/issues"
   },
   "engines": {
     "node": ">=18"
