@@ -3,7 +3,10 @@ import { defineConfig } from "vitepress";
 export default defineConfig({
   title: "formstand",
   description: "Zod-schema-first form state for React 19, backed by zustand",
-  head: [["link", { rel: "icon", href: "/favicon.svg" }]],
+  // Deployed to GitHub Pages under /formstand/ — drop this (and the favicon
+  // prefix) if the site ever moves to a custom domain.
+  base: "/formstand/",
+  head: [["link", { rel: "icon", href: "/formstand/favicon.svg" }]],
   themeConfig: {
     nav: [
       { text: "Guide", link: "/guide/getting-started" },
