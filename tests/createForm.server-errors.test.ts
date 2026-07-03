@@ -37,6 +37,18 @@ describe("manual (server) errors vs validation passes", () => {
     expect(form.getState().errors["username"]).toEqual(["taken"]);
   });
 
+  it("schema and server errors coexist at different keys, each in its channel", () => {
+    const form = createForm(schema, {
+      initialValues: { username: "tim", name: "x" }, // name too short
+    });
+    form.setError("username", ["taken"]);
+    form.validate();
+    expect(form.getState().errors["username"]).toEqual(["taken"]);
+    expect(form.getState().errors["name"]).toBeDefined();
+    expect(form.getState().schemaErrors["username"]).toBeUndefined();
+    expect(form.getState().serverErrors["username"]).toEqual(["taken"]);
+  });
+
   it("a schema error at the same key supersedes the manual entry", () => {
     const form = createForm(schema, {
       initialValues: { username: "tim", name: "x" },
@@ -98,16 +110,16 @@ describe("manual (server) errors vs validation passes", () => {
     expect(form.getState().errors["username"]).toEqual(["taken"]);
   });
 
-  it("errors written through updateState survive validation like setError", () => {
+  it("server errors written through updateState survive validation like setError", () => {
     const form = makeForm();
     form.updateState((s) => ({
-      errors: { ...s.errors, username: ["taken"] },
+      serverErrors: { ...s.serverErrors, username: ["taken"] },
     }));
     expect(form.validate().kind).toBe("valid");
     expect(form.getState().errors["username"]).toEqual(["taken"]);
   });
 
-  it("an updateState that merely clones error arrays does not mark schema errors manual", () => {
+  it("schema errors stay schema-owned no matter how state is patched", () => {
     const refineSchema = z
       .object({ password: z.string(), confirm: z.string() })
       .refine((v) => v.password === v.confirm, {
@@ -119,14 +131,10 @@ describe("manual (server) errors vs validation passes", () => {
     });
     form.validate();
     expect(form.getState().errors["confirm"]).toBeDefined();
-    // Rebuild the map with fresh array instances but identical content.
-    form.updateState((s) => ({
-      errors: Object.fromEntries(
-        Object.entries(s.errors).map(([k, v]) => [k, [...v]]),
-      ),
-    }));
-    // Fix the refine WITHOUT touching confirm's own value: if the clone had
-    // wrongly marked the schema error manual, it would now survive forever.
+    // A touched-only patch (or any patch) can't convert schema errors into
+    // surviving server errors — the channels are separate.
+    form.updateState((s) => ({ touched: { ...s.touched, confirm: true } }));
+    // Fix the refine WITHOUT touching confirm's own value.
     form.setValue("password", "b");
     form.validate();
     expect(form.getState().errors["confirm"]).toBeUndefined();

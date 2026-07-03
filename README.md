@@ -78,12 +78,12 @@ const form = createForm(schema, {
 | `setValue(path, value)` | updates one field. Dirtiness is derived, not stored: a field reads as dirty while its value differs structurally from `initialValues` at that path (arrays/plain objects compare deep, Dates by timestamp, `Object.is` otherwise) |
 | `setValues(next)` | replace the entire values object; dirtiness is recomputed per top-level key against `initialValues` |
 | `setTouched(path, touched?)` | marks a path touched |
-| `setError(path, errors)` / `setErrors(map)` / `clearErrors(path?)` | error map control (server errors); `setError` accepts a single string or an array; `clearErrors(path)` also clears descendant keys (`clearErrors("")` clears just the root schema-level entry; `clearErrors()` clears everything); `setErrors` replaces the whole map |
+| `setError(path, errors)` / `setErrors(map)` / `clearErrors(path?)` | the app-owned **server error channel** (`state.serverErrors`) — validation never touches it; `setError` accepts a single string or an array; `clearErrors(path)` clears both channels at the path and its descendants (`clearErrors("")` clears just the root entry; `clearErrors()` clears everything); `setErrors` replaces the whole server channel |
 | `setMode` / `setReValidateMode` | switch modes at runtime |
 | `reset(nextInitial?, options?)` | reset to initial; optional partial overrides (shallow-merged for record roots, replaced wholesale otherwise) and `{ keepErrors, keepTouched, keepSubmitCount }` (no `keepDirty` — dirtiness derives from values vs initial, and reset makes them equal) |
 | `resetField(path)` | reset one field to its initial value, clearing its (and descendants') error/touched state (dirtiness clears by definition — the value now equals initial) |
 | `adoptValues(values)` | mid-session rebase: replaces `values` + `initialValues` and clears `errors`, but **preserves** interaction state (`touched`, `submitCount`, `isSubmitting`, `isValidating`, `mode`). Use `reset()` for a full wipe |
-| `updateState(updater)` | atomic multi-field patch; error entries the patch adds or **changes by content** get the `setError` contract (marked manual) — re-writing identical content is treated as a clone and stays unmarked (use `setError`, or set `manualErrors` in the patch, to vouch for an unchanged entry) |
+| `updateState(updater)` | atomic multi-field patch; `errors` is derived from `schemaErrors`/`serverErrors`, so patch the channels — a direct `errors` patch is ignored (with a dev warning) |
 | `validate()` / `validateField(path)` / `validateFields(paths)` | sync validation; on an async schema they transparently start the async pass instead (`validate`/`validateField` return `{ kind: "pending", promise }`, `validateFields` returns the `Promise<boolean>` itself) |
 | `validateAsync()` / `validateFieldAsync(path)` / `validateFieldsAsync(paths)` | async; supports `async .refine` |
 | `submit(onValid, onInvalid?, { force? })` → `Promise<SubmitResult>` | full submit flow; resolves `{ kind: "valid", data }`, `{ kind: "invalid", errors }` (errored fields are also marked touched), or `{ kind: "skipped" }` when another submit is in flight |
@@ -377,15 +377,15 @@ form.handleSubmit(async (data) => {
 });
 ```
 
-Errors set via `setError`/`setErrors` (or an `errors` patch through `updateState`) are tracked as **manual** errors — the marks live in `FormState.manualErrors`, so `snapshot`/`restore` carry them and array ops re-key them alongside the errors themselves. Manual errors survive full-form validation passes the schema is silent on — a background `validateAsync()` resolving no longer wipes a "username taken" message. A manual error is released when:
+Errors live in two channels. `schemaErrors` is owned by validation: every pass rebuilds it (full passes wholesale, field-scoped passes splice their scope). `serverErrors` is owned by you: `setError`/`setErrors` write it and validation never reads or writes it — which is the entire preservation story. A background `validateAsync()` can't wipe a "username taken" message because it physically can't touch that channel; there are no marks or bookkeeping to get wrong. The `errors` map every hook reads is derived from both on each write: the schema's message wins at a key, server entries show where the schema is silent.
 
-- the field's value changes (`setValue` on the path or an ancestor/descendant — editing `address.street` releases a verdict on `address`),
-- an array op changes the array a mark sits on (marks on individual rows follow their rows instead),
-- a field-scoped validation (`validateField`/`validateFieldAsync`) targets its path (`validateField("")` counts as a full pass and preserves them, like `validate()`),
-- a schema error lands on the same key (the schema message wins), or
+A server error is released when:
+
+- the value on its spine changes (`setValue`/`resetField`/array op on the path, a descendant, or an ancestor — editing `address.street` releases a verdict on `address`; array ops release verdicts on the array itself while row-level entries follow their rows through re-indexing),
+- a field-scoped validation (`validateField`/`validateFieldAsync`/`validateFields`) targets its path (`validateField("")` counts as a full pass and leaves the server channel alone, like `validate()`), or
 - you call `clearErrors` / `reset` / `adoptValues`.
 
-Note `submit` still proceeds when the schema is valid even if manual errors are present (the server gets to re-judge); they simply remain in the error map, so `useIsValid` stays `false` until the user edits the field.
+Note `submit` still proceeds when the schema is valid even if server errors are present (the server gets to re-judge); they simply remain in the merged map, so `useIsValid` stays `false` until the user edits the field.
 
 ## Field arrays with nested arrays
 

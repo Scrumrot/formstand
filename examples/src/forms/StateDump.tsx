@@ -11,7 +11,10 @@ export const StateDump = <TSchema extends z.ZodType>({
 }: StateDumpProps<TSchema>) => {
   const snapshot = useFormSelectorShallow(form, (state) => ({
     values: state.values,
+    // The merged map hooks read; serverErrors is the app-owned channel that
+    // survives validation passes (schemaErrors is the validation-owned one).
     errors: state.errors,
+    serverErrors: state.serverErrors,
     touched: state.touched,
     // Dirtiness is derived from values vs initialValues, not stored state.
     dirtyFields: form.dirtyFields(),

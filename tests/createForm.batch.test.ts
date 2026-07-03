@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createForm } from "../src/core/createForm";
 
@@ -60,7 +60,7 @@ describe("form.updateState", () => {
     });
     form.updateState(() => ({
       touched: { name: true, email: true },
-      errors: { name: ["custom"] },
+      serverErrors: { name: ["custom"] },
     }));
     expect(form.getState().touched).toEqual({ name: true, email: true });
     expect(form.getState().errors).toEqual({ name: ["custom"] });
@@ -69,6 +69,17 @@ describe("form.updateState", () => {
       email: "t@t.com",
       age: 30,
     });
+  });
+
+  it("ignores a direct `errors` patch — the merged map is derived", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const form = createForm(schema, {
+      initialValues: { name: "Tim", email: "t@t.com", age: 30 },
+    });
+    form.updateState(() => ({ errors: { name: ["custom"] } }));
+    expect(form.getState().errors).toEqual({});
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
   });
 });
 

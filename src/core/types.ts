@@ -10,14 +10,22 @@ export type BoolMap = Readonly<Record<string, boolean>>;
 export type FormState<TValues> = Readonly<{
   values: TValues;
   initialValues: TValues;
+  // The user-visible error map, derived whenever either channel below is
+  // written: the schema's message wins at a key, server entries show where
+  // the schema is silent. Root-level messages (schema-wide refine, form-level
+  // server failure) live at the "" key. Never write this directly — write
+  // the channels.
   errors: ErrorMap;
+  // Validation-owned: rebuilt by every full pass, spliced by field-scoped
+  // passes. Apps never write it.
+  schemaErrors: ErrorMap;
+  // App-owned (setError/setErrors/clearErrors): validation never touches it,
+  // so a background pass can't wipe a "username taken" verdict. An entry
+  // releases when the value on its spine changes (the path, a descendant, or
+  // an ancestor), when a field-scoped validation targets its path, or via
+  // clearErrors/reset/adoptValues.
+  serverErrors: ErrorMap;
   touched: BoolMap;
-  // Paths whose current error entry came from setError/setErrors (or an
-  // errors patch via updateState) rather than a schema pass. Full-form
-  // validation preserves these where the schema is silent; they release when
-  // the field's value changes, a field-scoped validation targets them, or a
-  // schema error supersedes them at the same key.
-  manualErrors: BoolMap;
   isSubmitting: boolean;
   submitCount: number;
   isValidating: BoolMap;

@@ -6,6 +6,15 @@ The result of a full-repo review pass (see `TODO.md` items 1–34).
 
 ### Breaking
 
+- Errors are split into two stored channels: `FormState.schemaErrors`
+  (validation-owned, rebuilt every pass) and `FormState.serverErrors`
+  (app-owned via `setError`/`setErrors`, invisible to validation).
+  `FormState.errors` remains the map hooks read but is now derived from the
+  channels (schema wins at a key, server shows where the schema is silent) —
+  patch the channels through `updateState`, not `errors`.
+- `FormState.dirty` is removed; dirtiness is derived from `values` vs
+  `initialValues` everywhere (`useField().dirty`, `useIsDirty`,
+  `dirtyFields()`, `diff()`).
 - `submit` resolves a discriminated `SubmitResult` — `{ kind: "valid", data }`,
   `{ kind: "invalid", errors }`, or `{ kind: "skipped" }` — instead of a
   ran/skipped boolean.
