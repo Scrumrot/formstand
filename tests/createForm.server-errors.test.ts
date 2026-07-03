@@ -86,4 +86,99 @@ describe("manual (server) errors vs validation passes", () => {
     form.validate();
     expect(form.getState().errors).toEqual({});
   });
+
+  it("restore brings manual marks back with the snapshot", async () => {
+    const form = makeForm();
+    form.setError("username", ["taken"]);
+    const snap = form.snapshot();
+    form.clearErrors();
+    form.restore(snap);
+    const result = await form.validateAsync();
+    expect(result.kind).toBe("valid");
+    expect(form.getState().errors["username"]).toEqual(["taken"]);
+  });
+
+  it("errors written through updateState survive validation like setError", () => {
+    const form = makeForm();
+    form.updateState((s) => ({
+      errors: { ...s.errors, username: ["taken"] },
+    }));
+    expect(form.validate().kind).toBe("valid");
+    expect(form.getState().errors["username"]).toEqual(["taken"]);
+  });
+
+  it("validateField('') is a full pass: manual errors are preserved", () => {
+    const form = makeForm();
+    form.setError("username", ["taken"]);
+    form.validateField("");
+    expect(form.getState().errors["username"]).toEqual(["taken"]);
+  });
+
+  it("clearErrors('') clears only the root entry, not field errors", () => {
+    const form = makeForm();
+    form.setError("", ["totals mismatch"]);
+    form.setError("username", ["taken"]);
+    form.clearErrors("");
+    expect(form.getState().errors[""]).toBeUndefined();
+    expect(form.getState().errors["username"]).toEqual(["taken"]);
+  });
+});
+
+describe("manual errors on container paths", () => {
+  const nestedSchema = z.object({
+    address: z.object({ street: z.string().min(1), city: z.string().min(1) }),
+  });
+
+  const makeNestedForm = () =>
+    createForm(nestedSchema, {
+      initialValues: { address: { street: "Main", city: "Springfield" } },
+    });
+
+  it("editing a child field releases a manual error at the ancestor path", () => {
+    const form = makeNestedForm();
+    form.setError("address", ["invalid address"]);
+    form.setValue("address.street", "Elm");
+    form.validate();
+    expect(form.getState().errors["address"]).toBeUndefined();
+  });
+
+  it("editing any field releases a root '' manual error", () => {
+    const form = makeNestedForm();
+    form.setError("", ["form rejected"]);
+    form.setValue("address.city", "Shelbyville");
+    form.validate();
+    expect(form.getState().errors[""]).toBeUndefined();
+  });
+});
+
+describe("manual errors across array operations", () => {
+  const arraySchema = z.object({
+    items: z.array(z.object({ name: z.string().min(1) })),
+  });
+
+  it("a row's manual error follows the row through remove and survives revalidation", async () => {
+    const form = createForm(arraySchema, {
+      initialValues: { items: [{ name: "a" }, { name: "b" }] },
+    });
+    form.setError("items.1.name", ["server rejected"]);
+    form.arrayRemove("items", 0);
+    expect(form.getState().errors["items.0.name"]).toEqual([
+      "server rejected",
+    ]);
+    const result = await form.validateAsync();
+    expect(result.kind).toBe("valid");
+    expect(form.getState().errors["items.0.name"]).toEqual([
+      "server rejected",
+    ]);
+  });
+
+  it("a manual error on the array itself releases when the op changes the array", () => {
+    const form = createForm(arraySchema, {
+      initialValues: { items: [{ name: "a" }] },
+    });
+    form.setError("items", ["too many items"]);
+    form.arrayRemove("items", 0);
+    form.validate();
+    expect(form.getState().errors["items"]).toBeUndefined();
+  });
 });

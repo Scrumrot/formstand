@@ -4,6 +4,7 @@ import type { StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand/react";
 import { useShallow } from "zustand/react/shallow";
 import type { Form } from "../core/createForm";
+import { valuesEqual } from "../core/equality";
 import type { FieldPath, FieldValue } from "../core/fieldPath";
 import { shouldValidateOn } from "../core/mode";
 import { getAtPath } from "../core/path";
@@ -100,12 +101,17 @@ export function useField<TValue = unknown>(
     useShallow((state): FieldSlice<TValue> => {
       const p =
         typeof pathArg === "function" ? pathArg(state) : pathArg;
+      const value = getAtPath(state.values, p);
       return {
         path: p,
-        value: getAtPath(state.values, p) as TValue,
+        value: value as TValue,
         error: state.errors[p],
         touched: state.touched[p] ?? false,
-        dirty: state.dirty[p] ?? false,
+        // Derived from the values themselves — the form-level dirty map
+        // records keys at whatever granularity the writer used (setValue:
+        // leaf, setValues: top-level, array ops: base path), so an exact-key
+        // lookup would misreport nested reads.
+        dirty: !valuesEqual(value, getAtPath(state.initialValues, p)),
         isValidating: state.isValidating[p] ?? false,
       };
     }),

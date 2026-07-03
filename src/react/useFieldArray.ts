@@ -93,24 +93,30 @@ const reconcileIds = (prev: IdState, nextItems: readonly unknown[]): IdState => 
     .map((i) => prev.ids[i])
     .filter((id): id is string => id !== undefined);
 
-  const assigned = matchedIds.reduce<{
-    ids: readonly string[];
-    counter: number;
-    cursor: number;
-  }>(
-    (acc, id) => {
-      if (id !== null) return { ...acc, ids: [...acc.ids, id] };
-      const reused = leftover[acc.cursor];
-      if (reused !== undefined) {
-        return { ...acc, ids: [...acc.ids, reused], cursor: acc.cursor + 1 };
-      }
-      const counter = acc.counter + 1;
-      return { ...acc, ids: [...acc.ids, `__zfa_${counter}`], counter };
-    },
-    { ids: [], counter: prev.counter, cursor: 0 },
-  );
+  // Running 1-based count of unmatched slots up to each position, so every
+  // unmatched item maps straight to its leftover id (or a freshly minted one)
+  // without rebuilding the ids array per element.
+  const ordinals = matchedIds.reduce<number[]>((acc, id) => {
+    const count = acc.length === 0 ? 0 : (acc[acc.length - 1] ?? 0);
+    acc.push(id === null ? count + 1 : count);
+    return acc;
+  }, []);
+  const unmatched =
+    ordinals.length === 0 ? 0 : (ordinals[ordinals.length - 1] ?? 0);
+  const ids = matchedIds.map((id, i) => {
+    if (id !== null) return id;
+    const ordinal = ordinals[i] ?? 0;
+    return (
+      leftover[ordinal - 1] ??
+      `__zfa_${prev.counter + (ordinal - leftover.length)}`
+    );
+  });
 
-  return { items: nextItems, ids: assigned.ids, counter: assigned.counter };
+  return {
+    items: nextItems,
+    ids,
+    counter: prev.counter + Math.max(0, unmatched - leftover.length),
+  };
 };
 
 export const useFieldArray = <TItem = unknown>(
@@ -136,18 +142,26 @@ export const useFieldArray = <TItem = unknown>(
   // Reconcile ids against the live items every render, using the
   // derived-state-from-props pattern (a render-phase setState, which React
   // supports and immediately re-renders with) instead of mutating a ref during
-  // render — a discarded concurrent render must not advance id bookkeeping.
-  // When the form or path changes, drop the previous array's ids but carry the
-  // counter forward so freshly minted ids never collide with old ones.
+  // render — a discarded concurrent render must not advance id bookkeeping,
+  // and skipping the commit when ids look unchanged is unsound (a reorder
+  // after uncommitted in-place edits would then match against a stale items
+  // snapshot and glue ids to the wrong rows). The re-render is cheap: its
+  // reconcile early-exits on the same items reference. When the form or path
+  // changes, drop the previous array's ids but carry the counter forward so
+  // freshly minted ids never collide with old ones.
   const [idEntry, setIdEntry] = useState<
     Readonly<{ form: FieldArrayFormApi; path: string; state: IdState }>
   >({ form, path, state: EMPTY_ID_STATE });
   const base =
     idEntry.form === form && idEntry.path === path
       ? idEntry.state
-      : { items: [], ids: [], counter: idEntry.state.counter };
+      : { ...EMPTY_ID_STATE, counter: idEntry.state.counter };
   const nextIdState = reconcileIds(base, items);
-  if (idEntry.form !== form || idEntry.path !== path || idEntry.state !== nextIdState) {
+  if (
+    idEntry.form !== form ||
+    idEntry.path !== path ||
+    idEntry.state !== nextIdState
+  ) {
     setIdEntry({ form, path, state: nextIdState });
   }
   const ids = nextIdState.ids;

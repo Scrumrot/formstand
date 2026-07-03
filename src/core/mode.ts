@@ -19,7 +19,7 @@ export const shouldValidateOn = (
   const effective = submitAttempted ? reValidateMode : mode;
   switch (effective) {
     case "onChange":
-      return trigger === "change" || trigger === "blur";
+      return trigger === "change";
     case "onBlur":
       return trigger === "blur";
     case "onSubmit":

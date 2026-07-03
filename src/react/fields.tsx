@@ -1,5 +1,11 @@
 import { type ChangeEvent, type ReactNode, useId, useState } from "react";
-import { checkboxProps, selectProps, textInputProps } from "./inputProps";
+import {
+  checkboxProps,
+  numberToInputText,
+  parseNumberText,
+  selectProps,
+  textInputProps,
+} from "./inputProps";
 import { type FieldFormApi, type UseFieldReturn, useField } from "./useField";
 
 // Structural stand-in for React.Ref<T>: accepts useRef objects and callback
@@ -99,11 +105,10 @@ const IDLE_EDIT: NumberEditState = { raw: null, pushed: undefined };
 
 // Holds the raw text while editing so intermediate, not-yet-valid numbers
 // ("-", "1.", "1e") stay visible instead of being coerced to "". Keystrokes
-// that parse to a finite number are pushed to the form (whitespace counts as
-// empty; Infinity is rejected); partial input is kept locally. On blur the
-// display snaps back to the form's canonical value, and an external value
-// change while editing wins over the local text (render-phase derived-state
-// reset).
+// that parse to a number (via the shared parseNumberText rules) are pushed to
+// the form; partial input is kept locally. On blur the display snaps back to
+// the form's canonical value, and an external value change while editing wins
+// over the local text (render-phase derived-state reset).
 const useNumberInput = (
   field: UseFieldReturn<number | undefined>,
 ): NumberInputBinding => {
@@ -114,30 +119,28 @@ const useNumberInput = (
     setEdit(IDLE_EDIT);
   }
   const raw = externallyChanged ? null : edit.raw;
-  const canonical =
-    field.value === undefined || Number.isNaN(field.value)
-      ? ""
-      : String(field.value);
   return {
     name: field.path,
-    value: raw ?? canonical,
+    value: raw ?? numberToInputText(field.value),
     inputMode: "decimal",
     "aria-invalid": hasError(field.error) ? true : undefined,
     onChange: (e) => {
       const text = e.target.value;
-      if (text.trim() === "") {
-        setEdit({ raw: text, pushed: undefined });
-        field.setValue(undefined);
-        return;
-      }
-      const parsed = Number(text);
-      if (Number.isFinite(parsed)) {
-        setEdit({ raw: text, pushed: parsed });
-        field.setValue(parsed);
-      } else {
-        // Partial entry: keep the text, remember the untouched form value so
-        // it doesn't read as an external change.
-        setEdit({ raw: text, pushed: field.value });
+      const parsed = parseNumberText(text);
+      switch (parsed.kind) {
+        case "empty":
+          setEdit({ raw: text, pushed: undefined });
+          field.setValue(undefined);
+          return;
+        case "number":
+          setEdit({ raw: text, pushed: parsed.value });
+          field.setValue(parsed.value);
+          return;
+        case "invalid":
+          // Partial entry: keep the text, remember the untouched form value
+          // so it doesn't read as an external change.
+          setEdit({ raw: text, pushed: field.value });
+          return;
       }
     },
     onBlur: () => {
@@ -232,8 +235,13 @@ export const SelectField = <T extends string>({
 }: SelectFieldProps<T>) => {
   const id = useId();
   const errorId = `${id}-error`;
-  const field = useField<T | undefined>(form, path);
-  const showEmptyOption = field.value === undefined || placeholder !== undefined;
+  // null included: a nullable enum's "not chosen yet" must render the empty
+  // option, or the browser shows the first real option while state stays null.
+  const field = useField<T | null | undefined>(form, path);
+  const showEmptyOption =
+    field.value === undefined ||
+    field.value === null ||
+    placeholder !== undefined;
   return (
     <div className="zf-field">
       {label !== undefined ? (

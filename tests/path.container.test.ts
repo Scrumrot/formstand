@@ -15,6 +15,12 @@ describe("container-driven index-vs-key", () => {
     expect(Array.isArray((next as { byId: unknown }).byId)).toBe(false);
   });
 
+  it("writes large numeric keys into an existing record (the index cap is array-only)", () => {
+    const obj = { byId: { "4109238": "old" } };
+    const next = setAtPath(obj, "byId.4109238", "new");
+    expect(next).toEqual({ byId: { "4109238": "new" } });
+  });
+
   it("still writes indices into existing arrays", () => {
     const next = setAtPath({ items: ["a", "b"] }, "items.1", "c");
     expect(next).toEqual({ items: ["a", "c"] });

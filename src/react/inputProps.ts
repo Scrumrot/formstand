@@ -38,6 +38,29 @@ export type SelectProps = Readonly<{
 const ariaInvalid = (field: Readonly<{ error: readonly string[] | undefined }>): true | undefined =>
   field.error !== undefined && field.error.length > 0 ? true : undefined;
 
+// Canonical display text for a numeric field value ("" for empty/NaN).
+// Shared with NumberField so the two number bindings can't drift.
+export const numberToInputText = (value: number | undefined): string =>
+  value === undefined || Number.isNaN(value) ? "" : String(value);
+
+export type ParsedNumberText =
+  | Readonly<{ kind: "empty" }>
+  | Readonly<{ kind: "number"; value: number }>
+  // Text that doesn't parse to a finite number — partial entries ("-",
+  // "1.", "1e") or Infinity.
+  | Readonly<{ kind: "invalid" }>;
+
+// The single rule for turning user-typed text into a numeric field value:
+// whitespace counts as empty (Number("  ") is 0) and non-finite results are
+// rejected. Shared with NumberField.
+export const parseNumberText = (text: string): ParsedNumberText => {
+  if (text.trim() === "") return { kind: "empty" };
+  const parsed = Number(text);
+  return Number.isFinite(parsed)
+    ? { kind: "number", value: parsed }
+    : { kind: "invalid" };
+};
+
 export const textInputProps = <T extends string | undefined>(
   field: UseFieldReturn<T>,
 ): TextInputProps => ({
@@ -53,20 +76,11 @@ export const numberInputProps = <T extends number | undefined>(
 ): NumberInputProps => ({
   type: "number",
   name: field.path,
-  value:
-    field.value === undefined || Number.isNaN(field.value)
-      ? ""
-      : String(field.value),
+  value: numberToInputText(field.value),
   "aria-invalid": ariaInvalid(field),
   onChange: (e) => {
-    const raw = e.target.value;
-    // Whitespace counts as empty (Number("  ") is 0); Infinity is rejected.
-    if (raw.trim() === "") {
-      field.setValue(undefined as T);
-      return;
-    }
-    const parsed = Number(raw);
-    field.setValue((Number.isFinite(parsed) ? parsed : undefined) as T);
+    const parsed = parseNumberText(e.target.value);
+    field.setValue((parsed.kind === "number" ? parsed.value : undefined) as T);
   },
   onBlur: field.onBlur,
 });
@@ -82,10 +96,11 @@ export const checkboxProps = <T extends boolean | undefined>(
   onBlur: field.onBlur,
 });
 
-// `?? ""` keeps the <select> controlled when the field has no value yet;
-// pair it with an <option value=""> (SelectField renders one) so the blank
-// state is a real option instead of silently showing the first entry.
-export const selectProps = <T extends string | undefined>(
+// `?? ""` keeps the <select> controlled when the field has no value yet
+// (undefined for optional fields, null for nullable ones); pair it with an
+// <option value=""> (SelectField renders one) so the blank state is a real
+// option instead of silently showing the first entry.
+export const selectProps = <T extends string | null | undefined>(
   field: UseFieldReturn<T>,
 ): SelectProps => ({
   name: field.path,

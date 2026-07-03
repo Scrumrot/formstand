@@ -10,6 +10,10 @@ const schema = z.object({
   theme: z.enum(["light", "dark"]).optional(),
 });
 
+const nullableSchema = z.object({
+  plan: z.enum(["basic", "pro"]).nullable(),
+});
+
 type FormApi = Readonly<{ getState: () => { values: unknown } }>;
 
 const captured: { form: FormApi | null } = { form: null };
@@ -65,5 +69,30 @@ describe("SelectField with an undefined value", () => {
     fireEvent.change(select, { target: { value: "light" } });
     expect(select.options).toHaveLength(2);
     expect(select.value).toBe("light");
+  });
+});
+
+describe("SelectField with a null (nullable) value", () => {
+  const NullableHarness = () => {
+    const form = useForm(nullableSchema, { initialValues: { plan: null } });
+    return (
+      <SelectField
+        form={form}
+        path="plan"
+        label="Plan"
+        options={[
+          { value: "basic", label: "Basic" },
+          { value: "pro", label: "Pro" },
+        ]}
+      />
+    );
+  };
+
+  it("renders the empty option so the blank state is visible, not the first entry", () => {
+    render(<NullableHarness />);
+    const select = screen.getByLabelText("Plan") as HTMLSelectElement;
+    expect(select.value).toBe("");
+    expect(select.options).toHaveLength(3);
+    expect(select.options[0]?.value).toBe("");
   });
 });

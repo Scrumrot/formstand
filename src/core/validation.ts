@@ -55,20 +55,16 @@ const expandIssue = (
 
 export const flattenIssues = (
   issues: readonly z.core.$ZodIssue[],
-): ErrorMap => {
-  // Union branches often repeat the same complaint; drop exact duplicates.
-  const seen = new Map<string, Set<string>>();
-  return issues
+): ErrorMap =>
+  issues
     .flatMap((issue) => expandIssue(issue, []))
     .reduce<Record<string, readonly string[]>>((acc, { path, message }) => {
-      const seenAtPath = seen.get(path) ?? new Set<string>();
-      if (seenAtPath.has(message)) return acc;
-      seenAtPath.add(message);
-      seen.set(path, seenAtPath);
-      acc[path] = [...(acc[path] ?? []), message];
-      return acc;
+      // Union branches often repeat the same complaint; drop exact duplicates.
+      const existing = acc[path] ?? [];
+      return existing.includes(message)
+        ? acc
+        : { ...acc, [path]: [...existing, message] };
     }, {});
-};
 
 export const validateSync = <TSchema extends z.ZodType>(
   schema: TSchema,

@@ -154,3 +154,36 @@ Tooling (29–34)
 
 One thing to check: the repository/homepage/bugs URLs assume github.com/Scrumrot/zustand-forms (from your git username) — there's no git remote configured, so I couldn't verify. Correct those if the repo will live elsewhere, and once you add a remote and push, CI activates on its own. I left a note about
 this in TODO.md too.
+
+
+What this final batch did
+
+35. Bound components are finally in the playground:
+- New "Bound fields" tab — all four shipped components in one form: TextField with autoComplete, NumberField, SelectField with its new placeholder on an
+  optional field, and CheckboxField on a refine-gated boolean. It also demos validateOnMount + a useIsValid-gated submit button and focusFirstError on invalid
+  submit, with a pointer to inspect the a11y wiring in the DOM.
+- The three copycats are gone — ConditionalForm, ServerErrorsForm, and WizardForm each had a hand-rolled local TextField; all now use the library's components.
+  WizardForm's last step also switched to CheckboxField/SelectField, and its step-gating now uses the typed validateFields (with a comment about the boolean |
+  Promise<boolean> contract).
+
+36. Previously-invisible APIs now have demos:
+- New "Form context" tab — createFormContext provider with zero-prop-drilling children (typed paths intact through the context), a status bar built from all
+  four flag hooks (useIsDirty/useIsValid/useIsSubmitting/useSubmitCount), useFormError surfacing a schema-level refine, and adoptValues as the post-save rebase.
+- ServerErrorsForm now demos the new manual-error contract (single-string setError, errors surviving revalidation, releasing on edit) plus focusFirstError for
+  both server and schema failures.
+- AutosaveForm surfaces useIsDirty and the dirty map in its status line ("changed since the restored draft: title, body"), pointing at diff() for the PATCH
+  payload.
+- All sixteen example forms migrated off the deprecated useFormState/useFormStateShallow names.
+
+37. README — added the z.coerce.* pitfall (its unknown input type collapses FieldPath inference, with the honest-input alternatives); the reset shallow-merge
+    semantics were already documented in the method table from the earlier batch.
+
+The whole arc
+
+All 37 review items are now closed across five commits (ab02039 → b222a0b): 7 correctness bugs, 6 API gaps, 11 robustness items, 4 testing improvements, 6
+tooling/packaging items, and 3 docs/examples items. The suite grew from 234 to 325 tests, and the repo now has CI, a real linter, coverage, current
+dependencies, clean package resolution (verified with arethetypeswrong), and a 0.2.0 CHANGELOG.
+
+Two loose ends that need you rather than me: add a git remote and push so CI starts running (and correct the guessed github.com/Scrumrot/zustand-forms URLs in
+package.json if that's not where it'll live), and when you're ready to publish, npm publish will build via prepublishOnly automatically.
+    

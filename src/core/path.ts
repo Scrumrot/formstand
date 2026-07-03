@@ -35,6 +35,22 @@ const readSegment = (obj: unknown, segment: PathSegment): unknown => {
 export const getAtPath = (obj: unknown, path: string): unknown =>
   parsePath(path).reduce<unknown>(readSegment, obj);
 
+// True when every array traversed by `path` is long enough for its index.
+// Object properties may be legitimately absent (an empty optional field is
+// still a real, addressable field), but an out-of-range array index addresses
+// no slot at all — a full-form parse would never key an error there.
+export const arrayIndicesInBounds = (obj: unknown, path: string): boolean =>
+  parsePath(path).reduce<Readonly<{ ok: boolean; current: unknown }>>(
+    (acc, segment) =>
+      !acc.ok ||
+      (Array.isArray(acc.current) &&
+        typeof segment === "number" &&
+        segment >= acc.current.length)
+        ? { ok: false, current: undefined }
+        : { ok: true, current: readSegment(acc.current, segment) },
+    { ok: true, current: obj },
+  ).ok;
+
 const writeIntoArray = (
   arr: readonly unknown[],
   index: number,
@@ -47,6 +63,16 @@ const writeIntoArray = (
   );
 };
 
+const refusesHugeIndex = (index: number): boolean => {
+  if (index > MAX_ARRAY_INDEX) {
+    console.warn(
+      `[zustand-forms] refusing to write array index ${index} (max ${MAX_ARRAY_INDEX}); value left unchanged.`,
+    );
+    return true;
+  }
+  return false;
+};
+
 const writeSegments = (
   obj: unknown,
   segments: readonly PathSegment[],
@@ -55,13 +81,6 @@ const writeSegments = (
   const [head, ...rest] = segments;
   if (head === undefined) return value;
 
-  if (typeof head === "number" && head > MAX_ARRAY_INDEX) {
-    console.warn(
-      `[zustand-forms] refusing to write array index ${head} (max ${MAX_ARRAY_INDEX}); value left unchanged.`,
-    );
-    return obj;
-  }
-
   if (Array.isArray(obj)) {
     if (typeof head !== "number") {
       console.warn(
@@ -69,9 +88,13 @@ const writeSegments = (
       );
       return obj;
     }
+    if (refusesHugeIndex(head)) return obj;
     return writeIntoArray(obj, head, rest, value);
   }
 
+  // Records take any segment as a string key (mirroring readSegment), so a
+  // z.record keyed by a large numeric id is writable — the array-index cap
+  // only applies where an array actually exists or would be created.
   if (isPlainRecord(obj)) {
     const key = String(head);
     return { ...obj, [key]: writeSegments(obj[key], rest, value) };
@@ -79,6 +102,7 @@ const writeSegments = (
 
   // Absent (or non-container) value: create a container from the segment type.
   if (typeof head === "number") {
+    if (refusesHugeIndex(head)) return obj;
     return writeIntoArray([], head, rest, value);
   }
   return { [head]: writeSegments(undefined, rest, value) };

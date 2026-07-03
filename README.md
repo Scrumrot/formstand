@@ -78,12 +78,12 @@ const form = createForm(schema, {
 | `setValue(path, value)` | updates one field; marks it dirty, or clears dirty if the value equals `initialValues` at that path (structural equality for arrays/plain objects, `Object.is` otherwise) |
 | `setValues(next)` | replace the entire values object; dirtiness is recomputed per top-level key against `initialValues` |
 | `setTouched(path, touched?)` | marks a path touched |
-| `setError(path, errors)` / `setErrors(map)` / `clearErrors(path?)` | error map control (server errors); `setError` accepts a single string or an array; `clearErrors(path)` also clears descendant keys; `setErrors` replaces the whole map |
+| `setError(path, errors)` / `setErrors(map)` / `clearErrors(path?)` | error map control (server errors); `setError` accepts a single string or an array; `clearErrors(path)` also clears descendant keys (`clearErrors("")` clears just the root schema-level entry; `clearErrors()` clears everything); `setErrors` replaces the whole map |
 | `setMode` / `setReValidateMode` | switch modes at runtime |
 | `reset(nextInitial?, options?)` | reset to initial; optional partial overrides (shallow-merged for record roots, replaced wholesale otherwise) and `{ keepErrors, keepTouched, keepDirty, keepSubmitCount }` |
 | `resetField(path)` | reset one field to its initial value, clearing its (and descendants') error/touched/dirty state |
 | `adoptValues(values)` | mid-session rebase: replaces `values` + `initialValues` and clears `errors`/`dirty`, but **preserves** interaction state (`touched`, `submitCount`, `isSubmitting`, `isValidating`, `mode`). Use `reset()` for a full wipe |
-| `updateState(updater)` | atomic multi-field patch |
+| `updateState(updater)` | atomic multi-field patch; error entries the patch adds or replaces get the `setError` contract (marked manual), unless the patch sets `manualErrors` itself |
 | `validate()` / `validateField(path)` / `validateFields(paths)` | sync validation; on an async schema they transparently start the async pass instead (`validate`/`validateField` return `{ kind: "pending", promise }`, `validateFields` returns the `Promise<boolean>` itself) |
 | `validateAsync()` / `validateFieldAsync(path)` / `validateFieldsAsync(paths)` | async; supports `async .refine` |
 | `submit(onValid, onInvalid?, { force? })` → `Promise<SubmitResult>` | full submit flow; resolves `{ kind: "valid", data }`, `{ kind: "invalid", errors }` (errored fields are also marked touched), or `{ kind: "skipped" }` when another submit is in flight |
@@ -98,7 +98,7 @@ const form = createForm(schema, {
 ### Validation modes
 
 - `mode: "onBlur"` (default): validate on blur and on submit.
-- `mode: "onChange"`: validate on every change AND blur AND submit.
+- `mode: "onChange"`: validate on every change and on submit (not on blur).
 - `mode: "onSubmit"`: validate only on submit.
 - `mode: "onTouched"`: validate on blur always; on change only once the field has been touched.
 - `mode: "all"`: validate on every change and blur.
@@ -377,10 +377,11 @@ form.handleSubmit(async (data) => {
 });
 ```
 
-Errors set via `setError`/`setErrors` are tracked as **manual** errors and survive full-form validation passes the schema is silent on — a background `validateAsync()` resolving no longer wipes a "username taken" message. A manual error is released when:
+Errors set via `setError`/`setErrors` (or an `errors` patch through `updateState`) are tracked as **manual** errors — the marks live in `FormState.manualErrors`, so `snapshot`/`restore` carry them and array ops re-key them alongside the errors themselves. Manual errors survive full-form validation passes the schema is silent on — a background `validateAsync()` resolving no longer wipes a "username taken" message. A manual error is released when:
 
-- the field's value changes (`setValue` on the path or an ancestor/descendant),
-- a field-scoped validation (`validateField`/`validateFieldAsync`) targets its path,
+- the field's value changes (`setValue` on the path or an ancestor/descendant — editing `address.street` releases a verdict on `address`),
+- an array op changes the array a mark sits on (marks on individual rows follow their rows instead),
+- a field-scoped validation (`validateField`/`validateFieldAsync`) targets its path (`validateField("")` counts as a full pass and preserves them, like `validate()`),
 - a schema error lands on the same key (the schema message wins), or
 - you call `clearErrors` / `reset` / `adoptValues`.
 
