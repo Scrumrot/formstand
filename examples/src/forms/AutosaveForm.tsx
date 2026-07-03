@@ -44,9 +44,7 @@ export const AutosaveForm = () => {
   const body = useField(form, "body");
   const values = useFormSelector(form, (s) => s.values);
   const dirty = useIsDirty(form);
-  const dirtyPaths = useFormSelectorShallow(form, (s) =>
-    Object.keys(s.dirty).filter((k) => s.dirty[k] === true),
-  );
+  const dirtyPaths = useFormSelectorShallow(form, () => form.dirtyFields());
 
   useEffect(() => {
     const timerRef: { current: ReturnType<typeof setTimeout> | null } = {

@@ -110,7 +110,7 @@ What this batch changed
 14. Path semantics (path.ts) — The existing container now decides how a segment is interpreted: arrays take numeric segments as indices, plain objects take any segment as a string key. A z.record keyed "0" reads/writes the record key instead of being silently replaced by an array. String-key writes into
     arrays warn and no-op, and array writes past index 100,000 are refused instead of allocating gigabytes on a typo'd path. The dot-in-key limitation is now documented.
 
-15. reset overhaul — reset(partial) only spreads when both sides are plain records; an array-rooted schema replaces wholesale instead of corrupting into {0: ..., 1: ...}. New ResetOptions (keepErrors/keepTouched/keepDirty/keepSubmitCount), plus resetField(path) (restores the initial value and clears the
+15. reset overhaul — reset(partial) only spreads when both sides are plain records; an array-rooted schema replaces wholesale instead of corrupting into {0: ..., 1: ...}. New ResetOptions (keepErrors/keepTouched/keepSubmitCount — keepDirty was later removed when dirtiness became derived), plus resetField(path) (restores the initial value and clears the
     field's and descendants' meta) and getFieldState(path) (typed one-shot field slice).
 
 16. Array index validation — arrayRemove(path, -1) used to grow the array and corrupt the error/touched maps; all indexed ops now validate integer-and-in-range before anything mutates, warning and no-op-ing otherwise.

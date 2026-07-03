@@ -139,6 +139,14 @@ describe("manual (server) errors vs validation passes", () => {
     expect(form.getState().errors["username"]).toEqual(["taken"]);
   });
 
+  it("validateFields(['']) delegates to the full pass too", () => {
+    const form = makeForm();
+    form.setError("username", ["taken"]);
+    // "" is only reachable past the FieldPath type (runtime-built lists).
+    expect(form.validateFields(["" as never])).toBe(true);
+    expect(form.getState().errors["username"]).toEqual(["taken"]);
+  });
+
   it("clearErrors('') clears only the root entry, not field errors", () => {
     const form = makeForm();
     form.setError("", ["totals mismatch"]);

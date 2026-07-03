@@ -1,13 +1,13 @@
 import { useStore } from "zustand/react";
+import { isFieldDirty } from "../core/equality";
 import type { FormStateApi } from "./useFormState";
 
+// Derived from the values (memoized per values reference), so it always
+// agrees with per-field dirty reads.
 export const useIsDirty = (form: FormStateApi): boolean =>
-  useStore(form.store, (state) => {
-    for (const k in state.dirty) {
-      if (state.dirty[k] === true) return true;
-    }
-    return false;
-  });
+  useStore(form.store, (state) =>
+    isFieldDirty(state.values, state.initialValues),
+  );
 
 export const useIsValid = (form: FormStateApi): boolean =>
   useStore(form.store, (state) => {

@@ -67,4 +67,14 @@ describe("focusFirstError", () => {
     expect(document.activeElement).toBe(screen.getByLabelText("Name"));
   });
 
+  it("the root fallback skips hidden and disabled controls", () => {
+    render(
+      <form>
+        <input type="hidden" name="csrf" defaultValue="tok" />
+        <input type="text" name="visible" aria-label="Visible" />
+      </form>,
+    );
+    expect(focusFirstError({ "": ["form-wide refine failed"] })).toBe(true);
+    expect(document.activeElement).toBe(screen.getByLabelText("Visible"));
+  });
 });

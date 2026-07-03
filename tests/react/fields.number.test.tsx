@@ -20,9 +20,13 @@ const Harness = () => {
 
 describe("NumberField with a null (nullable) value", () => {
   const nullableSchema = z.object({ qty: z.number().nullable() });
+  type QtyForm = Form<typeof nullableSchema>;
+
+  const capturedNullable: { form: QtyForm | null } = { form: null };
 
   const NullableHarness = () => {
     const form = useForm(nullableSchema, { initialValues: { qty: null } });
+    capturedNullable.form = form;
     return <NumberField form={form} path="qty" label="Qty" />;
   };
 
@@ -30,6 +34,17 @@ describe("NumberField with a null (nullable) value", () => {
     render(<NullableHarness />);
     const input = screen.getByLabelText("Qty") as HTMLInputElement;
     expect(input.value).toBe("");
+  });
+
+  it("clearing the input round-trips to null, staying valid and clean", () => {
+    render(<NullableHarness />);
+    const input = screen.getByLabelText("Qty") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "5" } });
+    expect(capturedNullable.form?.getState().values.qty).toBe(5);
+    fireEvent.change(input, { target: { value: "" } });
+    expect(capturedNullable.form?.getState().values.qty).toBeNull();
+    expect(capturedNullable.form?.getFieldState("qty").dirty).toBe(false);
+    expect(capturedNullable.form?.validate().kind).toBe("valid");
   });
 });
 

@@ -46,8 +46,9 @@ The result of a full-repo review pass (see `TODO.md` items 1–34).
 
 - Accessibility wiring on all bound components (`name`, `aria-invalid`,
   `aria-describedby`, `role="alert"`) and `ref` support; `focusFirstError`.
-- `reset(nextInitial, { keepErrors, keepTouched, keepDirty, keepSubmitCount })`,
-  `resetField(path)`, `getFieldState(path)`, `SelectField` `placeholder`,
+- `reset(nextInitial, { keepErrors, keepTouched, keepSubmitCount })` (no
+  `keepDirty` — dirtiness is derived from values vs `initialValues`, which
+  reset makes equal), `resetField(path)`, `getFieldState(path)`, `SelectField` `placeholder`,
   `setError` accepts a single string, `"onTouched"` / `"all"` validation
   modes, and `FieldPath` support for optional/nullable object levels.
 - `useForm` warns once when the schema reference changes after mount.

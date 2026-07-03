@@ -27,7 +27,7 @@ describe("createForm", () => {
     expect(form.getState().isSubmitting).toBe(false);
     expect(form.getState().submitCount).toBe(0);
     expect(form.getState().errors).toEqual({});
-    expect(form.getState().dirty).toEqual({});
+    expect(form.dirtyFields()).toEqual([]);
     expect(form.getState().touched).toEqual({});
   });
 
@@ -47,10 +47,10 @@ describe("createForm", () => {
     expect(after.address).not.toBe(before.address);
   });
 
-  it("setValue marks the path as dirty", () => {
+  it("setValue makes the path read as dirty", () => {
     const form = makeForm();
     form.setValue("name", "Jane");
-    expect(form.getState().dirty["name"]).toBe(true);
+    expect(form.getFieldState("name").dirty).toBe(true);
   });
 
   it("setValues replaces the entire values object", () => {
@@ -68,7 +68,7 @@ describe("createForm", () => {
     form.setValue("name", "Jane");
     form.reset();
     expect(form.getState().values.name).toBe("Tim");
-    expect(form.getState().dirty).toEqual({});
+    expect(form.dirtyFields()).toEqual([]);
   });
 
   it("reset can adopt a new initial baseline", () => {

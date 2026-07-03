@@ -1,6 +1,7 @@
 import { type ChangeEvent, type ReactNode, useId, useState } from "react";
 import {
   checkboxProps,
+  emptyValueFor,
   numberToInputText,
   parseNumberText,
   selectProps,
@@ -128,10 +129,12 @@ const useNumberInput = (
       const text = e.target.value;
       const parsed = parseNumberText(text);
       switch (parsed.kind) {
-        case "empty":
-          setEdit({ raw: text, pushed: undefined });
-          field.setValue(undefined);
+        case "empty": {
+          const empty = emptyValueFor(field.initialValue);
+          setEdit({ raw: text, pushed: empty });
+          field.setValue(empty);
           return;
+        }
         case "number":
           setEdit({ raw: text, pushed: parsed.value });
           field.setValue(parsed.value);

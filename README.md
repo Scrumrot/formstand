@@ -75,15 +75,15 @@ const form = createForm(schema, {
 | Method | Notes |
 |---|---|
 | `getState()` / `subscribe(listener)` | the underlying zustand store |
-| `setValue(path, value)` | updates one field; marks it dirty, or clears dirty if the value equals `initialValues` at that path (structural equality for arrays/plain objects, `Object.is` otherwise) |
+| `setValue(path, value)` | updates one field. Dirtiness is derived, not stored: a field reads as dirty while its value differs structurally from `initialValues` at that path (arrays/plain objects compare deep, Dates by timestamp, `Object.is` otherwise) |
 | `setValues(next)` | replace the entire values object; dirtiness is recomputed per top-level key against `initialValues` |
 | `setTouched(path, touched?)` | marks a path touched |
 | `setError(path, errors)` / `setErrors(map)` / `clearErrors(path?)` | error map control (server errors); `setError` accepts a single string or an array; `clearErrors(path)` also clears descendant keys (`clearErrors("")` clears just the root schema-level entry; `clearErrors()` clears everything); `setErrors` replaces the whole map |
 | `setMode` / `setReValidateMode` | switch modes at runtime |
 | `reset(nextInitial?, options?)` | reset to initial; optional partial overrides (shallow-merged for record roots, replaced wholesale otherwise) and `{ keepErrors, keepTouched, keepSubmitCount }` (no `keepDirty` — dirtiness derives from values vs initial, and reset makes them equal) |
-| `resetField(path)` | reset one field to its initial value, clearing its (and descendants') error/touched/dirty state |
-| `adoptValues(values)` | mid-session rebase: replaces `values` + `initialValues` and clears `errors`/`dirty`, but **preserves** interaction state (`touched`, `submitCount`, `isSubmitting`, `isValidating`, `mode`). Use `reset()` for a full wipe |
-| `updateState(updater)` | atomic multi-field patch; error entries the patch adds or replaces get the `setError` contract (marked manual), unless the patch sets `manualErrors` itself |
+| `resetField(path)` | reset one field to its initial value, clearing its (and descendants') error/touched state (dirtiness clears by definition — the value now equals initial) |
+| `adoptValues(values)` | mid-session rebase: replaces `values` + `initialValues` and clears `errors`, but **preserves** interaction state (`touched`, `submitCount`, `isSubmitting`, `isValidating`, `mode`). Use `reset()` for a full wipe |
+| `updateState(updater)` | atomic multi-field patch; error entries the patch adds or **changes by content** get the `setError` contract (marked manual) — re-writing identical content is treated as a clone and stays unmarked (use `setError`, or set `manualErrors` in the patch, to vouch for an unchanged entry) |
 | `validate()` / `validateField(path)` / `validateFields(paths)` | sync validation; on an async schema they transparently start the async pass instead (`validate`/`validateField` return `{ kind: "pending", promise }`, `validateFields` returns the `Promise<boolean>` itself) |
 | `validateAsync()` / `validateFieldAsync(path)` / `validateFieldsAsync(paths)` | async; supports `async .refine` |
 | `submit(onValid, onInvalid?, { force? })` → `Promise<SubmitResult>` | full submit flow; resolves `{ kind: "valid", data }`, `{ kind: "invalid", errors }` (errored fields are also marked touched), or `{ kind: "skipped" }` when another submit is in flight |
@@ -91,7 +91,7 @@ const form = createForm(schema, {
 | `getField(path)` | typed one-shot value read |
 | `getFieldState(path)` | typed one-shot read of a field's full slice (value/error/touched/dirty/isValidating) |
 | `watchField` / `watchValue` / `watchValues` | subscriptions; see below |
-| `diff()` / `dirtyFields()` | PATCH-style helpers; reflect only fields whose value currently differs from initial (reverting a field drops it) |
+| `diff()` / `dirtyFields()` | PATCH-style helpers, derived by comparing `values` against `initialValues`: minimal divergent paths (objects recurse to the changed leaves; arrays report their base path). Reverting a field drops it |
 | `snapshot()` / `restore(snap)` | full state capture/restore for undo/rollback |
 | `arrayPush` / `arrayRemove` / `arrayInsert` / `arrayMove` / `arraySwap` | array ops with meta-key re-keying; the array path's dirtiness is recomputed against `initialValues` (push + remove reverts to clean) |
 

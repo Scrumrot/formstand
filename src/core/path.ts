@@ -35,14 +35,22 @@ const readSegment = (obj: unknown, segment: PathSegment): unknown => {
 export const getAtPath = (obj: unknown, path: string): unknown =>
   parsePath(path).reduce<unknown>(readSegment, obj);
 
-// True when every numeric segment of `path` addresses a real slot: an
-// in-range array index, or a record key (containers decide, mirroring
-// readSegment). An out-of-range index — including any index into an absent
-// or non-container value — addresses no slot at all: a full-form parse would
-// never key an error there. Object properties reached by STRING segments may
-// be legitimately absent (an empty optional field is still addressable).
-export const arrayIndicesInBounds = (obj: unknown, path: string): boolean =>
-  parsePath(path).reduce<Readonly<{ ok: boolean; current: unknown }>>(
+export type SlotAtPath =
+  | Readonly<{ exists: true; value: unknown }>
+  | Readonly<{ exists: false }>;
+
+// Resolve `path` while checking that every numeric segment addresses a real
+// slot: an in-range array index, or a record key (containers decide,
+// mirroring readSegment). An out-of-range index — including any index into
+// an absent or non-container value — addresses no slot at all: a full-form
+// parse would never key an error there. Object properties reached by STRING
+// segments may be legitimately absent (an empty optional field is still
+// addressable). Returns the resolved value so callers don't walk the path
+// twice.
+export const slotAtPath = (obj: unknown, path: string): SlotAtPath => {
+  const walked = parsePath(path).reduce<
+    Readonly<{ ok: boolean; current: unknown }>
+  >(
     (acc, segment) => {
       const outOfBounds =
         typeof segment === "number" &&
@@ -54,7 +62,9 @@ export const arrayIndicesInBounds = (obj: unknown, path: string): boolean =>
         : { ok: true, current: readSegment(acc.current, segment) };
     },
     { ok: true, current: obj },
-  ).ok;
+  );
+  return walked.ok ? { exists: true, value: walked.current } : { exists: false };
+};
 
 const writeIntoArray = (
   arr: readonly unknown[],

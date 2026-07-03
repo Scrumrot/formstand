@@ -19,7 +19,7 @@ describe("array op index validation", () => {
     const form = makeForm();
     form.arrayRemove("tags", -1);
     expect(form.getState().values.tags).toEqual(["a", "b"]);
-    expect(form.getState().dirty).toEqual({});
+    expect(form.dirtyFields()).toEqual([]);
     expect(console.warn).toHaveBeenCalledOnce();
   });
 

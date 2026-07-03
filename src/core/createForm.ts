@@ -12,7 +12,7 @@ import {
 import { isFieldDirty, isPlainObject, valuesEqual } from "./equality";
 import type { FieldPath, FieldValue } from "./fieldPath";
 import type { ValidationMode } from "./mode";
-import { arrayIndicesInBounds, getAtPath, setAtPath } from "./path";
+import { getAtPath, setAtPath, slotAtPath } from "./path";
 import type { BoolMap, ErrorMap, FormState } from "./types";
 import {
   type FieldValidationResult,
@@ -258,23 +258,28 @@ const releaseAncestorMarks = (manual: BoolMap, path: string): BoolMap => {
   return kept.length === entries.length ? manual : Object.fromEntries(kept);
 };
 
-// `setValues` replaces the whole values object, so per-path dirtiness written
-// by earlier `setValue` calls can't be carried over; recompute at top-level-key
-// granularity (or a single "" entry for non-record roots).
-const computeDirtyMap = (values: unknown, initialValues: unknown): BoolMap => {
-  if (isPlainObject(values) && isPlainObject(initialValues)) {
-    const keys = new Set([
-      ...Object.keys(values),
-      ...Object.keys(initialValues),
-    ]);
-    const dirtyKeys = [...keys].filter(
-      (k) => !valuesEqual(values[k], initialValues[k]),
+// Minimal divergent paths between values and initialValues: recurse through
+// plain objects, report anything else (scalars, arrays, type mismatches) at
+// its own path — arrays report their base path, and a divergent non-record
+// root reports "". This is the derived source for diff()/dirtyFields(); the
+// boolean per-field question is isFieldDirty.
+const dirtyPathsOf = (
+  values: unknown,
+  initial: unknown,
+  prefix: string,
+): readonly string[] => {
+  if (valuesEqual(values, initial)) return [];
+  if (isPlainObject(values) && isPlainObject(initial)) {
+    const keys = new Set([...Object.keys(values), ...Object.keys(initial)]);
+    return [...keys].flatMap((k) =>
+      dirtyPathsOf(
+        values[k],
+        initial[k],
+        prefix === "" ? k : `${prefix}.${k}`,
+      ),
     );
-    return dirtyKeys.length === 0
-      ? emptyBools
-      : Object.fromEntries(dirtyKeys.map((k) => [k, true]));
   }
-  return valuesEqual(values, initialValues) ? emptyBools : { "": true };
+  return [prefix];
 };
 
 // Key for the whole-form async validation's sequence counter (internal —
@@ -377,7 +382,6 @@ export const createForm = <TSchema extends z.ZodType>(
     initialValues: options.initialValues,
     errors: emptyErrors,
     touched: emptyBools,
-    dirty: emptyBools,
     manualErrors: emptyBools,
     isSubmitting: false,
     submitCount: 0,
@@ -412,6 +416,15 @@ export const createForm = <TSchema extends z.ZodType>(
     paths: readonly string[],
   ): boolean | Promise<boolean> => {
     if (paths.length === 0) return true;
+    // A "" path means whole-form scope (only reachable past the FieldPath
+    // type, e.g. runtime-built path lists): delegate to the full pass so
+    // manual errors are preserved, mirroring validateField("").
+    if (paths.some((p) => p === "")) {
+      const result = validate();
+      return result.kind === "pending"
+        ? result.promise.then((r) => r.kind === "valid")
+        : result.kind === "valid";
+    }
     try {
       const result = validateSync(schema, store.getState().values);
       const fullErrors =
@@ -431,40 +444,55 @@ export const createForm = <TSchema extends z.ZodType>(
     }
   };
 
-  // How to validate one field: through its extracted subschema when the path
-  // is reachable through check-free objects/arrays, via a full-form parse
-  // filtered to the path's scope otherwise (so cross-field refinements
-  // targeting the path still land), or not at all when the path addresses no
-  // slot (an out-of-range array index — parsing the subschema against
-  // undefined would fabricate an error no full-form parse produces). Shared
-  // by the sync and async passes so their decisions cannot diverge.
+  // How to validate one field: parse its extracted subschema against the
+  // slot's value when the path is reachable through check-free objects/
+  // arrays, parse the full form filtered to the path's scope otherwise (so
+  // cross-field refinements targeting the path still land), or skip when the
+  // path addresses no slot (an out-of-range array index — parsing the
+  // subschema against undefined would fabricate an error no full-form parse
+  // produces). One "parse" variant carries the whole triple so the sync and
+  // async passes cannot diverge arm-by-arm.
   type FieldScope =
     | Readonly<{ kind: "skip" }>
-    | Readonly<{ kind: "full" }>
-    | Readonly<{ kind: "sub"; schema: z.ZodType; value: unknown }>;
+    | Readonly<{
+        kind: "parse";
+        schema: z.ZodType;
+        value: unknown;
+        viaSubschema: boolean;
+      }>;
+
+  // The subschema for a path is a pure function of the form's fixed schema —
+  // cache it so per-keystroke validation doesn't re-walk the schema.
+  const subschemaCache = new Map<string, z.ZodType | null>();
+  const subschemaAt = (path: string): z.ZodType | null => {
+    const cached = subschemaCache.get(path);
+    if (cached !== undefined) return cached;
+    const sub = fieldSchemaAtPath(schema, path);
+    subschemaCache.set(path, sub);
+    return sub;
+  };
 
   const fieldScopeFor = (path: string, values: Values): FieldScope => {
-    const sub = path === "" ? null : fieldSchemaAtPath(schema, path);
-    if (sub === null) return { kind: "full" };
-    if (!arrayIndicesInBounds(values, path)) return { kind: "skip" };
-    return { kind: "sub", schema: sub, value: getAtPath(values, path) };
+    const sub = path === "" ? null : subschemaAt(path);
+    if (sub === null) {
+      return { kind: "parse", schema, value: values, viaSubschema: false };
+    }
+    const slot = slotAtPath(values, path);
+    return slot.exists
+      ? { kind: "parse", schema: sub, value: slot.value, viaSubschema: true }
+      : { kind: "skip" };
   };
 
   const scopedFieldErrors = (path: string): ErrorMap => {
     const values = store.getState().values;
     const scope = fieldScopeFor(path, values);
-    switch (scope.kind) {
-      case "skip":
-        return emptyErrors;
-      case "full":
-        return scopeSettledResult(validateSync(schema, values), path, false);
-      case "sub":
-        return scopeSettledResult(
+    return scope.kind === "skip"
+      ? emptyErrors
+      : scopeSettledResult(
           validateSync(scope.schema, scope.value),
           path,
-          true,
+          scope.viaSubschema,
         );
-    }
   };
 
   const scopedFieldErrorsAsync = async (
@@ -472,18 +500,13 @@ export const createForm = <TSchema extends z.ZodType>(
     values: Values,
   ): Promise<ErrorMap> => {
     const scope = fieldScopeFor(path, values);
-    switch (scope.kind) {
-      case "skip":
-        return emptyErrors;
-      case "full":
-        return scopeSettledResult(await validateAsync(schema, values), path, false);
-      case "sub":
-        return scopeSettledResult(
+    return scope.kind === "skip"
+      ? emptyErrors
+      : scopeSettledResult(
           await validateAsync(scope.schema, scope.value),
           path,
-          true,
+          scope.viaSubschema,
         );
-    }
   };
 
   const fieldResult = (scoped: ErrorMap): SettledFieldValidationResult => {
@@ -584,6 +607,11 @@ export const createForm = <TSchema extends z.ZodType>(
     paths: readonly string[],
   ): Promise<boolean> => {
     if (paths.length === 0) return true;
+    // Whole-form scope: same delegation as validateFields (see above).
+    if (paths.some((p) => p === "")) {
+      const result = await validateAsyncOnForm();
+      return result.kind === "valid";
+    }
     const seqs = new Map(paths.map((p) => [p, nextSeq(p)]));
     const valuesAtStart = store.getState().values;
     store.setState((state) => ({
@@ -694,23 +722,11 @@ export const createForm = <TSchema extends z.ZodType>(
     store.setState((state) => {
       const live = getAtPath(state.values, path);
       const arr: readonly unknown[] = Array.isArray(live) ? live : [];
-      const next = nextArray(arr);
-      const reKeyedDirty = reKeyByArrayPath(state.dirty, path, mapper);
-      const matchesInitial = valuesEqual(
-        next,
-        getAtPath(state.initialValues, path),
-      );
       return {
         ...state,
-        values: setAtPath(state.values, path, next),
+        values: setAtPath(state.values, path, nextArray(arr)),
         errors: reKeyByArrayPath(state.errors, path, mapper),
         touched: reKeyByArrayPath(state.touched, path, mapper),
-        // The op changed the array itself, so dirtiness of the base path is
-        // recomputed against the initial value (push then remove reverts to
-        // clean); per-item dirty keys just re-key with the indices.
-        dirty: matchesInitial
-          ? omitKey(reKeyedDirty, path)
-          : { ...reKeyedDirty, [path]: true },
         // Manual marks on rows follow their error entries through the index
         // mapping — a server error on "items.1.name" is still vouched for
         // after the op moves it to "items.0.name" (that row's value didn't
@@ -854,34 +870,27 @@ export const createForm = <TSchema extends z.ZodType>(
         }
       });
     },
-    setValue: (path: string, value: unknown) => {
-      store.setState((state) => {
-        const matchesInitial = valuesEqual(
-          value,
-          getAtPath(state.initialValues, path),
-        );
-        return {
-          ...state,
-          values: setAtPath(state.values, path, value),
-          dirty: matchesInitial
-            ? omitKey(state.dirty, path)
-            : { ...state.dirty, [path]: true },
-          // The value changed, so server-set errors on this path's spine —
-          // the path itself, its descendants (subtree replaced), and its
-          // ancestors (container verdicts) — are no longer vouched for; the
-          // next validation pass owns them again.
-          manualErrors: releaseAncestorMarks(
-            omitScope(state.manualErrors, [path]),
-            path,
-          ),
-        };
-      });
-    },
+    setValue: (path: string, value: unknown) =>
+      store.setState((state) => ({
+        ...state,
+        values: setAtPath(state.values, path, value),
+        // The value changed, so server-set errors on this path's spine — the
+        // path itself, its descendants (subtree replaced), and its ancestors
+        // (container verdicts) — are no longer vouched for; the next
+        // validation pass owns them again. A runtime "" path (the
+        // FieldFormApi surface is string-typed) replaces everything.
+        manualErrors:
+          path === ""
+            ? emptyBools
+            : releaseAncestorMarks(
+                omitScope(state.manualErrors, [path]),
+                path,
+              ),
+      })),
     setValues: (next) =>
       store.setState((state) => ({
         ...state,
         values: next,
-        dirty: computeDirtyMap(next, state.initialValues),
         manualErrors: emptyBools,
       })),
     setTouched: (path: string, touched: boolean = true) =>
@@ -936,11 +945,15 @@ export const createForm = <TSchema extends z.ZodType>(
         const patch = updater(state);
         if (Object.keys(patch).length === 0) return state;
         const next = { ...state, ...patch };
-        // Errors written through this escape hatch get the setError contract
-        // (they survive background validation until the field changes):
-        // entries the patch added or replaced are marked manual, entries it
-        // removed are unmarked. A patch that manages manualErrors itself
-        // opts out.
+        // Manual-marking policy for the escape hatch: setError/setErrors
+        // vouch for every entry they write, but updateState vouches only for
+        // entries its patch adds or CHANGES BY CONTENT — a clone-style
+        // updater (structuredClone, entries-map) must not convert schema
+        // errors into manual ones. The flip side: re-writing an entry with
+        // identical content is indistinguishable from a clone and gets no
+        // mark — use setError (or patch manualErrors directly) to vouch for
+        // an unchanged entry. A patch that manages manualErrors itself opts
+        // out entirely.
         if (
           patch.errors === undefined ||
           patch.errors === state.errors ||
@@ -951,18 +964,12 @@ export const createForm = <TSchema extends z.ZodType>(
         const survivors = Object.keys(state.manualErrors).filter(
           (k) => next.errors[k] !== undefined,
         );
-        // Content comparison, not reference: an updater that clones the
-        // error map (structuredClone, entries-map) must not turn schema
-        // errors into manual ones.
-        const written = Object.keys(next.errors).filter((k) => {
-          const prev = state.errors[k];
-          const entry = next.errors[k];
-          return (
-            prev === undefined ||
-            entry === undefined ||
-            !stringArraysEqual(prev, entry)
-          );
-        });
+        const written = Object.entries(next.errors)
+          .filter(([k, entry]) => {
+            const prev = state.errors[k];
+            return prev === undefined || !stringArraysEqual(prev, entry);
+          })
+          .map(([k]) => k);
         return {
           ...next,
           manualErrors: Object.fromEntries(
@@ -980,7 +987,6 @@ export const createForm = <TSchema extends z.ZodType>(
         values,
         initialValues: values,
         errors: emptyErrors,
-        dirty: emptyBools,
         manualErrors: emptyBools,
       }));
     },
@@ -1010,7 +1016,6 @@ export const createForm = <TSchema extends z.ZodType>(
               : emptyBools,
           touched:
             resetOptions?.keepTouched === true ? state.touched : emptyBools,
-          dirty: emptyBools,
           isSubmitting: false,
           submitCount:
             resetOptions?.keepSubmitCount === true ? state.submitCount : 0,
@@ -1027,16 +1032,23 @@ export const createForm = <TSchema extends z.ZodType>(
           path,
           getAtPath(state.initialValues, path),
         ),
-        errors: omitScope(state.errors, [path]),
-        touched: omitScope(state.touched, [path]),
-        dirty: omitScope(state.dirty, [path]),
+        // A runtime "" path scopes the whole form (the imperative surface is
+        // string-typed even though FieldPath excludes "").
+        errors:
+          path === "" ? emptyErrors : omitScope(state.errors, [path]),
+        touched:
+          path === "" ? emptyBools : omitScope(state.touched, [path]),
         // Same release contract as setValue: the value at this path changed,
         // so ancestor-level server verdicts are stale too.
-        manualErrors: releaseAncestorMarks(
-          omitScope(state.manualErrors, [path]),
-          path,
-        ),
-        isValidating: omitScope(state.isValidating, [path]),
+        manualErrors:
+          path === ""
+            ? emptyBools
+            : releaseAncestorMarks(
+                omitScope(state.manualErrors, [path]),
+                path,
+              ),
+        isValidating:
+          path === "" ? emptyBools : omitScope(state.isValidating, [path]),
       })),
     validate,
     validateField,
@@ -1099,16 +1111,15 @@ export const createForm = <TSchema extends z.ZodType>(
     diff: () => {
       const state = store.getState();
       return Object.fromEntries(
-        Object.keys(state.dirty)
-          .filter((path) => state.dirty[path] === true)
-          .map((path) => [path, getAtPath(state.values, path)]),
+        dirtyPathsOf(state.values, state.initialValues, "").map((path) => [
+          path,
+          getAtPath(state.values, path),
+        ]),
       );
     },
     dirtyFields: () => {
       const state = store.getState();
-      return Object.keys(state.dirty).filter(
-        (path) => state.dirty[path] === true,
-      );
+      return dirtyPathsOf(state.values, state.initialValues, "");
     },
     snapshot: () => store.getState(),
     restore: (snap) => store.setState(() => snap),

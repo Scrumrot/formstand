@@ -29,29 +29,32 @@ export const valuesEqual = (a: unknown, b: unknown): boolean => {
 };
 
 // The deep compare for a container-valued field runs inside store selectors
-// and watch subscriptions, i.e. on every store change — cache the verdict per
-// value object against the initial-slice reference it was computed for. Form
-// state is immutable, so identical references always mean an identical
-// verdict; the WeakMap lets discarded value objects release their entries.
-const dirtyCache = new WeakMap<
-  object,
-  Readonly<{ initial: unknown; dirty: boolean }>
->();
+// and watch subscriptions, i.e. on every store change — cache verdicts per
+// value object, keyed by the initial-slice reference each was computed for.
+// A small list (not a single slot) so distinct fields/forms sharing one value
+// object (a module-level default, a shared sentinel array) coexist instead of
+// evicting each other; bounded so no entry grows without limit. Form state is
+// immutable, so identical references always mean an identical verdict, and
+// the WeakMap releases everything when the value object dies.
+type DirtyVerdict = Readonly<{ initial: unknown; dirty: boolean }>;
+const dirtyCache = new WeakMap<object, readonly DirtyVerdict[]>();
+const MAX_VERDICTS = 4;
 
-// The single definition of per-field dirtiness: the field's current value
-// slice differs structurally from its initial-values slice. Derived (rather
-// than read from the form-level dirty map) so reads are accurate at any
-// depth, regardless of which writer (setValue/setValues/array op) recorded
-// dirtiness in the map.
+// The single definition of dirtiness: the current value slice differs
+// structurally from its initial-values slice. Derived (rather than tracked by
+// writers) so reads are accurate at any depth.
 export const isFieldDirty = (value: unknown, initialValue: unknown): boolean => {
+  if (Object.is(value, initialValue)) return false;
   if (typeof value !== "object" || value === null) {
     return !valuesEqual(value, initialValue);
   }
-  const cached = dirtyCache.get(value);
-  if (cached !== undefined && Object.is(cached.initial, initialValue)) {
-    return cached.dirty;
-  }
+  const cached = dirtyCache.get(value) ?? [];
+  const hit = cached.find((v) => Object.is(v.initial, initialValue));
+  if (hit !== undefined) return hit.dirty;
   const dirty = !valuesEqual(value, initialValue);
-  dirtyCache.set(value, { initial: initialValue, dirty });
+  dirtyCache.set(
+    value,
+    [{ initial: initialValue, dirty }, ...cached].slice(0, MAX_VERDICTS),
+  );
   return dirty;
 };

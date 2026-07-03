@@ -19,7 +19,7 @@ describe("form.adoptValues", () => {
     expect(form.getState().values).toEqual({ name: "Jane", age: 31 });
     expect(form.getState().initialValues).toEqual({ name: "Jane", age: 31 });
     expect(form.getState().errors).toEqual({});
-    expect(form.getState().dirty).toEqual({});
+    expect(form.dirtyFields()).toEqual([]);
     expect(form.getState().touched["name"]).toBe(true);
   });
 
@@ -46,7 +46,7 @@ describe("form.adoptValues", () => {
     expect(after.values).toEqual({ name: "Jane", age: 31 });
     expect(after.initialValues).toEqual({ name: "Jane", age: 31 });
     expect(after.errors).toEqual({});
-    expect(after.dirty).toEqual({});
+    expect(form.dirtyFields()).toEqual([]);
     // ...but interaction/session state is intentionally preserved.
     expect(after.touched.name).toBe(true);
     expect(after.submitCount).toBe(1);

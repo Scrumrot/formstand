@@ -4,12 +4,14 @@ export type ErrorMap = Readonly<Record<string, readonly string[]>>;
 
 export type BoolMap = Readonly<Record<string, boolean>>;
 
+// No dirty map: dirtiness is derived (a field is dirty when its value slice
+// differs structurally from initialValues), so it can't drift from the values
+// the way a writer-maintained map can. See isFieldDirty / dirtyFields().
 export type FormState<TValues> = Readonly<{
   values: TValues;
   initialValues: TValues;
   errors: ErrorMap;
   touched: BoolMap;
-  dirty: BoolMap;
   // Paths whose current error entry came from setError/setErrors (or an
   // errors patch via updateState) rather than a schema pass. Full-form
   // validation preserves these where the schema is silent; they release when

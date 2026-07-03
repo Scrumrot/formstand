@@ -38,6 +38,14 @@ export type SelectProps = Readonly<{
 const ariaInvalid = (field: Readonly<{ error: readonly string[] | undefined }>): true | undefined =>
   field.error !== undefined && field.error.length > 0 ? true : undefined;
 
+// A cleared input writes back the field's initial empty representation: null
+// when the field started as null (so z.number().nullable() round-trips to a
+// valid blank instead of an undefined the schema rejects), undefined
+// otherwise. The bindings can't see the schema, so the initial value is the
+// signal for which "empty" this field uses.
+export const emptyValueFor = (initialValue: unknown): null | undefined =>
+  initialValue === null ? null : undefined;
+
 // Canonical display text for a numeric field value ("" for empty/NaN; null
 // counts as empty so nullable fields don't render the literal text "null").
 // Shared with NumberField so the two number bindings can't drift.
@@ -70,7 +78,14 @@ export const textInputProps = <T extends string | null | undefined>(
   name: field.path,
   value: field.value ?? "",
   "aria-invalid": ariaInvalid(field),
-  onChange: (e) => field.setValue(e.target.value as T),
+  onChange: (e) => {
+    const text = e.target.value;
+    // Deleting all text from a null-initial field restores null, so a
+    // nullable string field isn't left permanently dirty by a visual no-op.
+    field.setValue(
+      (text === "" && field.initialValue === null ? null : text) as T,
+    );
+  },
   onBlur: field.onBlur,
 });
 
@@ -83,7 +98,11 @@ export const numberInputProps = <T extends number | null | undefined>(
   "aria-invalid": ariaInvalid(field),
   onChange: (e) => {
     const parsed = parseNumberText(e.target.value);
-    field.setValue((parsed.kind === "number" ? parsed.value : undefined) as T);
+    field.setValue(
+      (parsed.kind === "number"
+        ? parsed.value
+        : emptyValueFor(field.initialValue)) as T,
+    );
   },
   onBlur: field.onBlur,
 });
@@ -109,6 +128,11 @@ export const selectProps = <T extends string | null | undefined>(
   name: field.path,
   value: field.value ?? "",
   "aria-invalid": ariaInvalid(field),
-  onChange: (e) => field.setValue(e.target.value as T),
+  onChange: (e) => {
+    const v = e.target.value;
+    field.setValue(
+      (v === "" && field.initialValue === null ? null : v) as T,
+    );
+  },
   onBlur: field.onBlur,
 });

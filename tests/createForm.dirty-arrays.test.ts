@@ -10,11 +10,11 @@ const schema = z.object({
 const makeForm = () =>
   createForm(schema, { initialValues: { name: "Tim", tags: ["a"] } });
 
-describe("array ops update the dirty map", () => {
-  it("arrayPush marks the array path dirty and diff() reflects it", () => {
+describe("array ops and derived dirtiness", () => {
+  it("arrayPush makes the array path dirty and diff() reflects it", () => {
     const form = makeForm();
     form.arrayPush("tags", "b");
-    expect(form.getState().dirty["tags"]).toBe(true);
+    expect(form.getFieldState("tags").dirty).toBe(true);
     expect(form.dirtyFields()).toContain("tags");
     expect(form.diff()).toEqual({ tags: ["a", "b"] });
   });
@@ -23,33 +23,33 @@ describe("array ops update the dirty map", () => {
     const form = makeForm();
     form.arrayPush("tags", "b");
     form.arrayRemove("tags", 1);
-    expect(form.getState().dirty).toEqual({});
+    expect(form.dirtyFields()).toEqual([]);
     expect(form.diff()).toEqual({});
   });
 
-  it("arrayMove marks dirty and moving back clears it", () => {
+  it("arrayMove makes dirty and moving back clears it", () => {
     const form = createForm(schema, {
       initialValues: { name: "Tim", tags: ["a", "b"] },
     });
     form.arrayMove("tags", 0, 1);
-    expect(form.getState().dirty["tags"]).toBe(true);
+    expect(form.getFieldState("tags").dirty).toBe(true);
     form.arrayMove("tags", 0, 1);
-    expect(form.getState().dirty["tags"]).toBeUndefined();
+    expect(form.getFieldState("tags").dirty).toBe(false);
   });
 
-  it("arrayRemove of an initial item marks dirty", () => {
+  it("arrayRemove of an initial item makes dirty", () => {
     const form = makeForm();
     form.arrayRemove("tags", 0);
-    expect(form.getState().dirty["tags"]).toBe(true);
+    expect(form.getFieldState("tags").dirty).toBe(true);
     expect(form.diff()).toEqual({ tags: [] });
   });
 });
 
-describe("setValues updates the dirty map", () => {
-  it("marks changed top-level keys dirty", () => {
+describe("setValues and derived dirtiness", () => {
+  it("reports changed top-level keys dirty", () => {
     const form = makeForm();
     form.setValues({ name: "Anna", tags: ["a"] });
-    expect(form.getState().dirty).toEqual({ name: true });
+    expect(form.dirtyFields()).toEqual(["name"]);
     expect(form.diff()).toEqual({ name: "Anna" });
   });
 
@@ -58,6 +58,6 @@ describe("setValues updates the dirty map", () => {
     form.setValues({ name: "Anna", tags: ["a", "b"] });
     expect([...form.dirtyFields()].sort()).toEqual(["name", "tags"]);
     form.setValues({ name: "Tim", tags: ["a"] });
-    expect(form.getState().dirty).toEqual({});
+    expect(form.dirtyFields()).toEqual([]);
   });
 });

@@ -40,7 +40,7 @@ describe("validateOnMount", () => {
     });
     const state = form.getState();
     expect(state.touched).toEqual({});
-    expect(state.dirty).toEqual({});
+    expect(form.dirtyFields()).toEqual([]);
   });
 
   it("validates async schemas in the background", async () => {

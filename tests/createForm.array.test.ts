@@ -88,8 +88,8 @@ describe("array ops re-key meta maps", () => {
     expect(form.getState().errors["users.1.email"]).toBeUndefined();
     expect(form.getState().touched["users.0.email"]).toBe(true);
     expect(form.getState().touched["users.1.email"]).toBeUndefined();
-    expect(form.getState().dirty["users.0.email"]).toBe(true);
-    expect(form.getState().dirty["users.1.email"]).toBeUndefined();
+    expect(form.getFieldState("users.0.email").dirty).toBe(true);
+    expect(form.dirtyFields()).toEqual(["users"]);
   });
 
   it("arrayInsert shifts later meta keys up", () => {

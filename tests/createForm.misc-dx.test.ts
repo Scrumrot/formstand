@@ -14,9 +14,9 @@ describe("Date values in dirty tracking", () => {
     const initial = new Date("2000-01-02T00:00:00Z");
     const form = createForm(schema, { initialValues: { born: initial } });
     form.setValue("born", new Date("2000-01-02T00:00:00Z"));
-    expect(form.getState().dirty).toEqual({});
+    expect(form.dirtyFields()).toEqual([]);
     form.setValue("born", new Date("2001-05-06T00:00:00Z"));
-    expect(form.getState().dirty["born"]).toBe(true);
+    expect(form.getFieldState("born").dirty).toBe(true);
   });
 });
 

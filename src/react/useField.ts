@@ -46,6 +46,10 @@ export type UseFieldReturn<TValue> = Readonly<{
   // bound prop builders spread it as `name`).
   path: string;
   value: TValue;
+  // The slice of initialValues at this path. The prop builders use it to
+  // pick the field's empty representation (null when the field started as
+  // null) when the user clears the input.
+  initialValue: TValue;
   error: readonly string[] | undefined;
   touched: boolean;
   dirty: boolean;
@@ -62,6 +66,7 @@ export type UseFieldReturn<TValue> = Readonly<{
 type FieldSlice<TValue> = Readonly<{
   path: string;
   value: TValue;
+  initialValue: TValue;
   error: readonly string[] | undefined;
   touched: boolean;
   dirty: boolean;
@@ -102,12 +107,14 @@ export function useField<TValue = unknown>(
       const p =
         typeof pathArg === "function" ? pathArg(state) : pathArg;
       const value = getAtPath(state.values, p);
+      const initialValue = getAtPath(state.initialValues, p);
       return {
         path: p,
         value: value as TValue,
+        initialValue: initialValue as TValue,
         error: state.errors[p],
         touched: state.touched[p] ?? false,
-        dirty: isFieldDirty(value, getAtPath(state.initialValues, p)),
+        dirty: isFieldDirty(value, initialValue),
         isValidating: state.isValidating[p] ?? false,
       };
     }),
@@ -209,6 +216,7 @@ export function useField<TValue = unknown>(
     () => ({
       path: slice.path,
       value: slice.value,
+      initialValue: slice.initialValue,
       error: slice.error,
       touched: slice.touched,
       dirty: slice.dirty,

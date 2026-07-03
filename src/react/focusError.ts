@@ -25,11 +25,14 @@ export const focusFirstError = (
     (k) => k !== "" && (errors[k]?.length ?? 0) > 0,
   );
   const hasRootError = (errors[""]?.length ?? 0) > 0;
+  // Hidden and disabled controls can't take focus — without the filter, a
+  // leading <input type="hidden" name="csrf"> would swallow the root
+  // fallback (focus() no-ops but the function would still report success).
   const controls = [
     ...scope.querySelectorAll<HTMLElement>(
       "input[name], select[name], textarea[name]",
     ),
-  ];
+  ].filter((el) => !el.matches(':disabled, [type="hidden"]'));
   const fieldMatch = controls.find((el) => {
     const name = el.getAttribute("name");
     return name !== null && erroredPaths.some((k) => isPathOrChild(name, k));

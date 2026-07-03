@@ -13,7 +13,8 @@ export const StateDump = <TSchema extends z.ZodType>({
     values: state.values,
     errors: state.errors,
     touched: state.touched,
-    dirty: state.dirty,
+    // Dirtiness is derived from values vs initialValues, not stored state.
+    dirtyFields: form.dirtyFields(),
     isSubmitting: state.isSubmitting,
     submitCount: state.submitCount,
     isValidating: state.isValidating,

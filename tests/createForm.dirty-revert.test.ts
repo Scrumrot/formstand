@@ -25,10 +25,10 @@ describe("dirty clears when a value reverts to its initial", () => {
   it("clears the dirty flag for a primitive set back to initial", () => {
     const form = makeForm();
     form.setValue("name", "Jane");
-    expect(form.getState().dirty.name).toBe(true);
+    expect(form.getFieldState("name").dirty).toBe(true);
 
     form.setValue("name", "Tim");
-    expect(form.getState().dirty.name).toBeUndefined();
+    expect(form.getFieldState("name").dirty).toBe(false);
     expect(form.dirtyFields()).toEqual([]);
     expect(form.diff()).toEqual({});
   });
@@ -47,19 +47,19 @@ describe("dirty clears when a value reverts to its initial", () => {
     const form = makeForm();
     // Fresh object reference, same contents.
     form.setValue("address", { city: "NYC", zip: "10001" });
-    expect(form.getState().dirty.address).toBeUndefined();
+    expect(form.getFieldState("address").dirty).toBe(false);
 
     form.setValue("tags", ["a", "b"]);
-    expect(form.getState().dirty.tags).toBeUndefined();
+    expect(form.getFieldState("tags").dirty).toBe(false);
     expect(form.dirtyFields()).toEqual([]);
   });
 
   it("marks an object dirty when its contents differ", () => {
     const form = makeForm();
     form.setValue("address", { city: "Boston", zip: "10001" });
-    expect(form.getState().dirty.address).toBe(true);
+    expect(form.getFieldState("address").dirty).toBe(true);
     expect(form.diff()).toEqual({
-      address: { city: "Boston", zip: "10001" },
+      "address.city": "Boston",
     });
   });
 
@@ -67,24 +67,35 @@ describe("dirty clears when a value reverts to its initial", () => {
     const form = makeForm();
     // Different Date instance, different time.
     form.setValue("due", new Date("2021-06-06"));
-    expect(form.getState().dirty.due).toBe(true);
+    expect(form.getFieldState("due").dirty).toBe(true);
   });
 
   it("treats an equal-time Date set back to initial as not dirty", () => {
     const form = makeForm();
     form.setValue("due", new Date("2021-06-06"));
-    expect(form.getState().dirty.due).toBe(true);
+    expect(form.getFieldState("due").dirty).toBe(true);
     // Re-setting the original instance reverts cleanly.
     form.setValue("due", form.getState().initialValues.due);
-    expect(form.getState().dirty.due).toBeUndefined();
+    expect(form.getFieldState("due").dirty).toBe(false);
   });
 
   it("clears a nested path that reverts to initial", () => {
     const form = makeForm();
     form.setValue("address.city", "Boston");
-    expect(form.getState().dirty["address.city"]).toBe(true);
+    expect(form.getFieldState("address.city").dirty).toBe(true);
 
     form.setValue("address.city", "NYC");
-    expect(form.getState().dirty["address.city"]).toBeUndefined();
+    expect(form.getFieldState("address.city").dirty).toBe(false);
+  });
+
+  it("reverting a parent wholesale leaves no stale descendant dirtiness", () => {
+    const form = makeForm();
+    form.setValue("address.city", "Boston");
+    // Restore via the parent path with a fresh-but-equal object — the child
+    // edit must not linger anywhere.
+    form.setValue("address", { city: "NYC", zip: "10001" });
+    expect(form.dirtyFields()).toEqual([]);
+    expect(form.getFieldState("address.city").dirty).toBe(false);
+    expect(form.diff()).toEqual({});
   });
 });

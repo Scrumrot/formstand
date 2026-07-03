@@ -22,7 +22,7 @@ describe("reset options", () => {
     const state = form.getState();
     expect(state.errors).toEqual({});
     expect(state.touched).toEqual({});
-    expect(state.dirty).toEqual({});
+    expect(form.dirtyFields()).toEqual([]);
     expect(state.submitCount).toBe(0);
   });
 
@@ -40,7 +40,7 @@ describe("reset options", () => {
     // Values still reset, and dirtiness always clears with them — a field
     // whose value equals its initial value is clean by definition.
     expect(state.values).toEqual({ name: "x", age: 1 });
-    expect(state.dirty).toEqual({});
+    expect(form.dirtyFields()).toEqual([]);
     expect(form.getFieldState("age").dirty).toBe(false);
   });
 
@@ -60,7 +60,7 @@ describe("resetField", () => {
     const state = form.getState();
     expect(state.values.age).toBe(1);
     expect(state.touched["age"]).toBeUndefined();
-    expect(state.dirty["age"]).toBeUndefined();
+    expect(form.getFieldState("age").dirty).toBe(false);
     // Other fields' state is untouched.
     expect(state.errors["name"]).toBeDefined();
     expect(state.submitCount).toBe(1);
@@ -79,6 +79,6 @@ describe("resetField", () => {
     form.resetField("address");
     expect(form.getState().values.address.city).toBe("NYC");
     expect(form.getState().errors).toEqual({});
-    expect(form.getState().dirty).toEqual({});
+    expect(form.dirtyFields()).toEqual([]);
   });
 });
