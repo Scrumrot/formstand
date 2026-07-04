@@ -2,7 +2,9 @@
 
 ## 0.2.0 — 2026-07-02
 
-The result of a full-repo review pass (see `TODO.md` items 1–34).
+The result of a full-repo review pass (37 items across correctness, API
+gaps, robustness, testing, tooling, and docs — the working log lived in
+`TODO.md`, retired after release; see the git history for the play-by-play).
 
 ### Breaking
 
