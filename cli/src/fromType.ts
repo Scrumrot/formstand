@@ -77,21 +77,29 @@ const unionSpec = (
   );
 };
 
+const isCallable = (type: ts.Type): boolean =>
+  type.getCallSignatures().length > 0 ||
+  type.getConstructSignatures().length > 0;
+
 const objectFields = (
   checker: ts.TypeChecker,
   type: ts.Type,
   depth: number,
 ): readonly NamedField[] =>
-  checker.getPropertiesOfType(type).map((prop): NamedField => {
+  checker.getPropertiesOfType(type).flatMap((prop): readonly NamedField[] => {
     const propType = checker.getTypeOfSymbol(prop);
+    // Methods are not form fields — skip them entirely.
+    if (propType.getCallSignatures().length > 0) return [];
     const spec = walkType(checker, propType, NO_FLAGS, depth - 1);
     const optional =
       spec.optional || (prop.flags & ts.SymbolFlags.Optional) !== 0;
-    return {
-      name: prop.getName(),
-      label: labelFromName(prop.getName()),
-      spec: { ...spec, optional },
-    };
+    return [
+      {
+        name: prop.getName(),
+        label: labelFromName(prop.getName()),
+        spec: { ...spec, optional },
+      },
+    ];
   });
 
 const walkType = (
@@ -115,6 +123,11 @@ const walkType = (
     return { kind: "boolean", ...flags };
   }
   if (isDateType(type)) return { kind: "date", ...flags };
+  // Tuples are not isArrayType; without this check they would fall through to
+  // the object branch and leak Array.prototype members as fields.
+  if (checker.isTupleType(type)) {
+    return fallback(flags, "tuple — not supported; defaulted to string");
+  }
   if (isArrayReference(checker, type)) {
     const element = checker.getTypeArguments(type as ts.TypeReference)[0];
     return element === undefined
@@ -126,6 +139,14 @@ const walkType = (
         };
   }
   if (hasFlag(type, ts.TypeFlags.Object)) {
+    // A callable/constructable type is not a data object — surface the whole
+    // field as a todo instead of walking its properties.
+    if (isCallable(type)) {
+      return fallback(
+        flags,
+        `callable type "${checker.typeToString(type)}" — not supported; defaulted to string`,
+      );
+    }
     return { kind: "object", fields: objectFields(checker, type, depth), ...flags };
   }
   return fallback(
@@ -142,7 +163,10 @@ const pickSymbol = (
   if (typeName !== undefined) {
     const named = exports.find((s) => s.getName() === typeName);
     if (named === undefined) {
-      throw new Error(`no export named "${typeName}" in ${filePath}`);
+      const available = exports.map((s) => s.getName()).join(", ");
+      throw new Error(
+        `no export named "${typeName}" in ${filePath} (available: ${available.length === 0 ? "none" : available})`,
+      );
     }
     return named;
   }

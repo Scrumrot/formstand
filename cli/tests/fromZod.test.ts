@@ -158,4 +158,30 @@ describe("fromZod", () => {
     expect(extras?.spec.kind).toBe("string");
     expect(extras?.spec.todo).toContain("unsupported zod type");
   });
+
+  it("degrades zod v4 getter-recursion to a todo instead of overflowing", () => {
+    const category = z.object({
+      name: z.string(),
+      get subcategories() {
+        return z.array(category);
+      },
+    });
+    const ir = fromZod(category);
+    if (ir.kind !== "object") throw new Error("expected object root");
+    const sub = ir.fields.find((field) => field.name === "subcategories");
+    if (sub?.spec.kind !== "array") throw new Error("expected array field");
+    expect(sub.spec.item.kind).toBe("string");
+    expect(sub.spec.item.todo).toContain("recursive schema");
+  });
+
+  it("caps unbounded nesting at the depth limit", () => {
+    // Distinct schema objects at every level defeat the seen-set; the depth
+    // limit must still stop the walk.
+    const nested = (depth: number): z.ZodType =>
+      depth === 0 ? z.string() : z.object({ next: nested(depth - 1) });
+    expect(() => fromZod(nested(12))).not.toThrow();
+    expect(JSON.stringify(fromZod(nested(12)))).toContain(
+      "nesting depth limit reached",
+    );
+  });
 });

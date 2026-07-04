@@ -6,6 +6,11 @@ Generate [formstand](https://scrumrot.github.io/formstand/) form components from
 npm install --save-dev formstand-cli
 ```
 
+## Requirements
+
+- **formstand >= 0.3.0** for `--ui mui` output (the inlined adapter uses `UseFieldReturn`, `numberToInputText`, and `parseNumberText`); plain output works on 0.2.0.
+- **zod v4** in your project. The CLI walks your schema structurally (duck-typed by design — no `instanceof` against a bundled copy), so it does not ship zod itself: the schema module and the generated code both use the zod your project supplies.
+
 ## Two modes
 
 ### 1. Zod mode (default)
@@ -29,7 +34,7 @@ formstand-gen src/types.ts --type Profile --out src/ProfileForm.tsx
 # writes src/profileSchema.ts (override with --schema-out) and src/ProfileForm.tsx
 ```
 
-Without `--out`, both files print to stdout separated by `// --- file: ...` headers.
+Without `--out`, both files print to stdout separated by `// --- file: ...` headers. With `--schema-out` but no `--out`, the schema is written to that file and the component streams to stdout.
 
 ## Flags
 
@@ -55,6 +60,11 @@ Without `--out`, both files print to stdout separated by `// --- file: ...` head
 ## Supported schema surface
 
 `string`, `number`/`int`, `boolean`, `date`, `enum`, unions of string literals, `object`, `array`, with `.optional()` / `.nullable()` / `.default()` / `.pipe()` unwrapped. Anything else falls back to a string field with a `// TODO:` comment so the file still compiles. `date` fields render a text input with a `// TODO: date input` marker. Arrays nested inside array rows are emitted as TODO comments (extract a row component for those).
+
+Known limitations:
+
+- **Dots in keys**: formstand paths split on `.`, so a field named `"a.b"` is not path-addressable. The key is kept in the zod schema and `initialValues`, but no control is bound — a `{/* TODO: field "a.b" skipped ... */}` comment marks the spot and the CLI prints a warning.
+- **Tuples** (type mode): `[string, number]` degrades to a string field with a `// TODO: tuple — not supported` comment. Methods and callable types are skipped / degraded the same way.
 
 ## Programmatic API
 

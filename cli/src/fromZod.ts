@@ -56,13 +56,21 @@ const enumFromUnion = (options: unknown): readonly string[] | null => {
     : null;
 };
 
-const fieldsFromShape = (shape: unknown): readonly NamedField[] =>
+// Matches fromType's MAX_DEPTH; also the backstop for recursion the seen-set
+// misses (getters that build a fresh schema object on every access).
+const MAX_DEPTH = 6;
+
+const fieldsFromShape = (
+  shape: unknown,
+  depth: number,
+  seen: ReadonlySet<unknown>,
+): readonly NamedField[] =>
   typeof shape === "object" && shape !== null
     ? Object.entries(shape as Readonly<Record<string, unknown>>).map(
         ([name, sub]): NamedField => ({
           name,
           label: labelFromName(name),
-          spec: walk(sub, { optional: false, nullable: false }),
+          spec: walk(sub, { optional: false, nullable: false }, depth, seen),
         }),
       )
     : [];
@@ -73,11 +81,26 @@ const fallback = (flags: Flags, todo: string): FieldSpec => ({
   todo,
 });
 
-const walk = (schema: unknown, flags: Flags): FieldSpec => {
+// zod v4's recursion idiom (`get children() { return z.array(Category); }`)
+// makes the schema graph cyclic: track visited schema objects by identity so
+// a cycle degrades to a todo string field instead of a stack overflow.
+const walk = (
+  schema: unknown,
+  flags: Flags,
+  depth: number,
+  seen: ReadonlySet<unknown>,
+): FieldSpec => {
   const def = defOf(schema);
   if (def === null) {
     return fallback(flags, "value is not a zod schema; defaulted to string");
   }
+  if (seen.has(schema)) {
+    return fallback(flags, "recursive schema; defaulted to string");
+  }
+  if (depth <= 0) {
+    return fallback(flags, "nesting depth limit reached; defaulted to string");
+  }
+  const nextSeen: ReadonlySet<unknown> = new Set([...seen, schema]);
   const type = typeof def.type === "string" ? def.type : "<unknown>";
   switch (type) {
     case "string":
@@ -106,21 +129,30 @@ const walk = (schema: unknown, flags: Flags): FieldSpec => {
         : fallback(flags, "non-string literal; defaulted to string");
     }
     case "object":
-      return { kind: "object", fields: fieldsFromShape(def.shape), ...flags };
+      return {
+        kind: "object",
+        fields: fieldsFromShape(def.shape, depth - 1, nextSeen),
+        ...flags,
+      };
     case "array":
       return {
         kind: "array",
-        item: walk(def.element, { optional: false, nullable: false }),
+        item: walk(
+          def.element,
+          { optional: false, nullable: false },
+          depth - 1,
+          nextSeen,
+        ),
         ...flags,
       };
     case "optional":
-      return walk(def.innerType, { ...flags, optional: true });
+      return walk(def.innerType, { ...flags, optional: true }, depth, nextSeen);
     case "nullable":
-      return walk(def.innerType, { ...flags, nullable: true });
+      return walk(def.innerType, { ...flags, nullable: true }, depth, nextSeen);
     // A .default() means the *input* may omit the value.
     case "default":
     case "prefault":
-      return walk(def.innerType, { ...flags, optional: true });
+      return walk(def.innerType, { ...flags, optional: true }, depth, nextSeen);
     case "union": {
       const options = enumFromUnion(def.options);
       return options !== null
@@ -132,12 +164,12 @@ const walk = (schema: unknown, flags: Flags): FieldSpec => {
     }
     // Form values are typed as z.input, so a pipe's input side is the field.
     case "pipe":
-      return walk(def.in, flags);
+      return walk(def.in, flags, depth, nextSeen);
     default:
       // Wrappers we don't know by name but that carry an inner schema
       // (readonly, catch, ...) unwrap transparently.
       return def.innerType !== undefined
-        ? walk(def.innerType, flags)
+        ? walk(def.innerType, flags, depth, nextSeen)
         : fallback(
             flags,
             `unsupported zod type "${type}"; defaulted to string`,
@@ -146,4 +178,4 @@ const walk = (schema: unknown, flags: Flags): FieldSpec => {
 };
 
 export const fromZod = (schema: unknown): FieldSpec =>
-  walk(schema, { optional: false, nullable: false });
+  walk(schema, { optional: false, nullable: false }, MAX_DEPTH, new Set());

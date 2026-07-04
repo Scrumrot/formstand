@@ -1,13 +1,12 @@
-import {
-  type FieldSpec,
-  type NamedField,
-  labelFromName,
-} from "./ir";
+import { pascalCase } from "./casing";
+import { type FieldSpec, type NamedField, labelFromName } from "./ir";
 
 // Code emitters: zod schema source, initial values, and the two component
 // backends (plain HTML inputs bound via formstand's components, and a MUI v9
-// variant with an inlined adapter). All emitters are pure string builders
-// over the IR.
+// variant with an inlined adapter). Both backends share one IR walk and one
+// form scaffold (emitForm); a Backend supplies the leaf renderers, section
+// wrappers, and header imports. All emitters are pure string builders over
+// the IR.
 
 export type SchemaImport = Readonly<{
   // Local identifier the generated component uses for the schema.
@@ -23,28 +22,71 @@ export type EmitFormOptions = Readonly<{
   schemaImport: SchemaImport;
 }>;
 
+type ObjectSpec = Extract<FieldSpec, Readonly<{ kind: "object" }>>;
+
 const ind = (level: number): string => "  ".repeat(level);
+
+// ---------------------------------------------------------------------------
+// Escaping — one helper per emission context, so ANY field name is safe
+// ---------------------------------------------------------------------------
+
+// JS string literal (also the payload of JSX expression containers).
 const q = (value: string): string => JSON.stringify(value);
 
 const IDENT_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const propKey = (name: string): string =>
   IDENT_RE.test(name) ? name : q(name);
 
-const capitalize = (word: string): string =>
-  word.length === 0 ? word : word.charAt(0).toUpperCase() + word.slice(1);
+// JSX string attributes have no backslash escapes, so a quote in the value
+// cannot be escaped in place. Every string-valued attribute is therefore
+// emitted as an expression container holding a JS string: label={"..."}.
+const jsxAttr = (name: string, value: string): string => `${name}={${q(value)}}`;
+
+// JSX text position: braces, angle brackets, and quotes are all significant
+// there; a string expression container makes them inert.
+const jsxText = (value: string): string => `{${q(value)}}`;
+
+// Static segment of a template literal: escape what is active inside
+// backticks — backslashes, backticks, and "${" openings.
+const templateEscape = (value: string): string =>
+  value.replace(/[\\`]|\$\{/g, (match) => `\\${match}`);
+
+// Block-comment body: "*/" would end the comment early.
+const commentText = (value: string): string => value.replace(/\*\//g, "*\\/");
 
 const pascalJoin = (segments: readonly string[]): string =>
-  segments
-    .flatMap((segment) => segment.split(/[^A-Za-z0-9]+/))
-    .filter((part) => part.length > 0)
-    .map(capitalize)
-    .join("");
+  segments.map(pascalCase).join("");
 
 const camelJoin = (segments: readonly string[]): string => {
   const pascal = pascalJoin(segments);
   return pascal.length === 0
     ? pascal
     : pascal.charAt(0).toLowerCase() + pascal.slice(1);
+};
+
+// formstand paths split on "." — a key containing one is not addressable, so
+// the form emitters skip the binding (the zod schema and initialValues still
+// carry the key).
+const isUnaddressable = (name: string): boolean => name.includes(".");
+
+// The unaddressable field paths in an IR, for the CLI to surface as stderr
+// warnings alongside the in-file TODO comments.
+export const unaddressableFieldPaths = (ir: FieldSpec): readonly string[] => {
+  const walk = (spec: FieldSpec, prefix: string): readonly string[] => {
+    switch (spec.kind) {
+      case "object":
+        return spec.fields.flatMap((field) =>
+          isUnaddressable(field.name)
+            ? [`${prefix}${field.name}`]
+            : walk(field.spec, `${prefix}${field.name}.`),
+        );
+      case "array":
+        return walk(spec.item, prefix);
+      default:
+        return [];
+    }
+  };
+  return walk(ir, "");
 };
 
 // ---------------------------------------------------------------------------
@@ -176,54 +218,95 @@ type ArrayEntry = Readonly<{
   itemTypeExpr: string;
 }>;
 
-const arrayEntry = (
+type RawArrayEntry = Readonly<{
+  segments: readonly string[];
+  label: string;
+  item: FieldSpec;
+}>;
+
+const collectRawArrays = (
+  spec: FieldSpec,
   segments: readonly string[],
   label: string,
-  item: FieldSpec,
-): ArrayEntry => {
-  const pascal = pascalJoin(segments);
+): readonly RawArrayEntry[] => {
+  switch (spec.kind) {
+    case "object":
+      return spec.fields
+        .filter((field) => !isUnaddressable(field.name))
+        .flatMap((field) =>
+          collectRawArrays(field.spec, [...segments, field.name], field.label),
+        );
+    case "array":
+      // Arrays nested inside this array's items have dynamic paths; they are
+      // emitted as TODO comments instead of hooks.
+      return [{ segments, label, item: spec.item }];
+    default:
+      return [];
+  }
+};
+
+// Distinct source paths can normalize to the same Pascal identifier
+// ("userNames" and "user_names"): disambiguate every derived identifier with
+// a 2, 3, ... suffix (userNamesArray2, UserNamesItem2, emptyUserNamesItem2).
+const identifierSuffix = (base: string, used: ReadonlySet<string>): string => {
+  const next = (n: number): string =>
+    used.has(`${base}${n}`) ? next(n + 1) : `${n}`;
+  return used.has(base) ? next(2) : "";
+};
+
+const arrayEntry = (raw: RawArrayEntry, suffix: string): ArrayEntry => {
+  const pascal = pascalJoin(raw.segments);
   return {
-    path: segments.join("."),
-    label,
-    item,
-    hookName: `${camelJoin(segments)}Array`,
-    itemTypeName: `${pascal}Item`,
-    emptyItemName: `empty${pascal}Item`,
-    itemTypeExpr: `${segments.reduce(
+    path: raw.segments.join("."),
+    label: raw.label,
+    item: raw.item,
+    hookName: `${camelJoin(raw.segments)}Array${suffix}`,
+    itemTypeName: `${pascal}Item${suffix}`,
+    emptyItemName: `empty${pascal}Item${suffix}`,
+    itemTypeExpr: `${raw.segments.reduce(
       (acc, segment) => `NonNullable<${acc}[${q(segment)}]>`,
       "FormValues",
     )}[number]`,
   };
 };
 
-const collectArrays = (
-  spec: FieldSpec,
-  segments: readonly string[],
-  label: string,
-): readonly ArrayEntry[] => {
-  switch (spec.kind) {
-    case "object":
-      return spec.fields.flatMap((field) =>
-        collectArrays(field.spec, [...segments, field.name], field.label),
-      );
-    case "array":
-      // Arrays nested inside this array's items have dynamic paths; they are
-      // emitted as TODO comments instead of hooks.
-      return [arrayEntry(segments, label, spec.item)];
-    default:
-      return [];
-  }
-};
+const collectArrays = (root: ObjectSpec): readonly ArrayEntry[] =>
+  collectRawArrays(root, [], "").reduce<
+    Readonly<{ used: ReadonlySet<string>; entries: readonly ArrayEntry[] }>
+  >(
+    (acc, raw) => {
+      const base = pascalJoin(raw.segments);
+      const suffix = identifierSuffix(base, acc.used);
+      return {
+        used: new Set([...acc.used, `${base}${suffix}`]),
+        entries: [...acc.entries, arrayEntry(raw, suffix)],
+      };
+    },
+    { used: new Set<string>(), entries: [] },
+  ).entries;
 
+// A path prefix under construction. For dynamic prefixes (inside array rows)
+// `text` is already template-escaped — apart from the deliberate ${index}
+// hole — because it ends up inside a backtick template. Static prefixes stay
+// raw and are JSON-escaped as one piece at the end.
 type PathPrefix = Readonly<{ dynamic: boolean; text: string }>;
 
+const extendPrefix = (prefix: PathPrefix, name: string): PathPrefix => ({
+  dynamic: prefix.dynamic,
+  text: `${prefix.text}${prefix.dynamic ? templateEscape(name) : name}.`,
+});
+
 const pathAttr = (prefix: PathPrefix, name: string): string => {
-  const full = name === "" ? prefix.text.replace(/\.$/, "") : prefix.text + name;
-  return prefix.dynamic ? "path={`" + full + "`}" : `path=${q(full)}`;
+  const tail = prefix.dynamic ? templateEscape(name) : name;
+  const full =
+    name === "" ? prefix.text.replace(/\.$/, "") : prefix.text + tail;
+  return prefix.dynamic ? `path={\`${full}\`}` : `path={${q(full)}}`;
 };
 
 const todoComment = (spec: FieldSpec, level: number): readonly string[] =>
-  spec.todo !== undefined ? [`${ind(level)}{/* TODO: ${spec.todo} */}`] : [];
+  spec.todo !== undefined
+    ? [`${ind(level)}{/* TODO: ${commentText(spec.todo)} */}`]
+    : [];
 
 const valuesTypeAndInitials = (ir: FieldSpec, schemaName: string): string =>
   [
@@ -258,13 +341,157 @@ const schemaImportLine = (schemaImport: SchemaImport): string =>
     ? `import ${schemaImport.name} from ${q(schemaImport.from)};`
     : `import { ${schemaImport.name} } from ${q(schemaImport.from)};`;
 
-const assertObjectRoot = (
-  ir: FieldSpec,
-): FieldSpec & Readonly<{ kind: "object" }> => {
+const assertObjectRoot = (ir: FieldSpec): ObjectSpec => {
   if (ir.kind !== "object") {
     throw new Error("the root schema must be an object (z.object({...}))");
   }
   return ir;
+};
+
+// ---------------------------------------------------------------------------
+// The shared walk + scaffold, parameterized by a Backend
+// ---------------------------------------------------------------------------
+
+type Backend = Readonly<{
+  // Imports at the top of the file (everything before the schema import).
+  header: (
+    usage: KindUsage,
+    arrays: readonly ArrayEntry[],
+    root: ObjectSpec,
+  ) => readonly string[];
+  // Module-level sections between the array decls and the component.
+  preamble: (usage: KindUsage) => readonly string[];
+  // One bound control (or a todo fallback) for a scalar field.
+  leaf: (
+    spec: FieldSpec,
+    attr: string,
+    label: string,
+    level: number,
+  ) => readonly string[];
+  // Wrapper around a nested object's fields.
+  objectSection: (
+    label: string,
+    level: number,
+    body: readonly string[],
+  ) => readonly string[];
+  // Wrapper around a field array's mapped rows (rowBody sits at level + 3).
+  arraySection: (
+    entry: ArrayEntry,
+    level: number,
+    rowBody: readonly string[],
+  ) => readonly string[];
+  // Indentation level of the top-level field list.
+  bodyLevel: number;
+  // JSX between "return (" and the field list / between the field list and ")".
+  formOpen: readonly string[];
+  formClose: readonly string[];
+}>;
+
+const fieldLines = (
+  backend: Backend,
+  fields: readonly NamedField[],
+  prefix: PathPrefix,
+  level: number,
+  arrays: ReadonlyMap<string, ArrayEntry>,
+): readonly string[] =>
+  fields.flatMap((field): readonly string[] => {
+    if (isUnaddressable(field.name)) {
+      return [
+        `${ind(level)}{/* TODO: field ${commentText(q(field.name))} skipped — "." in a key is not path-addressable (see formstand docs) */}`,
+      ];
+    }
+    switch (field.spec.kind) {
+      case "object":
+        return [
+          ...todoComment(field.spec, level),
+          ...backend.objectSection(
+            field.label,
+            level,
+            fieldLines(
+              backend,
+              field.spec.fields,
+              extendPrefix(prefix, field.name),
+              level + 1,
+              arrays,
+            ),
+          ),
+        ];
+      case "array": {
+        if (prefix.dynamic) {
+          return [
+            `${ind(level)}{/* TODO: nested array ${commentText(q(prefix.text + field.name))} inside an array row — extract a row component with its own useFieldArray */}`,
+          ];
+        }
+        const entry = arrays.get(prefix.text + field.name);
+        return entry === undefined
+          ? []
+          : arraySectionLines(backend, entry, level, arrays);
+      }
+      default:
+        return backend.leaf(
+          field.spec,
+          pathAttr(prefix, field.name),
+          field.label,
+          level,
+        );
+    }
+  });
+
+const arraySectionLines = (
+  backend: Backend,
+  entry: ArrayEntry,
+  level: number,
+  arrays: ReadonlyMap<string, ArrayEntry>,
+): readonly string[] => {
+  const rowPrefix: PathPrefix = {
+    dynamic: true,
+    text: `${templateEscape(entry.path)}.\${index}.`,
+  };
+  const rowBody: readonly string[] =
+    entry.item.kind === "object"
+      ? fieldLines(backend, entry.item.fields, rowPrefix, level + 3, arrays)
+      : backend.leaf(entry.item, pathAttr(rowPrefix, ""), entry.label, level + 3);
+  return backend.arraySection(entry, level, rowBody);
+};
+
+const emitForm = (
+  backend: Backend,
+  { ir, formName, schemaImport }: EmitFormOptions,
+): string => {
+  const root = assertObjectRoot(ir);
+  const usage = collectUsage(root);
+  const arrays = collectArrays(root);
+  const arrayMap: ReadonlyMap<string, ArrayEntry> = new Map(
+    arrays.map((entry) => [entry.path, entry]),
+  );
+  return [
+    "// Generated by formstand-cli — edit freely, this file is yours.",
+    ...backend.header(usage, arrays, root),
+    schemaImportLine(schemaImport),
+    "",
+    valuesTypeAndInitials(root, schemaImport.name),
+    arrayItemDecls(arrays),
+    "",
+    ...backend.preamble(usage),
+    `export const ${formName} = () => {`,
+    `  const form = useForm(${schemaImport.name}, { initialValues, mode: "onBlur" });`,
+    "  const submitting = useIsSubmitting(form);",
+    ...(arrays.length > 0 ? [arrayHooks(arrays, 1)] : []),
+    "",
+    "  return (",
+    ...backend.formOpen,
+    ...fieldLines(
+      backend,
+      root.fields,
+      { dynamic: false, text: "" },
+      backend.bodyLevel,
+      arrayMap,
+    ),
+    ...backend.formClose,
+    "  );",
+    "};",
+    "",
+  ].join("\n");
 };
 
 // ---------------------------------------------------------------------------
@@ -282,23 +509,23 @@ const plainLeaf = (
     case "string":
       return [
         ...todo,
-        `${ind(level)}<TextField form={form} ${attr} label=${q(label)} />`,
+        `${ind(level)}<TextField form={form} ${attr} ${jsxAttr("label", label)} />`,
       ];
     case "date":
       return [
         ...todo,
         `${ind(level)}{/* TODO: date input — swap in a date picker; TextField binds plain text */}`,
-        `${ind(level)}<TextField form={form} ${attr} label=${q(label)} />`,
+        `${ind(level)}<TextField form={form} ${attr} ${jsxAttr("label", label)} />`,
       ];
     case "number":
       return [
         ...todo,
-        `${ind(level)}<NumberField form={form} ${attr} label=${q(label)} />`,
+        `${ind(level)}<NumberField form={form} ${attr} ${jsxAttr("label", label)} />`,
       ];
     case "boolean":
       return [
         ...todo,
-        `${ind(level)}<CheckboxField form={form} ${attr} label=${q(label)} />`,
+        `${ind(level)}<CheckboxField form={form} ${attr} ${jsxAttr("label", label)} />`,
       ];
     case "enum":
       return [
@@ -306,8 +533,8 @@ const plainLeaf = (
         `${ind(level)}<SelectField`,
         `${ind(level + 1)}form={form}`,
         `${ind(level + 1)}${attr}`,
-        `${ind(level + 1)}label=${q(label)}`,
-        `${ind(level + 1)}placeholder=${q(`Select ${label.toLowerCase()}`)}`,
+        `${ind(level + 1)}${jsxAttr("label", label)}`,
+        `${ind(level + 1)}${jsxAttr("placeholder", `Select ${label.toLowerCase()}`)}`,
         `${ind(level + 1)}options={[`,
         ...spec.options.map(
           (option) =>
@@ -322,25 +549,38 @@ const plainLeaf = (
   }
 };
 
-const plainArraySection = (
-  entry: ArrayEntry,
-  level: number,
-  arrays: ReadonlyMap<string, ArrayEntry>,
-): readonly string[] => {
-  const rowPrefix: PathPrefix = {
-    dynamic: true,
-    text: entry.path + ".${index}.",
-  };
-  const rowBody: readonly string[] =
-    entry.item.kind === "object"
-      ? plainFields(entry.item.fields, rowPrefix, level + 3, arrays)
-      : plainLeaf(entry.item, pathAttr(rowPrefix, ""), entry.label, level + 3);
-  return [
+const plainBackend: Backend = {
+  header: (usage, arrays) => {
+    const formstandImports = [
+      ...(usage.boolean ? ["CheckboxField"] : []),
+      ...(usage.number ? ["NumberField"] : []),
+      ...(usage.enum ? ["SelectField"] : []),
+      ...(usage.string || usage.date ? ["TextField"] : []),
+      ...(arrays.length > 0 ? ["useFieldArray"] : []),
+      "useForm",
+      "useIsSubmitting",
+    ];
+    return [
+      `import { z } from "zod";`,
+      "import {",
+      ...formstandImports.map((name) => `  ${name},`),
+      `} from "formstand";`,
+    ];
+  },
+  preamble: () => [],
+  leaf: plainLeaf,
+  objectSection: (label, level, body) => [
+    `${ind(level)}<fieldset>`,
+    `${ind(level + 1)}<legend>${jsxText(label)}</legend>`,
+    ...body,
+    `${ind(level)}</fieldset>`,
+  ],
+  arraySection: (entry, level, rowBody) => [
     `${ind(level)}<section>`,
-    `${ind(level + 1)}<h3>${entry.label}</h3>`,
+    `${ind(level + 1)}<h3>${jsxText(entry.label)}</h3>`,
     `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
     `${ind(level + 2)}<fieldset key={row.id}>`,
-    `${ind(level + 3)}<legend>${entry.label} #{index + 1}</legend>`,
+    `${ind(level + 3)}<legend>${jsxText(`${entry.label} #`)}{index + 1}</legend>`,
     ...rowBody,
     `${ind(level + 3)}<button type="button" onClick={() => ${entry.hookName}.remove(index)}>`,
     `${ind(level + 4)}Remove`,
@@ -348,106 +588,28 @@ const plainArraySection = (
     `${ind(level + 2)}</fieldset>`,
     `${ind(level + 1)}))}`,
     `${ind(level + 1)}<button type="button" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
-    `${ind(level + 2)}Add ${entry.label.toLowerCase()}`,
+    `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
     `${ind(level + 1)}</button>`,
     `${ind(level)}</section>`,
-  ];
-};
-
-const plainFields = (
-  fields: readonly NamedField[],
-  prefix: PathPrefix,
-  level: number,
-  arrays: ReadonlyMap<string, ArrayEntry>,
-): readonly string[] =>
-  fields.flatMap((field): readonly string[] => {
-    switch (field.spec.kind) {
-      case "object":
-        return [
-          ...todoComment(field.spec, level),
-          `${ind(level)}<fieldset>`,
-          `${ind(level + 1)}<legend>${field.label}</legend>`,
-          ...plainFields(
-            field.spec.fields,
-            { dynamic: prefix.dynamic, text: `${prefix.text}${field.name}.` },
-            level + 1,
-            arrays,
-          ),
-          `${ind(level)}</fieldset>`,
-        ];
-      case "array": {
-        if (prefix.dynamic) {
-          return [
-            `${ind(level)}{/* TODO: nested array "${prefix.text}${field.name}" inside an array row — extract a row component with its own useFieldArray */}`,
-          ];
-        }
-        const entry = arrays.get(prefix.text + field.name);
-        return entry === undefined
-          ? []
-          : plainArraySection(entry, level, arrays);
-      }
-      default:
-        return plainLeaf(
-          field.spec,
-          pathAttr(prefix, field.name),
-          field.label,
-          level,
-        );
-    }
-  });
-
-export const emitPlainForm = ({
-  ir,
-  formName,
-  schemaImport,
-}: EmitFormOptions): string => {
-  const root = assertObjectRoot(ir);
-  const usage = collectUsage(root);
-  const arrays = collectArrays(root, [], "");
-  const arrayMap: ReadonlyMap<string, ArrayEntry> = new Map(
-    arrays.map((entry) => [entry.path, entry]),
-  );
-  const formstandImports = [
-    ...(usage.boolean ? ["CheckboxField"] : []),
-    ...(usage.number ? ["NumberField"] : []),
-    ...(usage.enum ? ["SelectField"] : []),
-    ...(usage.string || usage.date ? ["TextField"] : []),
-    ...(arrays.length > 0 ? ["useFieldArray"] : []),
-    "useForm",
-    "useIsSubmitting",
-  ];
-  return [
-    "// Generated by formstand-cli — edit freely, this file is yours.",
-    `import { z } from "zod";`,
-    "import {",
-    ...formstandImports.map((name) => `  ${name},`),
-    `} from "formstand";`,
-    schemaImportLine(schemaImport),
-    "",
-    valuesTypeAndInitials(root, schemaImport.name),
-    arrayItemDecls(arrays),
-    "",
-    `export const ${formName} = () => {`,
-    `  const form = useForm(${schemaImport.name}, { initialValues, mode: "onBlur" });`,
-    "  const submitting = useIsSubmitting(form);",
-    ...(arrays.length > 0 ? [arrayHooks(arrays, 1)] : []),
-    "",
-    "  return (",
+  ],
+  bodyLevel: 3,
+  formOpen: [
     "    <form",
     "      onSubmit={form.handleSubmit((data) => {",
     `        console.log("submit", data);`,
     "      })}",
     "    >",
-    ...plainFields(root.fields, { dynamic: false, text: "" }, 3, arrayMap),
+  ],
+  formClose: [
     `      <button type="submit" disabled={submitting}>`,
     `        {submitting ? "Submitting..." : "Submit"}`,
     "      </button>",
     "    </form>",
-    "  );",
-    "};",
-    "",
-  ].join("\n");
+  ],
 };
+
+export const emitPlainForm = (options: EmitFormOptions): string =>
+  emitForm(plainBackend, options);
 
 // ---------------------------------------------------------------------------
 // MUI backend (@mui/material v9)
@@ -604,23 +766,23 @@ const muiLeaf = (
     case "string":
       return [
         ...todo,
-        `${ind(level)}<BoundTextField form={form} ${attr} label=${q(label)} />`,
+        `${ind(level)}<BoundTextField form={form} ${attr} ${jsxAttr("label", label)} />`,
       ];
     case "date":
       return [
         ...todo,
         `${ind(level)}{/* TODO: date input — consider @mui/x-date-pickers; this binds plain text */}`,
-        `${ind(level)}<BoundTextField form={form} ${attr} label=${q(label)} />`,
+        `${ind(level)}<BoundTextField form={form} ${attr} ${jsxAttr("label", label)} />`,
       ];
     case "number":
       return [
         ...todo,
-        `${ind(level)}<BoundNumberField form={form} ${attr} label=${q(label)} />`,
+        `${ind(level)}<BoundNumberField form={form} ${attr} ${jsxAttr("label", label)} />`,
       ];
     case "boolean":
       return [
         ...todo,
-        `${ind(level)}<BoundSwitchField form={form} ${attr} label=${q(label)} />`,
+        `${ind(level)}<BoundSwitchField form={form} ${attr} ${jsxAttr("label", label)} />`,
       ];
     case "enum":
       return [
@@ -628,7 +790,7 @@ const muiLeaf = (
         `${ind(level)}<BoundSelectField`,
         `${ind(level + 1)}form={form}`,
         `${ind(level + 1)}${attr}`,
-        `${ind(level + 1)}label=${q(label)}`,
+        `${ind(level + 1)}${jsxAttr("label", label)}`,
         `${ind(level + 1)}options={[${spec.options.map(q).join(", ")}]}`,
         `${ind(level)}/>`,
       ];
@@ -638,22 +800,79 @@ const muiLeaf = (
   }
 };
 
-const muiArraySection = (
-  entry: ArrayEntry,
-  level: number,
-  arrays: ReadonlyMap<string, ArrayEntry>,
-): readonly string[] => {
-  const rowPrefix: PathPrefix = {
-    dynamic: true,
-    text: entry.path + ".${index}.",
-  };
-  const rowBody: readonly string[] =
-    entry.item.kind === "object"
-      ? muiFields(entry.item.fields, rowPrefix, level + 3, arrays)
-      : muiLeaf(entry.item, pathAttr(rowPrefix, ""), entry.label, level + 3);
-  return [
+// Typography renders section headings: any addressable object field at any
+// depth needs it (array sections are covered by the arrays.length check).
+const anyAddressableObjectField = (spec: FieldSpec): boolean => {
+  switch (spec.kind) {
+    case "object":
+      return spec.fields.some(
+        (field) =>
+          !isUnaddressable(field.name) &&
+          (field.spec.kind === "object" ||
+            anyAddressableObjectField(field.spec)),
+      );
+    case "array":
+      return anyAddressableObjectField(spec.item);
+    default:
+      return false;
+  }
+};
+
+const muiBackend: Backend = {
+  header: (usage, arrays, root) => {
+    const hasLeaf =
+      usage.string || usage.number || usage.boolean || usage.date || usage.enum;
+    const muiImports = [
+      "Box",
+      "Button",
+      ...(usage.boolean ? ["FormControlLabel"] : []),
+      ...(usage.enum ? ["MenuItem"] : []),
+      "Stack",
+      ...(usage.boolean ? ["Switch"] : []),
+      ...(usage.string || usage.date || usage.number || usage.enum
+        ? ["TextField"]
+        : []),
+      ...(arrays.length > 0 || anyAddressableObjectField(root)
+        ? ["Typography"]
+        : []),
+    ];
+    const formstandValueImports = [
+      ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
+      ...(hasLeaf ? ["useField"] : []),
+      ...(arrays.length > 0 ? ["useFieldArray"] : []),
+      "useForm",
+      "useIsSubmitting",
+    ];
+    const formstandTypeImports = [
+      ...(hasLeaf ? ["FieldFormApi", "UseFieldReturn"] : []),
+    ];
+    return [
+      `import type { ChangeEvent } from "react";`,
+      "import {",
+      ...muiImports.map((name) => `  ${name},`),
+      `} from "@mui/material";`,
+      "import {",
+      ...formstandValueImports.map((name) => `  ${name},`),
+      ...formstandTypeImports.map((name) => `  type ${name},`),
+      `} from "formstand";`,
+      `import { z } from "zod";`,
+    ];
+  },
+  preamble: (usage) => [
+    muiAdapterSection(usage),
+    muiBoundComponents(usage),
+    "",
+  ],
+  leaf: muiLeaf,
+  objectSection: (label, level, body) => [
     `${ind(level)}<Stack spacing={2}>`,
-    `${ind(level + 1)}<Typography variant="subtitle1">${entry.label}</Typography>`,
+    `${ind(level + 1)}<Typography variant="subtitle1">${jsxText(label)}</Typography>`,
+    ...body,
+    `${ind(level)}</Stack>`,
+  ],
+  arraySection: (entry, level, rowBody) => [
+    `${ind(level)}<Stack spacing={2}>`,
+    `${ind(level + 1)}<Typography variant="subtitle1">${jsxText(entry.label)}</Typography>`,
     `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
     `${ind(level + 2)}<Stack`,
     `${ind(level + 3)}key={row.id}`,
@@ -667,115 +886,12 @@ const muiArraySection = (
     `${ind(level + 2)}</Stack>`,
     `${ind(level + 1)}))}`,
     `${ind(level + 1)}<Button type="button" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
-    `${ind(level + 2)}Add ${entry.label.toLowerCase()}`,
+    `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
     `${ind(level + 1)}</Button>`,
     `${ind(level)}</Stack>`,
-  ];
-};
-
-const muiFields = (
-  fields: readonly NamedField[],
-  prefix: PathPrefix,
-  level: number,
-  arrays: ReadonlyMap<string, ArrayEntry>,
-): readonly string[] =>
-  fields.flatMap((field): readonly string[] => {
-    switch (field.spec.kind) {
-      case "object":
-        return [
-          ...todoComment(field.spec, level),
-          `${ind(level)}<Stack spacing={2}>`,
-          `${ind(level + 1)}<Typography variant="subtitle1">${field.label}</Typography>`,
-          ...muiFields(
-            field.spec.fields,
-            { dynamic: prefix.dynamic, text: `${prefix.text}${field.name}.` },
-            level + 1,
-            arrays,
-          ),
-          `${ind(level)}</Stack>`,
-        ];
-      case "array": {
-        if (prefix.dynamic) {
-          return [
-            `${ind(level)}{/* TODO: nested array "${prefix.text}${field.name}" inside an array row — extract a row component with its own useFieldArray */}`,
-          ];
-        }
-        const entry = arrays.get(prefix.text + field.name);
-        return entry === undefined ? [] : muiArraySection(entry, level, arrays);
-      }
-      default:
-        return muiLeaf(
-          field.spec,
-          pathAttr(prefix, field.name),
-          field.label,
-          level,
-        );
-    }
-  });
-
-export const emitMuiForm = ({
-  ir,
-  formName,
-  schemaImport,
-}: EmitFormOptions): string => {
-  const root = assertObjectRoot(ir);
-  const usage = collectUsage(root);
-  const arrays = collectArrays(root, [], "");
-  const arrayMap: ReadonlyMap<string, ArrayEntry> = new Map(
-    arrays.map((entry) => [entry.path, entry]),
-  );
-  const hasLeaf =
-    usage.string || usage.number || usage.boolean || usage.date || usage.enum;
-  const muiImports = [
-    "Box",
-    "Button",
-    ...(usage.boolean ? ["FormControlLabel"] : []),
-    ...(usage.enum ? ["MenuItem"] : []),
-    "Stack",
-    ...(usage.boolean ? ["Switch"] : []),
-    ...(usage.string || usage.date || usage.number || usage.enum
-      ? ["TextField"]
-      : []),
-    ...(arrays.length > 0 ||
-    root.fields.some((field) => field.spec.kind === "object")
-      ? ["Typography"]
-      : []),
-  ];
-  const formstandValueImports = [
-    ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
-    ...(hasLeaf ? ["useField"] : []),
-    ...(arrays.length > 0 ? ["useFieldArray"] : []),
-    "useForm",
-    "useIsSubmitting",
-  ];
-  const formstandTypeImports = [
-    ...(hasLeaf ? ["FieldFormApi", "UseFieldReturn"] : []),
-  ];
-  return [
-    "// Generated by formstand-cli — edit freely, this file is yours.",
-    `import type { ChangeEvent } from "react";`,
-    "import {",
-    ...muiImports.map((name) => `  ${name},`),
-    `} from "@mui/material";`,
-    "import {",
-    ...formstandValueImports.map((name) => `  ${name},`),
-    ...formstandTypeImports.map((name) => `  type ${name},`),
-    `} from "formstand";`,
-    `import { z } from "zod";`,
-    schemaImportLine(schemaImport),
-    "",
-    valuesTypeAndInitials(root, schemaImport.name),
-    arrayItemDecls(arrays),
-    "",
-    muiAdapterSection(usage),
-    muiBoundComponents(usage),
-    "",
-    `export const ${formName} = () => {`,
-    `  const form = useForm(${schemaImport.name}, { initialValues, mode: "onBlur" });`,
-    "  const submitting = useIsSubmitting(form);",
-    ...(arrays.length > 0 ? [arrayHooks(arrays, 1)] : []),
-    "",
-    "  return (",
+  ],
+  bodyLevel: 4,
+  formOpen: [
     "    <Box",
     `      component="form"`,
     "      onSubmit={form.handleSubmit((data) => {",
@@ -784,14 +900,15 @@ export const emitMuiForm = ({
     "      sx={{ maxWidth: 640 }}",
     "    >",
     "      <Stack spacing={2}>",
-    ...muiFields(root.fields, { dynamic: false, text: "" }, 4, arrayMap),
+  ],
+  formClose: [
     `        <Button type="submit" variant="contained" disabled={submitting}>`,
     `          {submitting ? "Submitting..." : "Submit"}`,
     "        </Button>",
     "      </Stack>",
     "    </Box>",
-    "  );",
-    "};",
-    "",
-  ].join("\n");
+  ],
 };
+
+export const emitMuiForm = (options: EmitFormOptions): string =>
+  emitForm(muiBackend, options);

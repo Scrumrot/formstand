@@ -1,8 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { main } from "../src/cli";
-import { freshTmpDir, typeFixture, zodFixture } from "./helpers";
+import { isInvokedAsScript, main } from "../src/cli";
+import {
+  defaultExportFixture,
+  freshTmpDir,
+  typeFixture,
+  typecheckDiagnostics,
+  zodFixture,
+} from "./helpers";
 
 describe("cli main", () => {
   it("zod mode writes a component with --out and refuses to overwrite", async () => {
@@ -57,11 +64,78 @@ describe("cli main", () => {
     expect(fs.readFileSync(out, "utf8")).toContain("export const MyForm = () => {");
   });
 
+  it("--export default emits a default import that typechecks", async () => {
+    const dir = freshTmpDir("cli-default-export");
+    const out = path.join(dir, "GeneratedForm.tsx");
+    expect(
+      await main([defaultExportFixture, "--export", "default", "--out", out]),
+    ).toBe(0);
+    const code = fs.readFileSync(out, "utf8");
+    expect(code).toContain('import schema from');
+    expect(code).toContain("useForm(schema");
+    expect(typecheckDiagnostics([out])).toEqual([]);
+  });
+
+  it("type mode checks both destinations before writing either", async () => {
+    const dir = freshTmpDir("cli-atomic");
+    const out = path.join(dir, "ProfileForm.tsx");
+    fs.writeFileSync(out, "// existing component", "utf8");
+
+    expect(await main([typeFixture, "--type", "Profile", "--out", out])).toBe(1);
+    // The refusal happened before anything was written: no schema file, and
+    // the existing component is untouched.
+    expect(fs.existsSync(path.join(dir, "profileSchema.ts"))).toBe(false);
+    expect(fs.readFileSync(out, "utf8")).toBe("// existing component");
+  });
+
+  it("type mode honors --schema-out on the stdout path", async () => {
+    const dir = freshTmpDir("cli-schema-out");
+    const schemaOut = path.join(dir, "profileSchema.ts");
+    expect(
+      await main([typeFixture, "--type", "Profile", "--schema-out", schemaOut]),
+    ).toBe(0);
+    expect(fs.readFileSync(schemaOut, "utf8")).toContain(
+      "export const profileSchema = z.object({",
+    );
+  });
+
   it("errors cleanly", async () => {
     expect(await main([])).toBe(1);
     expect(await main(["does-not-exist.ts"])).toBe(1);
     expect(await main([zodFixture, "--ui", "bootstrap"])).toBe(1);
     expect(await main([zodFixture, "--export", "nope", "--out", "x.tsx"])).toBe(1);
     expect(await main(["--help"])).toBe(0);
+  });
+});
+
+describe("isInvokedAsScript", () => {
+  it("matches a direct path and rejects undefined/unrelated ones", () => {
+    const dir = freshTmpDir("cli-invoked");
+    const real = path.join(dir, "real.js");
+    fs.writeFileSync(real, "// entry", "utf8");
+    const realUrl = pathToFileURL(fs.realpathSync(real)).href;
+
+    expect(isInvokedAsScript(real, realUrl)).toBe(true);
+    expect(isInvokedAsScript(undefined, realUrl)).toBe(false);
+    expect(isInvokedAsScript(path.join(dir, "other.js"), realUrl)).toBe(false);
+  });
+
+  it("resolves a symlinked argv[1] (the npm .bin shim case)", () => {
+    const dir = freshTmpDir("cli-symlink");
+    const real = path.join(dir, "real.js");
+    fs.writeFileSync(real, "// entry", "utf8");
+    const link = path.join(dir, "link.js");
+    const created = ((): boolean => {
+      try {
+        fs.symlinkSync(real, link, "file");
+        return true;
+      } catch {
+        // Symlink creation needs privileges on Windows — skip gracefully.
+        return false;
+      }
+    })();
+    if (!created) return;
+    const realUrl = pathToFileURL(fs.realpathSync(real)).href;
+    expect(isInvokedAsScript(link, realUrl)).toBe(true);
   });
 });

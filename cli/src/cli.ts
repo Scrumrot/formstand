@@ -3,12 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createJiti } from "jiti";
+import { camelCase, pascalCase } from "./casing";
 import {
   type EmitFormOptions,
   type SchemaImport,
   emitMuiForm,
   emitPlainForm,
   emitZodSchema,
+  unaddressableFieldPaths,
 } from "./codegen";
 import { fromType } from "./fromType";
 import { fromZod, isZodSchema } from "./fromZod";
@@ -120,24 +122,6 @@ const parseRest = (
 export const parseArgs = (argv: readonly string[]): ParseResult =>
   parseRest(argv, { ui: "plain", force: false });
 
-const capitalize = (word: string): string =>
-  word.length === 0 ? word : word.charAt(0).toUpperCase() + word.slice(1);
-
-const pascalCase = (name: string): string =>
-  name
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .split(/[^A-Za-z0-9]+/)
-    .filter((part) => part.length > 0)
-    .map(capitalize)
-    .join("");
-
-const camelCase = (name: string): string => {
-  const pascal = pascalCase(name);
-  return pascal.length === 0
-    ? pascal
-    : pascal.charAt(0).toLowerCase() + pascal.slice(1);
-};
-
 // "profileSchema" → "ProfileForm"; "Profile" → "ProfileForm".
 const deriveFormName = (base: string): string => {
   const pascal = pascalCase(base.replace(/schema$/i, ""));
@@ -145,7 +129,7 @@ const deriveFormName = (base: string): string => {
 };
 
 // Relative import specifier from one directory to a target module file.
-const moduleSpecifier = (fromDir: string, targetAbs: string): string => {
+export const moduleSpecifier = (fromDir: string, targetAbs: string): string => {
   const relative = path
     .relative(fromDir, targetAbs)
     .replace(/\\/g, "/")
@@ -153,14 +137,22 @@ const moduleSpecifier = (fromDir: string, targetAbs: string): string => {
   return relative.startsWith(".") ? relative : `./${relative}`;
 };
 
-const writeFileChecked = (
-  filePath: string,
-  content: string,
-  force: boolean,
-): void => {
-  if (!force && fs.existsSync(filePath)) {
-    throw new Error(`refusing to overwrite ${filePath} (pass --force)`);
+const relToCwd = (fileAbs: string): string => {
+  const relative = path.relative(process.cwd(), fileAbs);
+  return relative.length === 0 ? fileAbs : relative;
+};
+
+// Pre-flight overwrite check for every destination of a command, run before
+// the first write so a refusal can never leave a half-written pair behind.
+const assertWritable = (paths: readonly string[], force: boolean): void => {
+  const existing = force ? [] : paths.filter((p) => fs.existsSync(p));
+  const first = existing[0];
+  if (first !== undefined) {
+    throw new Error(`refusing to overwrite ${relToCwd(first)} (pass --force)`);
   }
+};
+
+const writeFile = (filePath: string, content: string): void => {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content, "utf8");
 };
@@ -174,6 +166,23 @@ type SchemaPick =
     }>
   | Readonly<{ kind: "not-found"; message: string }>;
 
+const availableExports = (mod: Readonly<Record<string, unknown>>): string => {
+  const names = Object.keys(mod).join(", ");
+  return names.length === 0 ? "none" : names;
+};
+
+// jiti's ESM interop can flatten a default export onto the namespace object
+// itself (mod.safeParse works, while mod["default"] is an exotic binding) —
+// accept either shape.
+const defaultExport = (
+  mod: Readonly<Record<string, unknown>>,
+): unknown =>
+  isZodSchema(mod["default"])
+    ? mod["default"]
+    : isZodSchema(mod)
+      ? mod
+      : undefined;
+
 const pickSchemaExport = (
   mod: Readonly<Record<string, unknown>>,
   exportName: string | undefined,
@@ -181,26 +190,38 @@ const pickSchemaExport = (
   fallbackName: string,
 ): SchemaPick => {
   if (exportName !== undefined) {
-    const value = mod[exportName];
+    const value =
+      exportName === "default" ? defaultExport(mod) : mod[exportName];
     if (value === undefined) {
       return {
         kind: "not-found",
-        message: `no export named "${exportName}" in ${input}`,
+        message: `no export named "${exportName}" in ${input} (available: ${availableExports(mod)})`,
       };
     }
-    return isZodSchema(value)
-      ? { kind: "found", exportName, importKind: "named", schema: value }
-      : {
-          kind: "not-found",
-          message: `export "${exportName}" in ${input} is not a zod schema (for a TS type, use --type ${exportName})`,
-        };
+    if (!isZodSchema(value)) {
+      return {
+        kind: "not-found",
+        message: `export "${exportName}" in ${input} is not a zod schema (for a TS type, use --type ${exportName})`,
+      };
+    }
+    // "default" is not a legal local identifier: import it as a default
+    // import under the module-derived fallback name.
+    return exportName === "default"
+      ? {
+          kind: "found",
+          exportName: fallbackName,
+          importKind: "default",
+          schema: value,
+        }
+      : { kind: "found", exportName, importKind: "named", schema: value };
   }
-  if (isZodSchema(mod["default"])) {
+  const dflt = defaultExport(mod);
+  if (dflt !== undefined) {
     return {
       kind: "found",
       exportName: fallbackName,
       importKind: "default",
-      schema: mod["default"],
+      schema: dflt,
     };
   }
   const zodExports = Object.entries(mod).filter(
@@ -218,7 +239,7 @@ const pickSchemaExport = (
   if (zodExports.length === 0) {
     return {
       kind: "not-found",
-      message: `no zod schema exports found in ${input} (for a TS type/interface, pass --type TypeName)`,
+      message: `no zod schema exports found in ${input} (available exports: ${availableExports(mod)}; for a TS type/interface, pass --type TypeName)`,
     };
   }
   return {
@@ -240,12 +261,34 @@ const stderr = (text: string): void => {
   process.stderr.write(`${text}\n`);
 };
 
+const firstLine = (e: unknown): string =>
+  (e instanceof Error ? e.message : String(e)).split("\n")[0] ?? "";
+
+const loadModule = async (
+  inputAbs: string,
+  inputAsTyped: string,
+): Promise<Readonly<Record<string, unknown>>> => {
+  const jiti = createJiti(import.meta.url);
+  try {
+    return (await jiti.import(pathToFileURL(inputAbs).href)) as Readonly<
+      Record<string, unknown>
+    >;
+  } catch (e) {
+    throw new Error(`could not load ${inputAsTyped}: ${firstLine(e)}`);
+  }
+};
+
+const warnUnaddressable = (ir: FieldSpec): void => {
+  unaddressableFieldPaths(ir).forEach((fieldPath) => {
+    stderr(
+      `warning: field "${fieldPath}" skipped — "." in a key is not path-addressable (see formstand docs)`,
+    );
+  });
+};
+
 const runZodMode = async (options: CliOptions): Promise<number> => {
   const inputAbs = path.resolve(options.input);
-  const jiti = createJiti(import.meta.url);
-  const mod = (await jiti.import(pathToFileURL(inputAbs).href)) as Readonly<
-    Record<string, unknown>
-  >;
+  const mod = await loadModule(inputAbs, options.input);
   const fallbackName = camelCase(path.basename(inputAbs).replace(/\..*$/, ""));
   const pick = pickSchemaExport(
     mod,
@@ -258,6 +301,7 @@ const runZodMode = async (options: CliOptions): Promise<number> => {
     return 1;
   }
   const ir: FieldSpec = fromZod(pick.schema);
+  warnUnaddressable(ir);
   const formName = options.name ?? deriveFormName(pick.exportName);
   const fromDir =
     options.out !== undefined
@@ -273,8 +317,10 @@ const runZodMode = async (options: CliOptions): Promise<number> => {
     stderr("note: --schema-out is ignored in zod mode (the schema already exists)");
   }
   if (options.out !== undefined) {
-    writeFileChecked(path.resolve(options.out), code, options.force);
-    stderr(`wrote ${options.out}`);
+    const outAbs = path.resolve(options.out);
+    assertWritable([outAbs], options.force);
+    writeFile(outAbs, code);
+    stderr(`wrote ${relToCwd(outAbs)}`);
     return 0;
   }
   stdout(code);
@@ -282,8 +328,10 @@ const runZodMode = async (options: CliOptions): Promise<number> => {
 };
 
 const runTypeMode = (options: CliOptions): number => {
-  const inputAbs = path.resolve(options.input);
-  const { ir, typeName } = fromType(inputAbs, options.typeName);
+  // Pass the input as the user typed it so error messages echo it verbatim
+  // (fromType resolves it internally).
+  const { ir, typeName } = fromType(options.input, options.typeName);
+  warnUnaddressable(ir);
   const schemaName = `${camelCase(typeName)}Schema`;
   const formName = options.name ?? deriveFormName(typeName);
   const schemaSource = emitZodSchema(ir, schemaName);
@@ -299,10 +347,27 @@ const runTypeMode = (options: CliOptions): number => {
       kind: "named",
     };
     const code = emitComponent(options.ui, { ir, formName, schemaImport });
-    writeFileChecked(schemaOutAbs, schemaSource, options.force);
-    writeFileChecked(outAbs, code, options.force);
-    stderr(`wrote ${schemaOutAbs}`);
-    stderr(`wrote ${outAbs}`);
+    // Check BOTH destinations before writing either.
+    assertWritable([schemaOutAbs, outAbs], options.force);
+    writeFile(schemaOutAbs, schemaSource);
+    writeFile(outAbs, code);
+    stderr(`wrote ${relToCwd(schemaOutAbs)}`);
+    stderr(`wrote ${relToCwd(outAbs)}`);
+    return 0;
+  }
+  if (options.schemaOut !== undefined) {
+    // Component to stdout, but the schema still gets its requested file.
+    const schemaOutAbs = path.resolve(options.schemaOut);
+    const schemaImport: SchemaImport = {
+      name: schemaName,
+      from: moduleSpecifier(process.cwd(), schemaOutAbs),
+      kind: "named",
+    };
+    const code = emitComponent(options.ui, { ir, formName, schemaImport });
+    assertWritable([schemaOutAbs], options.force);
+    writeFile(schemaOutAbs, schemaSource);
+    stderr(`wrote ${relToCwd(schemaOutAbs)}`);
+    stdout(code);
     return 0;
   }
   const schemaImport: SchemaImport = {
@@ -352,12 +417,28 @@ export const main = async (argv: readonly string[]): Promise<number> => {
   }
 };
 
-const invokedAsScript =
-  process.argv[1] !== undefined &&
-  pathToFileURL(path.resolve(process.argv[1])).href.toLowerCase() ===
-    import.meta.url.toLowerCase();
+// npm installs bin entries as symlinks in node_modules/.bin. When Node loads
+// an ESM entry through such a symlink, import.meta.url is derived from the
+// *resolved* (real) file path, while process.argv[1] keeps the symlink path —
+// so a raw comparison never matches and the CLI silently does nothing.
+// Realpath argv[1] before comparing; if realpath fails (the path vanished, or
+// permissions), fall back to the raw resolved path.
+export const isInvokedAsScript = (
+  argv1: string | undefined,
+  moduleUrl: string,
+): boolean => {
+  if (argv1 === undefined) return false;
+  const resolved = ((): string => {
+    try {
+      return fs.realpathSync(path.resolve(argv1));
+    } catch {
+      return path.resolve(argv1);
+    }
+  })();
+  return pathToFileURL(resolved).href.toLowerCase() === moduleUrl.toLowerCase();
+};
 
-if (invokedAsScript) {
+if (isInvokedAsScript(process.argv[1], import.meta.url)) {
   void main(process.argv.slice(2)).then((code) => {
     process.exitCode = code;
   });
