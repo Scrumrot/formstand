@@ -18,7 +18,12 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      // The examples smoke test pulls examples/src files (which import the
+      // published name) into the root typecheck.
+      "formstand": ["./src/index.ts"]
+    }
   },
   "include": ["src", "tests", "vitest.config.ts", "tsup.config.ts"],
   "exclude": ["dist", "node_modules"]
