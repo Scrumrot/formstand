@@ -39,3 +39,11 @@ jobs:
 
       - name: Build docs
         run: npm run docs:build
+
+      - name: Install CLI dependencies
+        run: npm ci
+        working-directory: cli
+
+      - name: CLI typecheck, test, build
+        run: npm run typecheck && npm test && npm run build
+        working-directory: cli
