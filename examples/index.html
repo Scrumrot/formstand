@@ -7,6 +7,28 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // If the app bundle fails to parse or crashes before mounting, paint
+      // the error instead of a blank page (written in ES5 on purpose so it
+      // runs on any engine that can't parse the bundle itself).
+      (function () {
+        function show(msg) {
+          var root = document.getElementById("root");
+          if (root && root.childNodes.length === 0) {
+            root.innerHTML =
+              '<pre style="white-space:pre-wrap;padding:16px;color:#f87171;font-family:monospace">formstand playground failed to start:\n\n' +
+              String(msg).replace(/</g, "&lt;") +
+              "</pre>";
+          }
+        }
+        window.addEventListener("error", function (e) {
+          show(e.message + (e.filename ? "\n" + e.filename + ":" + e.lineno : ""));
+        });
+        window.addEventListener("unhandledrejection", function (e) {
+          show(e.reason && e.reason.message ? e.reason.message : e.reason);
+        });
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
