@@ -10,6 +10,8 @@ export default tseslint.config(
       "coverage/**",
       "docs/.vitepress/cache/**",
       "docs/.vitepress/dist/**",
+      "cli/dist/**",
+      "cli/tests/.tmp/**",
     ],
   },
   ...tseslint.configs.recommended,

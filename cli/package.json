@@ -1,0 +1,59 @@
+{
+  "name": "formstand-cli",
+  "version": "0.1.0",
+  "description": "Generate formstand form components from a zod schema or TypeScript type",
+  "license": "MIT",
+  "author": "Tim Frank <timfrankdev@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Scrumrot/formstand.git",
+    "directory": "cli"
+  },
+  "homepage": "https://scrumrot.github.io/formstand/",
+  "bugs": {
+    "url": "https://github.com/Scrumrot/formstand/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "type": "module",
+  "bin": {
+    "formstand-gen": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "formstand",
+    "forms",
+    "codegen",
+    "zod",
+    "react",
+    "cli"
+  ],
+  "dependencies": {
+    "jiti": "^2.4.2",
+    "typescript": "^5.7.0",
+    "zod": "^4.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "tsup": "^8.3.0",
+    "vitest": "^4.1.9"
+  }
+}
