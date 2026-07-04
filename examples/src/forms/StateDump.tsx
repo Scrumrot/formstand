@@ -16,11 +16,18 @@ export const StateDump = <TSchema extends z.ZodType>({
     errors: state.errors,
     serverErrors: state.serverErrors,
     touched: state.touched,
-    // Dirtiness is derived from values vs initialValues, not stored state.
-    dirtyFields: form.dirtyFields(),
     isSubmitting: state.isSubmitting,
     submitCount: state.submitCount,
     isValidating: state.isValidating,
   }));
-  return <pre className="state-dump">{JSON.stringify(snapshot, null, 2)}</pre>;
+  // dirtyFields() builds a fresh array per call, so it needs its own
+  // shallow-compared subscription — as a key inside the object above, the
+  // object's shallow compare would see a new array reference on every pass
+  // and loop the store subscription (React error #185).
+  const dirtyFields = useFormSelectorShallow(form, () => form.dirtyFields());
+  return (
+    <pre className="state-dump">
+      {JSON.stringify({ ...snapshot, dirtyFields }, null, 2)}
+    </pre>
+  );
 };
