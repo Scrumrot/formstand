@@ -63,6 +63,7 @@
     "@testing-library/react": "^16.1.0",
     "@types/node": "^26.1.0",
     "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.2.3",
     "@vitest/coverage-v8": "^4.1.9",
     "eslint": "^10.6.0",
     "eslint-plugin-react-hooks": "^7.1.1",
