@@ -11,6 +11,10 @@ export default defineConfig({
     nav: [
       { text: "Guide", link: "/guide/getting-started" },
       { text: "API", link: "/api/" },
+      {
+        text: "Playground",
+        link: "https://scrumrot.github.io/formstand/examples/",
+      },
       { text: "Changelog", link: "https://github.com/Scrumrot/formstand/blob/main/CHANGELOG.md" },
     ],
     sidebar: {
@@ -26,6 +30,7 @@ export default defineConfig({
             { text: "Field arrays", link: "/guide/field-arrays" },
             { text: "Form state & lifecycle", link: "/guide/state" },
             { text: "Recipes", link: "/guide/recipes" },
+            { text: "Examples", link: "/guide/examples" },
           ],
         },
       ],

@@ -31,6 +31,19 @@ jobs:
       - name: Build docs
         run: npm run docs:build
 
+      - name: Install example dependencies
+        run: npm ci
+        working-directory: examples
+
+      - name: Build examples app
+        run: npm run build
+        working-directory: examples
+        env:
+          EXAMPLES_BASE: /formstand/examples/
+
+      - name: Merge examples into the site
+        run: cp -r examples/dist docs/.vitepress/dist/examples
+
       - uses: actions/configure-pages@v5
         with:
           enablement: true

@@ -93,8 +93,16 @@ export const App = () => {
     <div className="layout">
       <h1>formstand</h1>
       <p className="subtitle">
-        Local playground. Edit <code>src/</code> in the parent folder and
-        changes hot-reload here.
+        Interactive playground — every demo runs against the real library.
+        The source for each tab lives in{" "}
+        <a href="https://github.com/Scrumrot/formstand/tree/main/examples/src/forms">
+          examples/src/forms
+        </a>
+        ; the docs are at{" "}
+        <a href="https://scrumrot.github.io/formstand/">
+          scrumrot.github.io/formstand
+        </a>
+        .
       </p>
       <div className="tabs" style={{ flexWrap: "wrap" }}>
         {TABS.map((tab) => (

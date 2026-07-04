@@ -2,6 +2,8 @@
 
 Zod-schema-first form state for React 19, backed by zustand.
 
+**[Documentation](https://scrumrot.github.io/formstand/)** · **[Live playground](https://scrumrot.github.io/formstand/examples/)** · **[API reference](https://scrumrot.github.io/formstand/api/)**
+
 - **Typed paths** — `useField(form, "users.0.email")` infers the value type from the schema.
 - **Per-field subscriptions** — fields re-render only when their own slice changes.
 - **Sync and async validation** — with race-handling for async refines.

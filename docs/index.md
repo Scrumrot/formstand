@@ -10,6 +10,9 @@ hero:
       text: Get started
       link: /guide/getting-started
     - theme: alt
+      text: Live playground
+      link: https://scrumrot.github.io/formstand/examples/
+    - theme: alt
       text: API reference
       link: /api/
 
