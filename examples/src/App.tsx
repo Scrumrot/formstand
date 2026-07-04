@@ -17,6 +17,12 @@ import { PerfBenchmarkForm } from "./forms/PerfBenchmarkForm";
 import { ServerErrorsForm } from "./forms/ServerErrorsForm";
 import { TagInputForm } from "./forms/TagInputForm";
 import { WizardForm } from "./forms/WizardForm";
+import { MuiCheckoutWizard } from "./mui/MuiCheckoutWizard";
+import { MuiInvoiceBuilder } from "./mui/MuiInvoiceBuilder";
+import { MuiJobApplication } from "./mui/MuiJobApplication";
+import { MuiProfileSettings } from "./mui/MuiProfileSettings";
+import { MuiSurveyBuilder } from "./mui/MuiSurveyBuilder";
+import { MuiThemeBridge } from "./mui/MuiThemeBridge";
 
 type TabKey =
   | "basic"
@@ -36,7 +42,12 @@ type TabKey =
   | "file"
   | "derived"
   | "tag"
-  | "perf";
+  | "perf"
+  | "muiCheckout"
+  | "muiJob"
+  | "muiInvoice"
+  | "muiSettings"
+  | "muiSurvey";
 
 type Tab = Readonly<{
   key: TabKey;
@@ -83,6 +94,51 @@ const TABS: readonly Tab[] = [
   { key: "derived", label: "Derived", render: () => <DerivedFieldForm /> },
   { key: "tag", label: "Tags", render: () => <TagInputForm /> },
   { key: "perf", label: "Perf", render: () => <PerfBenchmarkForm /> },
+  {
+    key: "muiCheckout",
+    label: "MUI: Checkout",
+    render: () => (
+      <MuiThemeBridge>
+        <MuiCheckoutWizard />
+      </MuiThemeBridge>
+    ),
+  },
+  {
+    key: "muiJob",
+    label: "MUI: Job form",
+    render: () => (
+      <MuiThemeBridge>
+        <MuiJobApplication />
+      </MuiThemeBridge>
+    ),
+  },
+  {
+    key: "muiInvoice",
+    label: "MUI: Invoice",
+    render: () => (
+      <MuiThemeBridge>
+        <MuiInvoiceBuilder />
+      </MuiThemeBridge>
+    ),
+  },
+  {
+    key: "muiSettings",
+    label: "MUI: Settings",
+    render: () => (
+      <MuiThemeBridge>
+        <MuiProfileSettings />
+      </MuiThemeBridge>
+    ),
+  },
+  {
+    key: "muiSurvey",
+    label: "MUI: Survey",
+    render: () => (
+      <MuiThemeBridge>
+        <MuiSurveyBuilder />
+      </MuiThemeBridge>
+    ),
+  },
 ];
 
 export const App = () => {

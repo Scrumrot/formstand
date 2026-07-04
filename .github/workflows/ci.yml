@@ -19,6 +19,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The examples smoke test and root typecheck reach into examples/src,
+      # whose UI dependencies (MUI) live in the examples package.
+      - name: Install example dependencies
+        run: npm ci
+        working-directory: examples
+
       - name: Typecheck
         run: npm run typecheck
 

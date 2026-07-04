@@ -83,10 +83,15 @@ export {
   numberInputProps,
   checkboxProps,
   selectProps,
+  // The number-text rules the built-in bindings use — exported so adapters
+  // for other UI kits (MUI, etc.) can share them instead of re-deriving.
+  numberToInputText,
+  parseNumberText,
 } from "./react/inputProps";
 export type {
   TextInputProps,
   NumberInputProps,
   CheckboxProps,
   SelectProps,
+  ParsedNumberText,
 } from "./react/inputProps";

@@ -23,6 +23,18 @@ Every feature has a working, interactive demo in the **[live playground](https:/
 | Tags | A tag input over an array of primitives | [TagInputForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/TagInputForm.tsx) |
 | Perf | A 200-row stress test showing per-field re-render isolation | [PerfBenchmarkForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/PerfBenchmarkForm.tsx) |
 
+## Material UI
+
+Five demos bind formstand to [Material UI](https://mui.com/) through a ~60-line adapter — [muiAdapter.ts](https://github.com/Scrumrot/formstand/blob/main/examples/src/mui/muiAdapter.ts) turns a `useField` result into spreadable props for `TextField`, `Select`, `Switch`, and `Slider`, reusing the library's exported `parseNumberText`/`numberToInputText` rules. Nothing MUI-specific lives in the library; this is the pattern to copy for any third-party UI kit. All five run in the same [live playground](https://scrumrot.github.io/formstand/examples/).
+
+| Demo | What it shows | Source |
+| --- | --- | --- |
+| MUI: Checkout | A `Stepper` wizard gating each step with `validateFields`, a "billing same as shipping" `Switch` that copies values, and a review step read from a selector | [MuiCheckoutWizard.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/mui/MuiCheckoutWizard.tsx) |
+| MUI: Job form | `Autocomplete multiple` over a string-array field, a salary `Slider`, an async email check with a `CircularProgress` adornment, and a server rejection via `form.setError` | [MuiJobApplication.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/mui/MuiJobApplication.tsx) |
+| MUI: Invoice | `useFieldArray` rendered as a MUI `Table` with reorder/delete `IconButton`s, derived totals, an array-level error `Alert`, and a dirty-gated save that rebases with `adoptValues` | [MuiInvoiceBuilder.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/mui/MuiInvoiceBuilder.tsx) |
+| MUI: Settings | Card-sectioned settings with a nullable bio (clearing the field round-trips to `null` via `emptyValue`), live `dirtyFields()` chips, and Save/Discard as `adoptValues`/`reset()` | [MuiProfileSettings.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/mui/MuiProfileSettings.tsx) |
+| MUI: Survey | Nested field arrays (sections → questions) with type-switched sub-editors and a root-level refine surfaced through `useFormError` | [MuiSurveyBuilder.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/mui/MuiSurveyBuilder.tsx) |
+
 ## Running locally
 
 ```bash
