@@ -50,7 +50,7 @@ const form = createForm(schema, {
 | `watchValue(path, listener)` | subscribe to one path's value (`Object.is`-compared); `listener(next, prev)` |
 | `watchValues(listener)` | subscribe to the **whole values object**; `listener(values, prev)` fires on any value change. (The name is `watchValue` + "s" as in "all the values" — it is not a multi-path `watchValue`; a future multi-path watcher would be a new API) |
 | `diff()` / `dirtyFields()` | PATCH-style helpers, derived by comparing `values` against `initialValues`: minimal divergent paths (objects recurse to the changed leaves; arrays report their base path). Reverting a field drops it |
-| `snapshot()` / `restore(snap)` | full state capture/restore for undo/rollback; `restore` re-derives the merged `errors` map from the snapshot's channels |
+| `snapshot()` / `restore(snap)` | full state capture/restore for undo/rollback; `restore` re-derives the merged `errors` map from the snapshot's channels, and clears the transient in-flight flags (`isValidating`/`isValidatingForm`) instead of restoring them — in-flight state is owned by live passes, never by snapshots |
 | `arrayPush(path, item)` / `arrayRemove(path, index)` / `arrayInsert(path, index, item)` / `arrayMove(path, from, to)` / `arraySwap(path, a, b)` | array ops with meta-key re-keying (errors/touched/server verdicts follow their rows); out-of-range or non-integer indices are refused with a warning |
 
 All paths on the imperative surface are `FieldPath`-typed; runtime-built strings need a cast — see [Typed paths](../guide/typed-paths#dynamic-paths).
@@ -196,7 +196,7 @@ Focuses the first control (in DOM order) whose `name` matches an errored path �
 
 ### `focusField(path, root?)`
 
-The imperative sibling of `focusFirstError`, keyed by a path instead of an error map: focuses the first control (in DOM order) whose `name` is `path` itself or a descendant of it — `focusField("address")` lands on the first rendered address field. Same focusability rules and the same optional `root` scoping; returns whether a control actually received focus. Use it where react-hook-form users reach for `setFocus`: after opening a dialog, appending an array row, or landing on a step — see the [recipe](../guide/recipes#focus-a-field-imperatively).
+The imperative sibling of `focusFirstError`, keyed by a path instead of an error map: focuses the first control (in DOM order) whose `name` is `path` itself or a descendant of it — `focusField("address")` lands on the first rendered address field. The root `""` path is whole-form scope (consistent with `validateField("")` / `resetField("")`): it focuses the first focusable control in scope — and, like `focusFirstError`'s root-`""` fallback, refuses to guess (returns `false`) under the default `document` scope when the page holds more than one `<form>`; pass the form element as `root`. Same focusability rules and the same optional `root` scoping; returns whether a control actually received focus. Use it where react-hook-form users reach for `setFocus`: after opening a dialog, appending an array row, or landing on a step — see the [recipe](../guide/recipes#focus-a-field-imperatively).
 
 ## Core utilities
 

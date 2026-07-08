@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { useFormSelectorShallow } from "../../src/react/useFormState";
+import { useFormSelectorShallow } from "../../src/react/useFormSelector";
 import { useForm } from "../../src/react/useForm";
 
 const schema = z.object({

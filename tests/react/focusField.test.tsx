@@ -87,3 +87,48 @@ describe("focusField", () => {
     expect(document.activeElement).toBe(screen.getByLabelText("Second email"));
   });
 });
+
+describe('focusField("") — whole-form scope', () => {
+  it("focuses the first focusable control within an explicit root", () => {
+    const { container } = render(
+      <form>
+        <input type="hidden" name="csrf" defaultValue="tok" />
+        <input type="text" name="name" aria-label="Name" />
+        <input type="text" name="email" aria-label="Email" />
+      </form>,
+    );
+    const formEl = container.querySelector("form");
+    if (formEl === null) throw new Error("form not rendered");
+    expect(focusField("", formEl)).toBe(true);
+    expect(document.activeElement).toBe(screen.getByLabelText("Name"));
+  });
+
+  it("focuses the first control under the default document scope with a single form", () => {
+    render(
+      <form>
+        <input type="text" name="name" aria-label="Name" />
+        <input type="text" name="email" aria-label="Email" />
+      </form>,
+    );
+    expect(focusField("")).toBe(true);
+    expect(document.activeElement).toBe(screen.getByLabelText("Name"));
+  });
+
+  it("refuses to guess between multiple forms under the default document scope", () => {
+    // Mirrors focusFirstError's root-"" fallback: "first control" would be a
+    // guess when the page holds several <form>s — return false instead.
+    render(
+      <div>
+        <form aria-label="first">
+          <input type="text" name="a" aria-label="A" />
+        </form>
+        <form aria-label="second">
+          <input type="text" name="b" aria-label="B" />
+        </form>
+      </div>,
+    );
+    const before = document.activeElement;
+    expect(focusField("")).toBe(false);
+    expect(document.activeElement).toBe(before);
+  });
+});

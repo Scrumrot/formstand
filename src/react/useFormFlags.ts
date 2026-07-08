@@ -1,6 +1,6 @@
 import { useStore } from "zustand/react";
 import { isFieldDirty } from "../core/equality";
-import type { FormStateApi } from "./useFormState";
+import type { FormStateApi } from "./useFormSelector";
 
 // Derived from the values (memoized per values reference), so it always
 // agrees with per-field dirty reads.

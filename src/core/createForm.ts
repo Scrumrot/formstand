@@ -304,9 +304,15 @@ const dirtyPathsOf = (
   return [prefix];
 };
 
-// Key for the whole-form async validation's sequence counter (internal —
+// Key for the whole-form async validation's ownership token (internal —
 // form-level in-flight state lives in FormState.isValidatingForm).
 const FORM_SEQ_KEY = "__form__";
+
+// Key for submit's ownership token: reset()/adoptValues() clear the token
+// map, so an in-flight submit notices the form was rebased under it even
+// when the values reference is unchanged (a bare reset() on a pristine form
+// restores the same initialValues reference).
+const SUBMIT_SEQ_KEY = "__submit__";
 
 const stringArraysEqual = (
   a: readonly string[],
@@ -652,35 +658,29 @@ export const createForm = <TSchema extends z.ZodType>(
     };
   };
 
-  const sequences = new Map<string, number>();
+  // Ownership tokens for in-flight async passes (a sanctioned mutable-ref
+  // cache, like the subscription refs). Tokens are unique by construction —
+  // each claim mints a fresh Symbol — so cleared or reissued keys can never
+  // collide with a token an in-flight pass still holds.
+  const sequences = new Map<string, symbol>();
 
-  // Globally monotonic counter behind nextSeq (a sanctioned mutable-ref
-  // cache, like the subscription refs). It must never reset: reset()/
-  // adoptValues() clear the `sequences` map to release per-path memory, and
-  // if numbering restarted per key, a post-reset pass could mint the same
-  // seq an in-flight pre-reset pass still holds — the old pass would pass
-  // the ownership check and commit against values it never validated.
-  // Cleared keys read as undefined, which matches no live seq, so orphaned
-  // passes are permanently disowned instead.
-  const seqRef = { current: 0 };
-
-  const nextSeq = (key: string): number => {
-    seqRef.current += 1;
-    sequences.set(key, seqRef.current);
-    return seqRef.current;
+  const claimPass = (key: string): symbol => {
+    const pass = Symbol(key);
+    sequences.set(key, pass);
+    return pass;
   };
 
   const validateAsyncOnForm = async (): Promise<
     SettledValidationResult<z.output<TSchema>>
   > => {
-    const seq = nextSeq(FORM_SEQ_KEY);
+    const pass = claimPass(FORM_SEQ_KEY);
     const valuesAtStart = store.getState().values;
     store.setState((state) => ({ ...state, isValidatingForm: true }));
 
     const result = await validateAsync(schema, valuesAtStart);
 
     const live = store.getState();
-    const stillOwns = sequences.get(FORM_SEQ_KEY) === seq;
+    const stillOwns = sequences.get(FORM_SEQ_KEY) === pass;
     if (!stillOwns || live.values !== valuesAtStart) {
       if (stillOwns) {
         store.setState((state) => ({ ...state, isValidatingForm: false }));
@@ -708,7 +708,7 @@ export const createForm = <TSchema extends z.ZodType>(
       const result = await validateAsyncOnForm();
       return result.kind === "valid";
     }
-    const seqs = new Map(paths.map((p) => [p, nextSeq(p)]));
+    const passes = new Map(paths.map((p) => [p, claimPass(p)]));
     const valuesAtStart = store.getState().values;
     store.setState((state) => ({
       ...state,
@@ -725,7 +725,9 @@ export const createForm = <TSchema extends z.ZodType>(
     );
 
     const live = store.getState();
-    const stillCurrent = paths.filter((p) => sequences.get(p) === seqs.get(p));
+    const stillCurrent = paths.filter(
+      (p) => sequences.get(p) === passes.get(p),
+    );
     if (live.values !== valuesAtStart) {
       if (stillCurrent.length > 0) {
         store.setState((state) => ({
@@ -775,7 +777,7 @@ export const createForm = <TSchema extends z.ZodType>(
         result.kind === "invalid" ? result.errors : emptyErrors,
       );
     }
-    const seq = nextSeq(path);
+    const pass = claimPass(path);
     const valuesAtStart = store.getState().values;
     store.setState((state) => ({
       ...state,
@@ -785,7 +787,7 @@ export const createForm = <TSchema extends z.ZodType>(
     const scoped = await scopedFieldErrorsAsync(path, valuesAtStart);
 
     const live = store.getState();
-    const stillOwns = sequences.get(path) === seq;
+    const stillOwns = sequences.get(path) === pass;
     if (!stillOwns || live.values !== valuesAtStart) {
       if (stillOwns) {
         store.setState((state) => ({
@@ -882,6 +884,7 @@ export const createForm = <TSchema extends z.ZodType>(
     }));
 
     try {
+      const pass = claimPass(SUBMIT_SEQ_KEY);
       const valuesAtStart = store.getState().values;
       const result = await validateAsync(schema, valuesAtStart);
 
@@ -889,13 +892,19 @@ export const createForm = <TSchema extends z.ZodType>(
       // values changed while validation was in flight (setValue/reset/
       // adoptValues), the verdict describes a snapshot the form no longer
       // holds — skip every state write (no error commit, no touched marks;
-      // that state belongs to the new values). The handlers still run and
-      // the result still reports the snapshot's verdict, so callers decide
-      // what it means for them.
-      const staleValues = store.getState().values !== valuesAtStart;
+      // that state belongs to the new values). The ownership token catches
+      // what the values reference can't: a bare reset() on a pristine form
+      // restores the same values reference but clears the token map, and a
+      // concurrent submit({ force: true }) re-claims the token — the LAST
+      // submit owns the writes. The handlers still run and the result still
+      // reports the snapshot's verdict, so callers decide what it means for
+      // them.
+      const stale =
+        sequences.get(SUBMIT_SEQ_KEY) !== pass ||
+        store.getState().values !== valuesAtStart;
 
       if (result.kind === "invalid") {
-        if (!staleValues) {
+        if (!stale) {
           store.setState((state) => {
             const committed = commitFullPass(state, result.errors);
             return {
@@ -915,12 +924,12 @@ export const createForm = <TSchema extends z.ZodType>(
             };
           });
         }
-        const merged = staleValues ? result.errors : store.getState().errors;
+        const merged = stale ? result.errors : store.getState().errors;
         onInvalid?.(merged);
         return { kind: "invalid", errors: merged };
       }
 
-      if (!staleValues) {
+      if (!stale) {
         store.setState((state) => ({
           ...state,
           ...commitFullPass(state, emptyErrors),
@@ -1102,8 +1111,8 @@ export const createForm = <TSchema extends z.ZodType>(
       }),
     adoptValues: (values) => {
       // Rebasing values invalidates any in-flight async validation (the
-      // values-reference guard drops its write), so the per-path sequence
-      // counters can be released too rather than growing without bound.
+      // values-reference guard drops its write), so the per-path ownership
+      // tokens can be released too rather than growing without bound.
       sequences.clear();
       store.setState((state) => ({
         ...state,
@@ -1265,6 +1274,12 @@ export const createForm = <TSchema extends z.ZodType>(
             mergeErrorChannels(schemaErrors, serverErrors),
             snap.errors ?? emptyErrors,
           ),
+          // In-flight state is owned by live passes, never by snapshots: a
+          // snapshotted flag has no pass left to clear it (the pass that set
+          // it cleared its ORIGINAL entry when it settled), so restoring one
+          // would stick it forever.
+          isValidating: emptyBools,
+          isValidatingForm: false,
         };
       }),
   }) as Form<TSchema>;

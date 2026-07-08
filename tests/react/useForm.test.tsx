@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { useField } from "../../src/react/useField";
 import { useForm } from "../../src/react/useForm";
-import { useFormSelector } from "../../src/react/useFormState";
+import { useFormSelector } from "../../src/react/useFormSelector";
 
 const schema = z.object({
   name: z.string().min(2),

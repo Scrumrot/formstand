@@ -15,9 +15,10 @@ token** with publish access to `formstand` and `formstand-cli`.
 2. Bump `version` in `package.json`.
 3. Commit: `git commit -am "release: formstand vX.Y.Z"`.
 4. Tag: `git tag vX.Y.Z`.
-5. Push: `git push && git push origin vX.Y.Z` — the Publish workflow runs
-   the full gate (typecheck, lint, tests with coverage) and publishes with
-   provenance.
+5. Push: `git push && git push origin vX.Y.Z` — the Publish workflow first
+   verifies the tag matches `package.json`'s `version` (a mismatch fails the
+   run before anything publishes), then runs the full gate (typecheck, lint,
+   tests with coverage) and publishes with provenance.
 6. Create the GitHub release:
    `gh release create vX.Y.Z --title "vX.Y.Z" --notes-from-tag` (or paste
    the CHANGELOG section as notes).
@@ -28,8 +29,10 @@ token** with publish access to `formstand` and `formstand-cli`.
 2. Bump `version` in `cli/package.json`.
 3. Commit: `git commit -am "release: formstand-cli vX.Y.Z"`.
 4. Tag: `git tag cli-vX.Y.Z`.
-5. Push the tag — the workflow publishes from `cli/` (its `prepublishOnly`
-   runs typecheck, tests, and build).
+5. Push: `git push && git push origin cli-vX.Y.Z` — the workflow first
+   verifies the tag matches `cli/package.json`'s `version` (a mismatch fails
+   the run before anything publishes), then publishes from `cli/` (its
+   `prepublishOnly` runs typecheck, tests, and build).
 6. `gh release create cli-vX.Y.Z --title "formstand-cli vX.Y.Z"`.
 
 ## Manual fallback

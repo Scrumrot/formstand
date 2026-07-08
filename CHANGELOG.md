@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.4.1 — 2026-07-08
+
+### Fixed
+
+- `submit`'s stale-write guard now uses pass ownership (cleared by
+  `reset`/`adoptValues`) in addition to the values-reference check — a bare
+  `reset()` on a pristine form during an in-flight submit no longer gets
+  stale errors and touched marks committed (reference equality couldn't see
+  it: reset restores the same `initialValues` reference).
+- `restore()` no longer resurrects in-flight validation flags captured in a
+  snapshot (`isValidating`/`isValidatingForm` are transient, owned by live
+  passes — a restored copy could stick forever).
+- `focusFirstError`/`focusField` verify focus against the element's own root
+  node, fixing a regression that walked past every candidate inside a shadow
+  root and reported failure after moving focus to the wrong control.
+- `focusField("")` focuses the form's first focusable control (whole-form
+  scope, like its imperative siblings), with the same multi-form
+  refuse-to-guess rule as `focusFirstError`.
+- `field.setError("string")` is normalized to an array before reaching
+  `FieldFormApi.setError`, shielding pre-0.4 custom implementations typed
+  for `readonly string[]`.
+
+### Internal
+
+- Validation pass ownership uses unique `Symbol()` tokens — collisions after
+  `reset`/`adoptValues` are impossible by construction rather than guarded
+  by a never-reset counter invariant.
+- Publish workflow fails fast when the pushed tag doesn't match
+  `package.json`'s version; the CLI release checklist pushes the release
+  commit, not just the tag.
+
 ## 0.4.0 — 2026-07-08
 
 ### Breaking
@@ -22,10 +53,13 @@
 - `adoptValues` now clears the in-flight validation flags
   (`isValidating` / `isValidatingForm`) along with the errors it already
   cleared — the rebase disowns in-flight passes.
-- `submit` skips its error/touched state writes when `values` changed while
-  validation was in flight (a `reset` during an in-flight submit no longer
-  gets stale errors committed over the fresh form); `onValid`/`onInvalid`
-  still run and the result still reports the outcome.
+- `submit` skips its error/touched state writes when the form was rebased
+  while validation was in flight: when `values` changed, when `reset` /
+  `adoptValues` ran (including a bare `reset()` on a pristine form, where the
+  values reference doesn't change), or when a concurrent
+  `submit({ force: true })` re-claimed ownership (the LAST submit's writes
+  land). `onValid`/`onInvalid` still run and the result still reports the
+  outcome.
 
 ### Added
 
@@ -35,11 +69,16 @@
   behind `useField().emptyValue`, alongside its adapter siblings
   `numberToInputText` / `parseNumberText`.
 - `field.setError` (from `useField`) accepts a single string, matching
-  `form.setError`.
-- Dev-mode warning (once per path) when `validateField` /
-  `validateFieldAsync` target a path the schema provably cannot contain —
-  protects the docs-sanctioned dynamic-path casts from silent always-valid
-  results.
+  `form.setError`. The hook normalizes the shorthand to a one-element array
+  before forwarding, so custom `FieldFormApi` implementations typed for
+  `readonly string[]` never receive a bare string.
+- `focusField("")` focuses the first focusable control in scope (the
+  whole-form `""` semantics of the imperative surface); under the default
+  `document` scope it refuses to guess between multiple `<form>`s, like
+  `focusFirstError`'s root-`""` fallback.
+- `validateField` / `validateFieldAsync` targeting a path the schema
+  provably cannot contain now warn (once per path per form) — protects the
+  docs-sanctioned dynamic-path casts from silent always-valid results.
 - Docs: a migrating-from-react-hook-form guide with the full API mapping
   table.
 
@@ -48,9 +87,16 @@
 - Array ops no longer strand in-flight `isValidating` flags: flags under the
   path are dropped rather than re-keyed (the completing pass clears the
   original key, so a re-keyed flag could never be cleared).
-- The validation sequence counter is globally monotonic and never resets, so
-  a superseded pre-reset validation pass can no longer collide with a
-  post-reset one and clobber its state.
+- In-flight validation passes are owned via unique symbol tokens (unique by
+  construction), so a superseded pre-reset validation pass can never collide
+  with a post-reset one and clobber its state.
+- `restore(snapshot)` clears the transient in-flight flags (`isValidating` /
+  `isValidatingForm`) instead of restoring them — in-flight state is owned
+  by live passes, never by snapshots, so a restored flag would stick forever.
+- `focusFirstError` / `focusField` verify focus against the element's own
+  root (`getRootNode().activeElement`), so controls inside a shadow root are
+  no longer reported as unfocused (`document.activeElement` retargets to the
+  shadow host).
 - `validateFieldAsync("")` delegates to the whole-form pass, so its pending
   state lives in `isValidatingForm` instead of `isValidating[""]`.
 - `focusFirstError` / `focusField` report success only when a control

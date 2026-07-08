@@ -65,7 +65,7 @@ describe("adoptValues with async validation in flight", () => {
   });
 });
 
-describe("sequence numbering across reset()", () => {
+describe("pass ownership across reset()", () => {
   it("a pre-reset pass can never collide with (and disown) a post-reset pass", async () => {
     // Manually gated refine so the test controls completion order.
     const gates: Array<() => void> = [];
@@ -84,7 +84,7 @@ describe("sequence numbering across reset()", () => {
     const first = form.validateFieldAsync("username");
     form.setValue("username", "edited");
     // reset() restores the SAME initialValues reference, so the first pass's
-    // values-changed guard cannot save us — only sequence ownership can.
+    // values-changed guard cannot save us — only token ownership can.
     form.reset();
     const second = form.validateFieldAsync("username");
     await vi.waitFor(() => {
@@ -92,8 +92,9 @@ describe("sequence numbering across reset()", () => {
     });
     expect(form.getState().isValidating["username"]).toBe(true);
 
-    // The pre-reset pass completes first. With per-key numbering restarting
-    // after reset it would reclaim seq 1 and clear the live pass's flag.
+    // The pre-reset pass completes first. If tokens could ever repeat (as a
+    // per-key counter restarting after reset would), the old pass could pass
+    // the ownership check and clear the live pass's flag.
     gates[0]?.();
     await first;
     expect(form.getState().isValidating["username"]).toBe(true);
@@ -139,6 +140,89 @@ describe("submit stale-commit guard", () => {
     const result = await promise;
     expect(result.kind).toBe("valid");
     expect(seen).toEqual([{ name: "Tim" }]);
+  });
+
+  it("skips error and touched writes when a bare reset() lands mid-flight on a PRISTINE form", async () => {
+    // Slow async refine on a sibling field keeps validation in flight while
+    // the invalid `name` produces the verdict.
+    const slowSchema = z.object({
+      name: z.string().min(2, "too short"),
+      username: z.string().refine(
+        async () => {
+          await new Promise((r) => setTimeout(r, 20));
+          return true;
+        },
+        { message: "taken" },
+      ),
+    });
+    const form = createForm(slowSchema, {
+      initialValues: { name: "x", username: "ok" },
+    });
+    const invalidCalls: unknown[] = [];
+    const promise = form.submit(
+      () => {},
+      (errors) => {
+        invalidCalls.push(errors);
+      },
+    );
+    // The form is pristine (values === initialValues), so a bare reset()
+    // restores the SAME values reference — the values-changed guard cannot
+    // catch this; only submit's ownership token (cleared by reset) can.
+    form.reset();
+
+    const result = await promise;
+    expect(result.kind).toBe("invalid");
+    if (result.kind !== "invalid") throw new Error();
+    expect(result.errors["name"]).toEqual(["too short"]);
+    expect(invalidCalls).toHaveLength(1);
+    expect(form.getState().errors).toEqual({});
+    expect(form.getState().touched).toEqual({});
+  });
+
+  it("a concurrent submit({ force: true }) re-claims ownership — the LAST submit's state lands", async () => {
+    // Manually gated refine whose verdict depends on call order: the first
+    // pass (first submit) says invalid, later passes say valid — so the two
+    // in-flight submits reach DIFFERENT verdicts over the same values.
+    const gates: Array<() => void> = [];
+    const gatedSchema = z.object({
+      username: z.string().refine(
+        async () => {
+          const call = gates.length;
+          await new Promise<void>((resolve) => {
+            gates.push(resolve);
+          });
+          return call > 0;
+        },
+        { message: "taken" },
+      ),
+    });
+    const form = createForm(gatedSchema, {
+      initialValues: { username: "x" },
+    });
+
+    const first = form.submit(() => {});
+    const second = form.submit(() => {}, undefined, { force: true });
+    await vi.waitFor(() => {
+      expect(gates).toHaveLength(2);
+    });
+
+    // The forced (last) submit settles first and commits its clean verdict.
+    gates[1]?.();
+    const secondResult = await second;
+    expect(secondResult.kind).toBe("valid");
+    expect(form.getState().errors).toEqual({});
+
+    // The superseded first submit settles afterwards: it still reports its
+    // snapshot's verdict, but its writes are skipped — the forced submit
+    // re-claimed the ownership token, so stale errors/touched must not land
+    // over the newer clean state.
+    gates[0]?.();
+    const firstResult = await first;
+    expect(firstResult.kind).toBe("invalid");
+    if (firstResult.kind !== "invalid") throw new Error();
+    expect(firstResult.errors["username"]).toEqual(["taken"]);
+    expect(form.getState().errors).toEqual({});
+    expect(form.getState().touched).toEqual({});
   });
 });
 

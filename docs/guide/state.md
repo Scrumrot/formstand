@@ -67,6 +67,8 @@ form.handleSubmit(async (data) => {
 
 `restore` re-derives the merged `errors` map from the snapshot's `schemaErrors`/`serverErrors` channels (defaulting missing channels for snapshots persisted under older shapes), so the errors-is-derived invariant holds even for hand-constructed snapshots.
 
+It also **clears the transient in-flight flags** (`isValidating` / `isValidatingForm`) rather than restoring whatever the snapshot captured: in-flight state is owned by live validation passes, never by snapshots — a flag snapshotted mid-flight has no pass left to clear it, so restoring it would stick it on forever.
+
 ## `reset` vs `adoptValues`
 
 Two different contracts for replacing values:

@@ -156,3 +156,46 @@ describe("focusFirstError skips controls that cannot take focus", () => {
     expect(document.activeElement).toBe(screen.getByLabelText("Dialog email"));
   });
 });
+
+describe("focusFirstError inside a shadow root", () => {
+  // document.activeElement retargets to the shadow HOST for a control focused
+  // inside a shadow root — focus verification must read the element's OWN
+  // root (getRootNode().activeElement), or a successfully focused shadow-DOM
+  // control reads as unfocused and the walk moves on (or reports false).
+  const hosts: HTMLElement[] = [];
+  afterEach(() => {
+    hosts.splice(0).forEach((host) => host.remove());
+  });
+
+  const mountShadowInputs = (names: readonly string[]) => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    hosts.push(host);
+    const shadow = host.attachShadow({ mode: "open" });
+    const inputs = names.map((name) => {
+      const input = document.createElement("input");
+      input.setAttribute("type", "text");
+      input.setAttribute("name", name);
+      shadow.appendChild(input);
+      return input;
+    });
+    return { shadow, inputs };
+  };
+
+  it("focuses a named control inside a shadow root and returns true", () => {
+    const { shadow, inputs } = mountShadowInputs(["email"]);
+    expect(focusFirstError({ email: ["required"] }, shadow)).toBe(true);
+    expect(shadow.activeElement).toBe(inputs[0]);
+  });
+
+  it("keeps focus on the FIRST candidate when several match", () => {
+    // With document-based verification the first focus would read as failed
+    // and the walk would move on to (and abandon) the second candidate.
+    const { shadow, inputs } = mountShadowInputs([
+      "address.street",
+      "address.city",
+    ]);
+    expect(focusFirstError({ address: ["incomplete"] }, shadow)).toBe(true);
+    expect(shadow.activeElement).toBe(inputs[0]);
+  });
+});

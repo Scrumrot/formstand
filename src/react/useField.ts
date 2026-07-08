@@ -202,7 +202,11 @@ export function useField<TValue = unknown>(
   );
 
   const setError = useCallback(
-    (errors: string | readonly string[]) => form.setError(path, errors),
+    // Normalize the string shorthand HERE, before forwarding: custom
+    // FieldFormApi implementations written against the pre-0.4 surface are
+    // typed for readonly string[] and must never receive a bare string.
+    (errors: string | readonly string[]) =>
+      form.setError(path, typeof errors === "string" ? [errors] : errors),
     [form, path],
   );
 

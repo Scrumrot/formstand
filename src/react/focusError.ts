@@ -18,6 +18,21 @@ const focusableControls = (scope: ParentNode): readonly HTMLElement[] =>
       el.closest("dialog:not([open])") === null,
   );
 
+// Does `el` actually hold focus? Ask the element's OWN root (document or
+// shadow root): document.activeElement retargets to the shadow HOST for a
+// focused control inside a shadow root, so it would read a successfully
+// focused shadow-DOM control as unfocused. A root that is neither (a
+// detached fragment) has no activeElement — fall back to the document,
+// where a detached element can never be the active one.
+const holdsFocus = (el: HTMLElement): boolean => {
+  const rootNode = el.getRootNode();
+  const active =
+    rootNode instanceof Document || rootNode instanceof ShadowRoot
+      ? rootNode.activeElement
+      : document.activeElement;
+  return active === el;
+};
+
 // focus() can silently no-op (display:none ancestors and other unfocusable
 // states the cheap filters above can't see) — verify it took, and fall
 // through to the next candidate in DOM order. True only when a control
@@ -25,7 +40,7 @@ const focusableControls = (scope: ParentNode): readonly HTMLElement[] =>
 const focusFirstOf = (candidates: readonly HTMLElement[]): boolean =>
   candidates.some((el) => {
     el.focus();
-    return document.activeElement === el;
+    return holdsFocus(el);
   });
 
 const nameMatchesAny = (
@@ -95,11 +110,20 @@ export const focusFirstError = (
 //     focusField(`items.${items.length}.name`, formRef.current ?? undefined),
 //   );
 //
+// The root "" path is whole-form scope, consistent with the imperative
+// surface (validateField("") / resetField("")): focus the first focusable
+// control in scope. Like focusFirstError's root-"" fallback, "first control"
+// under the default document scope is a guess when the page holds several
+// <form>s — focusField refuses to guess and returns false; pass the form
+// element as `root` to disambiguate.
+//
 // Returns whether a control actually received focus. Safe to import during
 // SSR — it only touches the DOM when called.
-export const focusField = (path: string, root?: ParentNode): boolean =>
-  focusFirstOf(
-    focusableControls(root ?? document).filter((el) =>
-      nameMatchesAny(el, [path]),
-    ),
-  );
+export const focusField = (path: string, root?: ParentNode): boolean => {
+  const controls = focusableControls(root ?? document);
+  return path === ""
+    ? (root !== undefined ||
+        document.querySelectorAll("form").length <= 1) &&
+        focusFirstOf(controls)
+    : focusFirstOf(controls.filter((el) => nameMatchesAny(el, [path])));
+};

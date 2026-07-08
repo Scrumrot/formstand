@@ -17,6 +17,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Fail fast on a tag that doesn't match the version being published —
+      # otherwise the tag would silently publish whatever version package.json
+      # happens to hold.
+      - name: Verify tag matches package.json version
+        run: |
+          expected="${GITHUB_REF_NAME#v}"
+          actual="$(node -p "require('./package.json').version")"
+          if [ "$expected" != "$actual" ]; then
+            echo "Tag ${GITHUB_REF_NAME} expects version ${expected}, but package.json holds ${actual}." >&2
+            exit 1
+          fi
+
       - uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -45,6 +57,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
+      # Fail fast on a tag that doesn't match the version being published —
+      # otherwise the tag would silently publish whatever version package.json
+      # happens to hold.
+      - name: Verify tag matches cli/package.json version
+        run: |
+          expected="${GITHUB_REF_NAME#cli-v}"
+          actual="$(node -p "require('./package.json').version")"
+          if [ "$expected" != "$actual" ]; then
+            echo "Tag ${GITHUB_REF_NAME} expects version ${expected}, but cli/package.json holds ${actual}." >&2
+            exit 1
+          fi
+        working-directory: cli
 
       - uses: actions/setup-node@v6
         with:

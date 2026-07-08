@@ -135,7 +135,7 @@ const addUser = () => {
 };
 ```
 
-A container path works too — `focusField("address")` lands on the first rendered `address.*` control. Pass your `<form>` element as `root` on multi-form pages, exactly like `focusFirstError`.
+A container path works too — `focusField("address")` lands on the first rendered `address.*` control — and the root `""` path means whole-form scope: `focusField("", formEl)` focuses the form's first focusable control. Pass your `<form>` element as `root` on multi-form pages, exactly like `focusFirstError` (with the default `document` scope and several forms, `focusField("")` refuses to guess and returns `false`).
 
 ## Rebase after save
 

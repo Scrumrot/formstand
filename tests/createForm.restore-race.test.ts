@@ -46,3 +46,28 @@ describe("restore() during in-flight async validation", () => {
     expect(form.getState().isValidatingForm).toBe(false);
   });
 });
+
+describe("restore() strips transient validation flags from the snapshot", () => {
+  it("does not resurrect isValidating/isValidatingForm captured mid-flight", async () => {
+    const form = createForm(asyncSchema, {
+      initialValues: { username: "ok" },
+    });
+    const fieldPass = form.validateFieldAsync("username");
+    const formPass = form.validateAsync();
+    expect(form.getState().isValidating["username"]).toBe(true);
+    expect(form.getState().isValidatingForm).toBe(true);
+
+    // Snapshot taken while both passes are in flight captures the flags.
+    const snap = form.snapshot();
+    await Promise.all([fieldPass, formPass]);
+    expect(form.getState().isValidating).toEqual({});
+    expect(form.getState().isValidatingForm).toBe(false);
+
+    // In-flight state is owned by live passes, never by snapshots: the
+    // passes that set these flags have already settled, so restoring them
+    // would stick them on forever (no pass left to clear them).
+    form.restore(snap);
+    expect(form.getState().isValidating).toEqual({});
+    expect(form.getState().isValidatingForm).toBe(false);
+  });
+});
