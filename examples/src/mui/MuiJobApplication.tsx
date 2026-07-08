@@ -22,6 +22,7 @@ import {
   useIsSubmitting,
 } from "formstand";
 import { z } from "zod";
+import { useDemoForm } from "../demo/DemoShell";
 import {
   muiNumberFieldProps,
   muiSliderProps,
@@ -85,6 +86,7 @@ export const MuiJobApplication = () => {
     },
     mode: "onChange",
   });
+  useDemoForm(form);
   // debounceMs holds the async availability check until typing pauses.
   const email = useField(form, "email", { debounceMs: 300 });
   const skills = useField(form, "skills");

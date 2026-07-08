@@ -7,8 +7,8 @@ import {
   useForm,
   useFormSelectorShallow,
 } from "formstand";
+import { useDemoForm } from "../demo/DemoShell";
 import { z } from "zod";
-import { StateDump } from "./StateDump";
 
 const lineItemSchema = z.object({
   description: z.string().min(1, "required"),
@@ -119,6 +119,7 @@ export const InvoiceForm = () => {
     },
     mode: "onBlur",
   });
+  useDemoForm(form);
   const customer = useField(form, "customer");
   const lineItems = useFieldArray<LineItem>(form, "lineItems");
 
@@ -175,8 +176,6 @@ export const InvoiceForm = () => {
           Submit invoice
         </button>
       </div>
-
-      <StateDump form={form} />
     </form>
   );
 };

@@ -6,8 +6,8 @@ import {
   useFieldArray,
   useForm,
 } from "formstand";
+import { useDemoForm } from "../demo/DemoShell";
 import { z } from "zod";
-import { StateDump } from "./StateDump";
 
 const trackSchema = z.object({
   title: z.string().min(1, "title required"),
@@ -208,6 +208,7 @@ export const NestedArraysForm = () => {
     },
     mode: "onBlur",
   });
+  useDemoForm(form);
   const albums = useFieldArray<Album>(form, "albums");
 
   return (
@@ -258,8 +259,6 @@ export const NestedArraysForm = () => {
           Save
         </button>
       </div>
-
-      <StateDump form={form} />
     </form>
   );
 };

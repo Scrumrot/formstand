@@ -1,6 +1,6 @@
 import { useField, useForm, useFormSelector, type ValidationMode } from "formstand";
+import { useDemoForm } from "../demo/DemoShell";
 import { z } from "zod";
-import { StateDump } from "./StateDump";
 
 const schema = z.object({
   name: z.string().min(2, "name must be at least 2 chars"),
@@ -11,6 +11,7 @@ export const BasicForm = () => {
   const form = useForm(schema, {
     initialValues: { name: "", email: "" },
   });
+  useDemoForm(form);
   const mode = useFormSelector(form, (s) => s.mode);
   const name = useField(form, "name");
   const email = useField(form, "email");
@@ -68,8 +69,6 @@ export const BasicForm = () => {
           Reset
         </button>
       </div>
-
-      <StateDump form={form} />
     </form>
   );
 };

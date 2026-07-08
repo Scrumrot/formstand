@@ -1,6 +1,6 @@
 import { useField, useForm, useFormSelector } from "formstand";
+import { useDemoForm } from "../demo/DemoShell";
 import { z } from "zod";
-import { StateDump } from "./StateDump";
 
 const MAX_BYTES = 1_000_000;
 
@@ -18,6 +18,7 @@ export const FileUploadForm = () => {
     initialValues: { caption: "", file: undefined as unknown as File },
     mode: "onBlur",
   });
+  useDemoForm(form);
   const caption = useField(form, "caption");
   const file = useField(form, "file");
   const isSubmitting = useFormSelector(form, (s) => s.isSubmitting);
@@ -71,8 +72,6 @@ export const FileUploadForm = () => {
       <button className="primary" type="submit" disabled={isSubmitting}>
         {isSubmitting ? "Uploading..." : "Upload"}
       </button>
-
-      <StateDump form={form} />
     </form>
   );
 };

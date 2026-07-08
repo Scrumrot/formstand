@@ -5,8 +5,8 @@ import {
   useForm,
   useFormSelector,
 } from "formstand";
+import { useDemoForm } from "../demo/DemoShell";
 import { z } from "zod";
-import { StateDump } from "./StateDump";
 
 const schema = z.object({
   firstName: z.string().min(1, "required"),
@@ -19,6 +19,7 @@ export const DerivedFieldForm = () => {
     initialValues: { firstName: "", lastName: "", displayName: "" },
     mode: "onBlur",
   });
+  useDemoForm(form);
   const firstName = useField(form, "firstName");
   const lastName = useField(form, "lastName");
   const displayName = useFormSelector(form, (s) => s.values.displayName);
@@ -73,8 +74,6 @@ export const DerivedFieldForm = () => {
       <button className="primary" type="submit">
         Greet
       </button>
-
-      <StateDump form={form} />
     </form>
   );
 };

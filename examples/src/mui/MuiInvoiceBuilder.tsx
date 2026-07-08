@@ -32,6 +32,7 @@ import {
   useIsSubmitting,
 } from "formstand";
 import { z } from "zod";
+import { useDemoForm } from "../demo/DemoShell";
 import {
   muiNumberFieldProps,
   muiSelectProps,
@@ -196,6 +197,7 @@ export const MuiInvoiceBuilder = () => {
     },
     mode: "onBlur",
   });
+  useDemoForm(form);
   const customer = useField(form, "customer");
   const items = useFieldArray<LineItem>(form, "items");
   const isDirty = useIsDirty(form);

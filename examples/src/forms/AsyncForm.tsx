@@ -4,8 +4,8 @@ import {
   useForm,
   useFormSelector,
 } from "formstand";
+import { useDemoForm } from "../demo/DemoShell";
 import { z } from "zod";
-import { StateDump } from "./StateDump";
 
 const TAKEN = new Set(["admin", "root", "tim"]);
 
@@ -27,6 +27,7 @@ export const AsyncForm = () => {
     initialValues: { username: "" },
     mode: "onChange",
   });
+  useDemoForm(form);
   const username = useField(form, "username", { debounceMs: 300 });
   const isSubmitting = useFormSelector(form, (s) => s.isSubmitting);
 
@@ -60,8 +61,6 @@ export const AsyncForm = () => {
       <button className="primary" type="submit" disabled={isSubmitting}>
         {isSubmitting ? "Signing up..." : "Sign up"}
       </button>
-
-      <StateDump form={form} />
     </form>
   );
 };

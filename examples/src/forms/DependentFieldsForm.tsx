@@ -4,8 +4,8 @@ import {
   useForm,
   useFormSelector,
 } from "formstand";
+import { useDemoForm } from "../demo/DemoShell";
 import { z } from "zod";
-import { StateDump } from "./StateDump";
 
 const REGIONS = {
   us: ["California", "New York", "Texas"],
@@ -26,6 +26,7 @@ export const DependentFieldsForm = () => {
     initialValues: { country: "us", region: "", city: "" },
     mode: "onBlur",
   });
+  useDemoForm(form);
   const country = useField(form, "country");
   const region = useField(form, "region");
   const city = useField(form, "city");
@@ -93,8 +94,6 @@ export const DependentFieldsForm = () => {
       <button className="primary" type="submit">
         Submit
       </button>
-
-      <StateDump form={form} />
     </form>
   );
 };

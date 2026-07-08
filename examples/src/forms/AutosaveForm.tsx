@@ -7,8 +7,8 @@ import {
   useFormSelectorShallow,
   useIsDirty,
 } from "formstand";
+import { useDemoForm } from "../demo/DemoShell";
 import { z } from "zod";
-import { StateDump } from "./StateDump";
 
 const STORAGE_KEY = "formstand:autosave-demo";
 const DEBOUNCE_MS = 800;
@@ -40,6 +40,7 @@ export const AutosaveForm = () => {
   const [titleChanges, setTitleChanges] = useState(0);
 
   const form = useForm(schema, { initialValues: initial, mode: "onBlur" });
+  useDemoForm(form);
   const title = useField(form, "title");
   const body = useField(form, "body");
   const values = useFormSelector(form, (s) => s.values);
@@ -146,8 +147,6 @@ export const AutosaveForm = () => {
           </button>
         </div>
       </div>
-
-      <StateDump form={form} />
     </form>
   );
 };

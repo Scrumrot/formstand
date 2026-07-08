@@ -10,8 +10,8 @@ import {
   useSubmitCount,
   textInputProps,
 } from "formstand";
+import { useDemoForm } from "../demo/DemoShell";
 import { z } from "zod";
-import { StateDump } from "./StateDump";
 
 const schema = z
   .object({
@@ -72,6 +72,7 @@ export const ContextForm = () => {
     initialValues: { displayName: "", tagline: "" },
     mode: "onBlur",
   });
+  useDemoForm(form);
 
   return (
     <Provider form={form}>
@@ -99,8 +100,6 @@ export const ContextForm = () => {
         <button className="primary" type="submit">
           Save profile
         </button>
-
-        <StateDump form={form} />
       </form>
     </Provider>
   );

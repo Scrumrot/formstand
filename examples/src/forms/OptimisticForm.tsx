@@ -5,8 +5,8 @@ import {
   useForm,
   useFormSelector,
 } from "formstand";
+import { useDemoForm } from "../demo/DemoShell";
 import { z } from "zod";
-import { StateDump } from "./StateDump";
 
 const schema = z.object({
   displayName: z.string().min(1, "required"),
@@ -34,6 +34,7 @@ export const OptimisticForm = () => {
     initialValues: serverProfile,
     mode: "onBlur",
   });
+  useDemoForm(form);
   const displayName = useField(form, "displayName");
   const bio = useField(form, "bio");
   const isSubmitting = useFormSelector(form, (s) => s.isSubmitting);
@@ -98,8 +99,6 @@ export const OptimisticForm = () => {
         Last known server state:{" "}
         <code>{JSON.stringify(serverProfile)}</code>
       </div>
-
-      <StateDump form={form} />
     </form>
   );
 };

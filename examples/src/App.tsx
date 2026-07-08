@@ -1,4 +1,6 @@
 import { type ReactElement, useState } from "react";
+import { DemoShell } from "./demo/DemoShell";
+import { DEMO_SOURCES } from "./demo/demoSources";
 import { ArrayForm } from "./forms/ArrayForm";
 import { AsyncForm } from "./forms/AsyncForm";
 import { AutosaveForm } from "./forms/AutosaveForm";
@@ -143,7 +145,7 @@ const TABS: readonly Tab[] = [
 
 export const App = () => {
   const [active, setActive] = useState<TabKey>("basic");
-  const current = TABS.find((t) => t.key === active) ?? TABS[0];
+  const current = TABS.find((t) => t.key === active);
 
   return (
     <div className="layout">
@@ -172,7 +174,13 @@ export const App = () => {
           </button>
         ))}
       </div>
-      <div className="card">{current?.render()}</div>
+      <div className="card">
+        {current !== undefined ? (
+          <DemoShell key={current.key} source={DEMO_SOURCES[current.key]}>
+            {current.render()}
+          </DemoShell>
+        ) : null}
+      </div>
     </div>
   );
 };

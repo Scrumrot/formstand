@@ -32,6 +32,7 @@ import {
   useFormSelector,
 } from "formstand";
 import { z } from "zod";
+import { useDemoForm } from "../demo/DemoShell";
 import { muiSelectProps, muiTextFieldProps } from "./muiAdapter";
 
 const QUESTION_TYPES = [
@@ -337,6 +338,7 @@ export const MuiSurveyBuilder = () => {
     },
     mode: "onBlur",
   });
+  useDemoForm(form);
   const title = useField(form, "title");
   const sections = useFieldArray<Section>(form, "sections");
   const rootError = useFormError(form);

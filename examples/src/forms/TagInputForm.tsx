@@ -1,7 +1,7 @@
 import { type KeyboardEvent, useState } from "react";
 import { useField, useForm } from "formstand";
+import { useDemoForm } from "../demo/DemoShell";
 import { z } from "zod";
-import { StateDump } from "./StateDump";
 
 const schema = z.object({
   title: z.string().min(1, "title required"),
@@ -13,6 +13,7 @@ export const TagInputForm = () => {
     initialValues: { title: "", tags: [] },
     mode: "onBlur",
   });
+  useDemoForm(form);
   const title = useField(form, "title");
   const tags = useField(form, "tags");
   const [draft, setDraft] = useState("");
@@ -139,8 +140,6 @@ export const TagInputForm = () => {
       <button className="primary" type="submit">
         Save
       </button>
-
-      <StateDump form={form} />
     </form>
   );
 };

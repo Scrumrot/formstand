@@ -1,6 +1,6 @@
 import { useField, useForm, useFormSelector } from "formstand";
+import { useDemoForm } from "../demo/DemoShell";
 import { z } from "zod";
-import { StateDump } from "./StateDump";
 
 const schema = z.object({
   name: z.string().min(2),
@@ -18,6 +18,7 @@ export const NestedForm = () => {
       address: { street: "", city: "", zip: "" },
     },
   });
+  useDemoForm(form);
 
   const name = useField(form, "name");
   const street = useField(form, "address.street");
@@ -78,8 +79,6 @@ export const NestedForm = () => {
       <button className="primary" type="submit" disabled={isSubmitting}>
         {isSubmitting ? "Submitting..." : "Submit"}
       </button>
-
-      <StateDump form={form} />
     </form>
   );
 };

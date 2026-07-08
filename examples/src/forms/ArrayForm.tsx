@@ -4,8 +4,8 @@ import {
   useFieldArray,
   useForm,
 } from "formstand";
+import { useDemoForm } from "../demo/DemoShell";
 import { z } from "zod";
-import { StateDump } from "./StateDump";
 
 const schema = z.object({
   users: z
@@ -71,6 +71,7 @@ export const ArrayForm = () => {
     initialValues: { users: [{ email: "a@a.com" }, { email: "b@b.com" }] },
     mode: "onBlur",
   });
+  useDemoForm(form);
   const users = useFieldArray<UserItem>(form, "users");
 
   return (
@@ -108,8 +109,6 @@ export const ArrayForm = () => {
           Submit
         </button>
       </div>
-
-      <StateDump form={form} />
     </form>
   );
 };

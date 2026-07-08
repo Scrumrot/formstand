@@ -4,8 +4,8 @@ import {
   useForm,
   useIsSubmitting,
 } from "formstand";
+import { useDemoForm } from "../demo/DemoShell";
 import { z } from "zod";
-import { StateDump } from "./StateDump";
 
 const schema = z.object({
   email: z.email("must be a valid email"),
@@ -41,6 +41,7 @@ export const ServerErrorsForm = () => {
     initialValues: { email: "", username: "" },
     mode: "onBlur",
   });
+  useDemoForm(form);
   const isSubmitting = useIsSubmitting(form);
 
   return (
@@ -76,8 +77,6 @@ export const ServerErrorsForm = () => {
       <button className="primary" type="submit" disabled={isSubmitting}>
         {isSubmitting ? "Registering..." : "Register"}
       </button>
-
-      <StateDump form={form} />
     </form>
   );
 };

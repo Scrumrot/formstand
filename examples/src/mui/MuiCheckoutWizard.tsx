@@ -30,6 +30,7 @@ import {
   useFormSelector,
 } from "formstand";
 import { z } from "zod";
+import { useDemoForm } from "../demo/DemoShell";
 import {
   muiSelectProps,
   muiSwitchProps,
@@ -294,6 +295,7 @@ export const MuiCheckoutWizard = () => {
     },
     mode: "onBlur",
   });
+  useDemoForm(form);
   const [step, setStep] = useState(0);
   const [orderPlaced, setOrderPlaced] = useState(false);
 

@@ -7,8 +7,8 @@ import {
   useForm,
   useIsValid,
 } from "formstand";
+import { useDemoForm } from "../demo/DemoShell";
 import { z } from "zod";
-import { StateDump } from "./StateDump";
 
 const schema = z.object({
   name: z.string().min(2, "min 2 chars"),
@@ -28,6 +28,7 @@ export const BoundFieldsForm = () => {
     // useIsValid; error *display* still waits for touched via the components.
     validateOnMount: true,
   });
+  useDemoForm(form);
   const isValid = useIsValid(form);
 
   return (
@@ -72,8 +73,6 @@ export const BoundFieldsForm = () => {
       <button className="primary" type="submit" disabled={!isValid}>
         Subscribe
       </button>
-
-      <StateDump form={form} />
     </form>
   );
 };

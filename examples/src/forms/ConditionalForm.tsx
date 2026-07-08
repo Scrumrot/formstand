@@ -1,6 +1,6 @@
 import { SelectField, TextField, useForm, useFormSelector } from "formstand";
+import { useDemoForm } from "../demo/DemoShell";
 import { z } from "zod";
-import { StateDump } from "./StateDump";
 
 const cardRegex = /^\d{16}$/;
 const accountRegex = /^\d{8,12}$/;
@@ -59,6 +59,7 @@ export const ConditionalForm = () => {
     },
     mode: "onBlur",
   });
+  useDemoForm(form);
   const method = useFormSelector(form, (s) => s.values.paymentMethod);
 
   return (
@@ -102,8 +103,6 @@ export const ConditionalForm = () => {
       <button className="primary" type="submit">
         Pay
       </button>
-
-      <StateDump form={form} />
     </form>
   );
 };

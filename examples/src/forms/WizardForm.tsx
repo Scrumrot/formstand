@@ -6,8 +6,8 @@ import {
   TextField,
   useForm,
 } from "formstand";
+import { useDemoForm } from "../demo/DemoShell";
 import { z } from "zod";
-import { StateDump } from "./StateDump";
 
 const schema = z.object({
   email: z.email("valid email required"),
@@ -38,6 +38,7 @@ export const WizardForm = () => {
     },
     mode: "onBlur",
   });
+  useDemoForm(form);
   const [step, setStep] = useState<0 | 1 | 2>(0);
 
   const handleNext = () => {
@@ -115,8 +116,6 @@ export const WizardForm = () => {
           </button>
         )}
       </div>
-
-      <StateDump form={form} />
     </form>
   );
 };

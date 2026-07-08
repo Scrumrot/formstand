@@ -27,6 +27,7 @@ import {
   useIsValid,
 } from "formstand";
 import { z } from "zod";
+import { useDemoForm } from "../demo/DemoShell";
 import {
   muiSelectProps,
   muiSwitchProps,
@@ -97,6 +98,7 @@ export const MuiProfileSettings = () => {
     },
     mode: "onChange",
   });
+  useDemoForm(form);
   const displayName = useField(form, "displayName");
   const bio = useField(form, "bio");
   const theme = useField(form, "theme");
