@@ -83,6 +83,13 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
 
+      # The CLI test suite typechecks its generated output against the
+      # library source (../src), which resolves react/zustand/zod types from
+      # the repo root's node_modules — so the root install is needed even
+      # though only cli/ publishes.
+      - name: Install dependencies
+        run: npm ci
+
       - name: Install CLI dependencies
         run: npm ci
         working-directory: cli
