@@ -8,7 +8,7 @@ npm install --save-dev formstand-cli
 
 ## Requirements
 
-- **formstand >= 0.3.0** for `--ui mui` output (the inlined adapter uses `UseFieldReturn`, `numberToInputText`, and `parseNumberText`); plain output works on 0.2.0.
+- **formstand >= 0.3.0** for `--ui mui` and `--ui shadcn` output (the inlined adapters use `UseFieldReturn`, `numberToInputText`, and `parseNumberText`); plain output works on 0.2.0.
 - **zod v4** in your project. The CLI walks your schema structurally (duck-typed by design — no `instanceof` against a bundled copy), so it does not ship zod itself: the schema module and the generated code both use the zod your project supplies.
 
 ## Two modes
@@ -42,7 +42,7 @@ Without `--out`, both files print to stdout separated by `// --- file: ...` head
 | --- | --- |
 | `--export <name>` | which export holds the zod schema |
 | `--type <TypeName>` | generate from a TS type/interface instead |
-| `--ui plain\|mui` | component flavor (default `plain`) |
+| `--ui plain\|mui\|shadcn` | component flavor (default `plain`) |
 | `--name <MyForm>` | component name (default derived from the schema/type name) |
 | `--out <file>` | write the component here instead of stdout |
 | `--schema-out <file>` | type mode: where the generated zod schema goes (default `<schemaName>.ts` next to `--out`) |
@@ -56,6 +56,7 @@ Without `--out`, both files print to stdout separated by `// --- file: ...` head
 - Field arrays via `useFieldArray` with stable row keys, add/remove buttons, and a typed empty-item constant.
 - `handleSubmit(console.log)` and a submit button disabled while submitting.
 - `--ui mui`: the same structure over `@mui/material` v9 with an inlined ~50-line adapter (`muiTextFieldProps` / `muiNumberFieldProps` / `muiSelectProps` / `muiSwitchProps`) binding `UseFieldReturn` to MUI props, sharing `parseNumberText` / `numberToInputText` with the library.
+- `--ui shadcn`: the same structure over your app's [shadcn/ui](https://ui.shadcn.com/) components (imported from the `@/components/ui/*` alias that `npx shadcn add` scaffolds) with an inlined adapter speaking the Radix dialect — `onCheckedChange` / `onValueChange` callbacks, dropdown-close as the blur trigger, and `aria-invalid` error styling with a message line.
 
 ## Supported schema surface
 
@@ -69,7 +70,7 @@ Known limitations:
 ## Programmatic API
 
 ```ts
-import { fromZod, fromType, emitPlainForm, emitMuiForm, emitZodSchema } from "formstand-cli";
+import { fromZod, fromType, emitPlainForm, emitMuiForm, emitShadcnForm, emitZodSchema } from "formstand-cli";
 
 const ir = fromZod(profileSchema);
 const code = emitPlainForm({
@@ -81,7 +82,7 @@ const code = emitPlainForm({
 
 ## Roadmap
 
-- MUI X date pickers for `date` fields.
+- Date pickers for `date` fields (MUI X; shadcn Calendar-in-Popover).
 - Custom templates.
 
 MIT

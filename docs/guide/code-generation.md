@@ -43,10 +43,10 @@ The type is expanded through the TypeScript compiler: primitives, `Date`, string
 
 ## Output styles
 
-`--ui plain` (the default) emits formstand's [bound components](./components). `--ui mui` emits the same structure against Material UI 9, with a small adapter inlined so the file is self-contained — the same pattern as the [MUI playground demos](./examples#material-ui).
+`--ui plain` (the default) emits formstand's [bound components](./components). `--ui mui` emits the same structure against Material UI 9, with a small adapter inlined so the file is self-contained — the same pattern as the [MUI playground demos](./examples#material-ui). `--ui shadcn` emits against [shadcn/ui](https://ui.shadcn.com/) conventions — imports from your app's `@/components/ui/*` alias, `aria-invalid` error styling, value-first callbacks for the Radix widgets — the pattern of the [shadcn playground demos](./examples#shadcn-ui).
 
 ::: warning Requirements
-`--ui mui` output imports `parseNumberText`/`numberToInputText`, which need **formstand ≥ 0.3.0**. Your project supplies `zod` v4 and (for MUI output) `@mui/material` — the CLI has no runtime footprint in your app.
+`--ui mui` and `--ui shadcn` output imports `parseNumberText`/`numberToInputText`, which need **formstand ≥ 0.3.0**. Your project supplies `zod` v4 plus the UI kit — `@mui/material` for MUI output; the scaffolded components (`npx shadcn add button input label checkbox select`) for shadcn output. The CLI has no runtime footprint in your app.
 :::
 
 ## Flags
@@ -55,7 +55,7 @@ The type is expanded through the TypeScript compiler: primitives, `Date`, string
 | --- | --- |
 | `--export NAME` | which schema export to use (zod mode); `default` works |
 | `--type NAME` | expand this type/interface instead (type mode) |
-| `--ui plain\|mui` | output style, default `plain` |
+| `--ui plain\|mui\|shadcn` | output style, default `plain` |
 | `--name MyForm` | component name, default derived from the input |
 | `--out FILE` | write the component here instead of stdout (parent dirs created) |
 | `--schema-out FILE` | type mode: where the generated zod schema goes |

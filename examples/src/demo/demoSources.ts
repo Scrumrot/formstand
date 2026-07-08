@@ -25,6 +25,10 @@ import muiInvoiceSrc from "../mui/MuiInvoiceBuilder.tsx?raw";
 import muiJobSrc from "../mui/MuiJobApplication.tsx?raw";
 import muiSettingsSrc from "../mui/MuiProfileSettings.tsx?raw";
 import muiSurveySrc from "../mui/MuiSurveyBuilder.tsx?raw";
+import shadCheckoutSrc from "../shadcn/ShadcnCheckoutForm.tsx?raw";
+import shadSettingsSrc from "../shadcn/ShadcnSettingsForm.tsx?raw";
+import shadSignupSrc from "../shadcn/ShadcnSignupForm.tsx?raw";
+import shadTeamSrc from "../shadcn/ShadcnTeamForm.tsx?raw";
 
 // The playground shell adds a one-line useDemoForm registration (plus its
 // import) to every demo so the "View state" panel works. Those lines are
@@ -60,6 +64,10 @@ const sources = {
   muiInvoice: muiInvoiceSrc,
   muiSettings: muiSettingsSrc,
   muiSurvey: muiSurveySrc,
+  shadSignup: shadSignupSrc,
+  shadCheckout: shadCheckoutSrc,
+  shadSettings: shadSettingsSrc,
+  shadTeam: shadTeamSrc,
 } as const;
 
 // App.tsx derives its TabKey from this map, so the tab list and the source

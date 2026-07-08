@@ -1,0 +1,107 @@
+/*
+ * Tailwind 4 without preflight: only the theme tokens and the utilities are
+ * imported (into the layers app.css declared), so Tailwind's global reset
+ * never touches the plain-CSS or MUI demos. The reset the shadcn components
+ * DO need is re-created below, scoped under `.shadcn-scope`.
+ */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/*
+ * shadcn's token bridge: utilities like `bg-background` read the component
+ * variables through Tailwind's theme namespace. `inline` makes utilities
+ * reference var(--background) at the use site, so defining the palette on
+ * `.shadcn-scope` (instead of shadcn's usual `:root`) is all the scoping
+ * needed — the values inherit down to every component in the subtree.
+ */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* The zinc palette's dark values — the playground is dark-chrome, so the
+ * demos ship dark-only (no `.dark` toggle, no `dark:` variants). */
+.shadcn-scope {
+  --radius: 0.625rem;
+  --background: oklch(0.141 0.005 285.823);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.21 0.006 285.885);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.21 0.006 285.885);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.92 0.004 286.32);
+  --primary-foreground: oklch(0.21 0.006 285.885);
+  --secondary: oklch(0.274 0.006 286.033);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.274 0.006 286.033);
+  --muted-foreground: oklch(0.705 0.015 286.067);
+  --accent: oklch(0.274 0.006 286.033);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.552 0.016 285.938);
+  color: var(--foreground);
+  font-size: 14px;
+}
+
+/*
+ * Scoped stand-in for the parts of Tailwind preflight the components rely
+ * on: solid zero-width borders (so `border` / `border-input` utilities
+ * render) and neutral form-control styling underneath the utility classes.
+ */
+@layer base {
+  .shadcn-scope *,
+  .shadcn-scope *::before,
+  .shadcn-scope *::after {
+    box-sizing: border-box;
+    border-width: 0;
+    border-style: solid;
+    border-color: var(--border);
+  }
+  .shadcn-scope button,
+  .shadcn-scope input,
+  .shadcn-scope select,
+  .shadcn-scope textarea {
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    margin: 0;
+    padding: 0;
+    background-color: transparent;
+    background-image: none;
+    border-radius: 0;
+  }
+  .shadcn-scope button {
+    cursor: pointer;
+  }
+  .shadcn-scope h1,
+  .shadcn-scope h2,
+  .shadcn-scope h3,
+  .shadcn-scope p {
+    margin: 0;
+  }
+  .shadcn-scope svg {
+    display: block;
+  }
+}

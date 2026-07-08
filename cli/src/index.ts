@@ -7,6 +7,7 @@ export {
   emitZodSchema,
   emitPlainForm,
   emitMuiForm,
+  emitShadcnForm,
 } from "./codegen";
 export type { SchemaImport, EmitFormOptions } from "./codegen";
 export { labelFromName } from "./ir";

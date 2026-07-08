@@ -2,12 +2,18 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { moduleSpecifier } from "../src/cli";
-import { type EmitFormOptions, emitMuiForm, emitPlainForm } from "../src/codegen";
+import {
+  type EmitFormOptions,
+  emitMuiForm,
+  emitPlainForm,
+  emitShadcnForm,
+} from "../src/codegen";
 import { fromZod } from "../src/fromZod";
 import {
   fixturesDir,
   freshTmpDir,
   muiStubPaths,
+  shadcnStubFile,
   typecheckDiagnostics,
 } from "./helpers";
 import { profileSchema } from "./fixtures/profileSchema";
@@ -90,6 +96,37 @@ describe("generated components", () => {
     expect(code).toContain(
       '{/* TODO: field "deep.dot" skipped — "." in a key is not path-addressable',
     );
+  });
+
+  // The shadcn variant typechecks too: the consumer's "@/components/ui/*"
+  // modules are declared by a structural ambient stub.
+  it("shadcn form typechecks against the library source and the shadcn stub", () => {
+    const dir = freshTmpDir("typecheck-shadcn");
+    const { file, code } = generate(
+      emitShadcnForm,
+      profileSchema,
+      "profileSchema",
+      "ProfileForm",
+      dir,
+    );
+    expect(typecheckDiagnostics([file, shadcnStubFile])).toEqual([]);
+    // The shadcn conventions the emitter promises: alias imports and
+    // aria-invalid error styling (no MUI-style error/helperText props).
+    expect(code).toContain('from "@/components/ui/input"');
+    expect(code).toContain('"aria-invalid":');
+    expect(code).not.toContain("helperText");
+  });
+
+  it("hostile field names typecheck in shadcn output", () => {
+    const dir = freshTmpDir("typecheck-hostile-shadcn");
+    const { file } = generate(
+      emitShadcnForm,
+      hostileSchema,
+      "hostileSchema",
+      "HostileForm",
+      dir,
+    );
+    expect(typecheckDiagnostics([file, shadcnStubFile])).toEqual([]);
   });
 
   it("hostile field names typecheck in mui output", () => {

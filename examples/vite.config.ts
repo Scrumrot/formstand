@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
@@ -10,7 +11,7 @@ export default defineConfig({
   // and the playground should run on older mobile WebKit rather than assume
   // the Vite default baseline.
   build: { target: "es2019" },
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       "formstand": fileURLToPath(new URL("../src/index.ts", import.meta.url)),

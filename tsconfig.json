@@ -22,7 +22,15 @@
     "paths": {
       // The examples smoke test pulls examples/src files (which import the
       // published name) into the root typecheck.
-      "formstand": ["./src/index.ts"]
+      "formstand": ["./src/index.ts"],
+      // Pin React's types to the root copy for the whole compilation: the
+      // examples files would otherwise resolve examples/node_modules'
+      // @types/react, and two copies fail assignability at every unique
+      // symbol (React 19's ref-cleanup VoidOrUndefinedOnly) even when the
+      // versions happen to match.
+      "react": ["./node_modules/@types/react"],
+      "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime"],
+      "react-dom": ["./node_modules/@types/react-dom"]
     }
   },
   "include": ["src", "tests", "vitest.config.ts", "tsup.config.ts"],

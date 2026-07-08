@@ -22,6 +22,10 @@ export const muiStubPaths: Readonly<Record<string, readonly string[]>> = {
   "@mui/material": [posix(path.join(testsDir, "stubs", "mui-material.d.ts"))],
 };
 
+// The shadcn stub declares ambient "@/components/ui/*" modules, so it joins
+// the program as an extra root file instead of a paths mapping.
+export const shadcnStubFile = path.join(testsDir, "stubs", "shadcn-ui.d.ts");
+
 const formatDiagnostic = (d: ts.Diagnostic): string => {
   const message = ts.flattenDiagnosticMessageText(d.messageText, "\n");
   if (d.file === undefined || d.start === undefined) return message;

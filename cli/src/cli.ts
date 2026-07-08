@@ -9,6 +9,7 @@ import {
   type SchemaImport,
   emitMuiForm,
   emitPlainForm,
+  emitShadcnForm,
   emitZodSchema,
   unaddressableFieldPaths,
 } from "./codegen";
@@ -30,7 +31,8 @@ Options:
   --export <name>     which export holds the zod schema (default: the default
                       export, or the sole zod-schema export)
   --type <TypeName>   generate from an exported TS type/interface instead
-  --ui <plain|mui>    component flavor (default: plain)
+  --ui <plain|mui|shadcn>
+                      component flavor (default: plain)
   --name <MyForm>     component name (default: derived from the schema/type)
   --out <file>        write the component here instead of stdout
   --schema-out <file> (type mode) where to write the generated zod schema
@@ -41,13 +43,21 @@ Options:
 Examples:
   formstand-gen src/profileSchema.ts --out src/ProfileForm.tsx
   formstand-gen src/types.ts --type Profile --ui mui --out src/ProfileForm.tsx
+  formstand-gen src/profileSchema.ts --ui shadcn --out src/ProfileForm.tsx
 `;
+
+type Ui = "plain" | "mui" | "shadcn";
+
+const UI_VALUES: readonly Ui[] = ["plain", "mui", "shadcn"];
+
+const isUi = (value: string): value is Ui =>
+  (UI_VALUES as readonly string[]).includes(value);
 
 type CliOptions = Readonly<{
   input: string;
   exportName?: string;
   typeName?: string;
-  ui: "plain" | "mui";
+  ui: Ui;
   name?: string;
   out?: string;
   schemaOut?: string;
@@ -63,7 +73,7 @@ type PartialOptions = Readonly<{
   input?: string;
   exportName?: string;
   typeName?: string;
-  ui: "plain" | "mui";
+  ui: Ui;
   name?: string;
   out?: string;
   schemaOut?: string;
@@ -99,10 +109,10 @@ const parseRest = (
     if (value === undefined) {
       return { kind: "error", message: `missing value for ${head}` };
     }
-    if (head === "--ui" && value !== "plain" && value !== "mui") {
+    if (head === "--ui" && !isUi(value)) {
       return {
         kind: "error",
-        message: `--ui must be "plain" or "mui", got "${value}"`,
+        message: `--ui must be one of ${UI_VALUES.map((ui) => `"${ui}"`).join(", ")}, got "${value}"`,
       };
     }
     return parseRest(after, { ...acc, [key]: value });
@@ -250,8 +260,16 @@ const pickSchemaExport = (
   };
 };
 
-const emitComponent = (ui: "plain" | "mui", options: EmitFormOptions): string =>
-  ui === "mui" ? emitMuiForm(options) : emitPlainForm(options);
+const emitComponent = (ui: Ui, options: EmitFormOptions): string => {
+  switch (ui) {
+    case "mui":
+      return emitMuiForm(options);
+    case "shadcn":
+      return emitShadcnForm(options);
+    case "plain":
+      return emitPlainForm(options);
+  }
+};
 
 const stdout = (text: string): void => {
   process.stdout.write(text);

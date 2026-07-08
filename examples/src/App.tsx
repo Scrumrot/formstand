@@ -25,6 +25,10 @@ import { MuiJobApplication } from "./mui/MuiJobApplication";
 import { MuiProfileSettings } from "./mui/MuiProfileSettings";
 import { MuiSurveyBuilder } from "./mui/MuiSurveyBuilder";
 import { MuiThemeBridge } from "./mui/MuiThemeBridge";
+import { ShadcnCheckoutForm } from "./shadcn/ShadcnCheckoutForm";
+import { ShadcnSettingsForm } from "./shadcn/ShadcnSettingsForm";
+import { ShadcnSignupForm } from "./shadcn/ShadcnSignupForm";
+import { ShadcnTeamForm } from "./shadcn/ShadcnTeamForm";
 
 // One key list for tabs and sources — adding a demo without a source entry
 // (or vice versa) is a compile error.
@@ -118,6 +122,44 @@ const TABS: readonly Tab[] = [
       <MuiThemeBridge>
         <MuiSurveyBuilder />
       </MuiThemeBridge>
+    ),
+  },
+  // The wrapper div is shadcn's MuiThemeBridge equivalent: the Tailwind
+  // theme variables and the scoped preflight both key off .shadcn-scope.
+  {
+    key: "shadSignup",
+    label: "shadcn: Signup",
+    render: () => (
+      <div className="shadcn-scope">
+        <ShadcnSignupForm />
+      </div>
+    ),
+  },
+  {
+    key: "shadCheckout",
+    label: "shadcn: Checkout",
+    render: () => (
+      <div className="shadcn-scope">
+        <ShadcnCheckoutForm />
+      </div>
+    ),
+  },
+  {
+    key: "shadSettings",
+    label: "shadcn: Settings",
+    render: () => (
+      <div className="shadcn-scope">
+        <ShadcnSettingsForm />
+      </div>
+    ),
+  },
+  {
+    key: "shadTeam",
+    label: "shadcn: Team",
+    render: () => (
+      <div className="shadcn-scope">
+        <ShadcnTeamForm />
+      </div>
     ),
   },
 ];

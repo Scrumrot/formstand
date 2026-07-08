@@ -21,6 +21,8 @@ export default defineConfig({
       "@mui/icons-material",
       "@emotion/react",
       "@emotion/styled",
+      "radix-ui",
+      "lucide-react",
     ],
   },
   test: {

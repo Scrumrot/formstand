@@ -8,3 +8,12 @@ import { afterEach } from "vitest";
 afterEach(() => {
   cleanup();
 });
+
+// jsdom has no ResizeObserver; Radix primitives (Slider's thumb sizing)
+// observe elements on mount, so the shadcn smoke-test tabs need a stand-in.
+// Layout never changes in jsdom, so an observer that never fires is
+// accurate. A `new`-able function (constructors ignore `this` when the body
+// returns an object) keeps the codebase class-free.
+globalThis.ResizeObserver ??= function ResizeObserver(): ResizeObserver {
+  return { observe: () => {}, unobserve: () => {}, disconnect: () => {} };
+} as unknown as typeof ResizeObserver;

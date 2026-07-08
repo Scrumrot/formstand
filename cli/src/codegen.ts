@@ -912,3 +912,336 @@ const muiBackend: Backend = {
 
 export const emitMuiForm = (options: EmitFormOptions): string =>
   emitForm(muiBackend, options);
+
+// ---------------------------------------------------------------------------
+// shadcn/ui backend
+// ---------------------------------------------------------------------------
+
+// Emits against the shadcn conventions: the components live in the consumer's
+// app under the "@/components/ui/*" alias (what `npx shadcn add` scaffolds),
+// validity surfaces as aria-invalid (the components style themselves off it)
+// plus a message line, and the Radix-based widgets (Checkbox, Select) take
+// value-first callbacks (onCheckedChange / onValueChange) instead of DOM
+// change events.
+
+const shadcnAdapterSection = (usage: KindUsage): string => {
+  const hasLeaf =
+    usage.string || usage.date || usage.number || usage.boolean || usage.enum;
+  const errorHelper = [
+    "const fieldError = (",
+    "  field: Readonly<{ error: readonly string[] | undefined }>,",
+    "): string | undefined =>",
+    "  field.error !== undefined && field.error.length > 0",
+    "    ? field.error[0]",
+    "    : undefined;",
+    "",
+    "const FieldError = ({",
+    "  field,",
+    "}: Readonly<{",
+    "  field: Readonly<{ error: readonly string[] | undefined }>;",
+    "}>) =>",
+    "  fieldError(field) !== undefined ? (",
+    '    <p className="text-sm text-destructive">{fieldError(field)}</p>',
+    "  ) : null;",
+  ];
+  const textAdapter = [
+    "",
+    "const shadcnTextInputProps = (field: UseFieldReturn<string | null | undefined>) => ({",
+    "  name: field.path,",
+    '  value: field.value ?? "",',
+    '  "aria-invalid": fieldError(field) !== undefined ? true : undefined,',
+    "  onChange: (e: ChangeEvent<HTMLInputElement>) => {",
+    "    const text = e.target.value;",
+    '    field.setValue(text === "" && field.emptyValue === null ? null : text);',
+    "  },",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
+  const numberAdapter = [
+    "",
+    "const shadcnNumberInputProps = (field: UseFieldReturn<number | null | undefined>) => ({",
+    '  type: "number" as const,',
+    "  name: field.path,",
+    "  value: numberToInputText(field.value),",
+    '  "aria-invalid": fieldError(field) !== undefined ? true : undefined,',
+    "  onChange: (e: ChangeEvent<HTMLInputElement>) => {",
+    "    const parsed = parseNumberText(e.target.value);",
+    '    field.setValue(parsed.kind === "number" ? parsed.value : field.emptyValue);',
+    "  },",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
+  // No blur event on the Radix Select root — closing the dropdown is the
+  // "done editing" signal, so it maps to the field's blur trigger.
+  const selectAdapter = [
+    "",
+    "const shadcnSelectProps = (field: UseFieldReturn<string | null | undefined>) => ({",
+    "  name: field.path,",
+    '  value: field.value ?? "",',
+    "  onValueChange: (value: string) => field.setValue(value),",
+    "  onOpenChange: (open: boolean) => {",
+    "    if (!open) field.onBlur();",
+    "  },",
+    "});",
+  ];
+  const checkboxAdapter = [
+    "",
+    "const shadcnCheckboxProps = (field: UseFieldReturn<boolean | null | undefined>) => ({",
+    "  name: field.path,",
+    "  checked: field.value ?? false,",
+    '  "aria-invalid": fieldError(field) !== undefined ? true : undefined,',
+    '  onCheckedChange: (checked: boolean | "indeterminate") =>',
+    "    field.setValue(checked === true),",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
+  return [
+    "// ---- formstand → shadcn/ui adapter -----------------------------------------",
+    ...(hasLeaf ? errorHelper : []),
+    ...(usage.string || usage.date ? textAdapter : []),
+    ...(usage.number ? numberAdapter : []),
+    ...(usage.enum ? selectAdapter : []),
+    ...(usage.boolean ? checkboxAdapter : []),
+  ].join("\n");
+};
+
+const shadcnBoundComponents = (usage: KindUsage): string => {
+  const propsType = [
+    "",
+    "type BoundFieldProps = Readonly<{",
+    "  form: FieldFormApi;",
+    "  path: string;",
+    "  label: string;",
+    "}>;",
+  ];
+  const text = [
+    "",
+    "const BoundTextField = ({ form, path, label }: BoundFieldProps) => {",
+    "  const field = useField<string | null | undefined>(form, path);",
+    "  return (",
+    '    <div className="grid gap-2">',
+    "      <Label htmlFor={path}>{label}</Label>",
+    "      <Input id={path} {...shadcnTextInputProps(field)} />",
+    "      <FieldError field={field} />",
+    "    </div>",
+    "  );",
+    "};",
+  ];
+  const number = [
+    "",
+    "const BoundNumberField = ({ form, path, label }: BoundFieldProps) => {",
+    "  const field = useField<number | null | undefined>(form, path);",
+    "  return (",
+    '    <div className="grid gap-2">',
+    "      <Label htmlFor={path}>{label}</Label>",
+    "      <Input id={path} {...shadcnNumberInputProps(field)} />",
+    "      <FieldError field={field} />",
+    "    </div>",
+    "  );",
+    "};",
+  ];
+  const select = [
+    "",
+    "const BoundSelectField = ({",
+    "  form,",
+    "  path,",
+    "  label,",
+    "  options,",
+    "}: BoundFieldProps & Readonly<{ options: readonly string[] }>) => {",
+    "  const field = useField<string | null | undefined>(form, path);",
+    "  return (",
+    '    <div className="grid gap-2">',
+    "      <Label htmlFor={path}>{label}</Label>",
+    "      <Select {...shadcnSelectProps(field)}>",
+    "        <SelectTrigger",
+    "          id={path}",
+    '          className="w-full"',
+    "          aria-invalid={fieldError(field) !== undefined ? true : undefined}",
+    "        >",
+    "          <SelectValue placeholder={`Select ${label.toLowerCase()}`} />",
+    "        </SelectTrigger>",
+    "        <SelectContent>",
+    "          {options.map((option) => (",
+    "            <SelectItem key={option} value={option}>",
+    "              {option}",
+    "            </SelectItem>",
+    "          ))}",
+    "        </SelectContent>",
+    "      </Select>",
+    "      <FieldError field={field} />",
+    "    </div>",
+    "  );",
+    "};",
+  ];
+  const checkbox = [
+    "",
+    "const BoundCheckboxField = ({ form, path, label }: BoundFieldProps) => {",
+    "  const field = useField<boolean | null | undefined>(form, path);",
+    "  return (",
+    '    <div className="grid gap-2">',
+    '      <div className="flex items-center gap-2">',
+    "        <Checkbox id={path} {...shadcnCheckboxProps(field)} />",
+    "        <Label htmlFor={path}>{label}</Label>",
+    "      </div>",
+    "      <FieldError field={field} />",
+    "    </div>",
+    "  );",
+    "};",
+  ];
+  return [
+    ...propsType,
+    ...(usage.string || usage.date ? text : []),
+    ...(usage.number ? number : []),
+    ...(usage.enum ? select : []),
+    ...(usage.boolean ? checkbox : []),
+  ].join("\n");
+};
+
+const shadcnLeaf = (
+  spec: FieldSpec,
+  attr: string,
+  label: string,
+  level: number,
+): readonly string[] => {
+  const todo = todoComment(spec, level);
+  switch (spec.kind) {
+    case "string":
+      return [
+        ...todo,
+        `${ind(level)}<BoundTextField form={form} ${attr} ${jsxAttr("label", label)} />`,
+      ];
+    case "date":
+      return [
+        ...todo,
+        `${ind(level)}{/* TODO: date input — consider shadcn's Calendar-in-Popover pattern; this binds plain text */}`,
+        `${ind(level)}<BoundTextField form={form} ${attr} ${jsxAttr("label", label)} />`,
+      ];
+    case "number":
+      return [
+        ...todo,
+        `${ind(level)}<BoundNumberField form={form} ${attr} ${jsxAttr("label", label)} />`,
+      ];
+    case "boolean":
+      return [
+        ...todo,
+        `${ind(level)}<BoundCheckboxField form={form} ${attr} ${jsxAttr("label", label)} />`,
+      ];
+    case "enum":
+      return [
+        ...todo,
+        `${ind(level)}<BoundSelectField`,
+        `${ind(level + 1)}form={form}`,
+        `${ind(level + 1)}${attr}`,
+        `${ind(level + 1)}${jsxAttr("label", label)}`,
+        `${ind(level + 1)}options={[${spec.options.map(q).join(", ")}]}`,
+        `${ind(level)}/>`,
+      ];
+    case "object":
+    case "array":
+      return [`${ind(level)}{/* unreachable: containers render elsewhere */}`];
+  }
+};
+
+const shadcnBackend: Backend = {
+  header: (usage, arrays) => {
+    const hasLeaf =
+      usage.string || usage.number || usage.boolean || usage.date || usage.enum;
+    const formstandValueImports = [
+      ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
+      ...(hasLeaf ? ["useField"] : []),
+      ...(arrays.length > 0 ? ["useFieldArray"] : []),
+      "useForm",
+      "useIsSubmitting",
+    ];
+    const formstandTypeImports = [
+      ...(hasLeaf ? ["FieldFormApi", "UseFieldReturn"] : []),
+    ];
+    return [
+      ...(usage.string || usage.date || usage.number
+        ? [`import type { ChangeEvent } from "react";`]
+        : []),
+      `import { Button } from "@/components/ui/button";`,
+      ...(usage.boolean
+        ? [`import { Checkbox } from "@/components/ui/checkbox";`]
+        : []),
+      ...(usage.string || usage.date || usage.number
+        ? [`import { Input } from "@/components/ui/input";`]
+        : []),
+      ...(hasLeaf ? [`import { Label } from "@/components/ui/label";`] : []),
+      ...(usage.enum
+        ? [
+            "import {",
+            "  Select,",
+            "  SelectContent,",
+            "  SelectItem,",
+            "  SelectTrigger,",
+            "  SelectValue,",
+            `} from "@/components/ui/select";`,
+          ]
+        : []),
+      "import {",
+      ...formstandValueImports.map((name) => `  ${name},`),
+      ...formstandTypeImports.map((name) => `  type ${name},`),
+      `} from "formstand";`,
+      `import { z } from "zod";`,
+    ];
+  },
+  preamble: (usage) => [
+    shadcnAdapterSection(usage),
+    shadcnBoundComponents(usage),
+    "",
+  ],
+  leaf: shadcnLeaf,
+  objectSection: (label, level, body) => [
+    `${ind(level)}<fieldset className="grid gap-4 rounded-lg border p-4">`,
+    `${ind(level + 1)}<legend className="px-1 text-sm font-medium">${jsxText(label)}</legend>`,
+    ...body,
+    `${ind(level)}</fieldset>`,
+  ],
+  arraySection: (entry, level, rowBody) => [
+    `${ind(level)}<section className="grid gap-3">`,
+    `${ind(level + 1)}<h3 className="text-sm font-medium">${jsxText(entry.label)}</h3>`,
+    `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
+    `${ind(level + 2)}<div key={row.id} className="grid gap-4 rounded-lg border p-4">`,
+    ...rowBody,
+    `${ind(level + 3)}<Button`,
+    `${ind(level + 4)}type="button"`,
+    `${ind(level + 4)}variant="outline"`,
+    `${ind(level + 4)}size="sm"`,
+    `${ind(level + 4)}className="w-fit"`,
+    `${ind(level + 4)}onClick={() => ${entry.hookName}.remove(index)}`,
+    `${ind(level + 3)}>`,
+    `${ind(level + 4)}Remove`,
+    `${ind(level + 3)}</Button>`,
+    `${ind(level + 2)}</div>`,
+    `${ind(level + 1)}))}`,
+    `${ind(level + 1)}<Button`,
+    `${ind(level + 2)}type="button"`,
+    `${ind(level + 2)}variant="outline"`,
+    `${ind(level + 2)}size="sm"`,
+    `${ind(level + 2)}className="w-fit"`,
+    `${ind(level + 2)}onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}`,
+    `${ind(level + 1)}>`,
+    `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
+    `${ind(level + 1)}</Button>`,
+    `${ind(level)}</section>`,
+  ],
+  bodyLevel: 3,
+  formOpen: [
+    "    <form",
+    `      className="grid max-w-xl gap-4"`,
+    "      onSubmit={form.handleSubmit((data) => {",
+    `        console.log("submit", data);`,
+    "      })}",
+    "    >",
+  ],
+  formClose: [
+    `      <Button type="submit" disabled={submitting}>`,
+    `        {submitting ? "Submitting..." : "Submit"}`,
+    "      </Button>",
+    "    </form>",
+  ],
+};
+
+export const emitShadcnForm = (options: EmitFormOptions): string =>
+  emitForm(shadcnBackend, options);

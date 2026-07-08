@@ -35,6 +35,19 @@ Five demos bind formstand to [Material UI](https://mui.com/) through a ~60-line 
 | MUI: Settings | Card-sectioned settings with a nullable bio (clearing the field round-trips to `null` via `emptyValue`), live `dirtyFields()` chips, and Save/Discard as `adoptValues`/`reset()` | [MuiProfileSettings.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/mui/MuiProfileSettings.tsx) |
 | MUI: Survey | Nested field arrays (sections → questions) with type-switched sub-editors and a root-level refine surfaced through `useFormError` | [MuiSurveyBuilder.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/mui/MuiSurveyBuilder.tsx) |
 
+## shadcn/ui
+
+Four demos bind formstand to [shadcn/ui](https://ui.shadcn.com/) components through the same adapter pattern — [shadcnAdapter.ts](https://github.com/Scrumrot/formstand/blob/main/examples/src/shadcn/shadcnAdapter.ts) turns a `useField` result into spreadable props, bridging two dialects: `Input`/`Textarea` take native DOM events, while the Radix-based widgets (`Checkbox`, `Switch`, `Select`, `Slider`, `RadioGroup`) take value-first callbacks (`onCheckedChange`, `onValueChange`) and signal "done editing" through close/commit events instead of blur. Errors surface as `aria-invalid`, which the components style themselves off. `formstand-gen --ui shadcn` generates forms against this pattern.
+
+| Demo | What it shows | Source |
+| --- | --- | --- |
+| shadcn: Signup | An async `.refine` username check isolated to its field's subschema, a cross-field password confirmation, and a must-accept `Checkbox` | [ShadcnSignupForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/shadcn/ShadcnSignupForm.tsx) |
+| shadcn: Checkout | Radix `Select` and `RadioGroup` via `onValueChange`, a derived total from a selector, and a nullable gift note that round-trips to `null` via `emptyValue` | [ShadcnCheckoutForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/shadcn/ShadcnCheckoutForm.tsx) |
+| shadcn: Settings | `Switch` and `Slider` bindings (validation waits for `onValueCommit`), live `dirtyFields()` badges, Save/Discard as `adoptValues`/`reset()` | [ShadcnSettingsForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/shadcn/ShadcnSettingsForm.tsx) |
+| shadcn: Team | `useFieldArray` rows (one component per row, so edits don't re-render siblings) with a cross-row duplicate-email `superRefine` | [ShadcnTeamForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/shadcn/ShadcnTeamForm.tsx) |
+
+The playground bundles its own copies of the shadcn components (they're copy-in code by design); in your app, `npx shadcn add button input label checkbox select …` scaffolds them and the adapter works unchanged.
+
 ## Browse the source inline
 
 Every block below embeds the demo's actual source file at build time, so it can never drift from what the playground runs. Two lines in each demo are playground harness, not library API: `import { useDemoForm } from "../demo/DemoShell"` and the `useDemoForm(form)` call register the demo's form with the playground shell, which is what powers the **View state** panel (rendered by `StateDump.tsx` below). Delete those two lines when copying a demo into your own project — everything else is plain formstand.
@@ -143,6 +156,32 @@ Every block below embeds the demo's actual source file at build time, so it can 
 
 ::: details MUI: Survey — MuiSurveyBuilder.tsx
 <<< ../../examples/src/mui/MuiSurveyBuilder.tsx
+:::
+
+### shadcn/ui demos
+
+::: details The adapter (shadcnAdapter.ts) — shadcnAdapter.ts
+<<< ../../examples/src/shadcn/shadcnAdapter.ts
+:::
+
+::: details Error line — FieldError.tsx
+<<< ../../examples/src/shadcn/FieldError.tsx
+:::
+
+::: details shadcn: Signup — ShadcnSignupForm.tsx
+<<< ../../examples/src/shadcn/ShadcnSignupForm.tsx
+:::
+
+::: details shadcn: Checkout — ShadcnCheckoutForm.tsx
+<<< ../../examples/src/shadcn/ShadcnCheckoutForm.tsx
+:::
+
+::: details shadcn: Settings — ShadcnSettingsForm.tsx
+<<< ../../examples/src/shadcn/ShadcnSettingsForm.tsx
+:::
+
+::: details shadcn: Team — ShadcnTeamForm.tsx
+<<< ../../examples/src/shadcn/ShadcnTeamForm.tsx
 :::
 
 ## Running locally

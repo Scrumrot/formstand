@@ -1,0 +1,14 @@
+/*
+ * Cascade-layer order for the whole playground, lowest priority first.
+ *
+ * The playground's own stylesheet goes into the bottom `app` layer so the
+ * shadcn demos' Tailwind utilities (top `utilities` layer) beat its global
+ * `input`/`button` element rules — unlayered CSS would win against ANY
+ * layered rule regardless of specificity, so styles.css must not stay
+ * unlayered. MUI is unaffected: emotion injects unlayered <style> tags,
+ * which outrank every layer here, same as before.
+ */
+@layer app, theme, base, utilities;
+
+@import "./styles.css" layer(app);
+@import "./shadcn/theme.css";

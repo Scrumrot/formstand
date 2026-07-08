@@ -1,5 +1,29 @@
 # Changelog
 
+## formstand-cli 0.2.0 — 2026-07-08
+
+### Added
+
+- `--ui shadcn`: generates forms against [shadcn/ui](https://ui.shadcn.com/)
+  conventions — components imported from the app's `@/components/ui/*` alias
+  (what `npx shadcn add` scaffolds), an inlined adapter speaking the Radix
+  dialect (`onCheckedChange`/`onValueChange`, dropdown-close as the blur
+  trigger), and `aria-invalid` error styling with a message line. Generated
+  output is typechecked in CI against the library source and a structural
+  stub of the shadcn components, like the other backends.
+- `emitShadcnForm` joins the programmatic API.
+
+### Docs & examples (no library package changes)
+
+- Four shadcn/ui playground demos (Signup, Checkout, Settings, Team) plus
+  the formstand→shadcn adapter pattern they showcase —
+  `examples/src/shadcn/shadcnAdapter.ts` bridges `useField` to both native
+  inputs and the Radix-based widgets (Checkbox, Switch, Select, Slider,
+  RadioGroup).
+- The playground carries its own copy-in shadcn component kit under a
+  scoped Tailwind 4 setup (no preflight; the plain-CSS and MUI demos are
+  untouched).
+
 ## 0.4.1 — 2026-07-08
 
 ### Fixed
