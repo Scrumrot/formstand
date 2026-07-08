@@ -19,6 +19,10 @@ export {
   validateSync,
   validateAsync,
   isAsyncRequiredError,
+  // The schema-introspection rule behind useField's emptyValue — exported so
+  // adapters for other UI kits can share it (like numberToInputText /
+  // parseNumberText below).
+  emptyValueForSchema,
 } from "./core/validation";
 export type {
   ValidationResult,
@@ -38,9 +42,6 @@ export type {
 export {
   useFormSelector,
   useFormSelectorShallow,
-  // Deprecated aliases — prefer useFormSelector / useFormSelectorShallow.
-  useFormState,
-  useFormStateShallow,
 } from "./react/useFormState";
 export type { FormStateApi } from "./react/useFormState";
 export { useFormError } from "./react/useFormError";

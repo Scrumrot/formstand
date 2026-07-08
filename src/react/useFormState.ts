@@ -47,13 +47,3 @@ export function useFormSelectorShallow<U>(
 ): U {
   return useStore(form.store, useShallow(selector));
 }
-
-/**
- * @deprecated Renamed to `useFormSelector` — React DOM ships its own
- * (deprecated) `useFormState`, and auto-imports regularly grab the wrong one.
- * This alias will be removed before 1.0.
- */
-export const useFormState = useFormSelector;
-
-/** @deprecated Renamed to `useFormSelectorShallow`; see `useFormState`. */
-export const useFormStateShallow = useFormSelectorShallow;

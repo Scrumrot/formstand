@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { createForm } from "../src/core/createForm";
-import {
-  useFormSelector,
-  useFormSelectorShallow,
-  useFormState,
-  useFormStateShallow,
-} from "../src/react/useFormState";
 
 describe("Date values in dirty tracking", () => {
   it("re-picking an equal Date reads as clean", () => {
@@ -56,12 +50,5 @@ describe("getFieldState", () => {
     expect(snap.dirty).toBe(true);
     expect(snap.error).toEqual(["short"]);
     expect(snap.isValidating).toBe(false);
-  });
-});
-
-describe("useFormSelector rename", () => {
-  it("keeps the deprecated names as aliases of the new ones", () => {
-    expect(useFormState).toBe(useFormSelector);
-    expect(useFormStateShallow).toBe(useFormSelectorShallow);
   });
 });

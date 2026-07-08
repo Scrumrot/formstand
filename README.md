@@ -127,7 +127,7 @@ name.dirty;
 name.isValidating;
 name.setValue(v);
 name.setTouched();
-name.setError([...]);
+name.setError("taken");  // or ["taken", "reserved"]
 name.clearError();
 name.validate();
 name.validateAsync();
@@ -176,7 +176,7 @@ Selector-style subscription. Use `useFormSelectorShallow` for selectors that ret
 
 > Formerly `useFormState` / `useFormStateShallow` — renamed because React DOM
 > ships its own (deprecated) `useFormState` and auto-imports regularly grabbed
-> the wrong one. The old names still work as deprecated aliases.
+> the wrong one. The old names were removed in 0.4.0.
 
 ### `useFormError(form)`
 

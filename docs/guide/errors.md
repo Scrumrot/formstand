@@ -51,7 +51,7 @@ form.clearErrors();           // clears everything, both channels
 
 Note the asymmetry: `setError`/`setErrors` touch only the server channel, but `clearErrors` scrubs both — schema errors it removes simply return on the next validation pass.
 
-From a field, `useField` exposes the same surface scoped to its path: `field.setError([...])` and `field.clearError()`.
+From a field, `useField` exposes the same surface scoped to its path: `field.setError("taken")` (a single string or an array, same as `form.setError`) and `field.clearError()`.
 
 ## When a server error is released
 

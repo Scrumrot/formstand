@@ -125,6 +125,10 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
       previous: FieldValue<z.input<TSchema>, P>,
     ) => void,
   ) => () => void;
+  // Watches THE WHOLE values object — the name is watchValue + "s" as in
+  // "all the values", not "watchValue over many paths". Fires whenever any
+  // value changes (reference-compared). A multi-path watcher, if one ever
+  // ships, would be a new API rather than a change to this one.
   watchValues: (
     listener: (
       values: z.input<TSchema>,

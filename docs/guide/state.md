@@ -107,7 +107,7 @@ form.watchValue("users.0.email", (next, prev) => { ... });  // one path's value
 form.watchField("users.0.email", (snapshot) => { ... });    // value+error+touched+dirty+isValidating
 ```
 
-All return an unsubscribe function. `watchValue` compares by `Object.is`; `watchField` fires when any part of the field's snapshot changes. A typical use is autosave:
+All return an unsubscribe function. `watchValue` compares by `Object.is`; `watchField` fires when any part of the field's snapshot changes. `watchValues` watches the **whole values object** (the "s" means "all the values" — it is not a multi-path `watchValue`; to watch several specific paths, register a `watchValue` per path). A typical use is autosave:
 
 ```ts
 const unsubscribe = form.watchValues((values) => scheduleAutosave(values));

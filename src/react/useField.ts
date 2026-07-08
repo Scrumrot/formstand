@@ -29,7 +29,7 @@ export type FieldFormApi = Readonly<{
   store: ReadonlyStore<FormState<unknown>>;
   setValue(path: string, value: unknown): void;
   setTouched(path: string, touched?: boolean): void;
-  setError(path: string, errors: readonly string[]): void;
+  setError(path: string, errors: string | readonly string[]): void;
   clearErrors(path?: string): void;
   validateField(path: string): FieldValidationResult;
   validateFieldAsync(path: string): Promise<FieldValidationResult>;
@@ -61,7 +61,8 @@ export type UseFieldReturn<TValue> = Readonly<{
   isValidating: boolean;
   setValue: (value: TValue) => void;
   setTouched: (touched?: boolean) => void;
-  setError: (errors: readonly string[]) => void;
+  // A single string is shorthand for a one-element array (like form.setError).
+  setError: (errors: string | readonly string[]) => void;
   clearError: () => void;
   validate: () => FieldValidationResult;
   validateAsync: () => Promise<FieldValidationResult>;
@@ -201,7 +202,7 @@ export function useField<TValue = unknown>(
   );
 
   const setError = useCallback(
-    (errors: readonly string[]) => form.setError(path, errors),
+    (errors: string | readonly string[]) => form.setError(path, errors),
     [form, path],
   );
 

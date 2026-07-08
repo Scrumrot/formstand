@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { useField } from "../../src/react/useField";
 import { useForm } from "../../src/react/useForm";
-import { useFormState } from "../../src/react/useFormState";
+import { useFormSelector } from "../../src/react/useFormState";
 
 const schema = z.object({
   name: z.string().min(2),
@@ -30,12 +30,12 @@ describe("useForm", () => {
   });
 });
 
-describe("useFormState", () => {
+describe("useFormSelector", () => {
   it("returns the selected slice and re-renders only when it changes", () => {
     const renders: string[] = [];
     const { result } = renderHook(() => {
       const form = useTestForm();
-      const name = useFormState(form, (s) => s.values.name);
+      const name = useFormSelector(form, (s) => s.values.name);
       renders.push(name);
       return { form, name };
     });
@@ -113,6 +113,23 @@ describe("useField", () => {
       result.current.city.setValue("Boston");
     });
     expect(result.current.city.value).toBe("Boston");
+  });
+
+  it("setError accepts a single string or an array", () => {
+    const { result } = renderHook(() => {
+      const form = useTestForm();
+      return { form, name: useField(form, "name") };
+    });
+
+    act(() => {
+      result.current.name.setError("taken");
+    });
+    expect(result.current.name.error).toEqual(["taken"]);
+
+    act(() => {
+      result.current.name.setError(["taken", "reserved"]);
+    });
+    expect(result.current.name.error).toEqual(["taken", "reserved"]);
   });
 
   it("returns a stable object when its own slice has not changed", () => {

@@ -48,12 +48,18 @@ const form = createForm(schema, {
 | `getFieldState(path)` | typed one-shot read of a field's full slice — a [`FieldSnapshot`](#fieldsnapshot) |
 | `watchField(path, listener)` | subscribe to one field's [`FieldSnapshot`](#fieldsnapshot); returns an unsubscribe function |
 | `watchValue(path, listener)` | subscribe to one path's value (`Object.is`-compared); `listener(next, prev)` |
-| `watchValues(listener)` | subscribe to the values object; `listener(values, prev)` |
+| `watchValues(listener)` | subscribe to the **whole values object**; `listener(values, prev)` fires on any value change. (The name is `watchValue` + "s" as in "all the values" — it is not a multi-path `watchValue`; a future multi-path watcher would be a new API) |
 | `diff()` / `dirtyFields()` | PATCH-style helpers, derived by comparing `values` against `initialValues`: minimal divergent paths (objects recurse to the changed leaves; arrays report their base path). Reverting a field drops it |
 | `snapshot()` / `restore(snap)` | full state capture/restore for undo/rollback; `restore` re-derives the merged `errors` map from the snapshot's channels |
 | `arrayPush(path, item)` / `arrayRemove(path, index)` / `arrayInsert(path, index, item)` / `arrayMove(path, from, to)` / `arraySwap(path, a, b)` | array ops with meta-key re-keying (errors/touched/server verdicts follow their rows); out-of-range or non-integer indices are refused with a warning |
 
 All paths on the imperative surface are `FieldPath`-typed; runtime-built strings need a cast — see [Typed paths](../guide/typed-paths#dynamic-paths).
+
+The positional `submit(onValid, onInvalid?, options?)` is the committed shape (no options-object overload is planned): when you need options without an invalid handler, pass `undefined` in its slot —
+
+```ts
+await form.submit(onValid, undefined, { force: true });
+```
 
 ## Result and option types
 
@@ -125,7 +131,7 @@ type FieldValidationResult =
 | `useSubmitCount` | `useSubmitCount(form): number` | `state.submitCount` |
 | `createFormContext` | `createFormContext<TSchema>(): { Provider, useFormContext }` | typed context factory for prop-drilling-free forms |
 
-`useFormState` / `useFormStateShallow` still exist as **deprecated aliases** of `useFormSelector` / `useFormSelectorShallow` — renamed because React DOM ships its own (deprecated) `useFormState` and auto-imports regularly grabbed the wrong one.
+The pre-0.2 names `useFormState` / `useFormStateShallow` were renamed to `useFormSelector` / `useFormSelectorShallow` (React DOM ships its own, deprecated, `useFormState` and auto-imports regularly grabbed the wrong one); the deprecated aliases were removed in 0.4.0.
 
 ### `UseFieldReturn<TValue>`
 
@@ -139,7 +145,7 @@ type FieldValidationResult =
 | `touched` / `dirty` / `isValidating` | `boolean` | |
 | `setValue(v)` | | writes the value and triggers mode-appropriate validation |
 | `setTouched(touched?)` | | |
-| `setError(errors)` | | writes the server channel at this path (`readonly string[]`) |
+| `setError(errors)` | | writes the server channel at this path; a single `string` or a `readonly string[]`, like `form.setError` |
 | `clearError()` | | `clearErrors(path)` — both channels at this path and descendants |
 | `validate()` / `validateAsync()` | | field-scoped validation |
 | `onBlur()` | | marks touched and triggers mode-appropriate validation |
@@ -175,6 +181,14 @@ Pure functions over a `useField` result, for custom markup:
 | `numberInputProps(field)` | `NumberInputProps` | `<input>` (stateless `type="number"` binding) |
 | `checkboxProps(field)` | `CheckboxProps` | `<input>` |
 | `selectProps(field)` | `SelectProps` | `<select>` |
+
+The rules the built-in bindings follow are exported alongside them, so adapters for other UI kits (MUI, etc.) can share them instead of re-deriving — see [Bound components](../guide/components):
+
+| Helper | Signature | Notes |
+| --- | --- | --- |
+| `numberToInputText` | `(value: number \| null \| undefined) => string` | canonical display text for a numeric field value (`""` for empty/`null`/`NaN`) |
+| `parseNumberText` | `(text: string) => ParsedNumberText` | classifies user-typed text: `{ kind: "number", value }` for a finite number, `{ kind: "empty" }` for whitespace-only, `{ kind: "invalid" }` for partial entries (`-`, `1.`, `1e`) and `Infinity` |
+| `emptyValueForSchema` | `(schema: z.ZodType) => null \| undefined` | the empty representation a field's schema accepts — `null` when nullable (and not optional), `undefined` otherwise; the schema-introspection rule behind [`useField().emptyValue`](#usefieldreturntvalue) |
 
 ### `focusFirstError(errors, root?)`
 
@@ -213,6 +227,13 @@ Everything importable via `import type { ... } from "formstand"`:
 - **Validation:** `ValidationResult`, `SettledValidationResult`, `FieldValidationResult`, `SettledFieldValidationResult`, `ValidationMode`, `ValidationTrigger`
 - **Hooks:** `FormStateApi`, `UseFieldReturn`, `FieldFormApi`, `FieldPathArg`, `UseFieldOptions`, `UseFieldArrayReturn`, `FieldArrayFormApi`, `FieldArrayEntry`, `FormProviderProps`, `FormContextApi`
 - **Components:** `TextFieldProps`, `NumberFieldProps`, `CheckboxFieldProps`, `SelectFieldProps`, `SelectFieldOption`, `FieldRef`, `PathsOf`
-- **Prop builders:** `TextInputProps`, `NumberInputProps`, `CheckboxProps`, `SelectProps`
+- **Prop builders:** `TextInputProps`, `NumberInputProps`, `CheckboxProps`, `SelectProps`, `ParsedNumberText`
 
 `FieldFormApi` / `FieldArrayFormApi` / `FormStateApi` are the structural (schema-less) form interfaces the hooks accept — useful for writing reusable field components that take any form. When a real `Form<TSchema>` is passed, the typed overloads bind instead and path inference is preserved.
+
+::: info Implementing these interfaces
+Their methods are deliberately declared with **method-shorthand syntax** (`setValue(path: string, value: unknown): void`), so TypeScript checks the parameters **bivariantly**. That is what lets a `Form<TSchema>` — whose write methods take the narrower `FieldPath<...>` instead of `string` — satisfy the string-typed interface. Two consequences if you implement one of these shapes yourself:
+
+- Your implementation **must accept any string path at runtime** — the compiler will not stop a caller from passing a path outside whatever narrower type you had in mind.
+- Do **not** re-declare these shapes with arrow-property syntax (`setValue: (path: string, ...) => void`): property function types are checked contravariantly, which makes `Form<TSchema>` unassignable to your copy.
+:::
