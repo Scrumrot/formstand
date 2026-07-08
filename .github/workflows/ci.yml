@@ -40,6 +40,13 @@ jobs:
       - name: Build docs
         run: npm run docs:build
 
+      # The docs deploy builds the examples app with the examples' own
+      # toolchain — run the same build here so dependency PRs against
+      # examples/ get judged on it BEFORE they can break the deploy.
+      - name: Build examples
+        run: npm run build
+        working-directory: examples
+
       - name: Install CLI dependencies
         run: npm ci
         working-directory: cli
