@@ -44,7 +44,7 @@ jobs:
       - name: Merge examples into the site
         run: cp -r examples/dist docs/.vitepress/dist/examples
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
         with:
           enablement: true
 
