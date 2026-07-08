@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0 — 2026-07-04
+
+### Added
+
+- `numberToInputText`, `parseNumberText` (and the `ParsedNumberText` type)
+  are exported — the number-text rules the built-in bindings use, so
+  adapters for third-party UI kits can share them instead of re-deriving.
+  This is the minimum formstand version for `formstand-gen --ui mui` output.
+
+### Docs & examples (no package changes)
+
+- Five Material UI 9 playground demos plus the ~60-line formstand→MUI
+  adapter pattern they showcase.
+- `formstand-cli` (`formstand-gen`) lives in the repo: generates form
+  components from a zod schema or TypeScript type. Published separately.
+
 ## 0.2.0 — 2026-07-02
 
 The result of a full-repo review pass (37 items across correctness, API
