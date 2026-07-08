@@ -35,6 +35,116 @@ Five demos bind formstand to [Material UI](https://mui.com/) through a ~60-line 
 | MUI: Settings | Card-sectioned settings with a nullable bio (clearing the field round-trips to `null` via `emptyValue`), live `dirtyFields()` chips, and Save/Discard as `adoptValues`/`reset()` | [MuiProfileSettings.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/mui/MuiProfileSettings.tsx) |
 | MUI: Survey | Nested field arrays (sections → questions) with type-switched sub-editors and a root-level refine surfaced through `useFormError` | [MuiSurveyBuilder.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/mui/MuiSurveyBuilder.tsx) |
 
+## Browse the source inline
+
+Every block below embeds the demo's actual source file at build time, so it can never drift from what the playground runs.
+
+::: details Basic + modes — BasicForm.tsx
+<<< ../../examples/src/forms/BasicForm.tsx
+:::
+
+::: details Bound fields — BoundFieldsForm.tsx
+<<< ../../examples/src/forms/BoundFieldsForm.tsx
+:::
+
+::: details Form context — ContextForm.tsx
+<<< ../../examples/src/forms/ContextForm.tsx
+:::
+
+::: details Nested + submit — NestedForm.tsx
+<<< ../../examples/src/forms/NestedForm.tsx
+:::
+
+::: details Field array — ArrayForm.tsx
+<<< ../../examples/src/forms/ArrayForm.tsx
+:::
+
+::: details Async — AsyncForm.tsx
+<<< ../../examples/src/forms/AsyncForm.tsx
+:::
+
+::: details Wizard — WizardForm.tsx
+<<< ../../examples/src/forms/WizardForm.tsx
+:::
+
+::: details Conditional — ConditionalForm.tsx
+<<< ../../examples/src/forms/ConditionalForm.tsx
+:::
+
+::: details Invoice — InvoiceForm.tsx
+<<< ../../examples/src/forms/InvoiceForm.tsx
+:::
+
+::: details Nested arrays — NestedArraysForm.tsx
+<<< ../../examples/src/forms/NestedArraysForm.tsx
+:::
+
+::: details Server errors — ServerErrorsForm.tsx
+<<< ../../examples/src/forms/ServerErrorsForm.tsx
+:::
+
+::: details Autosave — AutosaveForm.tsx
+<<< ../../examples/src/forms/AutosaveForm.tsx
+:::
+
+::: details Dependent — DependentFieldsForm.tsx
+<<< ../../examples/src/forms/DependentFieldsForm.tsx
+:::
+
+::: details Optimistic — OptimisticForm.tsx
+<<< ../../examples/src/forms/OptimisticForm.tsx
+:::
+
+::: details File upload — FileUploadForm.tsx
+<<< ../../examples/src/forms/FileUploadForm.tsx
+:::
+
+::: details Derived — DerivedFieldForm.tsx
+<<< ../../examples/src/forms/DerivedFieldForm.tsx
+:::
+
+::: details Tags — TagInputForm.tsx
+<<< ../../examples/src/forms/TagInputForm.tsx
+:::
+
+::: details Perf — PerfBenchmarkForm.tsx
+<<< ../../examples/src/forms/PerfBenchmarkForm.tsx
+:::
+
+::: details State dump panel — StateDump.tsx
+<<< ../../examples/src/forms/StateDump.tsx
+:::
+
+### Material UI demos
+
+::: details The adapter (muiAdapter.ts) — muiAdapter.ts
+<<< ../../examples/src/mui/muiAdapter.ts
+:::
+
+::: details Theme bridge — MuiThemeBridge.tsx
+<<< ../../examples/src/mui/MuiThemeBridge.tsx
+:::
+
+::: details MUI: Checkout — MuiCheckoutWizard.tsx
+<<< ../../examples/src/mui/MuiCheckoutWizard.tsx
+:::
+
+::: details MUI: Job form — MuiJobApplication.tsx
+<<< ../../examples/src/mui/MuiJobApplication.tsx
+:::
+
+::: details MUI: Invoice — MuiInvoiceBuilder.tsx
+<<< ../../examples/src/mui/MuiInvoiceBuilder.tsx
+:::
+
+::: details MUI: Settings — MuiProfileSettings.tsx
+<<< ../../examples/src/mui/MuiProfileSettings.tsx
+:::
+
+::: details MUI: Survey — MuiSurveyBuilder.tsx
+<<< ../../examples/src/mui/MuiSurveyBuilder.tsx
+:::
+
 ## Running locally
 
 ```bash
