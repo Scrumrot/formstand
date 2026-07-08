@@ -6,8 +6,21 @@ pushed — see `.github/workflows/publish.yml`.
 
 ## Prerequisite (one-time)
 
-The `NPM_TOKEN` repository secret must hold an npm **granular automation
-token** with publish access to `formstand` and `formstand-cli`.
+Both packages use npm **trusted publishing** (OIDC) — no token or repository
+secret. Configure it once per package on npmjs.com under
+*Package → Settings → Trusted Publisher → GitHub Actions*:
+
+| Field             | Value            |
+| ----------------- | ---------------- |
+| Organization/user | `Scrumrot`       |
+| Repository        | `formstand`      |
+| Workflow filename | `publish.yml`    |
+| Environment       | (leave empty)    |
+
+Do this for **both** `formstand` and `formstand-cli` (same values — both
+publish from the same repo and workflow file). CI then authenticates via a
+short-lived OIDC exchange (`id-token: write` in the workflow) and provenance
+attestations are generated automatically.
 
 ## Checklist: formstand (root package)
 

@@ -32,8 +32,11 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-          cache: npm
           registry-url: https://registry.npmjs.org
+
+      # Trusted publishing (OIDC) needs npm >= 11.5.1; Node 22 bundles 10.x.
+      - name: Update npm for trusted publishing
+        run: npm install -g npm@latest
 
       - name: Install dependencies
         run: npm ci
@@ -47,10 +50,10 @@ jobs:
       - name: Typecheck, lint, test
         run: npm run typecheck && npm run lint && npm run test:coverage
 
+      # Authenticates via OIDC trusted publishing (configured on npmjs.com for
+      # this repo + workflow file) — no token secret; provenance is automatic.
       - name: Publish formstand
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish
 
   publish-cli:
     if: ${{ startsWith(github.ref_name, 'cli-v') }}
@@ -74,16 +77,19 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-          cache: npm
           registry-url: https://registry.npmjs.org
+
+      # Trusted publishing (OIDC) needs npm >= 11.5.1; Node 22 bundles 10.x.
+      - name: Update npm for trusted publishing
+        run: npm install -g npm@latest
 
       - name: Install CLI dependencies
         run: npm ci
         working-directory: cli
 
       # prepublishOnly runs typecheck + test + build before the publish.
+      # Authenticates via OIDC trusted publishing (configured on npmjs.com for
+      # this repo + workflow file) — no token secret; provenance is automatic.
       - name: Publish formstand-cli
-        run: npm publish --provenance --access public
+        run: npm publish
         working-directory: cli
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
