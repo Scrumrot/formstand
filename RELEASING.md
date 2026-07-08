@@ -22,6 +22,11 @@ publish from the same repo and workflow file). CI then authenticates via a
 short-lived OIDC exchange (`id-token: write` in the workflow) and provenance
 attestations are generated automatically.
 
+Also set *Publishing access* to **"Require two-factor authentication and
+disallow tokens"** on both packages: trusted publishing is unaffected (it
+uses OIDC, not tokens), interactive OTP publishes still work as the manual
+fallback, and any leaked access token becomes useless for publishing.
+
 ## Checklist: formstand (root package)
 
 1. Add a section for the new version to `CHANGELOG.md`.
