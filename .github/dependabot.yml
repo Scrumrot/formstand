@@ -2,6 +2,10 @@ version: 2
 updates:
   - package-ecosystem: npm
     directory: "/"
+    ignore:
+      # TS7 blocked by typescript-eslint support; revisit deliberately.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
@@ -24,6 +28,11 @@ updates:
 
   - package-ecosystem: npm
     directory: "/cli"
+    ignore:
+      # typescript is a RUNTIME dep of the CLI; TS7 breaks the compiler-API
+      # frontend (fromType.ts). Migration is tracked work, not a bump.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
