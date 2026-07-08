@@ -156,7 +156,7 @@ type FieldValidationResult =
 
 ## Components
 
-All bound components render `name={path}`, `aria-invalid`, `aria-describedby`, and the error with `role="alert"`, and accept a `ref` to the underlying element — see [Bound components](../guide/components).
+All bound components render `name={path}`, `aria-invalid`, `aria-describedby`, and the error with `role="alert"`, and accept a `ref` to the underlying element — see [Bound components](../guide/components). Their `path` prop is typed against the form: passing a real `Form<TSchema>` narrows it to the schema's `FieldPath` union (typos are compile errors, template-literal array paths still typecheck), while a structural `FieldFormApi` keeps plain `string` — the `PathsOf<F>` type captures this rule.
 
 | Component | Props type | Element |
 | --- | --- | --- |
@@ -179,6 +179,10 @@ Pure functions over a `useField` result, for custom markup:
 ### `focusFirstError(errors, root?)`
 
 Focuses the first control (in DOM order) whose `name` matches an errored path — exactly or as a descendant of an errored container path. Most specific wins: the root `""` error falls back to the first control only when no field-keyed error matches — and with the default `document` scope that fallback is refused (returns `false`) when the page holds more than one `<form>`, since "first control" would be ambiguous. On multi-form pages pass the form element (e.g. via a ref) as `root`. Skips controls that can't take focus (hidden, disabled, inside a closed `<dialog>`) and verifies focus actually landed, trying the next match otherwise. Returns `boolean` — `true` only when a control actually holds focus; SSR-safe to import.
+
+### `focusField(path, root?)`
+
+The imperative sibling of `focusFirstError`, keyed by a path instead of an error map: focuses the first control (in DOM order) whose `name` is `path` itself or a descendant of it — `focusField("address")` lands on the first rendered address field. Same focusability rules and the same optional `root` scoping; returns whether a control actually received focus. Use it where react-hook-form users reach for `setFocus`: after opening a dialog, appending an array row, or landing on a step — see the [recipe](../guide/recipes#focus-a-field-imperatively).
 
 ## Core utilities
 
@@ -208,7 +212,7 @@ Everything importable via `import type { ... } from "formstand"`:
 - **Paths:** `PathSegment`, `FieldPath`, `FieldValue`
 - **Validation:** `ValidationResult`, `SettledValidationResult`, `FieldValidationResult`, `SettledFieldValidationResult`, `ValidationMode`, `ValidationTrigger`
 - **Hooks:** `FormStateApi`, `UseFieldReturn`, `FieldFormApi`, `FieldPathArg`, `UseFieldOptions`, `UseFieldArrayReturn`, `FieldArrayFormApi`, `FieldArrayEntry`, `FormProviderProps`, `FormContextApi`
-- **Components:** `TextFieldProps`, `NumberFieldProps`, `CheckboxFieldProps`, `SelectFieldProps`, `SelectFieldOption`, `FieldRef`
+- **Components:** `TextFieldProps`, `NumberFieldProps`, `CheckboxFieldProps`, `SelectFieldProps`, `SelectFieldOption`, `FieldRef`, `PathsOf`
 - **Prop builders:** `TextInputProps`, `NumberInputProps`, `CheckboxProps`, `SelectProps`
 
 `FieldFormApi` / `FieldArrayFormApi` / `FormStateApi` are the structural (schema-less) form interfaces the hooks accept — useful for writing reusable field components that take any form. When a real `Form<TSchema>` is passed, the typed overloads bind instead and path inference is preserved.

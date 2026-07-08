@@ -78,6 +78,25 @@ type FieldSlice<TValue> = Readonly<{
   isValidating: boolean;
 }>;
 
+// Overload order is deliberate. When no overload matches, TypeScript reports
+// the LAST candidate's error — so the typed-path overload sits last, and a
+// typo'd path on a Form<TSchema> is blamed on the path argument against the
+// full FieldPath union ('"naem"' is not assignable to '"name" | "age" | ...')
+// instead of on the form argument.
+export function useField<TSchema extends z.ZodType>(
+  form: Form<TSchema>,
+  pathSelector: (state: FormState<z.input<TSchema>>) => string,
+  options?: UseFieldOptions,
+): UseFieldReturn<unknown>;
+// The `schema?: undefined` brand forces TS past this widened overload when a
+// real Form is passed (Form has `schema: TSchema`, not undefined). Without
+// it, a Form<TSchema> with an invalid path would silently bind here and
+// return UseFieldReturn<unknown>.
+export function useField<TValue = unknown>(
+  form: FieldFormApi & { readonly schema?: undefined },
+  path: string | ((state: FormState<unknown>) => string),
+  options?: UseFieldOptions,
+): UseFieldReturn<TValue>;
 export function useField<
   TSchema extends z.ZodType,
   P extends FieldPath<z.input<TSchema>>,
@@ -86,21 +105,6 @@ export function useField<
   path: P,
   options?: UseFieldOptions,
 ): UseFieldReturn<FieldValue<z.input<TSchema>, P>>;
-export function useField<TSchema extends z.ZodType>(
-  form: Form<TSchema>,
-  pathSelector: (state: FormState<z.input<TSchema>>) => string,
-  options?: UseFieldOptions,
-): UseFieldReturn<unknown>;
-// The `schema?: undefined` brand below forces TS to bind the typed      no
-// Form<TSchema> overloads above when a real Form is passed (Form has
-// `schema: TSchema`, not undefined). Without it, a Form<TSchema> with
-// an invalid path would silently fall through to this widened
-// overload and return UseFieldReturn<unknown>.
-export function useField<TValue = unknown>(
-  form: FieldFormApi & { readonly schema?: undefined },
-  path: string | ((state: FormState<unknown>) => string),
-  options?: UseFieldOptions,
-): UseFieldReturn<TValue>;
 export function useField<TValue = unknown>(
   form: FieldFormApi,
   pathArg: string | ((state: FormState<unknown>) => string),

@@ -128,6 +128,87 @@ export const emptyValueForSchema = (schema: z.ZodType): null | undefined => {
   return walk(schema, false);
 };
 
+// One unwrap step for the lax structural walk below: wrappers that are
+// transparent to a path (optional/nullable/default/readonly/catch/pipe/...)
+// yield their inner schema; anything else returns null and is judged as-is.
+const unwrapForWalk = (s: z.ZodType): z.ZodType | null => {
+  if (s instanceof z.ZodOptional || s instanceof z.ZodNullable) {
+    return s.unwrap() as z.ZodType;
+  }
+  if (
+    s instanceof z.ZodDefault ||
+    s instanceof z.ZodPrefault ||
+    s instanceof z.ZodCatch ||
+    s instanceof z.ZodReadonly ||
+    s instanceof z.ZodNonOptional
+  ) {
+    return s.def.innerType as z.ZodType;
+  }
+  // Form values are z.input, so a pipe is traversed through its input side.
+  if (s instanceof z.ZodPipe) return s.def.in as z.ZodType;
+  return null;
+};
+
+// Leaves that provably have no children: remaining path segments under one of
+// these cannot exist in the schema.
+const isLeafSchema = (s: z.ZodType): boolean =>
+  s instanceof z.ZodString ||
+  s instanceof z.ZodNumber ||
+  s instanceof z.ZodBoolean ||
+  s instanceof z.ZodBigInt ||
+  s instanceof z.ZodDate ||
+  s instanceof z.ZodEnum ||
+  s instanceof z.ZodLiteral ||
+  s instanceof z.ZodNull ||
+  s instanceof z.ZodUndefined ||
+  s instanceof z.ZodVoid ||
+  s instanceof z.ZodNaN ||
+  s instanceof z.ZodSymbol;
+
+// Every unwrap and every consumed segment costs one step — generous for any
+// real path, but it bounds pathological wrapper towers.
+const SCHEMA_WALK_BUDGET = 64;
+
+// Lax structural check: can `path` possibly exist under `schema`? Used to
+// warn when validateField targets a path the schema cannot contain (which
+// would otherwise silently validate as always-valid). Deliberately biased
+// toward "yes": objects answer from their shape (a catchall/loose object
+// accepts any key), arrays accept any numeric index into their element, and
+// everything too dynamic to judge — records, maps, tuples, unions,
+// intersections, lazies, any/unknown, unrecognized nodes — answers true so
+// the warning can never be a false positive. Only a provable miss (a key
+// absent from a closed object shape, a string segment into an array, or
+// segments remaining under a scalar leaf) answers false.
+export const schemaHasPath = (schema: z.ZodType, path: string): boolean => {
+  const walk = (
+    s: z.ZodType,
+    segments: readonly PathSegment[],
+    budget: number,
+  ): boolean => {
+    if (budget <= 0) return true;
+    const inner = unwrapForWalk(s);
+    if (inner !== null) return walk(inner, segments, budget - 1);
+    const [head, ...rest] = segments;
+    if (head === undefined) return true;
+    if (s instanceof z.ZodObject) {
+      const shape: Readonly<Record<string, z.ZodType | undefined>> = s.shape;
+      const child = shape[String(head)];
+      if (child !== undefined) return walk(child, rest, budget - 1);
+      // A loose/catchall object accepts keys beyond the shape (a ZodNever
+      // catchall — strictObject — rejects them like a closed shape does).
+      const catchall = s.def.catchall;
+      return catchall !== undefined && !(catchall instanceof z.ZodNever);
+    }
+    if (s instanceof z.ZodArray) {
+      return typeof head === "number"
+        ? walk(s.element as z.ZodType, rest, budget - 1)
+        : false;
+    }
+    return !isLeafSchema(s);
+  };
+  return walk(schema, parsePath(path), SCHEMA_WALK_BUDGET);
+};
+
 const hasChecks = (s: z.ZodType): boolean => {
   const checks = (s.def as Readonly<{ checks?: readonly unknown[] }>).checks;
   return checks !== undefined && checks.length > 0;

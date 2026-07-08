@@ -23,6 +23,7 @@ import {
   isAsyncRequiredError,
   isPathOrChild,
   prefixErrorKeys,
+  schemaHasPath,
   validateAsync,
   validateSync,
 } from "./validation";
@@ -536,6 +537,21 @@ export const createForm = <TSchema extends z.ZodType>(
     return sub;
   };
 
+  // Field validation on a path the schema cannot contain silently returns
+  // valid — easy to hit through the docs-sanctioned casts for runtime-built
+  // paths. Warn once per path per form (a sanctioned mutable-ref cache, like
+  // subschemaCache above: checked paths never need re-walking).
+  const checkedSchemaPaths = new Set<string>();
+  const warnMissingSchemaPath = (fn: string, path: string): void => {
+    if (path === "" || checkedSchemaPaths.has(path)) return;
+    checkedSchemaPaths.add(path);
+    if (!schemaHasPath(schema, path)) {
+      console.warn(
+        `[formstand] ${fn}("${path}"): path does not exist in the schema — result will always be valid.`,
+      );
+    }
+  };
+
   const fieldScopeFor = (path: string, values: Values): FieldScope => {
     const sub = path === "" ? null : subschemaAt(path);
     if (sub === null) {
@@ -602,6 +618,7 @@ export const createForm = <TSchema extends z.ZodType>(
         });
 
   const validateField = (path: string): FieldValidationResult => {
+    warnMissingSchemaPath("validateField", path);
     try {
       const scoped = scopedFieldErrors(path);
       store.setState((state) => ({
@@ -743,6 +760,7 @@ export const createForm = <TSchema extends z.ZodType>(
   const validateFieldAsync = async (
     path: string,
   ): Promise<SettledFieldValidationResult> => {
+    warnMissingSchemaPath("validateFieldAsync", path);
     // The root "" is whole-form scope: delegate to the form-level pass so
     // the in-flight flag lands in isValidatingForm — the single slot for
     // whole-form validation — instead of booking an isValidating[""] entry

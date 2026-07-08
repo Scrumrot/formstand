@@ -123,3 +123,5 @@ All subscription functions return an unsubscribe function. See [Form state & lif
 - [Field arrays](./field-arrays) — lists with stable React keys.
 - [Form state & lifecycle](./state) — dirtiness, snapshots, reset vs adopt, subscriptions.
 - [API reference](../api/) — every method, hook, and exported type.
+
+Coming from react-hook-form? The [migration guide](./migrating-from-react-hook-form) maps every API you know — `register`, `watch`, `setError`, `setFocus`, `useFieldArray` — to its formstand counterpart, and is honest about what has none.

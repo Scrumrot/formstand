@@ -1,4 +1,7 @@
 import { type ChangeEvent, type ReactNode, useId, useState } from "react";
+import type { z } from "zod";
+import type { Form } from "../core/createForm";
+import type { FieldPath } from "../core/fieldPath";
 import {
   checkboxProps,
   numberToInputText,
@@ -7,6 +10,18 @@ import {
   textInputProps,
 } from "./inputProps";
 import { type FieldFormApi, type UseFieldReturn, useField } from "./useField";
+
+// The paths a bound component accepts for a given `form` prop: when the form
+// carries its schema (a real Form<TSchema>), `path` narrows to the schema's
+// FieldPath union — a typo'd path is a compile error, matching useField's
+// typed overloads. Template-literal paths with a numeric hole
+// (`users.${index}.email`) are part of that union, so dynamic array rows
+// still typecheck. A bare structural FieldFormApi keeps plain string paths.
+export type PathsOf<F extends FieldFormApi> = F extends Form<
+  infer TSchema extends z.ZodType
+>
+  ? FieldPath<z.input<TSchema>>
+  : string;
 
 // Structural stand-in for React.Ref<T>: accepts useRef objects and callback
 // refs (including React 19 cleanup-returning ones — any return type is
@@ -33,9 +48,9 @@ const ErrorText = ({
     </span>
   ) : null;
 
-export type TextFieldProps = Readonly<{
-  form: FieldFormApi;
-  path: string;
+export type TextFieldProps<F extends FieldFormApi = FieldFormApi> = Readonly<{
+  form: F;
+  path: PathsOf<F>;
   label?: ReactNode;
   placeholder?: string;
   type?: "text" | "password" | "email" | "url" | "tel";
@@ -43,7 +58,7 @@ export type TextFieldProps = Readonly<{
   ref?: FieldRef<HTMLInputElement>;
 }>;
 
-export const TextField = ({
+export const TextField = <F extends FieldFormApi>({
   form,
   path,
   label,
@@ -51,7 +66,7 @@ export const TextField = ({
   type = "text",
   autoComplete,
   ref,
-}: TextFieldProps) => {
+}: TextFieldProps<F>) => {
   const id = useId();
   const errorId = `${id}-error`;
   const field = useField<string | null | undefined>(form, path);
@@ -76,13 +91,14 @@ export const TextField = ({
   );
 };
 
-export type NumberFieldProps = Readonly<{
-  form: FieldFormApi;
-  path: string;
-  label?: ReactNode;
-  placeholder?: string;
-  ref?: FieldRef<HTMLInputElement>;
-}>;
+export type NumberFieldProps<F extends FieldFormApi = FieldFormApi> =
+  Readonly<{
+    form: F;
+    path: PathsOf<F>;
+    label?: ReactNode;
+    placeholder?: string;
+    ref?: FieldRef<HTMLInputElement>;
+  }>;
 
 type NumberInputBinding = Readonly<{
   name: string;
@@ -152,13 +168,13 @@ const useNumberInput = (
   };
 };
 
-export const NumberField = ({
+export const NumberField = <F extends FieldFormApi>({
   form,
   path,
   label,
   placeholder,
   ref,
-}: NumberFieldProps) => {
+}: NumberFieldProps<F>) => {
   const id = useId();
   const errorId = `${id}-error`;
   const field = useField<number | null | undefined>(form, path);
@@ -183,14 +199,20 @@ export const NumberField = ({
   );
 };
 
-export type CheckboxFieldProps = Readonly<{
-  form: FieldFormApi;
-  path: string;
-  label?: ReactNode;
-  ref?: FieldRef<HTMLInputElement>;
-}>;
+export type CheckboxFieldProps<F extends FieldFormApi = FieldFormApi> =
+  Readonly<{
+    form: F;
+    path: PathsOf<F>;
+    label?: ReactNode;
+    ref?: FieldRef<HTMLInputElement>;
+  }>;
 
-export const CheckboxField = ({ form, path, label, ref }: CheckboxFieldProps) => {
+export const CheckboxField = <F extends FieldFormApi>({
+  form,
+  path,
+  label,
+  ref,
+}: CheckboxFieldProps<F>) => {
   const id = useId();
   const errorId = `${id}-error`;
   const field = useField<boolean | null | undefined>(form, path);
@@ -215,9 +237,12 @@ export type SelectFieldOption<T extends string> = Readonly<{
   label: ReactNode;
 }>;
 
-export type SelectFieldProps<T extends string> = Readonly<{
-  form: FieldFormApi;
-  path: string;
+export type SelectFieldProps<
+  T extends string,
+  F extends FieldFormApi = FieldFormApi,
+> = Readonly<{
+  form: F;
+  path: PathsOf<F>;
   label?: ReactNode;
   options: readonly SelectFieldOption<T>[];
   // Shown as a disabled first option while the field value is undefined, so
@@ -227,14 +252,14 @@ export type SelectFieldProps<T extends string> = Readonly<{
   ref?: FieldRef<HTMLSelectElement>;
 }>;
 
-export const SelectField = <T extends string>({
+export const SelectField = <T extends string, F extends FieldFormApi>({
   form,
   path,
   label,
   options,
   placeholder,
   ref,
-}: SelectFieldProps<T>) => {
+}: SelectFieldProps<T, F>) => {
   const id = useId();
   const errorId = `${id}-error`;
   // null included: a nullable enum's "not chosen yet" must render the empty

@@ -30,6 +30,10 @@ export default defineConfig({
             { text: "Field arrays", link: "/guide/field-arrays" },
             { text: "Form state & lifecycle", link: "/guide/state" },
             { text: "Recipes", link: "/guide/recipes" },
+            {
+              text: "Migrating from react-hook-form",
+              link: "/guide/migrating-from-react-hook-form",
+            },
             { text: "Code generation", link: "/guide/code-generation" },
             { text: "Examples", link: "/guide/examples" },
           ],

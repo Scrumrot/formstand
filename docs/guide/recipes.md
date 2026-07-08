@@ -120,6 +120,23 @@ const DeeplyNestedField = () => {
 };
 ```
 
+## Focus a field imperatively
+
+`focusField(path, root?)` is `focusFirstError`'s path-keyed sibling (and the equivalent of react-hook-form's `setFocus`): it focuses the first control in DOM order whose `name` is the path or a descendant of it, with the same focusability rules. The classic uses are landing focus after appending an array row, or when a dialog opens:
+
+```tsx
+import { focusField } from "formstand";
+
+const addUser = () => {
+  const index = users.length;
+  users.push({ email: "" });
+  // The new row's input doesn't exist until React commits — focus after paint.
+  requestAnimationFrame(() => focusField(`users.${index}.email`));
+};
+```
+
+A container path works too — `focusField("address")` lands on the first rendered `address.*` control. Pass your `<form>` element as `root` on multi-form pages, exactly like `focusFirstError`.
+
 ## Rebase after save
 
 After a successful save, the just-saved values become the new baseline — `adoptValues` swaps `values` and `initialValues` without wiping interaction state, so the form reads clean but `touched`/`submitCount` survive.

@@ -41,7 +41,9 @@ Every bound component ships with:
 - `aria-invalid` while the field has an error.
 - `aria-describedby` pointing at the rendered error message's id.
 - The error message rendered with `role="alert"`, so assistive tech announces it when it appears.
-- A `ref` prop forwarding to the underlying `<input>`/`<select>` (object refs and callback refs both work), for custom focus logic.
+- A `ref` prop forwarding to the underlying `<input>`/`<select>` (object refs and callback refs both work), for custom focus logic — though for "focus this field now" you rarely need one: [`focusField(path)`](../guide/recipes#focus-a-field-imperatively) finds the control by its `name`.
+
+Because every bound component takes the `form` itself, `path` is checked against the schema: on a real `Form<TSchema>` a typo'd `path` is a compile error, and template-literal paths like `` `users.${index}.email` `` in array rows still typecheck — the same rules as [typed paths](./typed-paths) everywhere else.
 
 ## Prop builders for custom markup
 

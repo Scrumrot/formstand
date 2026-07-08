@@ -70,8 +70,9 @@ export type {
   SelectFieldProps,
   SelectFieldOption,
   FieldRef,
+  PathsOf,
 } from "./react/fields";
-export { focusFirstError } from "./react/focusError";
+export { focusFirstError, focusField } from "./react/focusError";
 export { useFieldArray } from "./react/useFieldArray";
 export type {
   UseFieldArrayReturn,

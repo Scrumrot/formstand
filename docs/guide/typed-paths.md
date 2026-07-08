@@ -96,10 +96,11 @@ const schema = z.object({ age: z.number() });
 
 At runtime, the **existing container** decides what a segment means: arrays take numeric segments as indices, plain objects take any segment as a string key — so a `z.record` keyed `"0"` reads and writes the record key instead of silently becoming an array. Only when the container doesn't exist yet does the segment type pick what's created (numeric creates an array, anything else an object).
 
-Two limitations:
+Three limitations:
 
 - **Keys containing `.` are not addressable.** Paths are split on dots, so a record key like `"a.b"` can't be reached. Use nested objects or dot-free keys.
 - **Array writes beyond index 100 000 are refused** (with a console warning) — a typo'd index must not allocate gigabytes.
+- **`FieldPath` stops at 7 segments deep.** The union is built by recursing through your schema's shape, and each level multiplies the work TypeScript does per path-taking call — uncapped, a deep or self-referential type would make every keystroke in your editor pay for it. So paths like `a.b.c.d.e.f.g.h` fall out of the union: the *runtime* handles them fine (every path API walks arbitrary depth), the compiler just can't vouch for them anymore. Cast at the boundary exactly like a [runtime-built string](#dynamic-paths) — or, better, ask whether a form nine levels deep wants a flatter schema.
 
 ## Next
 
