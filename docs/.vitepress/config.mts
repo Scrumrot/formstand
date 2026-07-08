@@ -6,8 +6,25 @@ export default defineConfig({
   // Deployed to GitHub Pages under /formstand/ — drop this (and the favicon
   // prefix) if the site ever moves to a custom domain.
   base: "/formstand/",
-  head: [["link", { rel: "icon", href: "/formstand/favicon.svg" }]],
+  head: [
+    ["link", { rel: "icon", href: "/formstand/favicon.svg" }],
+    ["meta", { property: "og:title", content: "formstand" }],
+    [
+      "meta",
+      {
+        property: "og:description",
+        content: "Zod-schema-first form state for React 19, backed by zustand",
+      },
+    ],
+    ["meta", { property: "og:type", content: "website" }],
+  ],
+  lastUpdated: true,
+  sitemap: { hostname: "https://scrumrot.github.io/formstand/" },
   themeConfig: {
+    editLink: {
+      pattern: "https://github.com/Scrumrot/formstand/edit/main/docs/:path",
+      text: "Edit this page on GitHub",
+    },
     nav: [
       { text: "Guide", link: "/guide/getting-started" },
       { text: "API", link: "/api/" },

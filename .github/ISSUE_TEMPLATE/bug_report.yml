@@ -1,0 +1,50 @@
+name: Bug report
+description: Something in formstand behaves incorrectly
+labels: [bug]
+body:
+  - type: input
+    id: formstand-version
+    attributes:
+      label: formstand version
+      placeholder: "0.4.0 (or formstand-cli 0.1.0)"
+    validations:
+      required: true
+
+  - type: input
+    id: peer-versions
+    attributes:
+      label: zod / zustand / react versions
+      placeholder: "zod 4.2.x, zustand 5.0.x, react 19.x"
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: >-
+        The smallest schema + component/code that shows the problem. A
+        runnable snippet beats a description.
+      value: |
+        ```tsx
+        const schema = z.object({ ... });
+
+        // code that triggers the bug
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include error messages or stack traces if any.
+    validations:
+      required: true

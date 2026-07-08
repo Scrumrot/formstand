@@ -1,0 +1,31 @@
+name: Feature request
+description: Propose an addition or change to formstand
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that formstand makes hard today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-api
+    attributes:
+      label: Proposed API
+      description: Sketch the API you would like to use.
+      value: |
+        ```tsx
+        // proposed usage
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds you tried, or other API shapes and why not.
+    validations:
+      required: false

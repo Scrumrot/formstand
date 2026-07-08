@@ -1,0 +1,64 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "cli-v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish-library:
+    if: ${{ !startsWith(github.ref_name, 'cli-v') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The root test suite renders the examples app.
+      - name: Install example dependencies
+        run: npm ci
+        working-directory: examples
+
+      # prepublishOnly only builds; run the full gate here before publishing.
+      - name: Typecheck, lint, test
+        run: npm run typecheck && npm run lint && npm run test:coverage
+
+      - name: Publish formstand
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-cli:
+    if: ${{ startsWith(github.ref_name, 'cli-v') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install CLI dependencies
+        run: npm ci
+        working-directory: cli
+
+      # prepublishOnly runs typecheck + test + build before the publish.
+      - name: Publish formstand-cli
+        run: npm publish --provenance --access public
+        working-directory: cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

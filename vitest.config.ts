@@ -31,7 +31,16 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/**"],
-      reporter: ["text", "html"],
+      reporter: ["text", "html", "json-summary"],
+      // Set ~2-3 points below measured levels (2026-07: statements 81.26,
+      // branches 79.07, functions 70.73, lines 81.34) so coverage drift
+      // fails CI without making every ordinary change a threshold fight.
+      thresholds: {
+        statements: 78,
+        branches: 76,
+        functions: 68,
+        lines: 78,
+      },
     },
   },
 });

@@ -1,5 +1,7 @@
 # formstand
 
+[![CI](https://github.com/Scrumrot/formstand/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Scrumrot/formstand/actions/workflows/ci.yml) [![npm version](https://img.shields.io/npm/v/formstand)](https://www.npmjs.com/package/formstand) [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Scrumrot/formstand/blob/main/LICENSE)
+
 Zod-schema-first form state for React 19, backed by zustand.
 
 **[Documentation](https://scrumrot.github.io/formstand/)** · **[Live playground](https://scrumrot.github.io/formstand/examples/)** · **[API reference](https://scrumrot.github.io/formstand/api/)**
@@ -422,6 +424,12 @@ form.handleSubmit(async (data) => {
   }
 });
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) — note the repo has three
+independent npm roots (`.`, `examples/`, `cli/`), and the root test suite
+needs `examples/` installed.
 
 ## License
 
