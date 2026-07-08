@@ -95,7 +95,20 @@ Because any value write makes a form-level verdict stale, the root `""` server e
 <form onSubmit={form.handleSubmit(onValid, (errors) => focusFirstError(errors))}>
 ```
 
-Matching is most-specific-first: the root `""` key falls back to focusing the first control only when no field-keyed error matches anything — a form-wide refine must not steal focus from an actually errored field. Hidden and disabled controls are skipped (a leading `<input type="hidden" name="csrf">` won't swallow the fallback). Pass `root` to scope the search to a specific element; the function returns whether anything was focused, and is safe to import during SSR.
+Matching is most-specific-first: the root `""` key falls back to focusing the first control only when no field-keyed error matches anything — a form-wide refine must not steal focus from an actually errored field. Controls that can't take focus are skipped: hidden and disabled ones (a leading `<input type="hidden" name="csrf">` won't swallow the fallback) and anything inside a closed `<dialog>`; if a candidate refuses focus anyway (e.g. `display: none`), the next match in DOM order is tried. The function returns `true` only when a control actually holds focus, and is safe to import during SSR.
+
+On a page with several forms, pass the form element as `root` (e.g. via a ref) so the search stays inside your form:
+
+```tsx
+<form
+  ref={formRef}
+  onSubmit={form.handleSubmit(onValid, (errors) =>
+    focusFirstError(errors, formRef.current ?? undefined),
+  )}
+>
+```
+
+Without a `root` the whole document is scanned — and the root-`""` fallback refuses to guess between forms: when the document holds more than one `<form>`, it returns `false` instead of focusing an arbitrary first control.
 
 ## Submit proceeds despite server errors
 

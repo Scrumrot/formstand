@@ -99,3 +99,22 @@ describe("dirty clears when a value reverts to its initial", () => {
     expect(form.diff()).toEqual({});
   });
 });
+
+describe("dirty reporting for undefined-valued keys (key-count divergence)", () => {
+  const profileSchema = z.object({
+    profile: z.object({ nickname: z.string().optional() }),
+  });
+
+  it("dirtyFields/diff report the object when a key is added holding undefined", () => {
+    const form = createForm(profileSchema, {
+      initialValues: { profile: {} },
+    });
+    // {} vs { nickname: undefined }: no child diverges by its own comparison,
+    // but the objects differ (key count) — the path report must agree with
+    // isFieldDirty instead of returning empty.
+    form.setValue("profile.nickname", undefined);
+    expect(form.getFieldState("profile").dirty).toBe(true);
+    expect(form.dirtyFields()).toEqual(["profile"]);
+    expect(Object.keys(form.diff())).toEqual(["profile"]);
+  });
+});

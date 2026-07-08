@@ -38,11 +38,11 @@ const form = createForm(schema, {
 | `setMode(mode)` / `setReValidateMode(mode)` | switch validation modes at runtime |
 | `reset(nextInitial?, options?)` | reset to initial; optional partial overrides (shallow-merged for record roots, replaced wholesale otherwise) and [`ResetOptions`](#resetoptions) (no `keepDirty` — dirtiness derives from values vs initial, and reset makes them equal) |
 | `resetField(path)` | reset one field to its initial value, clearing its (and descendants') error/touched state |
-| `adoptValues(values)` | mid-session rebase: replaces `values` + `initialValues` and clears `errors`, but **preserves** interaction state (`touched`, `submitCount`, `isSubmitting`, `isValidating`, `mode`). Use `reset()` for a full wipe |
+| `adoptValues(values)` | mid-session rebase: replaces `values` + `initialValues` and clears `errors` and in-flight validation flags (`isValidating`/`isValidatingForm` — the rebase disowns in-flight passes), but **preserves** interaction state (`touched`, `submitCount`, `isSubmitting`, `mode`). Use `reset()` for a full wipe |
 | `updateState(updater)` | atomic multi-field patch; `errors` is derived from `schemaErrors`/`serverErrors`, so patch the channels — the patch type omits `errors` entirely, and a plain-JS `errors` patch is warned about and ignored |
 | `validate()` / `validateField(path)` / `validateFields(paths)` | sync validation; on an async schema they transparently start the async pass instead (`validate`/`validateField` return `{ kind: "pending", promise }`, `validateFields` returns the `Promise<boolean>` itself) |
 | `validateAsync()` / `validateFieldAsync(path)` / `validateFieldsAsync(paths)` | async; supports `async .refine` |
-| `submit(onValid, onInvalid?, { force? })` | full submit flow, returns `Promise<SubmitResult>`; resolves `{ kind: "valid", data }`, `{ kind: "invalid", errors }` (errored fields are also marked touched), or `{ kind: "skipped" }` when another submit is in flight and `force` isn't set |
+| `submit(onValid, onInvalid?, { force? })` | full submit flow, returns `Promise<SubmitResult>`; resolves `{ kind: "valid", data }`, `{ kind: "invalid", errors }` (errored fields are also marked touched), `{ kind: "skipped" }` when another submit is in flight and `force` isn't set, or `{ kind: "error", error }` when `onValid` throws/rejects (submit resolves instead of rejecting, so `handleSubmit` never leaves an unhandled rejection) |
 | `handleSubmit(onValid, onInvalid?, options?)` | returns an event handler that calls `preventDefault()` and runs `submit` |
 | `getField(path)` | typed one-shot value read |
 | `getFieldState(path)` | typed one-shot read of a field's full slice — a [`FieldSnapshot`](#fieldsnapshot) |
@@ -61,9 +61,12 @@ All paths on the imperative surface are `FieldPath`-typed; runtime-built strings
 
 ```ts
 type SubmitResult<TOutput> =
-  | { kind: "valid"; data: TOutput }     // validation passed, onValid ran
+  | { kind: "valid"; data: TOutput }      // validation passed, onValid ran to completion
   | { kind: "invalid"; errors: ErrorMap } // onInvalid ran, errors written, fields marked touched
-  | { kind: "skipped" };                  // another submit was in flight and force wasn't set
+  | { kind: "skipped" }                   // another submit was in flight and force wasn't set
+  | { kind: "error"; error: unknown };    // onValid threw or rejected — submit resolves with the
+                                          // thrown value instead of rejecting; no error state is
+                                          // written (surface it yourself, e.g. via setError)
 ```
 
 ### `ResetOptions`
@@ -175,7 +178,7 @@ Pure functions over a `useField` result, for custom markup:
 
 ### `focusFirstError(errors, root?)`
 
-Focuses the first control (in DOM order) whose `name` matches an errored path — exactly or as a descendant of an errored container path. Most specific wins: the root `""` error falls back to the first control only when no field-keyed error matches. Skips hidden and disabled controls. Returns `boolean` (whether anything was focused); SSR-safe to import.
+Focuses the first control (in DOM order) whose `name` matches an errored path — exactly or as a descendant of an errored container path. Most specific wins: the root `""` error falls back to the first control only when no field-keyed error matches — and with the default `document` scope that fallback is refused (returns `false`) when the page holds more than one `<form>`, since "first control" would be ambiguous. On multi-form pages pass the form element (e.g. via a ref) as `root`. Skips controls that can't take focus (hidden, disabled, inside a closed `<dialog>`) and verifies focus actually landed, trying the next match otherwise. Returns `boolean` — `true` only when a control actually holds focus; SSR-safe to import.
 
 ## Core utilities
 

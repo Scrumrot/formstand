@@ -72,6 +72,35 @@ describe("SelectField with an undefined value", () => {
   });
 });
 
+describe("SelectField with duplicate option values", () => {
+  const DupHarness = () => {
+    const form = useForm(schema, { initialValues: {} });
+    return (
+      <SelectField
+        form={form}
+        path="theme"
+        label="Theme"
+        options={[
+          { value: "light", label: "Light" },
+          { value: "light", label: "Light (alias)" },
+        ]}
+      />
+    );
+  };
+
+  it("renders two options sharing a value without duplicate-key errors", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    render(<DupHarness />);
+    expect(screen.getByText("Light")).toBeDefined();
+    expect(screen.getByText("Light (alias)")).toBeDefined();
+    const warned = errorSpy.mock.calls.some((args) =>
+      String(args[0]).includes("same key"),
+    );
+    expect(warned).toBe(false);
+    errorSpy.mockRestore();
+  });
+});
+
 describe("SelectField with a null (nullable) value", () => {
   const NullableHarness = () => {
     const form = useForm(nullableSchema, { initialValues: { plan: null } });

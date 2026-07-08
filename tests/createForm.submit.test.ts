@@ -63,13 +63,17 @@ describe("form.submit", () => {
     expect(form.getState().isSubmitting).toBe(false);
   });
 
-  it("resets isSubmitting even if the handler throws", async () => {
+  it("resets isSubmitting even if the handler throws (resolving kind 'error')", async () => {
     const form = createForm(schema, { initialValues: validValues });
-    await expect(
-      form.submit(() => {
-        throw new Error("boom");
-      }),
-    ).rejects.toThrow("boom");
+    // A throwing onValid resolves { kind: "error", error } rather than
+    // rejecting, so handleSubmit-as-event-handler never leaves an unhandled
+    // rejection.
+    const result = await form.submit(() => {
+      throw new Error("boom");
+    });
+    expect(result.kind).toBe("error");
+    if (result.kind !== "error") throw new Error();
+    expect(result.error).toBeInstanceOf(Error);
     expect(form.getState().isSubmitting).toBe(false);
   });
 

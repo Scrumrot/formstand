@@ -54,13 +54,19 @@ export type SubmitOptions = Readonly<{
   force?: boolean;
 }>;
 
-// "valid": validation passed and onValid ran. "invalid": validation failed
-// (onInvalid ran, errors written and their fields marked touched).
-// "skipped": another submit was already in flight and force wasn't set.
+// "valid": validation passed and onValid ran to completion. "invalid":
+// validation failed (onInvalid ran; errors written and their fields marked
+// touched, unless the values changed while validation was in flight — see
+// submit). "skipped": another submit was already in flight and force wasn't
+// set. "error": onValid threw or rejected — submit resolves with the thrown
+// value instead of rejecting, so handleSubmit used as an event handler never
+// produces an unhandled rejection. No error state is written for this kind;
+// surface the failure yourself (e.g. via setError).
 export type SubmitResult<TOutput> =
   | Readonly<{ kind: "valid"; data: TOutput }>
   | Readonly<{ kind: "invalid"; errors: ErrorMap }>
-  | Readonly<{ kind: "skipped" }>;
+  | Readonly<{ kind: "skipped" }>
+  | Readonly<{ kind: "error"; error: unknown }>;
 
 type ArrayItemOf<T> = T extends readonly (infer U)[] ? U : never;
 
@@ -277,13 +283,18 @@ const dirtyPathsOf = (
   if (valuesEqual(values, initial)) return [];
   if (isPlainObject(values) && isPlainObject(initial)) {
     const keys = new Set([...Object.keys(values), ...Object.keys(initial)]);
-    return [...keys].flatMap((k) =>
+    const childPaths = [...keys].flatMap((k) =>
       dirtyPathsOf(
         values[k],
         initial[k],
         prefix === "" ? k : `${prefix}.${k}`,
       ),
     );
+    // valuesEqual said the objects differ, but no child diverges by its own
+    // comparison — a key-count mismatch where the extra key holds undefined
+    // ({} vs { nickname: undefined }). Report the object itself so diff()/
+    // dirtyFields() stay non-empty whenever isFieldDirty/useIsDirty say dirty.
+    return childPaths.length > 0 ? childPaths : [prefix];
   }
   return [prefix];
 };
@@ -622,10 +633,20 @@ export const createForm = <TSchema extends z.ZodType>(
 
   const sequences = new Map<string, number>();
 
+  // Globally monotonic counter behind nextSeq (a sanctioned mutable-ref
+  // cache, like the subscription refs). It must never reset: reset()/
+  // adoptValues() clear the `sequences` map to release per-path memory, and
+  // if numbering restarted per key, a post-reset pass could mint the same
+  // seq an in-flight pre-reset pass still holds — the old pass would pass
+  // the ownership check and commit against values it never validated.
+  // Cleared keys read as undefined, which matches no live seq, so orphaned
+  // passes are permanently disowned instead.
+  const seqRef = { current: 0 };
+
   const nextSeq = (key: string): number => {
-    const next = (sequences.get(key) ?? 0) + 1;
-    sequences.set(key, next);
-    return next;
+    seqRef.current += 1;
+    sequences.set(key, seqRef.current);
+    return seqRef.current;
   };
 
   const validateAsyncOnForm = async (): Promise<
@@ -722,6 +743,16 @@ export const createForm = <TSchema extends z.ZodType>(
   const validateFieldAsync = async (
     path: string,
   ): Promise<SettledFieldValidationResult> => {
+    // The root "" is whole-form scope: delegate to the form-level pass so
+    // the in-flight flag lands in isValidatingForm — the single slot for
+    // whole-form validation — instead of booking an isValidating[""] entry
+    // no consumer watches.
+    if (path === "") {
+      const result = await validateAsyncOnForm();
+      return fieldResult(
+        result.kind === "invalid" ? result.errors : emptyErrors,
+      );
+    }
     const seq = nextSeq(path);
     const valuesAtStart = store.getState().values;
     store.setState((state) => ({
@@ -794,7 +825,13 @@ export const createForm = <TSchema extends z.ZodType>(
           ),
         }),
         touched: reKeyByArrayPath(state.touched, path, mapper),
-        isValidating: reKeyByArrayPath(state.isValidating, path, mapper),
+        // Drop (don't re-key) in-flight flags under the array: the op changes
+        // `values`, so every pass they belong to fails its values-changed
+        // guard and never commits — but each pass's cleanup omits its
+        // ORIGINAL key, so a re-keyed entry would be orphaned and stick
+        // forever. Dropped, the flag is gone now and the cleanup is a
+        // harmless no-op.
+        isValidating: omitScope(state.isValidating, [path]),
       };
     });
   };
@@ -823,37 +860,58 @@ export const createForm = <TSchema extends z.ZodType>(
     }));
 
     try {
-      const result = await validateAsync(schema, store.getState().values);
+      const valuesAtStart = store.getState().values;
+      const result = await validateAsync(schema, valuesAtStart);
+
+      // Stale-commit contract (mirrors validateAsyncOnForm's guard): if the
+      // values changed while validation was in flight (setValue/reset/
+      // adoptValues), the verdict describes a snapshot the form no longer
+      // holds — skip every state write (no error commit, no touched marks;
+      // that state belongs to the new values). The handlers still run and
+      // the result still reports the snapshot's verdict, so callers decide
+      // what it means for them.
+      const staleValues = store.getState().values !== valuesAtStart;
 
       if (result.kind === "invalid") {
-        store.setState((state) => {
-          const committed = commitFullPass(state, result.errors);
-          return {
-            ...state,
-            ...committed,
-            // Mark every errored field touched so touched-gated error UIs
-            // show something after the canonical first failed submit. The
-            // "" key (schema-level refine) has no field to touch.
-            touched: {
-              ...state.touched,
-              ...Object.fromEntries(
-                Object.keys(committed.errors)
-                  .filter((k) => k !== "")
-                  .map((k) => [k, true]),
-              ),
-            },
-          };
-        });
-        const merged = store.getState().errors;
+        if (!staleValues) {
+          store.setState((state) => {
+            const committed = commitFullPass(state, result.errors);
+            return {
+              ...state,
+              ...committed,
+              // Mark every errored field touched so touched-gated error UIs
+              // show something after the canonical first failed submit. The
+              // "" key (schema-level refine) has no field to touch.
+              touched: {
+                ...state.touched,
+                ...Object.fromEntries(
+                  Object.keys(committed.errors)
+                    .filter((k) => k !== "")
+                    .map((k) => [k, true]),
+                ),
+              },
+            };
+          });
+        }
+        const merged = staleValues ? result.errors : store.getState().errors;
         onInvalid?.(merged);
         return { kind: "invalid", errors: merged };
       }
 
-      store.setState((state) => ({
-        ...state,
-        ...commitFullPass(state, emptyErrors),
-      }));
-      await onValid(result.data);
+      if (!staleValues) {
+        store.setState((state) => ({
+          ...state,
+          ...commitFullPass(state, emptyErrors),
+        }));
+      }
+      try {
+        await onValid(result.data);
+      } catch (error) {
+        // A throwing onValid is the caller's failure, not a validation
+        // verdict: resolve with it (so handleSubmit-as-event-handler never
+        // leaves an unhandled rejection) and write no error state.
+        return { kind: "error", error };
+      }
       return { kind: "valid", data: result.data };
     } finally {
       inFlight.count -= 1;
@@ -1033,6 +1091,11 @@ export const createForm = <TSchema extends z.ZodType>(
           schemaErrors: emptyErrors,
           serverErrors: emptyErrors,
         }),
+        // Clearing `sequences` disowns every in-flight pass, including its
+        // flag cleanup (the ownership check fails, so it never writes) —
+        // clear the flags here too, mirroring reset(), or they'd stick.
+        isValidating: emptyBools,
+        isValidatingForm: false,
       }));
     },
     reset: (nextInitial, resetOptions) => {

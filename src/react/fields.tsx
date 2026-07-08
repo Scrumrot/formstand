@@ -262,8 +262,11 @@ export const SelectField = <T extends string>({
             {placeholder ?? ""}
           </option>
         ) : null}
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
+        {options.map((opt, index) => (
+          // Index-qualified: option lists may legitimately repeat a value
+          // (e.g. differently-labelled aliases), and bare value keys would
+          // collide.
+          <option key={`${index}-${opt.value}`} value={opt.value}>
             {opt.label}
           </option>
         ))}

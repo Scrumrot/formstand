@@ -84,11 +84,11 @@ const form = createForm(schema, {
 | `setMode` / `setReValidateMode` | switch modes at runtime |
 | `reset(nextInitial?, options?)` | reset to initial; optional partial overrides (shallow-merged for record roots, replaced wholesale otherwise) and `{ keepErrors, keepTouched, keepSubmitCount }` (no `keepDirty` — dirtiness derives from values vs initial, and reset makes them equal) |
 | `resetField(path)` | reset one field to its initial value, clearing its (and descendants') error/touched state (dirtiness clears by definition — the value now equals initial) |
-| `adoptValues(values)` | mid-session rebase: replaces `values` + `initialValues` and clears `errors`, but **preserves** interaction state (`touched`, `submitCount`, `isSubmitting`, `isValidating`, `mode`). Use `reset()` for a full wipe |
+| `adoptValues(values)` | mid-session rebase: replaces `values` + `initialValues` and clears `errors` and in-flight validation flags (`isValidating`/`isValidatingForm` — the rebase disowns in-flight passes), but **preserves** interaction state (`touched`, `submitCount`, `isSubmitting`, `mode`). Use `reset()` for a full wipe |
 | `updateState(updater)` | atomic multi-field patch; `errors` is derived from `schemaErrors`/`serverErrors`, so patch the channels — the patch type omits `errors` entirely, and a plain-JS `errors` patch is warned about and ignored |
 | `validate()` / `validateField(path)` / `validateFields(paths)` | sync validation; on an async schema they transparently start the async pass instead (`validate`/`validateField` return `{ kind: "pending", promise }`, `validateFields` returns the `Promise<boolean>` itself) |
 | `validateAsync()` / `validateFieldAsync(path)` / `validateFieldsAsync(paths)` | async; supports `async .refine` |
-| `submit(onValid, onInvalid?, { force? })` → `Promise<SubmitResult>` | full submit flow; resolves `{ kind: "valid", data }`, `{ kind: "invalid", errors }` (errored fields are also marked touched), or `{ kind: "skipped" }` when another submit is in flight |
+| `submit(onValid, onInvalid?, { force? })` → `Promise<SubmitResult>` | full submit flow; resolves `{ kind: "valid", data }`, `{ kind: "invalid", errors }` (errored fields are also marked touched), `{ kind: "skipped" }` when another submit is in flight, or `{ kind: "error", error }` when `onValid` throws/rejects — submit resolves instead of rejecting, so `handleSubmit` never produces an unhandled rejection from an `onValid` throw |
 | `handleSubmit(onValid, onInvalid?)(event?)` | event handler wrapper that calls `preventDefault` |
 | `getField(path)` | typed one-shot value read |
 | `getFieldState(path)` | typed one-shot read of a field's full slice (value/error/touched/dirty/isValidating) |
@@ -255,6 +255,20 @@ works out of the box. Wire it into the invalid-submit handler:
 ```tsx
 <form onSubmit={form.handleSubmit(onValid, (errors) => focusFirstError(errors))}>
 ```
+
+On a page with several forms, pass the form element (e.g. via a ref) as `root`
+so the search stays inside your form — without it the whole document is
+scanned, and a root-`""` error's first-control fallback refuses to guess
+between forms (it returns `false` when the document holds more than one
+`<form>`):
+
+```tsx
+<form ref={formRef} onSubmit={form.handleSubmit(onValid, (errors) => focusFirstError(errors, formRef.current ?? undefined))}>
+```
+
+It returns `true` only when a control actually received focus — disabled or
+hidden controls, controls inside a closed `<dialog>`, and controls that refuse
+focus (e.g. `display: none`) are passed over for the next match.
 
 For custom focus logic, every bound component also takes a `ref` to its input.
 

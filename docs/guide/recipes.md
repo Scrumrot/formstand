@@ -14,6 +14,9 @@ const onSubmit = form.handleSubmit(async (data) => {
     Object.entries(res.fieldErrors).forEach(([path, message]) =>
       form.setError(path as FieldPath<Values>, message),
     );
+    // On a multi-form page, pass your <form> element (e.g. via a ref) so the
+    // search — and the root-error fallback — stays inside this form:
+    // focusFirstError(form.getState().errors, formRef.current ?? undefined)
     focusFirstError(form.getState().errors);
   }
 });

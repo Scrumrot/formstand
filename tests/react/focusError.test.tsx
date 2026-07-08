@@ -78,3 +78,81 @@ describe("focusFirstError", () => {
     expect(document.activeElement).toBe(screen.getByLabelText("Visible"));
   });
 });
+
+describe("focusFirstError multi-form containment", () => {
+  const TwoForms = () => (
+    <div>
+      <form aria-label="first form">
+        <input type="text" name="a" aria-label="A" />
+      </form>
+      <form aria-label="second form">
+        <input type="text" name="b" aria-label="B" />
+      </form>
+    </div>
+  );
+
+  it("a root-only error with document scope and multiple forms returns false", () => {
+    render(<TwoForms />);
+    const before = document.activeElement;
+    expect(focusFirstError({ "": ["form-wide refine failed"] })).toBe(false);
+    expect(document.activeElement).toBe(before);
+  });
+
+  it("a root-only error with a single form still focuses its first control", () => {
+    render(
+      <form>
+        <input type="text" name="only" aria-label="Only" />
+      </form>,
+    );
+    expect(focusFirstError({ "": ["form-wide refine failed"] })).toBe(true);
+    expect(document.activeElement).toBe(screen.getByLabelText("Only"));
+  });
+
+  it("an explicit root keeps the fallback and scopes it to that form", () => {
+    const { container } = render(<TwoForms />);
+    const second = container.querySelectorAll("form")[1];
+    if (second === undefined) throw new Error("second form not rendered");
+    expect(focusFirstError({ "": ["form-wide refine failed"] }, second)).toBe(
+      true,
+    );
+    expect(document.activeElement).toBe(screen.getByLabelText("B"));
+  });
+});
+
+describe("focusFirstError skips controls that cannot take focus", () => {
+  it("passes over a name match inside a closed <dialog> to the visible one", () => {
+    render(
+      <div>
+        <dialog>
+          <input type="text" name="email" aria-label="Dialog email" />
+        </dialog>
+        <form>
+          <input type="text" name="email" aria-label="Visible email" />
+        </form>
+      </div>,
+    );
+    expect(focusFirstError({ email: ["email required"] })).toBe(true);
+    expect(document.activeElement).toBe(screen.getByLabelText("Visible email"));
+  });
+
+  it("returns false when the only match lives in a closed <dialog>", () => {
+    render(
+      <dialog>
+        <input type="text" name="email" aria-label="Dialog email" />
+      </dialog>,
+    );
+    const before = document.activeElement;
+    expect(focusFirstError({ email: ["email required"] })).toBe(false);
+    expect(document.activeElement).toBe(before);
+  });
+
+  it("still matches inside an OPEN <dialog>", () => {
+    render(
+      <dialog open>
+        <input type="text" name="email" aria-label="Dialog email" />
+      </dialog>,
+    );
+    expect(focusFirstError({ email: ["email required"] })).toBe(true);
+    expect(document.activeElement).toBe(screen.getByLabelText("Dialog email"));
+  });
+});

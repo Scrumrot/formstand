@@ -41,6 +41,45 @@ describe("submit result", () => {
     expect(form.getState().touched["age"]).toBe(true);
   });
 
+  it("returns kind 'error' with the thrown value when onValid throws", async () => {
+    const form = createForm(schema, {
+      initialValues: { name: "Tim", age: 30 },
+    });
+    const boom = new Error("save failed");
+    const result = await form.submit(() => {
+      throw boom;
+    });
+    expect(result.kind).toBe("error");
+    if (result.kind !== "error") throw new Error();
+    expect(result.error).toBe(boom);
+    expect(form.getState().isSubmitting).toBe(false);
+  });
+
+  it("writes no error state when an async onValid rejects", async () => {
+    const form = createForm(schema, {
+      initialValues: { name: "Tim", age: 30 },
+    });
+    const result = await form.submit(async () => {
+      throw new Error("network down");
+    });
+    expect(result.kind).toBe("error");
+    expect(form.getState().errors).toEqual({});
+    expect(form.getState().isSubmitting).toBe(false);
+  });
+
+  it("handleSubmit resolves kind 'error' (never rejects) when onValid throws", async () => {
+    const form = createForm(schema, {
+      initialValues: { name: "Tim", age: 30 },
+    });
+    const handler = form.handleSubmit(() =>
+      Promise.reject(new Error("boom")),
+    );
+    // Invoked like an event handler: the returned promise must resolve —
+    // a rejection here would surface as an unhandled rejection in the page.
+    const result = await handler({ preventDefault: () => {} });
+    expect(result.kind).toBe("error");
+  });
+
   it("does not mark a phantom field for root-level refine errors", async () => {
     const rootSchema = z
       .object({ a: z.string(), b: z.string() })

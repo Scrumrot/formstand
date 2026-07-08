@@ -77,7 +77,8 @@ Two different contracts for replacing values:
 | errors (both channels) | cleared, unless `keepErrors` | cleared |
 | `touched` | cleared, unless `keepTouched` | **preserved** |
 | `submitCount` | zeroed, unless `keepSubmitCount` | **preserved** |
-| `isSubmitting` / `isValidating` | cleared | **preserved** |
+| `isSubmitting` | cleared | **preserved** |
+| `isValidating` / `isValidatingForm` | cleared | cleared (the rebase disowns in-flight passes, so their flags must not linger) |
 | use case | "start over" | mid-session rebase (a save succeeded; the saved data is the new baseline) |
 
 `reset`'s partial `nextInitial` is shallow-merged into the existing initial values when both are plain records, and replaces them wholesale otherwise (array- or scalar-rooted schemas). There's no `keepDirty` option because dirtiness derives from values vs initial — reset makes them equal, so everything reads clean by definition.
