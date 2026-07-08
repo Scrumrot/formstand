@@ -37,7 +37,7 @@ Five demos bind formstand to [Material UI](https://mui.com/) through a ~60-line 
 
 ## Browse the source inline
 
-Every block below embeds the demo's actual source file at build time, so it can never drift from what the playground runs.
+Every block below embeds the demo's actual source file at build time, so it can never drift from what the playground runs. Two lines in each demo are playground harness, not library API: `import { useDemoForm } from "../demo/DemoShell"` and the `useDemoForm(form)` call register the demo's form with the playground shell, which is what powers the **View state** panel (rendered by `StateDump.tsx` below). Delete those two lines when copying a demo into your own project — everything else is plain formstand.
 
 ::: details Basic + modes — BasicForm.tsx
 <<< ../../examples/src/forms/BasicForm.tsx

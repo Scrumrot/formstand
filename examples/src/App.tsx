@@ -1,6 +1,6 @@
 import { type ReactElement, useState } from "react";
 import { DemoShell } from "./demo/DemoShell";
-import { DEMO_SOURCES } from "./demo/demoSources";
+import { DEMO_SOURCES, type DemoSourceKey } from "./demo/demoSources";
 import { ArrayForm } from "./forms/ArrayForm";
 import { AsyncForm } from "./forms/AsyncForm";
 import { AutosaveForm } from "./forms/AutosaveForm";
@@ -26,30 +26,9 @@ import { MuiProfileSettings } from "./mui/MuiProfileSettings";
 import { MuiSurveyBuilder } from "./mui/MuiSurveyBuilder";
 import { MuiThemeBridge } from "./mui/MuiThemeBridge";
 
-type TabKey =
-  | "basic"
-  | "bound"
-  | "context"
-  | "nested"
-  | "array"
-  | "async"
-  | "wizard"
-  | "conditional"
-  | "invoice"
-  | "nestedArrays"
-  | "server"
-  | "autosave"
-  | "dependent"
-  | "optimistic"
-  | "file"
-  | "derived"
-  | "tag"
-  | "perf"
-  | "muiCheckout"
-  | "muiJob"
-  | "muiInvoice"
-  | "muiSettings"
-  | "muiSurvey";
+// One key list for tabs and sources — adding a demo without a source entry
+// (or vice versa) is a compile error.
+type TabKey = DemoSourceKey;
 
 type Tab = Readonly<{
   key: TabKey;

@@ -26,33 +26,17 @@ import muiJobSrc from "../mui/MuiJobApplication.tsx?raw";
 import muiSettingsSrc from "../mui/MuiProfileSettings.tsx?raw";
 import muiSurveySrc from "../mui/MuiSurveyBuilder.tsx?raw";
 
-// Mirrors TabKey in App.tsx (declared locally to avoid a circular import).
-export type DemoSourceKey =
-  | "basic"
-  | "bound"
-  | "context"
-  | "nested"
-  | "array"
-  | "async"
-  | "wizard"
-  | "conditional"
-  | "invoice"
-  | "nestedArrays"
-  | "server"
-  | "autosave"
-  | "dependent"
-  | "optimistic"
-  | "file"
-  | "derived"
-  | "tag"
-  | "perf"
-  | "muiCheckout"
-  | "muiJob"
-  | "muiInvoice"
-  | "muiSettings"
-  | "muiSurvey";
+// The playground shell adds a one-line useDemoForm registration (plus its
+// import) to every demo so the "View state" panel works. Those lines are
+// harness, not library API — strip them from the displayed source so
+// copy-pasted code compiles outside the playground.
+const stripHarness = (source: string): string =>
+  source
+    .split("\n")
+    .filter((line) => !line.includes("useDemoForm"))
+    .join("\n");
 
-export const DEMO_SOURCES: Readonly<Record<DemoSourceKey, string>> = {
+const sources = {
   basic: basicSrc,
   bound: boundSrc,
   context: contextSrc,
@@ -76,4 +60,13 @@ export const DEMO_SOURCES: Readonly<Record<DemoSourceKey, string>> = {
   muiInvoice: muiInvoiceSrc,
   muiSettings: muiSettingsSrc,
   muiSurvey: muiSurveySrc,
-};
+} as const;
+
+// App.tsx derives its TabKey from this map, so the tab list and the source
+// map cannot drift.
+export type DemoSourceKey = keyof typeof sources;
+
+export const DEMO_SOURCES: Readonly<Record<DemoSourceKey, string>> =
+  Object.fromEntries(
+    Object.entries(sources).map(([key, src]) => [key, stripHarness(src)]),
+  ) as Record<DemoSourceKey, string>;

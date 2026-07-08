@@ -2,7 +2,7 @@ import {
   type ReactNode,
   createContext,
   useContext,
-  useEffect,
+  useLayoutEffect,
   useState,
 } from "react";
 import type { z } from "zod";
@@ -16,11 +16,16 @@ export type DemoShellProps = Readonly<{
 
 // Demos register their live form through this context so the shell can
 // render a uniform "View state" panel without each demo wiring one up.
+// `unknown` on purpose: Form<TSchema>'s arrow-typed methods make concrete
+// forms non-assignable to Form<z.ZodType> (contravariant params), so a typed
+// channel would reject every real registration; the shell casts once where
+// StateDump consumes it. Registration is a layout effect so the "View state"
+// button never paints disabled for a frame after a tab switch.
 const DemoFormContext = createContext<(form: unknown) => void>(() => {});
 
 export const useDemoForm = (form: unknown): void => {
   const register = useContext(DemoFormContext);
-  useEffect(() => {
+  useLayoutEffect(() => {
     register(form);
     return () => {
       register(null);
@@ -35,7 +40,7 @@ export const DemoShell = ({ source, children }: DemoShellProps) => {
 
   return (
     <DemoFormContext.Provider value={setForm}>
-      {children}
+      <div className="demo-body">{children}</div>
       <div style={{ display: "flex", gap: 8, marginTop: 24 }}>
         <button
           className="secondary"

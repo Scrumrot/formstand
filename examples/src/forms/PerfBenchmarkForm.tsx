@@ -1,7 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { type FieldFormApi, useField, useForm } from "formstand";
-import { useDemoForm } from "../demo/DemoShell";
 import { z } from "zod";
 
 const SIZES = [10, 50, 200, 500] as const;
@@ -61,7 +60,9 @@ const Benchmark = ({ size, appendResult }: BenchmarkProps) => {
   const schema = useMemo(() => buildSchema(size), [size]);
   const initial = useMemo(() => buildInitial(size), [size]);
   const form = useForm(schema, { initialValues: initial, mode: "onSubmit" });
-  useDemoForm(form);
+  // Deliberately NOT registered with the playground shell: an open
+  // "View state" panel would re-render its JSON dump inside every timed
+  // flushSync iteration and corrupt the ms/setValue measurement.
   const renderCounterRef = useRef({ count: 0 });
   const onRender = () => {
     renderCounterRef.current.count += 1;
