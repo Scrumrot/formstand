@@ -82,6 +82,7 @@ const code = emitPlainForm({
 
 ## Roadmap
 
+- `--layout module`: emit the feature-module folder layout instead of one file — `schema.ts` / `types.ts` / `hooks.ts` (`createFormHooks`) / one file per field / one per section — like the [Onboarding playground demo](https://github.com/Scrumrot/formstand/tree/main/examples/src/forms/OnboardingForm).
 - Date pickers for `date` fields (MUI X; shadcn Calendar-in-Popover).
 - Custom templates.
 

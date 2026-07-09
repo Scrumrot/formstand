@@ -12,6 +12,7 @@ import { DependentFieldsForm } from "./forms/DependentFieldsForm";
 import { DerivedFieldForm } from "./forms/DerivedFieldForm";
 import { FileUploadForm } from "./forms/FileUploadForm";
 import { HooksFactoryForm } from "./forms/HooksFactoryForm";
+import { OnboardingForm } from "./forms/OnboardingForm";
 import { InvoiceForm } from "./forms/InvoiceForm";
 import { NestedArraysForm } from "./forms/NestedArraysForm";
 import { NestedForm } from "./forms/NestedForm";
@@ -67,6 +68,11 @@ const TABS: readonly Tab[] = [
     key: "hooksFactory",
     label: "Hooks factory",
     render: () => <HooksFactoryForm />,
+  },
+  {
+    key: "onboarding",
+    label: "Onboarding",
+    render: () => <OnboardingForm />,
   },
   { key: "nested", label: "Nested + submit", render: () => <NestedForm /> },
   { key: "array", label: "Field array", render: () => <ArrayForm /> },

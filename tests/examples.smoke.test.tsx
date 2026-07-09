@@ -45,12 +45,14 @@ describe("examples playground smoke test", () => {
       ).toBeGreaterThan(0);
 
       // View code: the shell shows the tab's ?raw source, which always
-      // contains its useForm call — with the playground-harness useDemoForm
-      // lines stripped so copied code compiles outside the playground.
+      // contains a form-creation call (useForm for per-mount demos,
+      // createForm for the module-singleton ones) — with the
+      // playground-harness useDemoForm lines stripped so copied code
+      // compiles outside the playground.
       const codeButton = scope.getByRole("button", { name: "View code" });
       fireEvent.click(codeButton);
       const codePre = statePres(card as HTMLElement).find((pre) =>
-        (pre.textContent ?? "").includes("useForm"),
+        /\b(useForm|createForm)\(/.test(pre.textContent ?? ""),
       );
       expect(codePre, `code panel on tab "${tab.textContent}"`).toBeDefined();
       expect(codePre?.textContent ?? "").not.toContain("useDemoForm");

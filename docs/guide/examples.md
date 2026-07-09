@@ -8,6 +8,7 @@ Every feature has a working, interactive demo in the **[live playground](https:/
 | Bound fields | All four shipped components — `TextField`, `NumberField`, `SelectField`, `CheckboxField` — with their a11y wiring, `validateOnMount`, a `useIsValid`-gated submit, and `focusFirstError` | [BoundFieldsForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/BoundFieldsForm.tsx) |
 | Form context | `createFormContext`: zero prop drilling with typed paths intact, all four flag hooks as a status bar, `useFormError`, and `adoptValues` as the post-save rebase | [ContextForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/ContextForm.tsx) |
 | Hooks factory | `createFormHooks(form, "invoice")`: a module-singleton form baked into exported hooks (`useInvoiceField`…) — no provider, no `form` prop anywhere | [HooksFactoryForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/HooksFactoryForm.tsx) |
+| Onboarding | A 26-field, five-section **feature module**: `schema.ts` → `hooks.ts` (`createFormHooks`) → one file per field, one per section, with path-scoped `useIsDirty`/`useIsValid` badges per section header | [OnboardingForm/](https://github.com/Scrumrot/formstand/tree/main/examples/src/forms/OnboardingForm) |
 | Nested + submit | Nested object paths and the full `handleSubmit` flow | [NestedForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/NestedForm.tsx) |
 | Field array | `useFieldArray` basics: push, remove, reorder with stable row IDs | [ArrayForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/ArrayForm.tsx) |
 | Async | An `async .refine` username check with `debounceMs`, `isValidating` spinners, and race handling | [AsyncForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/AsyncForm.tsx) |
@@ -67,6 +68,30 @@ Every block below embeds the demo's actual source file at build time, so it can 
 
 ::: details Hooks factory — HooksFactoryForm.tsx
 <<< ../../examples/src/forms/HooksFactoryForm.tsx
+:::
+
+### Onboarding — the feature-module layout
+
+One folder per form: `schema.ts` (zod + select options), `types.ts`, `hooks.ts` (`createForm` + `createFormHooks`), one file per field (props type + field hook + component), one file per section (props type + section hook built on the path-scoped flags + component). The key files:
+
+::: details hooks.ts — the module's pre-wired hooks
+<<< ../../examples/src/forms/OnboardingForm/hooks.ts
+:::
+
+::: details schema.ts — schema + select options as one source of truth
+<<< ../../examples/src/forms/OnboardingForm/schema.ts
+:::
+
+::: details A field file — CityField.tsx
+<<< ../../examples/src/forms/OnboardingForm/fields/CityField.tsx
+:::
+
+::: details A section file — PersonalSection.tsx
+<<< ../../examples/src/forms/OnboardingForm/sections/PersonalSection.tsx
+:::
+
+::: details The form body — OnboardingForm.tsx
+<<< ../../examples/src/forms/OnboardingForm/OnboardingForm.tsx
 :::
 
 ::: details Nested + submit — NestedForm.tsx

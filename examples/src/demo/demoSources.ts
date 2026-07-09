@@ -41,11 +41,51 @@ const stripHarness = (source: string): string =>
     .filter((line) => !line.includes("useDemoForm"))
     .join("\n");
 
+// The Onboarding demo is a whole feature module (schema/types/hooks +
+// per-field and per-section files), so its "View code" panel concatenates
+// every file with a banner, in reading order.
+const ONBOARDING_ORDER = [
+  "schema.ts",
+  "types.ts",
+  "hooks.ts",
+  "fields/",
+  "sections/",
+  "OnboardingForm.tsx",
+  "index.ts",
+];
+
+const onboardingRank = (path: string): number => {
+  const index = ONBOARDING_ORDER.findIndex((prefix) =>
+    path.startsWith(prefix),
+  );
+  return index === -1 ? ONBOARDING_ORDER.length : index;
+};
+
+const onboardingSrc = Object.entries(
+  import.meta.glob("../forms/OnboardingForm/**/*.{ts,tsx}", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }),
+)
+  .map(([path, src]) => ({
+    path: path.replace("../forms/OnboardingForm/", ""),
+    src,
+  }))
+  .sort(
+    (a, b) =>
+      onboardingRank(a.path) - onboardingRank(b.path) ||
+      a.path.localeCompare(b.path),
+  )
+  .map(({ path, src }) => `// ────────── ${path}\n${src}`)
+  .join("\n");
+
 const sources = {
   basic: basicSrc,
   bound: boundSrc,
   context: contextSrc,
   hooksFactory: hooksFactorySrc,
+  onboarding: onboardingSrc,
   nested: nestedSrc,
   array: arraySrc,
   async: asyncSrc,
