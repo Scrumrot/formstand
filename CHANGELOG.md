@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Docs & examples (no package changes)
+
+- The playground gets a real app layout: grouped demo navigation in a
+  sidebar (Core / Patterns / Material UI / shadcn/ui — the group map is
+  exhaustive over the tab keys, so an unassigned demo is a compile error),
+  a sticky scrollable sidebar from tablet width up, and responsive tiers
+  through HD to 4K; on mobile the nav becomes wrapping chips above the
+  content. `/guide/` on the docs site now lands on a guide index instead
+  of a 404.
+
 ## formstand-cli 0.4.0 — 2026-07-09
 
 ### Added

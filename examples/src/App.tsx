@@ -160,12 +160,61 @@ const TABS: readonly Tab[] = [
   shadcnTab("shadTeam", "shadcn: Team", ShadcnTeamForm),
 ];
 
+type GroupTitle = "Core" | "Patterns" | "Material UI" | "shadcn/ui";
+
+// Exhaustive over TabKey on purpose: a new demo that isn't assigned a
+// sidebar group is a compile error, not a missing nav entry.
+const GROUP_OF: Readonly<Record<TabKey, GroupTitle>> = {
+  basic: "Core",
+  bound: "Core",
+  context: "Core",
+  hooksFactory: "Core",
+  nested: "Core",
+  array: "Core",
+  async: "Core",
+  wizard: "Core",
+  conditional: "Core",
+  invoice: "Patterns",
+  nestedArrays: "Patterns",
+  server: "Patterns",
+  autosave: "Patterns",
+  dependent: "Patterns",
+  optimistic: "Patterns",
+  file: "Patterns",
+  derived: "Patterns",
+  tag: "Patterns",
+  onboarding: "Patterns",
+  perf: "Patterns",
+  muiCheckout: "Material UI",
+  muiJob: "Material UI",
+  muiInvoice: "Material UI",
+  muiSettings: "Material UI",
+  muiSurvey: "Material UI",
+  shadSignup: "shadcn/ui",
+  shadCheckout: "shadcn/ui",
+  shadSettings: "shadcn/ui",
+  shadTeam: "shadcn/ui",
+};
+
+const GROUP_TITLES: readonly GroupTitle[] = [
+  "Core",
+  "Patterns",
+  "Material UI",
+  "shadcn/ui",
+];
+
+const GROUPS = GROUP_TITLES.map((title) => ({
+  title,
+  tabs: TABS.filter((tab) => GROUP_OF[tab.key] === title),
+}));
+
 export const App = () => {
   const [active, setActive] = useState<TabKey>("basic");
   const current = TABS.find((t) => t.key === active);
 
   return (
-    <div className="layout">
+    <div className="shell">
+      <aside className="sidebar">
       <div className="brand">
         {/* The mark: a form (with its green check) on a music stand. */}
         <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
@@ -194,37 +243,46 @@ export const App = () => {
         <h1>formstand</h1>
         <span className="brand-badge">playground</span>
       </div>
-      <p className="subtitle">
-        Interactive playground — every demo runs against the real library.
-        The source for each tab lives in{" "}
-        <a href="https://github.com/Scrumrot/formstand/tree/main/examples/src/forms">
-          examples/src/forms
-        </a>
-        ; the docs are at{" "}
-        <a href="https://scrumrot.github.io/formstand/">
-          scrumrot.github.io/formstand
-        </a>
-        .
-      </p>
-      <div className="tabs" style={{ flexWrap: "wrap" }}>
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            className={`tab ${tab.key === active ? "active" : ""}`}
-            onClick={() => setActive(tab.key)}
-            type="button"
-          >
-            {tab.label}
-          </button>
+
+      <nav className="nav" aria-label="Demos">
+        {GROUPS.map((group) => (
+          <div key={group.title} className="nav-group">
+            <div className="nav-group-title">{group.title}</div>
+            {group.tabs.map((tab) => (
+              <button
+                key={tab.key}
+                className={`nav-tab ${tab.key === active ? "active" : ""}`}
+                onClick={() => setActive(tab.key)}
+                type="button"
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         ))}
+      </nav>
+
+      <p className="sidebar-foot">
+        Every demo runs against the real library. Source:{" "}
+        <a href="https://github.com/Scrumrot/formstand/tree/main/examples/src">
+          examples/src
+        </a>{" "}
+        · <a href="https://scrumrot.github.io/formstand/">docs</a>
+      </p>
+    </aside>
+
+    <main className="content">
+      <div className="content-inner">
+        <h2 className="demo-title">{current?.label ?? ""}</h2>
+        <div className="card">
+          {current !== undefined ? (
+            <DemoShell key={current.key} source={DEMO_SOURCES[current.key]}>
+              {current.render()}
+            </DemoShell>
+          ) : null}
+        </div>
       </div>
-      <div className="card">
-        {current !== undefined ? (
-          <DemoShell key={current.key} source={DEMO_SOURCES[current.key]}>
-            {current.render()}
-          </DemoShell>
-        ) : null}
-      </div>
-    </div>
+    </main>
+  </div>
   );
 };
