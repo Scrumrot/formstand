@@ -1,3 +1,10 @@
+/* This sheet is unlayered so pre-15.4 WebKit (no @layer support) keeps the
+ * page chrome — which means every rule here beats the shadcn demos' layered
+ * Tailwind utilities. That's safe only while selectors are class-scoped or
+ * page-level (`body`/`h1` never render inside .shadcn-scope; `*` sets the
+ * box-sizing the components want anyway). A bare `input {}` / `button {}`
+ * rule here WOULD restyle the shadcn components — don't add one; see
+ * app.css for the full cascade picture. */
 * { box-sizing: border-box; }
 body {
   font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;

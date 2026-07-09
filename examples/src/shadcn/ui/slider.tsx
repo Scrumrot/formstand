@@ -3,9 +3,13 @@ import { Slider as SliderPrimitive } from "radix-ui";
 import { cn } from "../cn";
 
 // Single-thumb variant (the demos bind one number per slider); stock shadcn
-// renders one thumb per entry in `value`.
+// renders one thumb per entry in `value`. The aria-label is routed to the
+// Thumb — that's the element carrying role="slider", and Radix gives a
+// single thumb no name of its own (the Root is a <span>, so label
+// htmlFor/id association can't name it either).
 export const Slider = ({
   className,
+  "aria-label": ariaLabel,
   ...props
 }: ComponentProps<typeof SliderPrimitive.Root>) => (
   <SliderPrimitive.Root
@@ -27,6 +31,7 @@ export const Slider = ({
     </SliderPrimitive.Track>
     <SliderPrimitive.Thumb
       data-slot="slider-thumb"
+      aria-label={ariaLabel}
       className="block size-4 shrink-0 rounded-full border border-primary bg-background shadow-sm transition-[color,box-shadow] outline-none hover:ring-4 hover:ring-ring/30 focus-visible:ring-4 focus-visible:ring-ring/50 disabled:pointer-events-none"
     />
   </SliderPrimitive.Root>

@@ -1,5 +1,38 @@
 # Changelog
 
+## formstand-cli 0.2.1 — 2026-07-09
+
+### Fixed
+
+- Leaf-free schemas (no scalar fields anywhere, e.g. an object of empty
+  objects) no longer generate non-compiling output in the `mui` and
+  `shadcn` backends — the emitted `BoundFieldProps` type referenced
+  `FieldFormApi` without importing it. All three backends now have a
+  leaf-free typecheck test.
+- The shadcn backend's generated output is additionally typechecked in CI
+  against the repo's real Radix-based components (not just the structural
+  stub), so a shadcn/Radix prop-contract change fails our suite instead of
+  the consumer's build.
+
+### Docs & examples (no library package changes)
+
+- Playground: the page chrome stylesheet is unlayered again — cascade
+  layers can't be transpiled, so pre-15.4 WebKit (the es2019 target's
+  audience) was losing every tab's styling; its selectors are class-scoped,
+  so the shadcn utilities are unaffected. The layer-order statement now
+  pins Tailwind's canonical `components` slot below `utilities`.
+- shadcn kit: sliders take an `aria-label` routed to the Radix Thumb (the
+  Root is a `<span>`, so `htmlFor`/`id` never named it); radio-group items
+  show error styling via `group-aria-invalid` (Radix doesn't propagate the
+  Root's `aria-invalid` to items); the Team demo's rows are memoized with
+  stable handlers so keystrokes in one row stop re-rendering the rest.
+- Publish workflow: `--provenance` is explicit again (fail-closed — the
+  automatic path silently skips attestation when conditions aren't met) and
+  the Node pin is `>=24.8`, the first line whose bundled npm meets trusted
+  publishing's 11.5.1 floor. CI asserts the root and examples lockfiles
+  agree on the deduped UI packages, so the smoke test can't silently
+  certify a different build than the deployed playground.
+
 ## formstand-cli 0.2.0 — 2026-07-08
 
 ### Added

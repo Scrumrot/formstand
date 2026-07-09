@@ -139,12 +139,14 @@ export const ShadcnSettingsForm = () => {
             </Select>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="settings-volume">
+            {/* No htmlFor: Radix Slider's root is a <span> (not labelable),
+                so the accessible name goes to the thumb via aria-label. */}
+            <Label>
               Notification volume
               <span className="text-muted-foreground">{volume.value}%</span>
             </Label>
             <Slider
-              id="settings-volume"
+              aria-label="Notification volume"
               min={0}
               max={100}
               step={1}

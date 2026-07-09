@@ -692,14 +692,21 @@ const muiAdapterSection = (usage: KindUsage): string => {
 };
 
 const muiBoundComponents = (usage: KindUsage): string => {
-  const propsType = [
-    "",
-    "type BoundFieldProps = Readonly<{",
-    "  form: FieldFormApi;",
-    "  path: string;",
-    "  label: string;",
-    "}>;",
-  ];
+  const hasLeaf =
+    usage.string || usage.date || usage.number || usage.boolean || usage.enum;
+  // Gated like the components that use it: BoundFieldProps references
+  // FieldFormApi, whose import only exists when some leaf renders — an
+  // unconditional type would emit non-compiling code for leaf-free schemas.
+  const propsType = hasLeaf
+    ? [
+        "",
+        "type BoundFieldProps = Readonly<{",
+        "  form: FieldFormApi;",
+        "  path: string;",
+        "  label: string;",
+        "}>;",
+      ]
+    : [];
   const text = [
     "",
     "const BoundTextField = ({ form, path, label }: BoundFieldProps) => {",
@@ -1006,14 +1013,21 @@ const shadcnAdapterSection = (usage: KindUsage): string => {
 };
 
 const shadcnBoundComponents = (usage: KindUsage): string => {
-  const propsType = [
-    "",
-    "type BoundFieldProps = Readonly<{",
-    "  form: FieldFormApi;",
-    "  path: string;",
-    "  label: string;",
-    "}>;",
-  ];
+  const hasLeaf =
+    usage.string || usage.date || usage.number || usage.boolean || usage.enum;
+  // Gated like the components that use it: BoundFieldProps references
+  // FieldFormApi, whose import only exists when some leaf renders — an
+  // unconditional type would emit non-compiling code for leaf-free schemas.
+  const propsType = hasLeaf
+    ? [
+        "",
+        "type BoundFieldProps = Readonly<{",
+        "  form: FieldFormApi;",
+        "  path: string;",
+        "  label: string;",
+        "}>;",
+      ]
+    : [];
   const text = [
     "",
     "const BoundTextField = ({ form, path, label }: BoundFieldProps) => {",

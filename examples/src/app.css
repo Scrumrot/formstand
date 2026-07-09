@@ -1,14 +1,22 @@
 /*
- * Cascade-layer order for the whole playground, lowest priority first.
+ * Cascade order for the whole playground.
  *
- * The playground's own stylesheet goes into the bottom `app` layer so the
- * shadcn demos' Tailwind utilities (top `utilities` layer) beat its global
- * `input`/`button` element rules — unlayered CSS would win against ANY
- * layered rule regardless of specificity, so styles.css must not stay
- * unlayered. MUI is unaffected: emotion injects unlayered <style> tags,
- * which outrank every layer here, same as before.
+ * styles.css stays UNLAYERED, deliberately, for two reasons:
+ *  - pre-15.4 WebKit drops @layer blocks wholesale and layers can't be
+ *    transpiled away, so layering the page chrome would unstyle every tab
+ *    on the older mobile WebKit the es2019 build target exists for;
+ *  - every selector in it is class-scoped (.tabs, .card, .field input,
+ *    button.primary…), so nothing in it can reach the shadcn components
+ *    and outrank their layered utilities.
+ * If styles.css ever grows a bare element rule, it WOULD beat every layered
+ * rule below — keep it class-scoped (see the note at its top).
+ *
+ * The layer statement pins Tailwind's canonical order up front, including
+ * `components` even though nothing declares it yet: an undeclared layer
+ * would otherwise register on first use AFTER `utilities` (i.e. above it),
+ * silently inverting Tailwind's components-lose-to-utilities guarantee.
  */
-@layer app, theme, base, utilities;
+@layer theme, base, components, utilities;
 
-@import "./styles.css" layer(app);
+@import "./styles.css";
 @import "./shadcn/theme.css";

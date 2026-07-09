@@ -9,7 +9,9 @@ export const RadioGroup = ({
 }: ComponentProps<typeof RadioGroupPrimitive.Root>) => (
   <RadioGroupPrimitive.Root
     data-slot="radio-group"
-    className={cn("grid gap-3", className)}
+    // `group` lets the items react to aria-invalid set on the Root (where
+    // the adapter puts it) — Radix doesn't propagate the attribute down.
+    className={cn("group grid gap-3", className)}
     {...props}
   />
 );
@@ -21,7 +23,7 @@ export const RadioGroupItem = ({
   <RadioGroupPrimitive.Item
     data-slot="radio-group-item"
     className={cn(
-      "aspect-square size-4 shrink-0 rounded-full border border-input text-primary outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive",
+      "aspect-square size-4 shrink-0 rounded-full border border-input text-primary outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive group-aria-invalid:border-destructive",
       className,
     )}
     {...props}

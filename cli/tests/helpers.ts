@@ -26,6 +26,24 @@ export const muiStubPaths: Readonly<Record<string, readonly string[]>> = {
 // the program as an extra root file instead of a paths mapping.
 export const shadcnStubFile = path.join(testsDir, "stubs", "shadcn-ui.d.ts");
 
+// Maps the shadcn alias onto the repo's REAL Radix-based components
+// (examples/src/shadcn/ui), so the emitter is also validated against actual
+// shadcn/Radix prop contracts — the stub alone would only prove the emitter
+// agrees with its own assumptions. React's types are pinned to the root copy
+// because this program mixes examples files with the library source, and two
+// @types/react copies fail assignability at React 19's unique symbols.
+export const realShadcnPaths: Readonly<Record<string, readonly string[]>> = {
+  "@/components/ui/*": [
+    posix(path.join(repoRoot, "examples", "src", "shadcn", "ui")) + "/*",
+  ],
+  react: [posix(path.join(repoRoot, "node_modules", "@types", "react"))],
+  "react/jsx-runtime": [
+    posix(
+      path.join(repoRoot, "node_modules", "@types", "react", "jsx-runtime"),
+    ),
+  ],
+};
+
 const formatDiagnostic = (d: ts.Diagnostic): string => {
   const message = ts.flattenDiagnosticMessageText(d.messageText, "\n");
   if (d.file === undefined || d.start === undefined) return message;

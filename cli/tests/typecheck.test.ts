@@ -13,12 +13,14 @@ import {
   fixturesDir,
   freshTmpDir,
   muiStubPaths,
+  realShadcnPaths,
   shadcnStubFile,
   typecheckDiagnostics,
 } from "./helpers";
 import { profileSchema } from "./fixtures/profileSchema";
 import { hostileSchema } from "./fixtures/hostileSchema";
 import { collidingSchema } from "./fixtures/collidingSchema";
+import { leafFreeSchema } from "./fixtures/leafFreeSchema";
 
 type Emitter = (options: EmitFormOptions) => string;
 
@@ -127,6 +129,53 @@ describe("generated components", () => {
       dir,
     );
     expect(typecheckDiagnostics([file, shadcnStubFile])).toEqual([]);
+  });
+
+  // The stub is typed with the emitter's shapes, so it can only prove
+  // self-consistency; this run typechecks the same output against the repo's
+  // real Radix-based components, so a shadcn/Radix prop-contract change
+  // fails HERE instead of in every consumer's app.
+  it("shadcn form typechecks against the real shadcn/Radix components", () => {
+    const dir = freshTmpDir("typecheck-shadcn-real");
+    const { file } = generate(
+      emitShadcnForm,
+      profileSchema,
+      "profileSchema",
+      "ProfileForm",
+      dir,
+    );
+    expect(typecheckDiagnostics([file], realShadcnPaths)).toEqual([]);
+  });
+
+  // A schema with no scalar leaves must still emit compilable code: every
+  // helper, type, and import in the preamble is usage-gated (BoundFieldProps
+  // references FieldFormApi, whose import only exists when a leaf renders).
+  it("leaf-free schemas emit compilable output in all three backends", () => {
+    const dir = freshTmpDir("typecheck-leaf-free");
+    const plain = generate(
+      emitPlainForm,
+      leafFreeSchema,
+      "leafFreeSchema",
+      "LeafFreePlainForm",
+      dir,
+    );
+    const mui = generate(
+      emitMuiForm,
+      leafFreeSchema,
+      "leafFreeSchema",
+      "LeafFreeMuiForm",
+      dir,
+    );
+    const shadcn = generate(
+      emitShadcnForm,
+      leafFreeSchema,
+      "leafFreeSchema",
+      "LeafFreeShadcnForm",
+      dir,
+    );
+    expect(typecheckDiagnostics([plain.file])).toEqual([]);
+    expect(typecheckDiagnostics([mui.file], muiStubPaths)).toEqual([]);
+    expect(typecheckDiagnostics([shadcn.file, shadcnStubFile])).toEqual([]);
   });
 
   it("hostile field names typecheck in mui output", () => {

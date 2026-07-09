@@ -29,13 +29,15 @@ jobs:
             exit 1
           fi
 
-      # Node 24 bundles npm >= 11.6, satisfying trusted publishing's
-      # npm >= 11.5.1 floor natively — upgrading npm in place on the runner
-      # (npm install -g npm@latest) leaves a broken install whose
-      # libnpmpublish can't resolve its sigstore dependency.
+      # Trusted publishing needs npm >= 11.5.1; Node 24.8+ is the first line
+      # bundling npm >= 11.6 (24.0-24.4 shipped 11.3/11.4, below the floor),
+      # so the floor is pinned explicitly rather than trusting whatever 24.x
+      # a toolcache holds. Never upgrade npm in place instead (npm install
+      # -g npm@latest) — it leaves a broken install whose libnpmpublish
+      # can't resolve its sigstore dependency.
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: ">=24.8"
           registry-url: https://registry.npmjs.org
 
       - name: Install dependencies
@@ -50,10 +52,13 @@ jobs:
       - name: Typecheck, lint, test
         run: npm run typecheck && npm run lint && npm run test:coverage
 
-      # Authenticates via OIDC trusted publishing (configured on npmjs.com for
-      # this repo + workflow file) — no token secret; provenance is automatic.
+      # Authenticates via OIDC trusted publishing (configured on npmjs.com
+      # for this repo + workflow file) — no token secret. --provenance stays
+      # explicit even though trusted publishing generates it by default:
+      # the flag is fail-CLOSED (publish errors if attestation can't be
+      # produced), where the automatic path silently skips it.
       - name: Publish formstand
-        run: npm publish
+        run: npm publish --provenance
 
   publish-cli:
     if: ${{ startsWith(github.ref_name, 'cli-v') }}
@@ -74,13 +79,15 @@ jobs:
           fi
         working-directory: cli
 
-      # Node 24 bundles npm >= 11.6, satisfying trusted publishing's
-      # npm >= 11.5.1 floor natively — upgrading npm in place on the runner
-      # (npm install -g npm@latest) leaves a broken install whose
-      # libnpmpublish can't resolve its sigstore dependency.
+      # Trusted publishing needs npm >= 11.5.1; Node 24.8+ is the first line
+      # bundling npm >= 11.6 (24.0-24.4 shipped 11.3/11.4, below the floor),
+      # so the floor is pinned explicitly rather than trusting whatever 24.x
+      # a toolcache holds. Never upgrade npm in place instead (npm install
+      # -g npm@latest) — it leaves a broken install whose libnpmpublish
+      # can't resolve its sigstore dependency.
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: ">=24.8"
           registry-url: https://registry.npmjs.org
 
       # The CLI test suite typechecks its generated output against the
@@ -95,8 +102,11 @@ jobs:
         working-directory: cli
 
       # prepublishOnly runs typecheck + test + build before the publish.
-      # Authenticates via OIDC trusted publishing (configured on npmjs.com for
-      # this repo + workflow file) — no token secret; provenance is automatic.
+      # Authenticates via OIDC trusted publishing (configured on npmjs.com
+      # for this repo + workflow file) — no token secret. --provenance stays
+      # explicit even though trusted publishing generates it by default:
+      # the flag is fail-CLOSED (publish errors if attestation can't be
+      # produced), where the automatic path silently skips it.
       - name: Publish formstand-cli
-        run: npm publish
+        run: npm publish --provenance
         working-directory: cli

@@ -12,6 +12,8 @@ export default defineConfig({
     // @mui/@emotion — installed at the root as devDependencies for exactly
     // this reason) from examples/node_modules. Two copies of React null the
     // hooks dispatcher; two copies of emotion split the theme context.
+    // Keep this list in sync with scripts/check-lockfile-sync.mjs, which
+    // fails CI when the two lockfiles resolve these to different versions.
     dedupe: [
       "react",
       "react-dom",

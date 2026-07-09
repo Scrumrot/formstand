@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { ArrowUpIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { type Form, useField, useFieldArray, useForm } from "formstand";
 import { z } from "zod";
@@ -66,13 +66,17 @@ type Schema = typeof schema;
 type MemberRowProps = Readonly<{
   form: Form<Schema>;
   index: number;
-  onMoveUp: () => void;
-  onRemove: () => void;
+  move: (from: number, to: number) => void;
+  remove: (index: number) => void;
 }>;
 
-// One component per row: each row owns its three useField subscriptions, so
-// typing in one row never re-renders the others.
-const MemberRow = ({ form, index, onMoveUp, onRemove }: MemberRowProps) => {
+// One memoized component per row: the per-row useField subscriptions keep
+// each row's reads self-contained, and memo (every prop here is stable —
+// useFieldArray's move/remove are useCallback'd) is what actually stops
+// keystrokes in one row, or in the team name, from re-rendering the others.
+// Without memo the parent re-renders on any member edit (its useFieldArray
+// slice changes identity) and would take every row with it.
+const MemberRow = memo(({ form, index, move, remove }: MemberRowProps) => {
   const name = useField(form, `members.${index}.name`);
   const email = useField(form, `members.${index}.email`);
   const role = useField(form, `members.${index}.role`);
@@ -104,7 +108,7 @@ const MemberRow = ({ form, index, onMoveUp, onRemove }: MemberRowProps) => {
         size="icon"
         aria-label="Move up"
         disabled={index === 0}
-        onClick={onMoveUp}
+        onClick={() => move(index, index - 1)}
       >
         <ArrowUpIcon />
       </Button>
@@ -112,13 +116,13 @@ const MemberRow = ({ form, index, onMoveUp, onRemove }: MemberRowProps) => {
         variant="ghost"
         size="icon"
         aria-label="Remove member"
-        onClick={onRemove}
+        onClick={() => remove(index)}
       >
         <Trash2Icon />
       </Button>
     </div>
   );
-};
+});
 
 export const ShadcnTeamForm = () => {
   const form = useForm(schema, {
@@ -160,8 +164,8 @@ export const ShadcnTeamForm = () => {
               key={entry.id}
               form={form}
               index={index}
-              onMoveUp={() => members.move(index, index - 1)}
-              onRemove={() => members.remove(index)}
+              move={members.move}
+              remove={members.remove}
             />
           ))}
           <FieldError field={members} />

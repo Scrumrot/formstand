@@ -25,6 +25,13 @@ jobs:
         run: npm ci
         working-directory: examples
 
+      # The smoke test resolves the deduped UI packages from the ROOT
+      # lockfile while the deployed playground builds from the examples one;
+      # fail loudly if a one-sided bump makes CI certify a different build
+      # than the one that ships.
+      - name: Check lockfiles agree on deduped packages
+        run: node scripts/check-lockfile-sync.mjs
+
       - name: Typecheck
         run: npm run typecheck
 
