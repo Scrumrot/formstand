@@ -1,10 +1,22 @@
 # Changelog
 
-## Unreleased
+## formstand-cli Unreleased
 
-### formstand
+- Generated array hooks drop the explicit item type
+  (`useFieldArray(form, "items")`): formstand ≥ 0.5 infers it from the
+  schema through the path — and rejects the old explicit spelling on typed
+  forms. On formstand 0.4 the generated code still compiles, with untyped
+  items.
+- Generated shadcn output defines one `ariaInvalid` helper (used by the
+  inlined adapters and the select trigger) instead of repeating the ternary
+  four times, and the generated `FieldError` computes the message once —
+  cosmetic; runtime behavior unchanged. Internally the MUI and shadcn
+  backends now share their emitted snippets (error helper, `BoundFieldProps`,
+  the leaf switch), so the generators can't drift.
 
-#### Breaking
+## 0.5.0 — 2026-07-09
+
+### Breaking
 
 - `useFieldArray` infers the item type from a `Form<TSchema>` and a typed
   path — `useFieldArray(form, "users")` (and template paths like
@@ -18,27 +30,13 @@
   `UseFieldArrayReturn<unknown>` (dynamic paths carry no type), also like
   `useField`.
 
-#### Fixed (site only)
+### Fixed (site only)
 
 - The deployed playground bundled two copies of React (the formstand alias
   reaches outside the examples package, so its imports resolved the repo
   root's copy) — every tab crashed at startup with a null hooks
   dispatcher. The examples build now dedupes react/zustand/zod and CI
   asserts the bundle holds exactly one React.
-
-### formstand-cli
-
-- Generated array hooks drop the explicit item type
-  (`useFieldArray(form, "items")`): formstand ≥ 0.5 infers it from the
-  schema through the path — and rejects the old explicit spelling on typed
-  forms. On formstand 0.4 the generated code still compiles, with untyped
-  items.
-- Generated shadcn output defines one `ariaInvalid` helper (used by the
-  inlined adapters and the select trigger) instead of repeating the ternary
-  four times, and the generated `FieldError` computes the message once —
-  cosmetic; runtime behavior unchanged. Internally the MUI and shadcn
-  backends now share their emitted snippets (error helper, `BoundFieldProps`,
-  the leaf switch), so the generators can't drift.
 
 ### Docs & examples (no package changes)
 
