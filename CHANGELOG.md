@@ -11,6 +11,12 @@
   through HD to 4K; on mobile the nav becomes wrapping chips above the
   content. `/guide/` on the docs site now lands on a guide index instead
   of a 404.
+- Fixed: clicking a checkbox's label made the field and everything below
+  it jump down for a frame and snap back (Chrome's label-forwarded
+  activation briefly rendered the checkbox as a padded text-input box —
+  reproduced and verified fixed in real Chromium via Playwright). The
+  playground's text-input chrome now excludes checkboxes, which also gain
+  a brass accent-color and a focus-visible ring.
 - View state / View code move to a panel on the demo's right (stacked
   below on narrow screens), toggled by the same two buttons; multi-file
   demos (Onboarding) get a file-tree navigator (@mui/x-tree-view with
