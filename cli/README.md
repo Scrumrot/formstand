@@ -43,6 +43,7 @@ Without `--out`, both files print to stdout separated by `// --- file: ...` head
 | `--export <name>` | which export holds the zod schema |
 | `--type <TypeName>` | generate from a TS type/interface instead |
 | `--ui plain\|mui\|shadcn` | component flavor (default `plain`) |
+| `--layout single\|module` | `single` (default): one file. `module`: a feature-module folder — see below |
 | `--name <MyForm>` | component name (default derived from the schema/type name) |
 | `--out <file>` | write the component here instead of stdout |
 | `--schema-out <file>` | type mode: where the generated zod schema goes (default `<schemaName>.ts` next to `--out`) |
@@ -57,6 +58,29 @@ Without `--out`, both files print to stdout separated by `// --- file: ...` head
 - `handleSubmit(console.log)` and a submit button disabled while submitting.
 - `--ui mui`: the same structure over `@mui/material` v9 with an inlined ~50-line adapter (`muiTextFieldProps` / `muiNumberFieldProps` / `muiSelectProps` / `muiSwitchProps`) binding `UseFieldReturn` to MUI props, sharing `parseNumberText` / `numberToInputText` with the library.
 - `--ui shadcn`: the same structure over your app's [shadcn/ui](https://ui.shadcn.com/) components (imported from the `@/components/ui/*` alias that `npx shadcn add` scaffolds) with an inlined adapter speaking the Radix dialect — `onCheckedChange` / `onValueChange` callbacks, dropdown-close as the blur trigger, and `aria-invalid` error styling with a message line.
+
+## `--layout module`
+
+Instead of one file, a feature-module folder in the shape of the [Onboarding playground demo](https://github.com/Scrumrot/formstand/tree/main/examples/src/forms/OnboardingForm):
+
+```
+ProfileForm/
+  schema.ts        the zod schema (re-exported in zod mode, generated in type mode)
+  types.ts         ProfileSchema / ProfileValues
+  hooks.ts         createForm + createFormHooks(form, "profile") — the pre-wired hook API
+  fields/          one file per scalar leaf: props type + field hook + component
+  sections/        one per top-level object/array: props type + section hook
+                   (path-scoped useProfileIsDirty/IsValid) + component
+  ProfileForm.tsx  the body composing sections and root-level fields
+  index.ts         the folder's public API
+```
+
+`--out` names the folder (created if missing; every destination is checked before anything is written). Without `--out`, all files stream to stdout with `// --- file:` headers. Array sections bind their row fields inline with template paths; `Date` fields bind as text through a cast with a TODO. Requires **formstand ≥ 0.7** (`createFormHooks`) and currently supports `--ui plain` only.
+
+```bash
+formstand-gen src/profileSchema.ts --layout module --out src/ProfileForm
+formstand-gen src/types.ts --type Profile --layout module --out src/ProfileForm
+```
 
 ## Supported schema surface
 
@@ -82,7 +106,7 @@ const code = emitPlainForm({
 
 ## Roadmap
 
-- `--layout module`: emit the feature-module folder layout instead of one file — `schema.ts` / `types.ts` / `hooks.ts` (`createFormHooks`) / one file per field / one per section — like the [Onboarding playground demo](https://github.com/Scrumrot/formstand/tree/main/examples/src/forms/OnboardingForm).
+- `--layout module` for the `mui`/`shadcn` uis (the kit adapters need a shared module file).
 - Date pickers for `date` fields (MUI X; shadcn Calendar-in-Popover).
 - Custom templates.
 

@@ -16,6 +16,11 @@ import {
 import { fromType } from "./fromType";
 import { fromZod, isZodSchema } from "./fromZod";
 import type { FieldSpec } from "./ir";
+import {
+  type ModuleFile,
+  emitModuleForm,
+  joinModuleFiles,
+} from "./moduleLayout";
 
 const HELP = `formstand-gen — generate formstand form components
 
@@ -33,6 +38,12 @@ Options:
   --type <TypeName>   generate from an exported TS type/interface instead
   --ui <plain|mui|shadcn>
                       component flavor (default: plain)
+  --layout <single|module>
+                      single: one component file (default). module: a
+                      feature-module folder (schema.ts/types.ts/hooks.ts via
+                      createFormHooks, one file per field, one per section);
+                      --out names the folder. Requires --ui plain and
+                      formstand >= 0.7.
   --name <MyForm>     component name (default: derived from the schema/type)
   --out <file>        write the component here instead of stdout
   --schema-out <file> (type mode) where to write the generated zod schema
@@ -44,6 +55,7 @@ Examples:
   formstand-gen src/profileSchema.ts --out src/ProfileForm.tsx
   formstand-gen src/types.ts --type Profile --ui mui --out src/ProfileForm.tsx
   formstand-gen src/profileSchema.ts --ui shadcn --out src/ProfileForm.tsx
+  formstand-gen src/profileSchema.ts --layout module --out src/ProfileForm
 `;
 
 type Ui = "plain" | "mui" | "shadcn";
@@ -53,11 +65,19 @@ const UI_VALUES: readonly Ui[] = ["plain", "mui", "shadcn"];
 const isUi = (value: string): value is Ui =>
   (UI_VALUES as readonly string[]).includes(value);
 
+type Layout = "single" | "module";
+
+const LAYOUT_VALUES: readonly Layout[] = ["single", "module"];
+
+const isLayout = (value: string): value is Layout =>
+  (LAYOUT_VALUES as readonly string[]).includes(value);
+
 type CliOptions = Readonly<{
   input: string;
   exportName?: string;
   typeName?: string;
   ui: Ui;
+  layout: Layout;
   name?: string;
   out?: string;
   schemaOut?: string;
@@ -74,6 +94,7 @@ type PartialOptions = Readonly<{
   exportName?: string;
   typeName?: string;
   ui: Ui;
+  layout: Layout;
   name?: string;
   out?: string;
   schemaOut?: string;
@@ -81,11 +102,15 @@ type PartialOptions = Readonly<{
 }>;
 
 const VALUE_FLAGS: Readonly<
-  Record<string, "exportName" | "typeName" | "ui" | "name" | "out" | "schemaOut">
+  Record<
+    string,
+    "exportName" | "typeName" | "ui" | "layout" | "name" | "out" | "schemaOut"
+  >
 > = {
   "--export": "exportName",
   "--type": "typeName",
   "--ui": "ui",
+  "--layout": "layout",
   "--name": "name",
   "--out": "out",
   "--schema-out": "schemaOut",
@@ -115,6 +140,12 @@ const parseRest = (
         message: `--ui must be one of ${UI_VALUES.map((ui) => `"${ui}"`).join(", ")}, got "${value}"`,
       };
     }
+    if (head === "--layout" && !isLayout(value)) {
+      return {
+        kind: "error",
+        message: `--layout must be one of ${LAYOUT_VALUES.map((layout) => `"${layout}"`).join(", ")}, got "${value}"`,
+      };
+    }
     return parseRest(after, { ...acc, [key]: value });
   }
   if (head.startsWith("-")) {
@@ -130,7 +161,7 @@ const parseRest = (
 };
 
 export const parseArgs = (argv: readonly string[]): ParseResult =>
-  parseRest(argv, { ui: "plain", force: false });
+  parseRest(argv, { ui: "plain", layout: "single", force: false });
 
 // "profileSchema" → "ProfileForm"; "Profile" → "ProfileForm".
 const deriveFormName = (base: string): string => {
@@ -165,6 +196,30 @@ const assertWritable = (paths: readonly string[], force: boolean): void => {
 const writeFile = (filePath: string, content: string): void => {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content, "utf8");
+};
+
+// Module layout: write the whole folder (all destinations pre-checked so a
+// refusal can never leave a half-written module), or stream it to stdout
+// with the multi-file headers when no --out is given.
+const emitModuleOutput = (
+  files: readonly ModuleFile[],
+  out: string | undefined,
+  force: boolean,
+): void => {
+  if (out === undefined) {
+    stdout(joinModuleFiles(files));
+    return;
+  }
+  const outDir = path.resolve(out);
+  const destinations = files.map((file) => path.join(outDir, file.path));
+  assertWritable(destinations, force);
+  files.forEach((file, i) => {
+    const dest = destinations[i];
+    if (dest !== undefined) {
+      writeFile(dest, file.content);
+      stderr(`wrote ${relToCwd(dest)}`);
+    }
+  });
 };
 
 type SchemaPick =
@@ -323,17 +378,27 @@ const runZodMode = async (options: CliOptions): Promise<number> => {
   const formName = options.name ?? deriveFormName(pick.exportName);
   const fromDir =
     options.out !== undefined
-      ? path.dirname(path.resolve(options.out))
+      ? options.layout === "module"
+        ? path.resolve(options.out)
+        : path.dirname(path.resolve(options.out))
       : process.cwd();
   const schemaImport: SchemaImport = {
     name: pick.exportName,
     from: moduleSpecifier(fromDir, inputAbs),
     kind: pick.importKind,
   };
-  const code = emitComponent(options.ui, { ir, formName, schemaImport });
   if (options.schemaOut !== undefined) {
     stderr("note: --schema-out is ignored in zod mode (the schema already exists)");
   }
+  if (options.layout === "module") {
+    emitModuleOutput(
+      emitModuleForm({ ir, formName, schemaImport }),
+      options.out,
+      options.force,
+    );
+    return 0;
+  }
+  const code = emitComponent(options.ui, { ir, formName, schemaImport });
   if (options.out !== undefined) {
     const outAbs = path.resolve(options.out);
     assertWritable([outAbs], options.force);
@@ -353,6 +418,26 @@ const runTypeMode = (options: CliOptions): number => {
   const schemaName = `${camelCase(typeName)}Schema`;
   const formName = options.name ?? deriveFormName(typeName);
   const schemaSource = emitZodSchema(ir, schemaName);
+  if (options.layout === "module") {
+    // The schema is a module file (schema.ts), so --schema-out has no
+    // separate destination here.
+    if (options.schemaOut !== undefined) {
+      stderr(
+        "note: --schema-out is ignored with --layout module (the schema is the module's schema.ts)",
+      );
+    }
+    emitModuleOutput(
+      emitModuleForm({
+        ir,
+        formName,
+        schemaImport: { name: schemaName, from: "./schema", kind: "named" },
+        schemaSource,
+      }),
+      options.out,
+      options.force,
+    );
+    return 0;
+  }
   if (options.out !== undefined) {
     const outAbs = path.resolve(options.out);
     const schemaOutAbs =
@@ -408,6 +493,12 @@ const runTypeMode = (options: CliOptions): number => {
 const run = async (options: CliOptions): Promise<number> => {
   if (!fs.existsSync(path.resolve(options.input))) {
     stderr(`error: input file not found: ${options.input}`);
+    return 1;
+  }
+  if (options.layout === "module" && options.ui !== "plain") {
+    stderr(
+      `error: --layout module currently supports --ui plain only (got --ui ${options.ui})`,
+    );
     return 1;
   }
   return options.typeName !== undefined

@@ -23,16 +23,16 @@ export type EmitFormOptions = Readonly<{
   schemaImport: SchemaImport;
 }>;
 
-type ObjectSpec = Extract<FieldSpec, Readonly<{ kind: "object" }>>;
+export type ObjectSpec = Extract<FieldSpec, Readonly<{ kind: "object" }>>;
 
-const ind = (level: number): string => "  ".repeat(level);
+export const ind = (level: number): string => "  ".repeat(level);
 
 // ---------------------------------------------------------------------------
 // Escaping — one helper per emission context, so ANY field name is safe
 // ---------------------------------------------------------------------------
 
 // JS string literal (also the payload of JSX expression containers).
-const q = (value: string): string => JSON.stringify(value);
+export const q = (value: string): string => JSON.stringify(value);
 
 const IDENT_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const propKey = (name: string): string =>
@@ -41,21 +41,21 @@ const propKey = (name: string): string =>
 // JSX string attributes have no backslash escapes, so a quote in the value
 // cannot be escaped in place. Every string-valued attribute is therefore
 // emitted as an expression container holding a JS string: label={"..."}.
-const jsxAttr = (name: string, value: string): string => `${name}={${q(value)}}`;
+export const jsxAttr = (name: string, value: string): string => `${name}={${q(value)}}`;
 
 // JSX text position: braces, angle brackets, and quotes are all significant
 // there; a string expression container makes them inert.
-const jsxText = (value: string): string => `{${q(value)}}`;
+export const jsxText = (value: string): string => `{${q(value)}}`;
 
 // Static segment of a template literal: escape what is active inside
 // backticks — backslashes, backticks, and "${" openings.
-const templateEscape = (value: string): string =>
+export const templateEscape = (value: string): string =>
   value.replace(/[\\`]|\$\{/g, (match) => `\\${match}`);
 
 // Block-comment body: "*/" would end the comment early.
-const commentText = (value: string): string => value.replace(/\*\//g, "*\\/");
+export const commentText = (value: string): string => value.replace(/\*\//g, "*\\/");
 
-const pascalJoin = (segments: readonly string[]): string =>
+export const pascalJoin = (segments: readonly string[]): string =>
   segments.map(pascalCase).join("");
 
 const camelJoin = (segments: readonly string[]): string => {
@@ -68,7 +68,7 @@ const camelJoin = (segments: readonly string[]): string => {
 // formstand paths split on "." — a key containing one is not addressable, so
 // the form emitters skip the binding (the zod schema and initialValues still
 // carry the key).
-const isUnaddressable = (name: string): boolean => name.includes(".");
+export const isUnaddressable = (name: string): boolean => name.includes(".");
 
 // The unaddressable field paths in an IR, for the CLI to surface as stderr
 // warnings alongside the in-file TODO comments.
@@ -249,7 +249,7 @@ const collectRawArrays = (
 // Distinct source paths can normalize to the same Pascal identifier
 // ("userNames" and "user_names"): disambiguate every derived identifier with
 // a 2, 3, ... suffix (userNamesArray2, UserNamesItem2, emptyUserNamesItem2).
-const identifierSuffix = (base: string, used: ReadonlySet<string>): string => {
+export const identifierSuffix = (base: string, used: ReadonlySet<string>): string => {
   const next = (n: number): string =>
     used.has(`${base}${n}`) ? next(n + 1) : `${n}`;
   return used.has(base) ? next(2) : "";
@@ -344,7 +344,7 @@ const schemaImportLine = (schemaImport: SchemaImport): string =>
     ? `import ${schemaImport.name} from ${q(schemaImport.from)};`
     : `import { ${schemaImport.name} } from ${q(schemaImport.from)};`;
 
-const assertObjectRoot = (ir: FieldSpec): ObjectSpec => {
+export const assertObjectRoot = (ir: FieldSpec): ObjectSpec => {
   if (ir.kind !== "object") {
     throw new Error("the root schema must be an object (z.object({...}))");
   }

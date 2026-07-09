@@ -1,5 +1,23 @@
 # Changelog
 
+## formstand-cli Unreleased
+
+### Added
+
+- `--layout module`: emits a feature-module folder instead of one file —
+  `schema.ts` (re-exported in zod mode, generated in type mode), `types.ts`,
+  `hooks.ts` (`createForm` + `createFormHooks`, so the whole module shares
+  one pre-wired hook API), one file per scalar field (props type + field
+  hook + component), one file per top-level object/array section (props
+  type + section hook built on the path-scoped dirty/valid flags +
+  component), the form body, and `index.ts` — the shape of the Onboarding
+  playground demo. `--out` names the folder with all destinations
+  pre-checked; without it the files stream to stdout with `// --- file:`
+  headers. Emitted modules are typechecked in CI against the library
+  source, including hostile-name, colliding-name, and leaf-free schemas.
+  Requires formstand ≥ 0.7; `--ui plain` only for now.
+- `emitModuleForm` / `joinModuleFiles` join the programmatic API.
+
 ## 0.7.0 — 2026-07-09
 
 ### Added

@@ -56,6 +56,7 @@ The type is expanded through the TypeScript compiler: primitives, `Date`, string
 | `--export NAME` | which schema export to use (zod mode); `default` works |
 | `--type NAME` | expand this type/interface instead (type mode) |
 | `--ui plain\|mui\|shadcn` | output style, default `plain` |
+| `--layout single\|module` | `single` (default): one file. `module`: a feature-module folder (`schema.ts`/`types.ts`/`hooks.ts` via [`createFormHooks`](./state#pre-wired-hooks-createformhooks), one file per field, one per section with path-scoped flags) — `--out` names the folder; requires formstand ≥ 0.7 and `--ui plain` |
 | `--name MyForm` | component name, default derived from the input |
 | `--out FILE` | write the component here instead of stdout (parent dirs created) |
 | `--schema-out FILE` | type mode: where the generated zod schema goes |

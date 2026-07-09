@@ -10,5 +10,7 @@ export {
   emitShadcnForm,
 } from "./codegen";
 export type { SchemaImport, EmitFormOptions } from "./codegen";
+export { emitModuleForm, joinModuleFiles } from "./moduleLayout";
+export type { EmitModuleOptions, ModuleFile } from "./moduleLayout";
 export { labelFromName } from "./ir";
 export type { FieldSpec, NamedField, SharedSpecProps } from "./ir";
