@@ -8,6 +8,7 @@ import {
 import type { z } from "zod";
 import type { Form } from "formstand";
 import { StateDump } from "../forms/StateDump";
+import { CodeView } from "./CodeView";
 
 export type DemoShellProps = Readonly<{
   source: string;
@@ -64,11 +65,7 @@ export const DemoShell = ({ source, children }: DemoShellProps) => {
       {showState && form !== null ? (
         <StateDump form={form as Form<z.ZodType>} />
       ) : null}
-      {showCode ? (
-        <pre className="state-dump" style={{ maxHeight: 480, overflow: "auto" }}>
-          {source}
-        </pre>
-      ) : null}
+      {showCode ? <CodeView source={source} /> : null}
     </DemoFormContext.Provider>
   );
 };

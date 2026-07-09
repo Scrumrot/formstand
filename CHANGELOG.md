@@ -17,6 +17,16 @@
   `createFormContext` with the singleton/SSR caveat; new "Hooks factory"
   playground tab.
 
+### Docs & examples (no package changes)
+
+- New "Onboarding" playground tab: a 26-field, five-section feature module
+  built on `createFormHooks` — `schema.ts` / `types.ts` / `hooks.ts`, one
+  file per field, one per section (section headers run the path-scoped
+  `useIsDirty`/`useIsValid` flags), with the whole folder shown in the
+  View code panel.
+- The playground's View code panel is syntax-highlighted (Prism, ~25KB —
+  read-only, so no editor bundle).
+
 ## 0.6.0 — 2026-07-09
 
 ### Added

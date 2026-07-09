@@ -130,3 +130,38 @@ button.secondary {
   white-space: pre-wrap;
   word-break: break-all;
 }
+/* Prism tokens for the View code panel — scoped under .code-view (all
+ * class-scoped: this sheet is unlayered and must not leak, see the top). */
+.code-view {
+  color: #c3cbd9;
+  word-break: normal;
+}
+.code-view .token.comment {
+  color: #5d6a80;
+  font-style: italic;
+}
+.code-view .token.string,
+.code-view .token.template-string {
+  color: #8fce7f;
+}
+.code-view .token.keyword {
+  color: #c792ea;
+}
+.code-view .token.function {
+  color: #6fb3ff;
+}
+.code-view .token.number,
+.code-view .token.boolean {
+  color: #f2a25c;
+}
+.code-view .token.tag,
+.code-view .token.class-name {
+  color: #e5c07b;
+}
+.code-view .token.attr-name {
+  color: #8fd3ff;
+}
+.code-view .token.punctuation,
+.code-view .token.operator {
+  color: #7c879b;
+}
