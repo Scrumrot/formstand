@@ -44,6 +44,8 @@ Without `--out`, both files print to stdout separated by `// --- file: ...` head
 | `--type <TypeName>` | generate from a TS type/interface instead |
 | `--ui plain\|mui\|shadcn` | component flavor (default `plain`) |
 | `--layout single\|module` | `single` (default): one file. `module`: a feature-module folder — see below |
+| `--sections flat\|panel\|collapsible` | section chrome: `flat` headings (default), bordered `panel`s, or `collapsible` sections (`<details>`; MUI `Accordion`) |
+| `--columns 1\|2\|3` | evenly spaced field columns inside each section (default `1`); nested sections span the full row |
 | `--name <MyForm>` | component name (default derived from the schema/type name) |
 | `--out <file>` | write the component here instead of stdout |
 | `--schema-out <file>` | type mode: where the generated zod schema goes (default `<schemaName>.ts` next to `--out`) |
@@ -55,6 +57,7 @@ Without `--out`, both files print to stdout separated by `// --- file: ...` head
 - One bound control per field: `TextField`, `NumberField`, `CheckboxField`, `SelectField` (enum options from the schema).
 - Nested objects as `<fieldset>`/`<legend>` sections.
 - Field arrays via `useFieldArray` with stable row keys, add/remove buttons, and a typed empty-item constant.
+- `--sections` / `--columns` pick each section's chrome and field grid, in the ui's own dialect: inline styles for `plain`, `Card`/`Accordion` + `sx` grids for `mui`, Tailwind classes (`md:grid-cols-2`, `bg-card`) for `shadcn`. Both flags work with either `--layout`.
 - `handleSubmit(console.log)` and a submit button disabled while submitting.
 - `--ui mui`: the same structure over `@mui/material` v9 with an inlined ~50-line adapter (`muiTextFieldProps` / `muiNumberFieldProps` / `muiSelectProps` / `muiSwitchProps`) binding `UseFieldReturn` to MUI props, sharing `parseNumberText` / `numberToInputText` with the library.
 - `--ui shadcn`: the same structure over your app's [shadcn/ui](https://ui.shadcn.com/) components (imported from the `@/components/ui/*` alias that `npx shadcn add` scaffolds) with an inlined adapter speaking the Radix dialect — `onCheckedChange` / `onValueChange` callbacks, dropdown-close as the blur trigger, and `aria-invalid` error styling with a message line.
@@ -80,6 +83,7 @@ ProfileForm/
 ```bash
 formstand-gen src/profileSchema.ts --layout module --out src/ProfileForm
 formstand-gen src/types.ts --type Profile --layout module --out src/ProfileForm
+formstand-gen src/profileSchema.ts --ui mui --sections panel --columns 2 --layout module --out src/ProfileForm
 ```
 
 ## Supported schema surface

@@ -1,9 +1,11 @@
 import { camelCase, pascalCase } from "./casing";
 import {
+  DEFAULT_VISUAL,
   type EmitFormOptions,
   type KindUsage,
   type ObjectSpec,
   type SchemaImport,
+  type VisualOptions,
   assertObjectRoot,
   collectUsage,
   commentText,
@@ -462,43 +464,165 @@ const headingLines = (indent: string): readonly string[] => [
   `${indent}{valid ? "" : " — has errors"}`,
 ];
 
+// Section wrappers are where --sections and --columns land: the wrapper
+// picks the chrome (flat / panel / collapsible) and its content container is
+// the grid the fields flow into. The 1-column flat default keeps the
+// historical output verbatim.
 const objectShell = (
   ui: ModuleUi,
+  visual: VisualOptions,
   children: readonly string[],
 ): readonly string[] => {
+  const cols = visual.columns;
   switch (ui) {
-    case "mui":
+    case "mui": {
+      const gridSx = `display: "grid", gridTemplateColumns: "repeat(${cols}, minmax(0, 1fr))", gap: 2`;
+      switch (visual.sections) {
+        case "flat":
+          return cols === 1
+            ? [
+                "    <Stack spacing={2}>",
+                `      <Typography variant="subtitle1">`,
+                ...headingLines("        "),
+                "      </Typography>",
+                ...children,
+                "    </Stack>",
+              ]
+            : [
+                `    <Box sx={{ ${gridSx} }}>`,
+                `      <Typography variant="subtitle1" sx={{ gridColumn: "1 / -1" }}>`,
+                ...headingLines("        "),
+                "      </Typography>",
+                ...children,
+                "    </Box>",
+              ];
+        case "panel":
+          return [
+            `    <Card variant="outlined">`,
+            `      <CardContent sx={{ ${gridSx} }}>`,
+            `        <Typography variant="subtitle1"${cols > 1 ? ` sx={{ gridColumn: "1 / -1" }}` : ""}>`,
+            ...headingLines("          "),
+            "        </Typography>",
+            ...children,
+            "      </CardContent>",
+            "    </Card>",
+          ];
+        case "collapsible":
+          return [
+            `    <Accordion defaultExpanded variant="outlined" disableGutters>`,
+            `      <AccordionSummary expandIcon={<span aria-hidden>{"▾"}</span>}>`,
+            `        <Typography variant="subtitle1">`,
+            ...headingLines("          "),
+            "        </Typography>",
+            "      </AccordionSummary>",
+            `      <AccordionDetails sx={{ ${gridSx} }}>`,
+            ...children,
+            "      </AccordionDetails>",
+            "    </Accordion>",
+          ];
+      }
+      break;
+    }
+    case "shadcn": {
+      const colsClass = cols > 1 ? ` md:grid-cols-${cols}` : "";
+      switch (visual.sections) {
+        case "flat":
+        case "panel":
+          return [
+            `    <fieldset className="grid gap-4 rounded-lg border p-4${visual.sections === "panel" ? " bg-card text-card-foreground shadow-sm" : ""}${colsClass}">`,
+            `      <legend className="px-1 text-sm font-medium">`,
+            ...headingLines("        "),
+            "      </legend>",
+            ...children,
+            "    </fieldset>",
+          ];
+        case "collapsible":
+          return [
+            `    <details open className="rounded-lg border">`,
+            `      <summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium">`,
+            ...headingLines("        "),
+            "      </summary>",
+            `      <div className="grid gap-4 px-4 pb-4${colsClass}">`,
+            ...children,
+            "      </div>",
+            "    </details>",
+          ];
+      }
+      break;
+    }
+    case "plain": {
+      const grid =
+        cols > 1
+          ? `display: "grid", gridTemplateColumns: "repeat(${cols}, minmax(0, 1fr))", gap: 16`
+          : "";
+      switch (visual.sections) {
+        case "flat":
+        case "panel": {
+          const style = [
+            ...(grid === "" ? [] : [grid]),
+            ...(visual.sections === "panel"
+              ? [`border: "1px solid #d0d7e2", borderRadius: 8, padding: 16, margin: 0`]
+              : []),
+          ].join(", ");
+          return [
+            `    <fieldset${style === "" ? "" : ` style={{ ${style} }}`}>`,
+            `      <legend${visual.sections === "panel" ? ` style={{ padding: "0 6px", fontWeight: 600 }}` : ""}>`,
+            ...headingLines("        "),
+            "      </legend>",
+            ...children,
+            "    </fieldset>",
+          ];
+        }
+        case "collapsible":
+          return [
+            "    <details open>",
+            `      <summary style={{ cursor: "pointer", fontWeight: 600 }}>`,
+            ...headingLines("        "),
+            "      </summary>",
+            ...(grid === ""
+              ? children
+              : [`      <div style={{ ${grid} }}>`, ...children, "      </div>"]),
+            "    </details>",
+          ];
+      }
+      break;
+    }
+  }
+  return children;
+};
+
+const objectSectionImports = (
+  ui: ModuleUi,
+  visual: VisualOptions,
+): readonly ImportLine[] => {
+  if (ui !== "mui") return [];
+  switch (visual.sections) {
+    case "flat":
       return [
-        "    <Stack spacing={2}>",
-        `      <Typography variant="subtitle1">`,
-        ...headingLines("        "),
-        "      </Typography>",
-        ...children,
-        "    </Stack>",
+        {
+          from: "@mui/material",
+          names:
+            visual.columns === 1 ? ["Stack", "Typography"] : ["Box", "Typography"],
+        },
       ];
-    case "shadcn":
+    case "panel":
       return [
-        `    <fieldset className="grid gap-4 rounded-lg border p-4">`,
-        `      <legend className="px-1 text-sm font-medium">`,
-        ...headingLines("        "),
-        "      </legend>",
-        ...children,
-        "    </fieldset>",
+        { from: "@mui/material", names: ["Card", "CardContent", "Typography"] },
       ];
-    case "plain":
+    case "collapsible":
       return [
-        "    <fieldset>",
-        "      <legend>",
-        ...headingLines("        "),
-        "      </legend>",
-        ...children,
-        "    </fieldset>",
+        {
+          from: "@mui/material",
+          names: [
+            "Accordion",
+            "AccordionDetails",
+            "AccordionSummary",
+            "Typography",
+          ],
+        },
       ];
   }
 };
-
-const objectSectionImports = (ui: ModuleUi): readonly ImportLine[] =>
-  ui === "mui" ? [{ from: "@mui/material", names: ["Stack", "Typography"] }] : [];
 
 type ArrayShellParts = Readonly<{
   imports: readonly ImportLine[];
@@ -819,6 +943,7 @@ const fieldFile = (
 
 const objectSectionFile = (
   ui: ModuleUi,
+  visual: VisualOptions,
   naming: Naming,
   section: SectionPlan,
   plan: Plan,
@@ -844,7 +969,13 @@ const objectSectionFile = (
       switch (field.spec.kind) {
         case "object":
           return [
-            `${indent}<fieldset>`,
+            `${indent}<fieldset${
+              visual.columns > 1
+                ? ui === "shadcn"
+                  ? ` className="md:col-span-full"`
+                  : ` style={{ gridColumn: "1 / -1" }}`
+                : ""
+            }>`,
             `${indent}  <legend>${jsxText(field.label)}</legend>`,
             ...body(field.spec.fields, at, `${indent}  `),
             `${indent}</fieldset>`,
@@ -874,7 +1005,7 @@ const objectSectionFile = (
     path: `sections/${section.componentName}.tsx`,
     content: [
       HEADER,
-      ...mergeImports(objectSectionImports(ui)),
+      ...mergeImports(objectSectionImports(ui, visual)),
       `import { ${naming.hook("IsDirty")}, ${naming.hook("IsValid")} } from "../hooks";`,
       ...fieldImports,
       "",
@@ -892,7 +1023,7 @@ const objectSectionFile = (
       `}: ${propsType}) => {`,
       `  const { dirty, valid } = ${hookName}();`,
       "  return (",
-      ...objectShell(ui, body(spec.fields, [section.key], "      ")),
+      ...objectShell(ui, visual, body(spec.fields, [section.key], "      ")),
       "  );",
       "};",
       "",
@@ -902,6 +1033,7 @@ const objectSectionFile = (
 
 const arraySectionFile = (
   ui: ModuleUi,
+  visual: VisualOptions,
   naming: Naming,
   section: SectionPlan,
 ): ModuleFile => {
@@ -987,6 +1119,9 @@ const arraySectionFile = (
   const imports = mergeImports([
     ...rowSpecs.flatMap((s) => leafImports(ui, s)),
     ...shell.imports,
+    // The outer wrapper is objectShell, so panel/collapsible chrome pulls
+    // its own components in.
+    ...objectSectionImports(ui, visual),
     ...(anyDateBinding
       ? [{ from: "formstand", names: ["type UseFieldReturn"] }]
       : []),
@@ -1035,7 +1170,7 @@ const arraySectionFile = (
       `}: ${propsType}) => {`,
       `  const { rows, dirty, valid } = ${hookName}();`,
       "  return (",
-      ...objectShell(ui, [
+      ...objectShell(ui, visual, [
         "      {rows.fields.map((row, index) => (",
         `        <${rowName}`,
         "          key={row.id}",
@@ -1114,6 +1249,7 @@ export const emitModuleForm = (
   options: EmitModuleOptions,
 ): readonly ModuleFile[] => {
   const ui = options.ui ?? "plain";
+  const visual = options.visual ?? DEFAULT_VISUAL;
   const root = assertObjectRoot(options.ir);
   const naming = namingFor(options.formName);
   const plan = buildPlan(root);
@@ -1127,8 +1263,8 @@ export const emitModuleForm = (
     ...plan.fields.map((field) => fieldFile(ui, naming, field)),
     ...plan.sections.map((section) =>
       section.spec.kind === "object"
-        ? objectSectionFile(ui, naming, section, plan)
-        : arraySectionFile(ui, naming, section),
+        ? objectSectionFile(ui, visual, naming, section, plan)
+        : arraySectionFile(ui, visual, naming, section),
     ),
     formFile(ui, naming, plan),
     indexFile(naming),

@@ -6,6 +6,7 @@ import { createJiti } from "jiti";
 import { camelCase, pascalCase } from "./casing";
 import {
   type EmitFormOptions,
+  type VisualOptions,
   type SchemaImport,
   emitMuiForm,
   emitPlainForm,
@@ -44,6 +45,11 @@ Options:
                       createFormHooks, a shared adapter for the kit uis, one
                       file per field, one per section); --out names the
                       folder. Requires formstand >= 0.7.
+  --sections <flat|panel|collapsible>
+                      section chrome: flat headings (default), bordered
+                      panels, or expandable sections
+  --columns <1|2|3>   evenly spaced field columns inside each section
+                      (default: 1); multi-row content spans the full row
   --name <MyForm>     component name (default: derived from the schema/type)
   --out <file>        write the component here instead of stdout
   --schema-out <file> (type mode) where to write the generated zod schema
@@ -56,6 +62,7 @@ Examples:
   formstand-gen src/types.ts --type Profile --ui mui --out src/ProfileForm.tsx
   formstand-gen src/profileSchema.ts --ui shadcn --out src/ProfileForm.tsx
   formstand-gen src/profileSchema.ts --layout module --out src/ProfileForm
+  formstand-gen src/profileSchema.ts --ui mui --sections panel --columns 2
 `;
 
 type Ui = "plain" | "mui" | "shadcn";
@@ -72,12 +79,29 @@ const LAYOUT_VALUES: readonly Layout[] = ["single", "module"];
 const isLayout = (value: string): value is Layout =>
   (LAYOUT_VALUES as readonly string[]).includes(value);
 
+type Sections = VisualOptions["sections"];
+
+const SECTIONS_VALUES: readonly Sections[] = ["flat", "panel", "collapsible"];
+
+const isSections = (value: string): value is Sections =>
+  (SECTIONS_VALUES as readonly string[]).includes(value);
+
+type Columns = VisualOptions["columns"];
+
+const COLUMNS_BY_TEXT: Readonly<Record<string, Columns>> = {
+  "1": 1,
+  "2": 2,
+  "3": 3,
+};
+
 type CliOptions = Readonly<{
   input: string;
   exportName?: string;
   typeName?: string;
   ui: Ui;
   layout: Layout;
+  sections: Sections;
+  columns: Columns;
   name?: string;
   out?: string;
   schemaOut?: string;
@@ -95,6 +119,8 @@ type PartialOptions = Readonly<{
   typeName?: string;
   ui: Ui;
   layout: Layout;
+  sections: Sections;
+  columns: Columns;
   name?: string;
   out?: string;
   schemaOut?: string;
@@ -128,6 +154,33 @@ const parseRest = (
   }
   if (head === "--help" || head === "-h") return { kind: "help" };
   if (head === "--force") return parseRest(rest, { ...acc, force: true });
+  if (head === "--sections") {
+    const [value, ...after] = rest;
+    if (value === undefined) {
+      return { kind: "error", message: `missing value for ${head}` };
+    }
+    if (!isSections(value)) {
+      return {
+        kind: "error",
+        message: `--sections must be one of ${SECTIONS_VALUES.map((s) => `"${s}"`).join(", ")}, got "${value}"`,
+      };
+    }
+    return parseRest(after, { ...acc, sections: value });
+  }
+  if (head === "--columns") {
+    const [value, ...after] = rest;
+    if (value === undefined) {
+      return { kind: "error", message: `missing value for ${head}` };
+    }
+    const columns = COLUMNS_BY_TEXT[value];
+    if (columns === undefined) {
+      return {
+        kind: "error",
+        message: `--columns must be 1, 2, or 3, got "${value}"`,
+      };
+    }
+    return parseRest(after, { ...acc, columns });
+  }
   const key = VALUE_FLAGS[head];
   if (key !== undefined) {
     const [value, ...after] = rest;
@@ -161,7 +214,18 @@ const parseRest = (
 };
 
 export const parseArgs = (argv: readonly string[]): ParseResult =>
-  parseRest(argv, { ui: "plain", layout: "single", force: false });
+  parseRest(argv, {
+    ui: "plain",
+    layout: "single",
+    sections: "flat",
+    columns: 1,
+    force: false,
+  });
+
+const visualOf = (options: CliOptions): VisualOptions => ({
+  sections: options.sections,
+  columns: options.columns,
+});
 
 // "profileSchema" → "ProfileForm"; "Profile" → "ProfileForm".
 const deriveFormName = (base: string): string => {
@@ -392,13 +456,24 @@ const runZodMode = async (options: CliOptions): Promise<number> => {
   }
   if (options.layout === "module") {
     emitModuleOutput(
-      emitModuleForm({ ir, formName, schemaImport, ui: options.ui }),
+      emitModuleForm({
+        ir,
+        formName,
+        schemaImport,
+        ui: options.ui,
+        visual: visualOf(options),
+      }),
       options.out,
       options.force,
     );
     return 0;
   }
-  const code = emitComponent(options.ui, { ir, formName, schemaImport });
+  const code = emitComponent(options.ui, {
+    ir,
+    formName,
+    schemaImport,
+    visual: visualOf(options),
+  });
   if (options.out !== undefined) {
     const outAbs = path.resolve(options.out);
     assertWritable([outAbs], options.force);
@@ -433,6 +508,7 @@ const runTypeMode = (options: CliOptions): number => {
         schemaImport: { name: schemaName, from: "./schema", kind: "named" },
         schemaSource,
         ui: options.ui,
+        visual: visualOf(options),
       }),
       options.out,
       options.force,
@@ -450,7 +526,12 @@ const runTypeMode = (options: CliOptions): number => {
       from: moduleSpecifier(path.dirname(outAbs), schemaOutAbs),
       kind: "named",
     };
-    const code = emitComponent(options.ui, { ir, formName, schemaImport });
+    const code = emitComponent(options.ui, {
+      ir,
+      formName,
+      schemaImport,
+      visual: visualOf(options),
+    });
     // Check BOTH destinations before writing either.
     assertWritable([schemaOutAbs, outAbs], options.force);
     writeFile(schemaOutAbs, schemaSource);
@@ -467,7 +548,12 @@ const runTypeMode = (options: CliOptions): number => {
       from: moduleSpecifier(process.cwd(), schemaOutAbs),
       kind: "named",
     };
-    const code = emitComponent(options.ui, { ir, formName, schemaImport });
+    const code = emitComponent(options.ui, {
+      ir,
+      formName,
+      schemaImport,
+      visual: visualOf(options),
+    });
     assertWritable([schemaOutAbs], options.force);
     writeFile(schemaOutAbs, schemaSource);
     stderr(`wrote ${relToCwd(schemaOutAbs)}`);
@@ -479,7 +565,12 @@ const runTypeMode = (options: CliOptions): number => {
     from: `./${schemaName}`,
     kind: "named",
   };
-  const code = emitComponent(options.ui, { ir, formName, schemaImport });
+  const code = emitComponent(options.ui, {
+    ir,
+    formName,
+    schemaImport,
+    visual: visualOf(options),
+  });
   stdout(
     [
       `// --- file: ${schemaName}.ts`,

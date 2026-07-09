@@ -17,10 +17,22 @@ export type SchemaImport = Readonly<{
   kind: "named" | "default";
 }>;
 
+// Visual layout of the generated markup (orthogonal to --layout, which is
+// FILE layout): how sections wrap, and how many evenly spaced columns their
+// fields flow into. Multi-row content (nested sections, array editors)
+// always spans the full row.
+export type VisualOptions = Readonly<{
+  sections: "flat" | "panel" | "collapsible";
+  columns: 1 | 2 | 3;
+}>;
+
+export const DEFAULT_VISUAL: VisualOptions = { sections: "flat", columns: 1 };
+
 export type EmitFormOptions = Readonly<{
   ir: FieldSpec;
   formName: string;
   schemaImport: SchemaImport;
+  visual?: VisualOptions;
 }>;
 
 export type ObjectSpec = Extract<FieldSpec, Readonly<{ kind: "object" }>>;
@@ -552,7 +564,25 @@ const plainLeaf = (
   }
 };
 
-const plainBackend: Backend = {
+const plainBackend = (visual: VisualOptions): Backend => {
+  const cols = visual.columns;
+  // Section roots span the full row so nested sections inside a parent grid
+  // never get squeezed into one column (harmless outside a grid).
+  const span = cols > 1 ? `gridColumn: "1 / -1"` : "";
+  const grid =
+    cols > 1
+      ? `display: "grid", gridTemplateColumns: "repeat(${cols}, minmax(0, 1fr))", gap: 16`
+      : "";
+  const styleAttr = (...parts: readonly string[]): string => {
+    const body = parts.filter((part) => part !== "").join(", ");
+    return body === "" ? "" : ` style={{ ${body} }}`;
+  };
+  const panelChrome =
+    visual.sections === "panel"
+      ? `border: "1px solid #d0d7e2", borderRadius: 8, padding: 16, margin: 0`
+      : "";
+
+  return {
   header: (usage, arrays) => {
     const formstandImports = [
       ...(usage.boolean ? ["CheckboxField"] : []),
@@ -572,15 +602,39 @@ const plainBackend: Backend = {
   },
   preamble: () => [],
   leaf: plainLeaf,
-  objectSection: (label, level, body) => [
-    `${ind(level)}<fieldset>`,
-    `${ind(level + 1)}<legend>${jsxText(label)}</legend>`,
-    ...body,
-    `${ind(level)}</fieldset>`,
-  ],
+  objectSection: (label, level, body) =>
+    visual.sections === "collapsible"
+      ? [
+          `${ind(level)}<details open${styleAttr(span)}>`,
+          `${ind(level + 1)}<summary style={{ cursor: "pointer", fontWeight: 600 }}>${jsxText(label)}</summary>`,
+          ...(cols > 1
+            ? [
+                `${ind(level + 1)}<div${styleAttr(grid)}>`,
+                ...body,
+                `${ind(level + 1)}</div>`,
+              ]
+            : body),
+          `${ind(level)}</details>`,
+        ]
+      : [
+          `${ind(level)}<fieldset${styleAttr(span, grid, panelChrome)}>`,
+          `${ind(level + 1)}<legend${styleAttr(
+            cols > 1 ? `gridColumn: "1 / -1"` : "",
+            visual.sections === "panel" ? `padding: "0 6px", fontWeight: 600` : "",
+          )}>${jsxText(label)}</legend>`,
+          ...body,
+          `${ind(level)}</fieldset>`,
+        ],
   arraySection: (entry, level, rowBody) => [
-    `${ind(level)}<section>`,
-    `${ind(level + 1)}<h3>${jsxText(entry.label)}</h3>`,
+    ...(visual.sections === "collapsible"
+      ? [
+          `${ind(level)}<details open${styleAttr(span)}>`,
+          `${ind(level + 1)}<summary style={{ cursor: "pointer", fontWeight: 600 }}>${jsxText(entry.label)}</summary>`,
+        ]
+      : [
+          `${ind(level)}<section${styleAttr(span, panelChrome)}>`,
+          `${ind(level + 1)}<h3>${jsxText(entry.label)}</h3>`,
+        ]),
     `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
     `${ind(level + 2)}<fieldset key={row.id}>`,
     `${ind(level + 3)}<legend>${jsxText(`${entry.label} #`)}{index + 1}</legend>`,
@@ -593,7 +647,7 @@ const plainBackend: Backend = {
     `${ind(level + 1)}<button type="button" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
     `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
     `${ind(level + 1)}</button>`,
-    `${ind(level)}</section>`,
+    `${ind(level)}${visual.sections === "collapsible" ? "</details>" : "</section>"}`,
   ],
   bodyLevel: 3,
   formOpen: [
@@ -609,14 +663,26 @@ const plainBackend: Backend = {
     "      </button>",
     "    </form>",
   ],
+  };
 };
 
 export const emitPlainForm = (options: EmitFormOptions): string =>
-  emitForm(plainBackend, options);
+  emitForm(plainBackend(options.visual ?? DEFAULT_VISUAL), options);
 
 // ---------------------------------------------------------------------------
 // Snippets shared by the component-kit backends (MUI + shadcn)
 // ---------------------------------------------------------------------------
+
+// Inline grid style for the plain backend (self-contained, no CSS file);
+// sx object for MUI; Tailwind classes for shadcn.
+export const gridStyleExpr = (columns: number): string =>
+  `{ display: "grid", gridTemplateColumns: "repeat(${columns}, minmax(0, 1fr))", gap: 16 }`;
+
+export const gridSxExpr = (columns: number): string =>
+  `{ display: "grid", gridTemplateColumns: "repeat(${columns}, minmax(0, 1fr))", gap: 2 }`;
+
+export const gridClasses = (columns: number): string =>
+  columns === 1 ? "grid gap-4" : `grid gap-4 md:grid-cols-${columns}`;
 
 const hasLeafUsage = (usage: KindUsage): boolean =>
   usage.string || usage.date || usage.number || usage.boolean || usage.enum;
@@ -866,12 +932,68 @@ const anyAddressableObjectField = (spec: FieldSpec): boolean => {
   }
 };
 
-const muiBackend: Backend = {
+const muiBackend = (visual: VisualOptions): Backend => {
+  const cols = visual.columns;
+  // Every section container is a CSS grid (a one-column grid with gap: 2 is
+  // exactly a Stack); section roots span the parent grid's full row.
+  const gridSx = `display: "grid", gridTemplateColumns: "repeat(${cols}, minmax(0, 1fr))", gap: 2`;
+  const span = cols > 1 ? `gridColumn: "1 / -1", ` : "";
+  const sectionOpen = (label: string, level: number): readonly string[] => {
+    switch (visual.sections) {
+      case "flat":
+        // The 1-column default keeps the historical Stack output verbatim.
+        return cols === 1
+          ? [
+              `${ind(level)}<Stack spacing={2}>`,
+              `${ind(level + 1)}<Typography variant="subtitle1">${jsxText(label)}</Typography>`,
+            ]
+          : [
+              `${ind(level)}<Box sx={{ ${span}${gridSx} }}>`,
+              `${ind(level + 1)}<Typography variant="subtitle1" sx={{ gridColumn: "1 / -1" }}>${jsxText(label)}</Typography>`,
+            ];
+      case "panel":
+        return [
+          `${ind(level)}<Card variant="outlined"${cols > 1 ? ` sx={{ gridColumn: "1 / -1" }}` : ""}>`,
+          `${ind(level + 1)}<CardHeader title=${q(label)} />`,
+          `${ind(level + 1)}<CardContent sx={{ ${gridSx} }}>`,
+        ];
+      case "collapsible":
+        return [
+          `${ind(level)}<Accordion defaultExpanded variant="outlined" disableGutters${cols > 1 ? ` sx={{ gridColumn: "1 / -1" }}` : ""}>`,
+          `${ind(level + 1)}<AccordionSummary expandIcon={<span aria-hidden>{"▾"}</span>}>`,
+          `${ind(level + 2)}<Typography variant="subtitle1">${jsxText(label)}</Typography>`,
+          `${ind(level + 1)}</AccordionSummary>`,
+          `${ind(level + 1)}<AccordionDetails sx={{ ${gridSx} }}>`,
+        ];
+    }
+  };
+  const sectionClose = (level: number): readonly string[] => {
+    switch (visual.sections) {
+      case "flat":
+        return [`${ind(level)}${cols === 1 ? "</Stack>" : "</Box>"}`];
+      case "panel":
+        return [`${ind(level + 1)}</CardContent>`, `${ind(level)}</Card>`];
+      case "collapsible":
+        return [
+          `${ind(level + 1)}</AccordionDetails>`,
+          `${ind(level)}</Accordion>`,
+        ];
+    }
+  };
+
+  return {
   header: (usage, arrays, root) => {
     const hasLeaf = hasLeafUsage(usage);
+    const hasSection = arrays.length > 0 || anyAddressableObjectField(root);
     const muiImports = [
+      ...(hasSection && visual.sections === "collapsible"
+        ? ["Accordion", "AccordionDetails", "AccordionSummary"]
+        : []),
       "Box",
       "Button",
+      ...(hasSection && visual.sections === "panel"
+        ? ["Card", "CardContent", "CardHeader"]
+        : []),
       ...(usage.boolean ? ["FormControlLabel"] : []),
       ...(usage.enum ? ["MenuItem"] : []),
       "Stack",
@@ -879,9 +1001,7 @@ const muiBackend: Backend = {
       ...(usage.string || usage.date || usage.number || usage.enum
         ? ["TextField"]
         : []),
-      ...(arrays.length > 0 || anyAddressableObjectField(root)
-        ? ["Typography"]
-        : []),
+      ...(hasSection && visual.sections !== "panel" ? ["Typography"] : []),
     ];
     const formstandValueImports = [
       ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
@@ -912,14 +1032,12 @@ const muiBackend: Backend = {
   ],
   leaf: muiLeaf,
   objectSection: (label, level, body) => [
-    `${ind(level)}<Stack spacing={2}>`,
-    `${ind(level + 1)}<Typography variant="subtitle1">${jsxText(label)}</Typography>`,
+    ...sectionOpen(label, level),
     ...body,
-    `${ind(level)}</Stack>`,
+    ...sectionClose(level),
   ],
   arraySection: (entry, level, rowBody) => [
-    `${ind(level)}<Stack spacing={2}>`,
-    `${ind(level + 1)}<Typography variant="subtitle1">${jsxText(entry.label)}</Typography>`,
+    ...sectionOpen(entry.label, level),
     `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
     `${ind(level + 2)}<Stack`,
     `${ind(level + 3)}key={row.id}`,
@@ -935,7 +1053,7 @@ const muiBackend: Backend = {
     `${ind(level + 1)}<Button type="button" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
     `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
     `${ind(level + 1)}</Button>`,
-    `${ind(level)}</Stack>`,
+    ...sectionClose(level),
   ],
   bodyLevel: 4,
   formOpen: [
@@ -955,10 +1073,11 @@ const muiBackend: Backend = {
     "      </Stack>",
     "    </Box>",
   ],
+  };
 };
 
 export const emitMuiForm = (options: EmitFormOptions): string =>
-  emitForm(muiBackend, options);
+  emitForm(muiBackend(options.visual ?? DEFAULT_VISUAL), options);
 
 // ---------------------------------------------------------------------------
 // shadcn/ui backend
@@ -1150,7 +1269,36 @@ const shadcnLeaf = boundLeaf(
   "BoundCheckboxField",
 );
 
-const shadcnBackend: Backend = {
+const shadcnBackend = (visual: VisualOptions): Backend => {
+  const cols = visual.columns;
+  // md:col-span-full keeps nested sections on their own row inside a parent
+  // grid (no effect when the parent stacks).
+  const span = cols > 1 ? " md:col-span-full" : "";
+  const colsClass = cols > 1 ? ` md:grid-cols-${cols}` : "";
+  // shadcn's Card recipe, applied to the section wrapper itself.
+  const panelChrome = " bg-card text-card-foreground shadow-sm";
+  const sectionOpen = (label: string, level: number): readonly string[] => {
+    switch (visual.sections) {
+      case "flat":
+      case "panel":
+        return [
+          `${ind(level)}<fieldset className="grid gap-4 rounded-lg border p-4${visual.sections === "panel" ? panelChrome : ""}${colsClass}${span}">`,
+          `${ind(level + 1)}<legend className="px-1 text-sm font-medium">${jsxText(label)}</legend>`,
+        ];
+      case "collapsible":
+        return [
+          `${ind(level)}<details open className="rounded-lg border${span}">`,
+          `${ind(level + 1)}<summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium">${jsxText(label)}</summary>`,
+          `${ind(level + 1)}<div className="grid gap-4 px-4 pb-4${colsClass}">`,
+        ];
+    }
+  };
+  const sectionClose = (level: number): readonly string[] =>
+    visual.sections === "collapsible"
+      ? [`${ind(level + 1)}</div>`, `${ind(level)}</details>`]
+      : [`${ind(level)}</fieldset>`];
+
+  return {
   header: (usage, arrays) => {
     const hasLeaf = hasLeafUsage(usage);
     const formstandValueImports = [
@@ -1200,14 +1348,21 @@ const shadcnBackend: Backend = {
   ],
   leaf: shadcnLeaf,
   objectSection: (label, level, body) => [
-    `${ind(level)}<fieldset className="grid gap-4 rounded-lg border p-4">`,
-    `${ind(level + 1)}<legend className="px-1 text-sm font-medium">${jsxText(label)}</legend>`,
+    ...sectionOpen(label, level),
     ...body,
-    `${ind(level)}</fieldset>`,
+    ...sectionClose(level),
   ],
   arraySection: (entry, level, rowBody) => [
-    `${ind(level)}<section className="grid gap-3">`,
-    `${ind(level + 1)}<h3 className="text-sm font-medium">${jsxText(entry.label)}</h3>`,
+    ...(visual.sections === "collapsible"
+      ? [
+          `${ind(level)}<details open className="rounded-lg border${span}">`,
+          `${ind(level + 1)}<summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium">${jsxText(entry.label)}</summary>`,
+          `${ind(level + 1)}<div className="grid gap-3 px-4 pb-4">`,
+        ]
+      : [
+          `${ind(level)}<section className="grid gap-3${visual.sections === "panel" ? ` rounded-lg border p-4${panelChrome}` : ""}${span}">`,
+          `${ind(level + 1)}<h3 className="text-sm font-medium">${jsxText(entry.label)}</h3>`,
+        ]),
     `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
     `${ind(level + 2)}<div key={row.id} className="grid gap-4 rounded-lg border p-4">`,
     ...rowBody,
@@ -1231,7 +1386,9 @@ const shadcnBackend: Backend = {
     `${ind(level + 1)}>`,
     `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
     `${ind(level + 1)}</Button>`,
-    `${ind(level)}</section>`,
+    ...(visual.sections === "collapsible"
+      ? [`${ind(level + 1)}</div>`, `${ind(level)}</details>`]
+      : [`${ind(level)}</section>`]),
   ],
   bodyLevel: 3,
   formOpen: [
@@ -1248,7 +1405,8 @@ const shadcnBackend: Backend = {
     "      </Button>",
     "    </form>",
   ],
+  };
 };
 
 export const emitShadcnForm = (options: EmitFormOptions): string =>
-  emitForm(shadcnBackend, options);
+  emitForm(shadcnBackend(options.visual ?? DEFAULT_VISUAL), options);

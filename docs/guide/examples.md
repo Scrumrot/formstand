@@ -221,9 +221,9 @@ One folder per form: `schema.ts` (zod + select options), `types.ts`, `hooks.ts` 
 ## Generated output, as a living example
 
 The **Onboarding (CLI output)** tab is not hand-written: CI runs
-`formstand-gen schema.ts --layout module --ui mui` against the Onboarding
-schema and fails if the committed demo differs from what the current CLI
-emits — so the tab is always the generator's real, untouched output
+`formstand-gen schema.ts --layout module --ui mui --sections panel --columns 2`
+against the Onboarding schema and fails if the committed demo differs from
+what the current CLI emits — so the tab is always the generator's real, untouched output
 ([examples/src/generated](https://github.com/Scrumrot/formstand/tree/main/examples/src/generated)).
 Compare it against the hand-built MUI Onboarding tab to see exactly what the
 generator gives you versus what you might grow it into.

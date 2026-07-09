@@ -103,8 +103,22 @@ describe("cli main", () => {
     expect(await main([])).toBe(1);
     expect(await main(["does-not-exist.ts"])).toBe(1);
     expect(await main([zodFixture, "--ui", "bootstrap"])).toBe(1);
+    expect(await main([zodFixture, "--sections", "tabs"])).toBe(1);
+    expect(await main([zodFixture, "--columns", "4"])).toBe(1);
+    expect(await main([zodFixture, "--columns"])).toBe(1);
     expect(await main([zodFixture, "--export", "nope", "--out", "x.tsx"])).toBe(1);
     expect(await main(["--help"])).toBe(0);
+  });
+
+  it("--sections/--columns reach the emitted component", async () => {
+    const dir = freshTmpDir("cli-visual");
+    const out = path.join(dir, "PanelForm.tsx");
+    expect(
+      await main([zodFixture, "--sections", "panel", "--columns", "2", "--out", out]),
+    ).toBe(0);
+    const code = fs.readFileSync(out, "utf8");
+    expect(code).toContain('border: "1px solid #d0d7e2"');
+    expect(code).toContain('gridTemplateColumns: "repeat(2, minmax(0, 1fr))"');
   });
 });
 

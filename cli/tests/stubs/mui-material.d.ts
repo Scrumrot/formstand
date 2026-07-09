@@ -43,6 +43,52 @@ export declare const Typography: (
   props: Readonly<{
     variant?: string;
     color?: string;
+    sx?: SxProps;
+    children?: ReactNode;
+  }>,
+) => ReactElement;
+
+export declare const Card: (
+  props: Readonly<{
+    variant?: "outlined" | "elevation";
+    sx?: SxProps;
+    children?: ReactNode;
+  }>,
+) => ReactElement;
+
+export declare const CardHeader: (
+  props: Readonly<{
+    title?: ReactNode;
+  }>,
+) => ReactElement;
+
+export declare const CardContent: (
+  props: Readonly<{
+    sx?: SxProps;
+    children?: ReactNode;
+  }>,
+) => ReactElement;
+
+export declare const Accordion: (
+  props: Readonly<{
+    defaultExpanded?: boolean;
+    disableGutters?: boolean;
+    variant?: "outlined" | "elevation";
+    sx?: SxProps;
+    children?: ReactNode;
+  }>,
+) => ReactElement;
+
+export declare const AccordionSummary: (
+  props: Readonly<{
+    expandIcon?: ReactNode;
+    children?: ReactNode;
+  }>,
+) => ReactElement;
+
+export declare const AccordionDetails: (
+  props: Readonly<{
+    sx?: SxProps;
     children?: ReactNode;
   }>,
 ) => ReactElement;

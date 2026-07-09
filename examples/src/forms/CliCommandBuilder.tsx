@@ -24,6 +24,8 @@ const schema = z
     typeName: z.string(),
     ui: z.enum(["plain", "mui", "shadcn"]),
     layout: z.enum(["single", "module"]),
+    sections: z.enum(["flat", "panel", "collapsible"]),
+    columns: z.enum(["1", "2", "3"]),
     name: z.string(),
     out: z.string(),
     schemaOut: z.string(),
@@ -61,6 +63,8 @@ const buildCommand = (values: Values): string =>
       : []),
     ...(values.ui !== "plain" ? ["--ui", values.ui] : []),
     ...(values.layout !== "single" ? ["--layout", values.layout] : []),
+    ...(values.sections !== "flat" ? ["--sections", values.sections] : []),
+    ...(values.columns !== "1" ? ["--columns", values.columns] : []),
     ...(values.name.trim() !== "" ? ["--name", quote(values.name)] : []),
     ...(values.out.trim() !== "" ? ["--out", quote(values.out)] : []),
     ...(values.mode === "type" &&
@@ -81,6 +85,8 @@ export const CliCommandBuilder = () => {
       typeName: "",
       ui: "plain",
       layout: "single",
+      sections: "flat",
+      columns: "1",
       name: "",
       out: "src/ProfileForm.tsx",
       schemaOut: "",
@@ -96,6 +102,8 @@ export const CliCommandBuilder = () => {
   const typeName = useField(form, "typeName");
   const ui = useField(form, "ui");
   const layout = useField(form, "layout");
+  const sections = useField(form, "sections");
+  const columns = useField(form, "columns");
   const name = useField(form, "name");
   const out = useField(form, "out");
   const schemaOut = useField(form, "schemaOut");
@@ -170,6 +178,25 @@ export const CliCommandBuilder = () => {
           <select {...selectProps(layout)}>
             <option value="single">single file</option>
             <option value="module">feature module</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="row" style={{ alignItems: "flex-start" }}>
+        <div className="field" style={{ flex: 1 }}>
+          <label>Sections (--sections)</label>
+          <select {...selectProps(sections)}>
+            <option value="flat">flat headings</option>
+            <option value="panel">bordered panels</option>
+            <option value="collapsible">collapsible</option>
+          </select>
+        </div>
+        <div className="field" style={{ flex: 1 }}>
+          <label>Field columns (--columns)</label>
+          <select {...selectProps(columns)}>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
           </select>
         </div>
       </div>

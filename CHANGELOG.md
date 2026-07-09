@@ -2,7 +2,24 @@
 
 ## Unreleased
 
+### formstand-cli
+
+- `--sections flat|panel|collapsible` and `--columns 1|2|3`: minimal visual
+  layout options, working with both `--layout single` and `--layout module`
+  and all three uis. Sections render as flat headings (default, unchanged
+  output), bordered panels, or collapsible sections; fields inside each
+  section flow into 1–3 evenly spaced columns, with nested sections
+  spanning the full row. Each ui speaks its own dialect: inline styles for
+  `plain` (`<details>`/`<summary>` when collapsible), `Card`/`Accordion` +
+  `sx` grids for `mui`, Tailwind classes (`md:grid-cols-2`,
+  `bg-card … shadow-sm`, `<details>`) for `shadcn`. The defaults emit
+  byte-identical output to 0.4.0.
+
 ### Docs & examples (no package changes)
+
+- The CLI command builder gains Sections and Field columns selects, and the
+  Generated Onboarding tab now showcases `--sections panel --columns 2`
+  (still CI-verified as the CLI's untouched output).
 
 - A "CLI command builder" tab: a formstand form (cross-field superRefine,
   conditional fields) whose live-updating formstand-gen command line is

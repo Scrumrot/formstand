@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { moduleSpecifier } from "../src/cli";
 import {
   type EmitFormOptions,
+  type VisualOptions,
   emitMuiForm,
   emitPlainForm,
   emitShadcnForm,
@@ -32,6 +33,7 @@ const generate = (
   schemaName: string,
   formName: string,
   dir: string,
+  visual?: VisualOptions,
 ): Readonly<{ file: string; code: string }> => {
   const code = emit({
     ir: fromZod(schema),
@@ -41,6 +43,7 @@ const generate = (
       from: moduleSpecifier(dir, path.join(fixturesDir, `${schemaName}.ts`)),
       kind: "named",
     },
+    ...(visual === undefined ? {} : { visual }),
   });
   const file = path.join(dir, `${formName}.tsx`);
   fs.writeFileSync(file, code, "utf8");
@@ -63,6 +66,8 @@ const fixturesFor = (
   hostile: Readonly<{ file: string; code: string }>;
   colliding: Readonly<{ file: string; code: string }>;
   leafFree: Readonly<{ file: string; code: string }>;
+  panel: Readonly<{ file: string; code: string }>;
+  collapsible: Readonly<{ file: string; code: string }>;
   files: readonly string[];
 }> => {
   const dir = freshTmpDir(`typecheck-${tag}`);
@@ -70,13 +75,36 @@ const fixturesFor = (
   const hostile = generate(emit, hostileSchema, "hostileSchema", "HostileForm", dir);
   const colliding = generate(emit, collidingSchema, "collidingSchema", "CollidingForm", dir);
   const leafFree = generate(emit, leafFreeSchema, "leafFreeSchema", "LeafFreeForm", dir);
+  // The visual axes ride in the same program: panel + 2 columns and
+  // collapsible + 3 columns cover every non-default wrapper and grid.
+  const panel = generate(emit, profileSchema, "profileSchema", "PanelForm", dir, {
+    sections: "panel",
+    columns: 2,
+  });
+  const collapsible = generate(
+    emit,
+    profileSchema,
+    "profileSchema",
+    "CollapsibleForm",
+    dir,
+    { sections: "collapsible", columns: 3 },
+  );
   return {
     dir,
     profile,
     hostile,
     colliding,
     leafFree,
-    files: [profile.file, hostile.file, colliding.file, leafFree.file],
+    panel,
+    collapsible,
+    files: [
+      profile.file,
+      hostile.file,
+      colliding.file,
+      leafFree.file,
+      panel.file,
+      collapsible.file,
+    ],
   };
 };
 
@@ -138,6 +166,31 @@ describe("generated components", () => {
     expect(plain.colliding.code).toContain("const userNamesArray2 = ");
     expect(plain.colliding.code).toContain("type UserNamesItem2 = ");
     expect(plain.colliding.code).toContain("const emptyUserNamesItem2 = ");
+  });
+
+  // --sections/--columns land in the section wrappers; the typecheck
+  // programs above already prove the variants compile, so these pin the
+  // shape of the chrome and that imports stay usage-gated.
+  it("panel and columns render per-ui section chrome and grids", () => {
+    expect(plain.panel.code).toContain('border: "1px solid #d0d7e2"');
+    expect(plain.panel.code).toContain('gridTemplateColumns: "repeat(2, minmax(0, 1fr))"');
+    expect(mui.panel.code).toContain('<Card variant="outlined"');
+    expect(mui.panel.code).toContain('gridTemplateColumns: "repeat(2, minmax(0, 1fr))"');
+    expect(shadcn.panel.code).toContain("bg-card text-card-foreground shadow-sm");
+    expect(shadcn.panel.code).toContain("md:grid-cols-2");
+  });
+
+  it("collapsible renders details/summary (Accordion on mui)", () => {
+    expect(plain.collapsible.code).toContain("<details open");
+    expect(mui.collapsible.code).toContain("<Accordion defaultExpanded");
+    expect(shadcn.collapsible.code).toContain("<details open");
+  });
+
+  it("the flat default keeps the historical output and gates the imports", () => {
+    expect(mui.profile.code).toContain("<Stack spacing={2}>");
+    expect(mui.profile.code).not.toContain("Card");
+    expect(mui.profile.code).not.toContain("Accordion");
+    expect(shadcn.profile.code).not.toContain("bg-card");
   });
 
   // Leaf-free output must not reference usage-gated helpers/types whose

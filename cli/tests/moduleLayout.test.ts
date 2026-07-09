@@ -26,6 +26,7 @@ const generateModule = (
   formName: string,
   dir: string,
   ui: "plain" | "mui" | "shadcn" = "plain",
+  visual?: Readonly<{ sections: "flat" | "panel" | "collapsible"; columns: 1 | 2 | 3 }>,
 ) => {
   const files = emitModuleForm({
     ir: fromZod(schema),
@@ -36,6 +37,7 @@ const generateModule = (
       from: moduleSpecifier(dir, path.join(fixturesDir, `${schemaName}.ts`)),
       kind: "named",
     },
+    ...(visual === undefined ? {} : { visual }),
   });
   const written = files.map((file) => {
     const dest = path.join(dir, file.path);
@@ -186,6 +188,59 @@ describe("emitModuleForm kit uis", () => {
     );
     expect(files.map((f) => f.path)).not.toContain("adapter.ts");
     expect(typecheckDiagnostics(written, muiStubPaths)).toEqual([]);
+  });
+});
+
+describe("emitModuleForm visual options", () => {
+  // One non-default combo per ui: the section files carry the chrome, and
+  // each combo still typechecks against the same programs as the defaults.
+  it("mui collapsible sections wrap in Accordions and typecheck", () => {
+    const dir = freshTmpDir("module-mui-collapsible");
+    const { files, written } = generateModule(
+      profileSchema,
+      "profileSchema",
+      "ProfileForm",
+      dir,
+      "mui",
+      { sections: "collapsible", columns: 2 },
+    );
+    const section = files.find((f) => f.path.startsWith("sections/"));
+    expect(section?.content).toContain("<Accordion defaultExpanded");
+    expect(section?.content).toContain('gridTemplateColumns: "repeat(2, minmax(0, 1fr))"');
+    expect(section?.content).toContain('} from "@mui/material";');
+    expect(typecheckDiagnostics(written, muiStubPaths)).toEqual([]);
+  });
+
+  it("shadcn panel sections get card chrome + tailwind grid and typecheck", () => {
+    const dir = freshTmpDir("module-shadcn-panel");
+    const { files, written } = generateModule(
+      profileSchema,
+      "profileSchema",
+      "ProfileForm",
+      dir,
+      "shadcn",
+      { sections: "panel", columns: 2 },
+    );
+    const section = files.find((f) => f.path.startsWith("sections/"));
+    expect(section?.content).toContain("bg-card text-card-foreground shadow-sm");
+    expect(section?.content).toContain("md:grid-cols-2");
+    expect(typecheckDiagnostics([...written, shadcnStubFile])).toEqual([]);
+  });
+
+  it("plain collapsible sections use details/summary and typecheck", () => {
+    const dir = freshTmpDir("module-plain-collapsible");
+    const { files, written } = generateModule(
+      profileSchema,
+      "profileSchema",
+      "ProfileForm",
+      dir,
+      "plain",
+      { sections: "collapsible", columns: 3 },
+    );
+    const section = files.find((f) => f.path.startsWith("sections/"));
+    expect(section?.content).toContain("<details open>");
+    expect(section?.content).toContain('gridTemplateColumns: "repeat(3, minmax(0, 1fr))"');
+    expect(typecheckDiagnostics(written)).toEqual([]);
   });
 });
 
