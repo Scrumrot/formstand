@@ -1,15 +1,19 @@
 import { camelCase, pascalCase } from "./casing";
 import {
   type EmitFormOptions,
+  type KindUsage,
   type ObjectSpec,
   type SchemaImport,
   assertObjectRoot,
+  collectUsage,
   commentText,
   emitInitialValues,
   identifierSuffix,
   isUnaddressable,
   jsxText,
+  muiAdapterSection,
   q,
+  shadcnAdapterSection,
   templateEscape,
 } from "./codegen";
 import { type FieldSpec, type NamedField, labelFromName } from "./ir";
@@ -22,6 +26,8 @@ import { type FieldSpec, type NamedField, labelFromName } from "./ir";
 //   types.ts         the draft value types
 //   hooks.ts         createForm + createFormHooks(form, name): the module's
 //                    pre-wired hook API
+//   adapter.ts(x)    (mui/shadcn only) the kit adapter the single-file
+//                    backends inline, exported once for the whole module
 //   fields/*.tsx     one file per scalar leaf outside arrays — props type,
 //                    field hook, component
 //   sections/*.tsx   one file per top-level object or array — props type,
@@ -32,6 +38,8 @@ import { type FieldSpec, type NamedField, labelFromName } from "./ir";
 // Requires formstand >= 0.7 (createFormHooks). Everything is a pure string
 // builder over the IR, like the single-file backends.
 
+export type ModuleUi = "plain" | "mui" | "shadcn";
+
 export type ModuleFile = Readonly<{
   // Forward-slash relative path inside the module folder.
   path: string;
@@ -40,6 +48,7 @@ export type ModuleFile = Readonly<{
 
 export type EmitModuleOptions = EmitFormOptions &
   Readonly<{
+    ui?: ModuleUi;
     // Type mode passes the generated schema source; zod mode omits it and
     // schema.ts re-exports the user's module via schemaImport.from.
     schemaSource?: string;
@@ -183,28 +192,8 @@ const buildPlan = (root: ObjectSpec): Plan => {
 };
 
 // ---------------------------------------------------------------------------
-// Leaf rendering (shared by field files and array-row bodies)
+// Leaf rendering, per kit
 // ---------------------------------------------------------------------------
-
-type LeafBinding = Readonly<{
-  builder: "textInputProps" | "numberInputProps" | "checkboxProps" | "selectProps";
-  extraAttrs: string; // e.g. ` type="date"`
-}>;
-
-const leafBinding = (spec: FieldSpec): LeafBinding => {
-  switch (spec.kind) {
-    case "number":
-      return { builder: "numberInputProps", extraAttrs: "" };
-    case "boolean":
-      return { builder: "checkboxProps", extraAttrs: "" };
-    case "enum":
-      return { builder: "selectProps", extraAttrs: "" };
-    case "date":
-      return { builder: "textInputProps", extraAttrs: ` type="date"` };
-    default:
-      return { builder: "textInputProps", extraAttrs: "" };
-  }
-};
 
 const todoTexts = (spec: FieldSpec): readonly string[] => [
   ...(spec.todo !== undefined ? [commentText(spec.todo)] : []),
@@ -215,65 +204,465 @@ const todoTexts = (spec: FieldSpec): readonly string[] => [
     : []),
 ];
 
-// The control JSX for one leaf bound to `varName` (a useField result held
-// in a local), at the given indent. Label-wrapped, so no ids are needed.
+// Date-typed fields bind a text input, so the hook result is cast to the
+// string shape the prop builders take — flagged by the TODO the file gets.
+const isDateBinding = (spec: FieldSpec): boolean => spec.kind === "date";
+
+const DATE_CAST = " as unknown as UseFieldReturn<string | null | undefined>";
+
+type ImportLine = Readonly<{ from: string; names: readonly string[] }>;
+
+// Merge import needs per module specifier, preserving first-seen order.
+const mergeImports = (lines: readonly ImportLine[]): readonly string[] => {
+  const byFrom = lines.reduce<ReadonlyMap<string, readonly string[]>>(
+    (acc, line) => {
+      const existing = acc.get(line.from) ?? [];
+      const merged = [
+        ...existing,
+        ...line.names.filter((name) => !existing.includes(name)),
+      ];
+      return new Map([...acc, [line.from, merged]]);
+    },
+    new Map(),
+  );
+  return [...byFrom.entries()]
+    .filter(([, names]) => names.length > 0)
+    .map(([from, names]) => `import { ${names.join(", ")} } from ${q(from)};`);
+};
+
+// What one leaf control needs imported, per kit. Builder names double as
+// the adapter's exports for the kit uis.
+const leafImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] => {
+  switch (ui) {
+    case "plain": {
+      const builder =
+        spec.kind === "number"
+          ? "numberInputProps"
+          : spec.kind === "boolean"
+            ? "checkboxProps"
+            : spec.kind === "enum"
+              ? "selectProps"
+              : "textInputProps";
+      return [{ from: "formstand", names: [builder] }];
+    }
+    case "mui":
+      switch (spec.kind) {
+        case "boolean":
+          return [
+            { from: "@mui/material", names: ["FormControlLabel", "Switch"] },
+            { from: "../adapter", names: ["muiSwitchProps"] },
+          ];
+        case "enum":
+          return [
+            { from: "@mui/material", names: ["MenuItem", "TextField"] },
+            { from: "../adapter", names: ["muiSelectProps"] },
+          ];
+        case "number":
+          return [
+            { from: "@mui/material", names: ["TextField"] },
+            { from: "../adapter", names: ["muiNumberFieldProps"] },
+          ];
+        default:
+          return [
+            { from: "@mui/material", names: ["TextField"] },
+            { from: "../adapter", names: ["muiTextFieldProps"] },
+          ];
+      }
+    case "shadcn":
+      switch (spec.kind) {
+        case "boolean":
+          return [
+            { from: "@/components/ui/checkbox", names: ["Checkbox"] },
+            { from: "@/components/ui/label", names: ["Label"] },
+            { from: "../adapter", names: ["FieldError", "shadcnCheckboxProps"] },
+          ];
+        case "enum":
+          return [
+            { from: "@/components/ui/label", names: ["Label"] },
+            {
+              from: "@/components/ui/select",
+              names: [
+                "Select",
+                "SelectContent",
+                "SelectItem",
+                "SelectTrigger",
+                "SelectValue",
+              ],
+            },
+            {
+              from: "../adapter",
+              names: ["FieldError", "ariaInvalid", "shadcnSelectProps"],
+            },
+          ];
+        case "number":
+          return [
+            { from: "@/components/ui/input", names: ["Input"] },
+            { from: "@/components/ui/label", names: ["Label"] },
+            {
+              from: "../adapter",
+              names: ["FieldError", "shadcnNumberInputProps"],
+            },
+          ];
+        default:
+          return [
+            { from: "@/components/ui/input", names: ["Input"] },
+            { from: "@/components/ui/label", names: ["Label"] },
+            { from: "../adapter", names: ["FieldError", "shadcnTextInputProps"] },
+          ];
+      }
+  }
+};
+
+// The labeled control for one leaf bound to `varName`, at `indent`.
+// `labelAttr` is a JSX expression container string (e.g. `{label}` or
+// `{"Email"}`); `idAttr` likewise, or undefined where the kit needs none.
 const leafJsx = (
+  ui: ModuleUi,
   spec: FieldSpec,
   varName: string,
-  labelExpr: string,
+  labelAttr: string,
+  idAttr: string | undefined,
   indent: string,
 ): readonly string[] => {
-  const { builder, extraAttrs } = leafBinding(spec);
-  const control =
-    spec.kind === "enum"
-      ? [
-          `${indent}    <select {...selectProps(${varName})}>`,
-          `${indent}      <option value="">{"Select…"}</option>`,
-          ...spec.options.map(
-            (option) =>
-              `${indent}      <option value=${jsxText(option)}>${jsxText(labelFromName(option))}</option>`,
-          ),
-          `${indent}    </select>`,
-        ]
-      : [
-          `${indent}    <input${extraAttrs} {...${builder}(${varName})} />`,
-        ];
-  return [
-    `${indent}<div>`,
-    `${indent}  <label>`,
-    `${indent}    ${labelExpr}`,
-    ...control,
-    `${indent}  </label>`,
-    `${indent}  {${varName}.error?.[0] !== undefined ? (`,
-    `${indent}    <p role="alert">{${varName}.error?.[0]}</p>`,
-    `${indent}  ) : null}`,
-    `${indent}</div>`,
-  ];
+  switch (ui) {
+    case "plain": {
+      const control =
+        spec.kind === "enum"
+          ? [
+              `${indent}    <select {...selectProps(${varName})}>`,
+              `${indent}      <option value="">{"Select…"}</option>`,
+              ...spec.options.map(
+                (option) =>
+                  `${indent}      <option value=${jsxText(option)}>${jsxText(labelFromName(option))}</option>`,
+              ),
+              `${indent}    </select>`,
+            ]
+          : [
+              `${indent}    <input${spec.kind === "date" ? ' type="date"' : ""} {...${
+                spec.kind === "number"
+                  ? "numberInputProps"
+                  : spec.kind === "boolean"
+                    ? "checkboxProps"
+                    : "textInputProps"
+              }(${varName})} />`,
+            ];
+      return [
+        `${indent}<div>`,
+        `${indent}  <label>`,
+        `${indent}    ${labelAttr}`,
+        ...control,
+        `${indent}  </label>`,
+        `${indent}  {${varName}.error?.[0] !== undefined ? (`,
+        `${indent}    <p role="alert">{${varName}.error?.[0]}</p>`,
+        `${indent}  ) : null}`,
+        `${indent}</div>`,
+      ];
+    }
+    case "mui":
+      switch (spec.kind) {
+        case "boolean":
+          return [
+            `${indent}<FormControlLabel`,
+            `${indent}  label=${labelAttr}`,
+            `${indent}  control={<Switch {...muiSwitchProps(${varName})} />}`,
+            `${indent}/>`,
+          ];
+        case "enum":
+          return [
+            `${indent}<TextField select fullWidth label=${labelAttr} {...muiSelectProps(${varName})}>`,
+            ...spec.options.map(
+              (option) =>
+                `${indent}  <MenuItem value=${jsxText(option)}>${jsxText(labelFromName(option))}</MenuItem>`,
+            ),
+            `${indent}</TextField>`,
+          ];
+        case "number":
+          return [
+            `${indent}<TextField fullWidth label=${labelAttr} {...muiNumberFieldProps(${varName})} />`,
+          ];
+        default:
+          return [
+            `${indent}<TextField fullWidth label=${labelAttr} {...muiTextFieldProps(${varName})} />`,
+          ];
+      }
+    case "shadcn": {
+      const id = idAttr ?? `{${q("")}}`;
+      switch (spec.kind) {
+        case "boolean":
+          return [
+            `${indent}<div className="grid gap-2">`,
+            `${indent}  <div className="flex items-center gap-2">`,
+            `${indent}    <Checkbox id=${id} {...shadcnCheckboxProps(${varName})} />`,
+            `${indent}    <Label htmlFor=${id}>${labelAttr}</Label>`,
+            `${indent}  </div>`,
+            `${indent}  <FieldError field={${varName}} />`,
+            `${indent}</div>`,
+          ];
+        case "enum":
+          return [
+            `${indent}<div className="grid gap-2">`,
+            `${indent}  <Label htmlFor=${id}>${labelAttr}</Label>`,
+            `${indent}  <Select {...shadcnSelectProps(${varName})}>`,
+            `${indent}    <SelectTrigger`,
+            `${indent}      id=${id}`,
+            `${indent}      className="w-full"`,
+            `${indent}      aria-invalid={ariaInvalid(${varName})}`,
+            `${indent}    >`,
+            `${indent}      <SelectValue placeholder=${labelAttr} />`,
+            `${indent}    </SelectTrigger>`,
+            `${indent}    <SelectContent>`,
+            ...spec.options.map(
+              (option) =>
+                `${indent}      <SelectItem value=${jsxText(option)}>${jsxText(labelFromName(option))}</SelectItem>`,
+            ),
+            `${indent}    </SelectContent>`,
+            `${indent}  </Select>`,
+            `${indent}  <FieldError field={${varName}} />`,
+            `${indent}</div>`,
+          ];
+        default: {
+          const builder =
+            spec.kind === "number"
+              ? "shadcnNumberInputProps"
+              : "shadcnTextInputProps";
+          return [
+            `${indent}<div className="grid gap-2">`,
+            `${indent}  <Label htmlFor=${id}>${labelAttr}</Label>`,
+            `${indent}  <Input id=${id}${spec.kind === "date" ? ' type="date"' : ""} {...${builder}(${varName})} />`,
+            `${indent}  <FieldError field={${varName}} />`,
+            `${indent}</div>`,
+          ];
+        }
+      }
+    }
+  }
 };
 
 // Same, prefixed with JSX-comment TODOs — safe only in child position
 // (a comment container can't precede the return expression itself).
 const leafControl = (
+  ui: ModuleUi,
   spec: FieldSpec,
   varName: string,
-  labelExpr: string,
+  labelAttr: string,
+  idAttr: string | undefined,
   indent: string,
 ): readonly string[] => [
   ...todoTexts(spec).map((text) => `${indent}{/* TODO: ${text} */}`),
-  ...leafJsx(spec, varName, labelExpr, indent),
+  ...leafJsx(ui, spec, varName, labelAttr, idAttr, indent),
 ];
 
-// Date-typed fields bind a text input, so the hook result is cast to the
-// string shape the prop builder takes — flagged by the TODO the file gets.
-const isDateBinding = (spec: FieldSpec): boolean => spec.kind === "date";
+// ---------------------------------------------------------------------------
+// Kit shells (sections, array rows, form body)
+// ---------------------------------------------------------------------------
 
-const DATE_CAST = " as unknown as UseFieldReturn<string | null | undefined>";
+const headingLines = (indent: string): readonly string[] => [
+  `${indent}{heading}`,
+  `${indent}{dirty ? " — edited" : ""}`,
+  `${indent}{valid ? "" : " — has errors"}`,
+];
 
-const buildersUsed = (specs: readonly FieldSpec[]): readonly string[] => {
-  const names = new Set(specs.map((spec) => leafBinding(spec).builder));
-  return ["textInputProps", "numberInputProps", "checkboxProps", "selectProps"].filter(
-    (name) => names.has(name as LeafBinding["builder"]),
-  );
+const objectShell = (
+  ui: ModuleUi,
+  children: readonly string[],
+): readonly string[] => {
+  switch (ui) {
+    case "mui":
+      return [
+        "    <Stack spacing={2}>",
+        `      <Typography variant="subtitle1">`,
+        ...headingLines("        "),
+        "      </Typography>",
+        ...children,
+        "    </Stack>",
+      ];
+    case "shadcn":
+      return [
+        `    <fieldset className="grid gap-4 rounded-lg border p-4">`,
+        `      <legend className="px-1 text-sm font-medium">`,
+        ...headingLines("        "),
+        "      </legend>",
+        ...children,
+        "    </fieldset>",
+      ];
+    case "plain":
+      return [
+        "    <fieldset>",
+        "      <legend>",
+        ...headingLines("        "),
+        "      </legend>",
+        ...children,
+        "    </fieldset>",
+      ];
+  }
+};
+
+const objectSectionImports = (ui: ModuleUi): readonly ImportLine[] =>
+  ui === "mui" ? [{ from: "@mui/material", names: ["Stack", "Typography"] }] : [];
+
+type ArrayShellParts = Readonly<{
+  imports: readonly ImportLine[];
+  rowOpen: readonly string[]; // wraps the row body inside the Row component
+  rowClose: (removeExpr: string) => readonly string[];
+  listError: readonly string[]; // rows.error rendering
+  addButton: (pushExpr: string, addLabel: string) => readonly string[];
+}>;
+
+const arrayShell = (ui: ModuleUi, sectionLabel: string): ArrayShellParts => {
+  switch (ui) {
+    case "mui":
+      return {
+        imports: [
+          { from: "@mui/material", names: ["Button", "Stack", "Typography"] },
+        ],
+        rowOpen: [
+          "    <Stack",
+          "      spacing={2}",
+          `      sx={{ p: 2, border: 1, borderColor: "divider", borderRadius: 1 }}`,
+          "    >",
+        ],
+        rowClose: (removeExpr) => [
+          `      <Button type="button" onClick={${removeExpr}}>`,
+          "        Remove",
+          "      </Button>",
+          "    </Stack>",
+        ],
+        listError: [
+          "      {rows.error ? (",
+          `        <Typography color="error">{rows.error[0]}</Typography>`,
+          "      ) : null}",
+        ],
+        addButton: (pushExpr, addLabel) => [
+          `      <Button type="button" onClick={${pushExpr}}>`,
+          `        ${jsxText(addLabel)}`,
+          "      </Button>",
+        ],
+      };
+    case "shadcn":
+      return {
+        imports: [{ from: "@/components/ui/button", names: ["Button"] }],
+        rowOpen: [`    <div className="grid gap-4 rounded-lg border p-4">`],
+        rowClose: (removeExpr) => [
+          "      <Button",
+          `        type="button"`,
+          `        variant="outline"`,
+          `        size="sm"`,
+          `        className="w-fit"`,
+          `        onClick={${removeExpr}}`,
+          "      >",
+          "        Remove",
+          "      </Button>",
+          "    </div>",
+        ],
+        listError: [
+          `      {rows.error ? <p role="alert">{rows.error[0]}</p> : null}`,
+        ],
+        addButton: (pushExpr, addLabel) => [
+          "      <Button",
+          `        type="button"`,
+          `        variant="outline"`,
+          `        size="sm"`,
+          `        className="w-fit"`,
+          `        onClick={${pushExpr}}`,
+          "      >",
+          `        ${jsxText(addLabel)}`,
+          "      </Button>",
+        ],
+      };
+    case "plain":
+      return {
+        imports: [],
+        rowOpen: [
+          "    <fieldset>",
+          `      <legend>${jsxText(`${sectionLabel} #`)}{index + 1}</legend>`,
+        ],
+        rowClose: (removeExpr) => [
+          `      <button type="button" onClick={${removeExpr}}>`,
+          "        Remove",
+          "      </button>",
+          "    </fieldset>",
+        ],
+        listError: [
+          `      {rows.error ? <p role="alert">{rows.error[0]}</p> : null}`,
+        ],
+        addButton: (pushExpr, addLabel) => [
+          `      <button type="button" onClick={${pushExpr}}>`,
+          `        ${jsxText(addLabel)}`,
+          "      </button>",
+        ],
+      };
+  }
+};
+
+type FormShell = Readonly<{
+  imports: readonly ImportLine[];
+  open: (naming: Naming) => readonly string[];
+  close: readonly string[];
+  bodyIndent: string;
+}>;
+
+const formShell = (ui: ModuleUi): FormShell => {
+  switch (ui) {
+    case "mui":
+      return {
+        imports: [{ from: "@mui/material", names: ["Box", "Button", "Stack"] }],
+        open: (naming) => [
+          "    <Box",
+          `      component="form"`,
+          `      onSubmit={${naming.formConst}.handleSubmit((data) => {`,
+          `        console.log("submit", data);`,
+          "      })}",
+          "      sx={{ maxWidth: 640 }}",
+          "    >",
+          "      <Stack spacing={2}>",
+        ],
+        close: [
+          `        <Button type="submit" variant="contained" disabled={submitting}>`,
+          `          {submitting ? "Submitting..." : "Submit"}`,
+          "        </Button>",
+          "      </Stack>",
+          "    </Box>",
+        ],
+        bodyIndent: "        ",
+      };
+    case "shadcn":
+      return {
+        imports: [{ from: "@/components/ui/button", names: ["Button"] }],
+        open: (naming) => [
+          "    <form",
+          `      className="grid max-w-xl gap-4"`,
+          `      onSubmit={${naming.formConst}.handleSubmit((data) => {`,
+          `        console.log("submit", data);`,
+          "      })}",
+          "    >",
+        ],
+        close: [
+          `      <Button type="submit" disabled={submitting}>`,
+          `        {submitting ? "Submitting..." : "Submit"}`,
+          "      </Button>",
+          "    </form>",
+        ],
+        bodyIndent: "      ",
+      };
+    case "plain":
+      return {
+        imports: [],
+        open: (naming) => [
+          "    <form",
+          `      onSubmit={${naming.formConst}.handleSubmit((data) => {`,
+          `        console.log("submit", data);`,
+          "      })}",
+          "    >",
+        ],
+        close: [
+          `      <button type="submit" disabled={submitting}>`,
+          `        {submitting ? "Submitting..." : "Submit"}`,
+          "      </button>",
+          "    </form>",
+        ],
+        bodyIndent: "      ",
+      };
+  }
 };
 
 // ---------------------------------------------------------------------------
@@ -361,19 +750,53 @@ const hooksFile = (
   };
 };
 
-const fieldFile = (naming: Naming, field: FieldPlan): ModuleFile => {
+// The kit adapter the single-file backends inline, exported once — only for
+// the kit uis, and only when some leaf actually renders a control.
+const adapterFile = (ui: ModuleUi, usage: KindUsage): ModuleFile | undefined => {
+  const hasLeaf =
+    usage.string || usage.date || usage.number || usage.boolean || usage.enum;
+  if (ui === "plain" || !hasLeaf) return undefined;
+  const needsText = usage.string || usage.date;
+  const needsChangeEvent = needsText || usage.number || (ui === "mui" && usage.enum);
+  const formstandValues = [
+    ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
+  ];
+  return {
+    path: ui === "mui" ? "adapter.ts" : "adapter.tsx",
+    content: [
+      HEADER,
+      ...(needsChangeEvent ? [`import type { ChangeEvent } from "react";`] : []),
+      "import {",
+      ...formstandValues.map((name) => `  ${name},`),
+      "  type UseFieldReturn,",
+      `} from "formstand";`,
+      "",
+      ui === "mui"
+        ? muiAdapterSection(usage, "export ")
+        : shadcnAdapterSection(usage, "export "),
+      "",
+    ].join("\n"),
+  };
+};
+
+const fieldFile = (
+  ui: ModuleUi,
+  naming: Naming,
+  field: FieldPlan,
+): ModuleFile => {
   const path = field.segments.join(".");
   const propsType = `${field.componentName}Props`;
   const hookName = `use${field.componentName}`;
-  const { builder } = leafBinding(field.spec);
   const dateCast = isDateBinding(field.spec);
+  const imports = mergeImports([
+    ...leafImports(ui, field.spec),
+    ...(dateCast ? [{ from: "formstand", names: ["type UseFieldReturn"] }] : []),
+  ]);
   return {
     path: `fields/${field.componentName}.tsx`,
     content: [
       HEADER,
-      dateCast
-        ? `import { type UseFieldReturn, ${builder} } from "formstand";`
-        : `import { ${builder} } from "formstand";`,
+      ...imports,
       `import { ${naming.hook("Field")} } from "../hooks";`,
       "",
       `export type ${propsType} = Readonly<{ label?: string }>;`,
@@ -386,7 +809,7 @@ const fieldFile = (naming: Naming, field: FieldPlan): ModuleFile => {
       ...todoTexts(field.spec).map((text) => `  // TODO: ${text}`),
       `  const field = ${hookName}()${dateCast ? DATE_CAST : ""};`,
       "  return (",
-      ...leafJsx(field.spec, "field", "{label}", "    "),
+      ...leafJsx(ui, field.spec, "field", "{label}", `{${q(path)}}`, "    "),
       "  );",
       "};",
       "",
@@ -395,6 +818,7 @@ const fieldFile = (naming: Naming, field: FieldPlan): ModuleFile => {
 };
 
 const objectSectionFile = (
+  ui: ModuleUi,
   naming: Naming,
   section: SectionPlan,
   plan: Plan,
@@ -438,7 +862,7 @@ const objectSectionFile = (
       }
     });
 
-  const imports = collectLeaves(spec.fields, [section.key])
+  const fieldImports = collectLeaves(spec.fields, [section.key])
     .map(({ segments }) => own(segments))
     .flatMap((planned) => (planned === undefined ? [] : [planned]))
     .map(
@@ -450,8 +874,9 @@ const objectSectionFile = (
     path: `sections/${section.componentName}.tsx`,
     content: [
       HEADER,
+      ...mergeImports(objectSectionImports(ui)),
       `import { ${naming.hook("IsDirty")}, ${naming.hook("IsValid")} } from "../hooks";`,
-      ...imports,
+      ...fieldImports,
       "",
       `export type ${propsType} = Readonly<{ heading?: string }>;`,
       "",
@@ -467,14 +892,7 @@ const objectSectionFile = (
       `}: ${propsType}) => {`,
       `  const { dirty, valid } = ${hookName}();`,
       "  return (",
-      "    <fieldset>",
-      "      <legend>",
-      "        {heading}",
-      `        {dirty ? " — edited" : ""}`,
-      `        {valid ? "" : " — has errors"}`,
-      "      </legend>",
-      ...body(spec.fields, [section.key], "      "),
-      "    </fieldset>",
+      ...objectShell(ui, body(spec.fields, [section.key], "      ")),
       "  );",
       "};",
       "",
@@ -483,6 +901,7 @@ const objectSectionFile = (
 };
 
 const arraySectionFile = (
+  ui: ModuleUi,
   naming: Naming,
   section: SectionPlan,
 ): ModuleFile => {
@@ -491,6 +910,7 @@ const arraySectionFile = (
   const hookName = `use${section.componentName}`;
   const rowName = `${section.componentName.replace(/Section$/, "")}Row`;
   const emptyName = `empty${section.componentName.replace(/Section$/, "")}Item`;
+  const shell = arrayShell(ui, section.label);
   const itemLeaves =
     spec.item.kind === "object"
       ? spec.item.fields.filter(
@@ -513,7 +933,7 @@ const arraySectionFile = (
         })
       : [];
 
-  const used = new Set<string>(["index", "onRemove", "field"]);
+  const used = new Set<string>(["index", "onRemove", "field", "rows"]);
   const rowVars = itemLeaves.map((field) => {
     const base = camelCase(field.name).length === 0 ? "value" : camelCase(field.name);
     const name = `${base}${identifierSuffix(base, used)}`;
@@ -521,11 +941,14 @@ const arraySectionFile = (
     return { field, varName: name };
   });
 
-  const builders = buildersUsed(
-    spec.item.kind === "object"
-      ? itemLeaves.map((f) => f.spec)
-      : [spec.item],
-  );
+  const rowSpecs =
+    spec.item.kind === "object" ? itemLeaves.map((f) => f.spec) : [spec.item];
+  const anyDateBinding = rowSpecs.some(isDateBinding);
+
+  const dynamicId = (name: string | undefined): string =>
+    name === undefined
+      ? `{\`${templateEscape(section.key)}.\${index}\`}`
+      : `{\`${templateEscape(section.key)}.\${index}.${templateEscape(name)}\`}`;
 
   const rowBindings =
     spec.item.kind === "object"
@@ -537,26 +960,43 @@ const arraySectionFile = (
           `  const field = ${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}\`)${isDateBinding(spec.item) ? DATE_CAST : ""};`,
         ];
 
-  const anyDateBinding =
-    spec.item.kind === "object"
-      ? itemLeaves.some((field) => isDateBinding(field.spec))
-      : isDateBinding(spec.item);
-
   const rowBody =
     spec.item.kind === "object"
       ? [
           ...rowVars.flatMap(({ field, varName }) =>
-            leafControl(field.spec, varName, jsxText(field.label), "      "),
+            leafControl(
+              ui,
+              field.spec,
+              varName,
+              jsxText(field.label),
+              dynamicId(field.name),
+              "      ",
+            ),
           ),
           ...itemTodos,
         ]
-      : leafControl(spec.item, "field", jsxText(section.label), "      ");
+      : leafControl(
+          ui,
+          spec.item,
+          "field",
+          jsxText(section.label),
+          dynamicId(undefined),
+          "      ",
+        );
+
+  const imports = mergeImports([
+    ...rowSpecs.flatMap((s) => leafImports(ui, s)),
+    ...shell.imports,
+    ...(anyDateBinding
+      ? [{ from: "formstand", names: ["type UseFieldReturn"] }]
+      : []),
+  ]);
 
   return {
     path: `sections/${section.componentName}.tsx`,
     content: [
       HEADER,
-      `import { ${[...(anyDateBinding ? ["type UseFieldReturn"] : []), ...builders].join(", ")} } from "formstand";`,
+      ...imports,
       "import {",
       `  ${naming.hook("Field")},`,
       `  ${naming.hook("FieldArray")},`,
@@ -584,13 +1024,9 @@ const arraySectionFile = (
       "}: Readonly<{ index: number; onRemove: () => void }>) => {",
       ...rowBindings,
       "  return (",
-      "    <fieldset>",
-      `      <legend>${jsxText(`${section.label} #`)}{index + 1}</legend>`,
+      ...shell.rowOpen,
       ...rowBody,
-      `      <button type="button" onClick={onRemove}>`,
-      "        Remove",
-      "      </button>",
-      "    </fieldset>",
+      ...shell.rowClose("onRemove"),
       "  );",
       "};",
       "",
@@ -599,24 +1035,20 @@ const arraySectionFile = (
       `}: ${propsType}) => {`,
       `  const { rows, dirty, valid } = ${hookName}();`,
       "  return (",
-      "    <fieldset>",
-      "      <legend>",
-      "        {heading}",
-      `        {dirty ? " — edited" : ""}`,
-      `        {valid ? "" : " — has errors"}`,
-      "      </legend>",
-      "      {rows.fields.map((row, index) => (",
-      `        <${rowName}`,
-      "          key={row.id}",
-      "          index={index}",
-      "          onRemove={() => rows.remove(index)}",
-      "        />",
-      "      ))}",
-      "      {rows.error ? <p role=\"alert\">{rows.error[0]}</p> : null}",
-      `      <button type="button" onClick={() => rows.push(${emptyName})}>`,
-      `        ${jsxText(`Add ${section.label.toLowerCase()}`)}`,
-      "      </button>",
-      "    </fieldset>",
+      ...objectShell(ui, [
+        "      {rows.fields.map((row, index) => (",
+        `        <${rowName}`,
+        "          key={row.id}",
+        "          index={index}",
+        "          onRemove={() => rows.remove(index)}",
+        "        />",
+        "      ))}",
+        ...shell.listError,
+        ...shell.addButton(
+          `() => rows.push(${emptyName})`,
+          `Add ${section.label.toLowerCase()}`,
+        ),
+      ]),
       "  );",
       "};",
       "",
@@ -624,43 +1056,44 @@ const arraySectionFile = (
   };
 };
 
-const formFile = (naming: Naming, plan: Plan): ModuleFile => ({
-  path: `${naming.formName}.tsx`,
-  content: [
-    HEADER,
-    `import { ${naming.formConst}, ${naming.hook("IsSubmitting")} } from "./hooks";`,
-    ...plan.rootFields.map(
-      (field) =>
-        `import { ${field.componentName} } from "./fields/${field.componentName}";`,
-    ),
-    ...plan.sections.map(
-      (section) =>
-        `import { ${section.componentName} } from "./sections/${section.componentName}";`,
-    ),
-    "",
-    "// The form body composes sections; sections compose fields; fields bind",
-    "// paths. Nothing in this tree passes `form` — every hook comes pre-wired",
-    "// from ./hooks.",
-    `export const ${naming.formName} = () => {`,
-    `  const submitting = ${naming.hook("IsSubmitting")}();`,
-    "  return (",
-    "    <form",
-    `      onSubmit={${naming.formConst}.handleSubmit((data) => {`,
-    `        console.log("submit", data);`,
-    "      })}",
-    "    >",
-    ...plan.rootTodos.map((todo) => `      ${todo}`),
-    ...plan.rootFields.map((field) => `      <${field.componentName} />`),
-    ...plan.sections.map((section) => `      <${section.componentName} />`),
-    `      <button type="submit" disabled={submitting}>`,
-    `        {submitting ? "Submitting..." : "Submit"}`,
-    "      </button>",
-    "    </form>",
-    "  );",
-    "};",
-    "",
-  ].join("\n"),
-});
+const formFile = (ui: ModuleUi, naming: Naming, plan: Plan): ModuleFile => {
+  const shell = formShell(ui);
+  return {
+    path: `${naming.formName}.tsx`,
+    content: [
+      HEADER,
+      ...mergeImports(shell.imports),
+      `import { ${naming.formConst}, ${naming.hook("IsSubmitting")} } from "./hooks";`,
+      ...plan.rootFields.map(
+        (field) =>
+          `import { ${field.componentName} } from "./fields/${field.componentName}";`,
+      ),
+      ...plan.sections.map(
+        (section) =>
+          `import { ${section.componentName} } from "./sections/${section.componentName}";`,
+      ),
+      "",
+      "// The form body composes sections; sections compose fields; fields bind",
+      "// paths. Nothing in this tree passes `form` — every hook comes pre-wired",
+      "// from ./hooks.",
+      `export const ${naming.formName} = () => {`,
+      `  const submitting = ${naming.hook("IsSubmitting")}();`,
+      "  return (",
+      ...shell.open(naming),
+      ...plan.rootTodos.map((todo) => `${shell.bodyIndent}${todo}`),
+      ...plan.rootFields.map(
+        (field) => `${shell.bodyIndent}<${field.componentName} />`,
+      ),
+      ...plan.sections.map(
+        (section) => `${shell.bodyIndent}<${section.componentName} />`,
+      ),
+      ...shell.close,
+      "  );",
+      "};",
+      "",
+    ].join("\n"),
+  };
+};
 
 const indexFile = (naming: Naming): ModuleFile => ({
   path: "index.ts",
@@ -680,21 +1113,24 @@ const indexFile = (naming: Naming): ModuleFile => ({
 export const emitModuleForm = (
   options: EmitModuleOptions,
 ): readonly ModuleFile[] => {
+  const ui = options.ui ?? "plain";
   const root = assertObjectRoot(options.ir);
   const naming = namingFor(options.formName);
   const plan = buildPlan(root);
+  const adapter = adapterFile(ui, collectUsage(root));
 
   return [
     schemaFile(options.schemaImport, options.schemaSource),
     typesFile(naming, options.schemaImport),
     hooksFile(naming, options.schemaImport, root, plan),
-    ...plan.fields.map((field) => fieldFile(naming, field)),
+    ...(adapter === undefined ? [] : [adapter]),
+    ...plan.fields.map((field) => fieldFile(ui, naming, field)),
     ...plan.sections.map((section) =>
       section.spec.kind === "object"
-        ? objectSectionFile(naming, section, plan)
-        : arraySectionFile(naming, section),
+        ? objectSectionFile(ui, naming, section, plan)
+        : arraySectionFile(ui, naming, section),
     ),
-    formFile(naming, plan),
+    formFile(ui, naming, plan),
     indexFile(naming),
   ];
 };

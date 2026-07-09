@@ -169,7 +169,7 @@ export const emitZodSchema = (ir: FieldSpec, schemaName = "schema"): string =>
 // Shared form-emission plumbing
 // ---------------------------------------------------------------------------
 
-type KindUsage = Readonly<{
+export type KindUsage = Readonly<{
   string: boolean;
   number: boolean;
   boolean: boolean;
@@ -193,7 +193,7 @@ const mergeUsage = (a: KindUsage, b: KindUsage): KindUsage => ({
   enum: a.enum || b.enum,
 });
 
-const collectUsage = (spec: FieldSpec): KindUsage => {
+export const collectUsage = (spec: FieldSpec): KindUsage => {
   switch (spec.kind) {
     case "object":
       return spec.fields.reduce(
@@ -621,6 +621,18 @@ export const emitPlainForm = (options: EmitFormOptions): string =>
 const hasLeafUsage = (usage: KindUsage): boolean =>
   usage.string || usage.date || usage.number || usage.boolean || usage.enum;
 
+// Prefixes the top-level `const` declarations of an emitted block with
+// "export " when the module layout writes them into a shared adapter file.
+const withExportPrefix = (
+  lines: readonly string[],
+  exp: string,
+): readonly string[] =>
+  exp === ""
+    ? lines
+    : lines.map((line) =>
+        line.startsWith("const ") ? `${exp}${line}` : line,
+      );
+
 // The emitted first-error helper — one definition so the two generators
 // can't drift in error semantics.
 const FIELD_ERROR_HELPER: readonly string[] = [
@@ -702,25 +714,29 @@ const boundLeaf =
 // props, MenuItem children inside a select TextField. Layout uses Stack to
 // stay out of Grid's way entirely.
 
-const muiAdapterSection = (usage: KindUsage): string => {
+export const muiAdapterSection = (usage: KindUsage, exp = ""): string => {
   const needsError = usage.string || usage.date || usage.number || usage.enum;
   const textAdapter = [
     "",
-    "const muiTextFieldProps = (field: UseFieldReturn<string | null | undefined>) => ({",
+    `${exp}const muiTextFieldProps = <T extends string | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
     "  name: field.path,",
     '  value: field.value ?? "",',
     "  error: fieldError(field) !== undefined,",
     "  helperText: fieldError(field),",
     "  onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {",
     "    const text = e.target.value;",
-    '    field.setValue(text === "" && field.emptyValue === null ? null : text);',
+    '    field.setValue((text === "" && field.emptyValue === null ? null : text) as T);',
     "  },",
     "  onBlur: field.onBlur,",
     "});",
   ];
   const numberAdapter = [
     "",
-    "const muiNumberFieldProps = (field: UseFieldReturn<number | null | undefined>) => ({",
+    `${exp}const muiNumberFieldProps = <T extends number | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
     "  name: field.path,",
     "  value: numberToInputText(field.value),",
     "  error: fieldError(field) !== undefined,",
@@ -728,37 +744,41 @@ const muiAdapterSection = (usage: KindUsage): string => {
     '  slotProps: { input: { inputMode: "decimal" as const } },',
     "  onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {",
     "    const parsed = parseNumberText(e.target.value);",
-    '    field.setValue(parsed.kind === "number" ? parsed.value : field.emptyValue);',
+    '    field.setValue((parsed.kind === "number" ? parsed.value : field.emptyValue) as T);',
     "  },",
     "  onBlur: field.onBlur,",
     "});",
   ];
   const selectAdapter = [
     "",
-    "const muiSelectProps = (field: UseFieldReturn<string | null | undefined>) => ({",
+    `${exp}const muiSelectProps = <T extends string | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
     "  name: field.path,",
     '  value: field.value ?? "",',
     "  error: fieldError(field) !== undefined,",
     "  helperText: fieldError(field),",
     "  onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {",
     "    const next = e.target.value;",
-    '    field.setValue(next === "" && field.emptyValue === null ? null : next);',
+    '    field.setValue((next === "" && field.emptyValue === null ? null : next) as T);',
     "  },",
     "  onBlur: field.onBlur,",
     "});",
   ];
   const switchAdapter = [
     "",
-    "const muiSwitchProps = (field: UseFieldReturn<boolean | null | undefined>) => ({",
+    `${exp}const muiSwitchProps = <T extends boolean | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
     "  name: field.path,",
     "  checked: field.value ?? false,",
-    "  onChange: (e: ChangeEvent<HTMLInputElement>) => field.setValue(e.target.checked),",
+    "  onChange: (e: ChangeEvent<HTMLInputElement>) => field.setValue(e.target.checked as T),",
     "  onBlur: field.onBlur,",
     "});",
   ];
   return [
     "// ---- formstand → MUI adapter ----------------------------------------------",
-    ...(needsError ? FIELD_ERROR_HELPER : []),
+    ...(needsError ? withExportPrefix(FIELD_ERROR_HELPER, exp) : []),
     ...(usage.string || usage.date ? textAdapter : []),
     ...(usage.number ? numberAdapter : []),
     ...(usage.enum ? selectAdapter : []),
@@ -951,16 +971,16 @@ export const emitMuiForm = (options: EmitFormOptions): string =>
 // value-first callbacks (onCheckedChange / onValueChange) instead of DOM
 // change events.
 
-const shadcnAdapterSection = (usage: KindUsage): string => {
+export const shadcnAdapterSection = (usage: KindUsage, exp = ""): string => {
   const hasLeaf = hasLeafUsage(usage);
   const errorHelper = [
     ...FIELD_ERROR_HELPER,
     "",
-    "const ariaInvalid = (",
+    `${exp}const ariaInvalid = (`,
     "  field: Readonly<{ error: readonly string[] | undefined }>,",
     "): true | undefined => (fieldError(field) !== undefined ? true : undefined);",
     "",
-    "const FieldError = ({",
+    `${exp}const FieldError = ({`,
     "  field,",
     "}: Readonly<{",
     "  field: Readonly<{ error: readonly string[] | undefined }>;",
@@ -973,27 +993,31 @@ const shadcnAdapterSection = (usage: KindUsage): string => {
   ];
   const textAdapter = [
     "",
-    "const shadcnTextInputProps = (field: UseFieldReturn<string | null | undefined>) => ({",
+    `${exp}const shadcnTextInputProps = <T extends string | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
     "  name: field.path,",
     '  value: field.value ?? "",',
     '  "aria-invalid": ariaInvalid(field),',
     "  onChange: (e: ChangeEvent<HTMLInputElement>) => {",
     "    const text = e.target.value;",
-    '    field.setValue(text === "" && field.emptyValue === null ? null : text);',
+    '    field.setValue((text === "" && field.emptyValue === null ? null : text) as T);',
     "  },",
     "  onBlur: field.onBlur,",
     "});",
   ];
   const numberAdapter = [
     "",
-    "const shadcnNumberInputProps = (field: UseFieldReturn<number | null | undefined>) => ({",
+    `${exp}const shadcnNumberInputProps = <T extends number | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
     '  type: "number" as const,',
     "  name: field.path,",
     "  value: numberToInputText(field.value),",
     '  "aria-invalid": ariaInvalid(field),',
     "  onChange: (e: ChangeEvent<HTMLInputElement>) => {",
     "    const parsed = parseNumberText(e.target.value);",
-    '    field.setValue(parsed.kind === "number" ? parsed.value : field.emptyValue);',
+    '    field.setValue((parsed.kind === "number" ? parsed.value : field.emptyValue) as T);',
     "  },",
     "  onBlur: field.onBlur,",
     "});",
@@ -1002,10 +1026,12 @@ const shadcnAdapterSection = (usage: KindUsage): string => {
   // "done editing" signal, so it maps to the field's blur trigger.
   const selectAdapter = [
     "",
-    "const shadcnSelectProps = (field: UseFieldReturn<string | null | undefined>) => ({",
+    `${exp}const shadcnSelectProps = <T extends string | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
     "  name: field.path,",
     '  value: field.value ?? "",',
-    "  onValueChange: (value: string) => field.setValue(value),",
+    "  onValueChange: (value: string) => field.setValue(value as T),",
     "  onOpenChange: (open: boolean) => {",
     "    if (!open) field.onBlur();",
     "  },",
@@ -1013,18 +1039,20 @@ const shadcnAdapterSection = (usage: KindUsage): string => {
   ];
   const checkboxAdapter = [
     "",
-    "const shadcnCheckboxProps = (field: UseFieldReturn<boolean | null | undefined>) => ({",
+    `${exp}const shadcnCheckboxProps = <T extends boolean | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
     "  name: field.path,",
     "  checked: field.value ?? false,",
     '  "aria-invalid": ariaInvalid(field),',
     '  onCheckedChange: (checked: boolean | "indeterminate") =>',
-    "    field.setValue(checked === true),",
+    "    field.setValue((checked === true) as T),",
     "  onBlur: field.onBlur,",
     "});",
   ];
   return [
     "// ---- formstand → shadcn/ui adapter -----------------------------------------",
-    ...(hasLeaf ? errorHelper : []),
+    ...(hasLeaf ? withExportPrefix(errorHelper, exp) : []),
     ...(usage.string || usage.date ? textAdapter : []),
     ...(usage.number ? numberAdapter : []),
     ...(usage.enum ? selectAdapter : []),

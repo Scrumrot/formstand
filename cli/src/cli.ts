@@ -41,9 +41,9 @@ Options:
   --layout <single|module>
                       single: one component file (default). module: a
                       feature-module folder (schema.ts/types.ts/hooks.ts via
-                      createFormHooks, one file per field, one per section);
-                      --out names the folder. Requires --ui plain and
-                      formstand >= 0.7.
+                      createFormHooks, a shared adapter for the kit uis, one
+                      file per field, one per section); --out names the
+                      folder. Requires formstand >= 0.7.
   --name <MyForm>     component name (default: derived from the schema/type)
   --out <file>        write the component here instead of stdout
   --schema-out <file> (type mode) where to write the generated zod schema
@@ -392,7 +392,7 @@ const runZodMode = async (options: CliOptions): Promise<number> => {
   }
   if (options.layout === "module") {
     emitModuleOutput(
-      emitModuleForm({ ir, formName, schemaImport }),
+      emitModuleForm({ ir, formName, schemaImport, ui: options.ui }),
       options.out,
       options.force,
     );
@@ -432,6 +432,7 @@ const runTypeMode = (options: CliOptions): number => {
         formName,
         schemaImport: { name: schemaName, from: "./schema", kind: "named" },
         schemaSource,
+        ui: options.ui,
       }),
       options.out,
       options.force,
@@ -493,12 +494,6 @@ const runTypeMode = (options: CliOptions): number => {
 const run = async (options: CliOptions): Promise<number> => {
   if (!fs.existsSync(path.resolve(options.input))) {
     stderr(`error: input file not found: ${options.input}`);
-    return 1;
-  }
-  if (options.layout === "module" && options.ui !== "plain") {
-    stderr(
-      `error: --layout module currently supports --ui plain only (got --ui ${options.ui})`,
-    );
     return 1;
   }
   return options.typeName !== undefined

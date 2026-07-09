@@ -42,6 +42,7 @@ export declare const Stack: (
 export declare const Typography: (
   props: Readonly<{
     variant?: string;
+    color?: string;
     children?: ReactNode;
   }>,
 ) => ReactElement;

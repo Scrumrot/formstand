@@ -1,5 +1,19 @@
 # Changelog
 
+## formstand-cli Unreleased
+
+### Added
+
+- `--layout module` works with `--ui mui` and `--ui shadcn`: kit modules
+  get a shared `adapter.ts` / `adapter.tsx` exporting the adapter the
+  single-file backends inline, and field/section files import it. The
+  emitted prop builders are now generic over the field's value type
+  (matching the documented example adapters), because the module layout's
+  typed hooks surfaced what the single-file layout's widened hooks masked —
+  `UseFieldReturn<string>` wasn't assignable to a monomorphic builder.
+  Emitted kit modules are typechecked in CI against the MUI stub and both
+  the shadcn stub and the repo's real Radix components.
+
 ## formstand-cli 0.3.0 — 2026-07-09
 
 ### Added

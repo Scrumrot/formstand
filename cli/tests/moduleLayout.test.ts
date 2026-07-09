@@ -4,7 +4,15 @@ import { describe, expect, it } from "vitest";
 import { main, moduleSpecifier } from "../src/cli";
 import { emitModuleForm, joinModuleFiles } from "../src/moduleLayout";
 import { fromZod } from "../src/fromZod";
-import { fixturesDir, freshTmpDir, typecheckDiagnostics, zodFixture } from "./helpers";
+import {
+  fixturesDir,
+  freshTmpDir,
+  muiStubPaths,
+  realShadcnPaths,
+  shadcnStubFile,
+  typecheckDiagnostics,
+  zodFixture,
+} from "./helpers";
 import { profileSchema } from "./fixtures/profileSchema";
 import { hostileSchema } from "./fixtures/hostileSchema";
 import { collidingSchema } from "./fixtures/collidingSchema";
@@ -17,10 +25,12 @@ const generateModule = (
   schemaName: string,
   formName: string,
   dir: string,
+  ui: "plain" | "mui" | "shadcn" = "plain",
 ) => {
   const files = emitModuleForm({
     ir: fromZod(schema),
     formName,
+    ui,
     schemaImport: {
       name: schemaName,
       from: moduleSpecifier(dir, path.join(fixturesDir, `${schemaName}.ts`)),
@@ -125,8 +135,62 @@ describe("emitModuleForm edge inputs", () => {
   });
 });
 
+describe("emitModuleForm kit uis", () => {
+  it("mui modules share one adapter file and typecheck against the MUI stub", () => {
+    const dir = freshTmpDir("module-mui");
+    const { files, written } = generateModule(
+      profileSchema,
+      "profileSchema",
+      "ProfileForm",
+      dir,
+      "mui",
+    );
+    const paths = files.map((f) => f.path);
+    expect(paths).toContain("adapter.ts");
+    const adapter = files.find((f) => f.path === "adapter.ts");
+    expect(adapter?.content).toContain("export const muiTextFieldProps");
+    const field = files.find((f) => f.path === "fields/FirstNameField.tsx");
+    expect(field?.content).toContain('from "../adapter"');
+    expect(field?.content).toContain("<TextField fullWidth");
+    expect(typecheckDiagnostics(written, muiStubPaths)).toEqual([]);
+  });
+
+  it("shadcn modules typecheck against the stub AND the real Radix components", () => {
+    const dir = freshTmpDir("module-shadcn");
+    const { files, written } = generateModule(
+      profileSchema,
+      "profileSchema",
+      "ProfileForm",
+      dir,
+      "shadcn",
+    );
+    const paths = files.map((f) => f.path);
+    expect(paths).toContain("adapter.tsx");
+    const adapter = files.find((f) => f.path === "adapter.tsx");
+    expect(adapter?.content).toContain("export const FieldError");
+    expect(adapter?.content).toContain("export const ariaInvalid");
+    const field = files.find((f) => f.path === "fields/RoleField.tsx");
+    expect(field?.content).toContain('from "@/components/ui/select"');
+    expect(typecheckDiagnostics([...written, shadcnStubFile])).toEqual([]);
+    expect(typecheckDiagnostics(written, realShadcnPaths)).toEqual([]);
+  });
+
+  it("leaf-free kit modules omit the adapter and still typecheck", () => {
+    const dir = freshTmpDir("module-mui-leaf-free");
+    const { files, written } = generateModule(
+      leafFreeSchema,
+      "leafFreeSchema",
+      "LeafFreeForm",
+      dir,
+      "mui",
+    );
+    expect(files.map((f) => f.path)).not.toContain("adapter.ts");
+    expect(typecheckDiagnostics(written, muiStubPaths)).toEqual([]);
+  });
+});
+
 describe("--layout module via the CLI", () => {
-  it("writes the folder, refuses to overwrite, and gates non-plain uis", async () => {
+  it("writes the folder and refuses to overwrite", async () => {
     const dir = freshTmpDir("module-cli");
     const out = path.join(dir, "ProfileForm");
 
@@ -146,9 +210,6 @@ describe("--layout module via the CLI", () => {
       await main([zodFixture, "--layout", "module", "--out", out, "--force"]),
     ).toBe(0);
 
-    expect(
-      await main([zodFixture, "--layout", "module", "--ui", "mui"]),
-    ).toBe(1);
     expect(await main([zodFixture, "--layout", "bogus"])).toBe(1);
   });
 

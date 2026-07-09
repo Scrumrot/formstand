@@ -75,7 +75,7 @@ ProfileForm/
   index.ts         the folder's public API
 ```
 
-`--out` names the folder (created if missing; every destination is checked before anything is written). Without `--out`, all files stream to stdout with `// --- file:` headers. Array sections bind their row fields inline with template paths; `Date` fields bind as text through a cast with a TODO. Requires **formstand ≥ 0.7** (`createFormHooks`) and currently supports `--ui plain` only.
+`--out` names the folder (created if missing; every destination is checked before anything is written). Without `--out`, all files stream to stdout with `// --- file:` headers. Array sections bind their row fields inline with template paths; `Date` fields bind as text through a cast with a TODO. Works with **all three uis** — `mui` and `shadcn` modules get a shared `adapter.ts(x)` exporting the generic prop builders instead of inlining them per file. Requires **formstand ≥ 0.7** (`createFormHooks`).
 
 ```bash
 formstand-gen src/profileSchema.ts --layout module --out src/ProfileForm
@@ -106,7 +106,6 @@ const code = emitPlainForm({
 
 ## Roadmap
 
-- `--layout module` for the `mui`/`shadcn` uis (the kit adapters need a shared module file).
 - Date pickers for `date` fields (MUI X; shadcn Calendar-in-Popover).
 - Custom templates.
 
