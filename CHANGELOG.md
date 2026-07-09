@@ -4,6 +4,17 @@
 
 ### Docs & examples (no package changes)
 
+- A "Schema builder" tab: formstand-gen running in the browser. A formstand
+  form describes a schema (fields, sections, arrays, enum options — with
+  duplicate-name and enum-needs-options cross-field validation), its values
+  map straight onto the CLI's IR, and the REAL emitters (imported from
+  cli/src — pure string builders, no Node APIs) regenerate the output files
+  on every keystroke, shown in a file tree with copy-file / copy-all. All
+  the CLI axes are selects: --ui, --layout, --sections, --columns.
+- Every demo has a direct link: hash routes like
+  `examples/#/schema-builder` (kebab-cased tab keys), synced both ways so
+  back/forward and hand-edited URLs work. Hash routing because GitHub Pages
+  is static hosting.
 - The CLI command builder gains Sections and Field columns selects, and the
   Generated Onboarding tab now showcases `--sections panel --columns 2`
   (still CI-verified as the CLI's untouched output).

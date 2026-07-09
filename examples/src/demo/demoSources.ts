@@ -8,6 +8,9 @@ import autosaveSrc from "../forms/AutosaveForm.tsx?raw";
 import basicSrc from "../forms/BasicForm.tsx?raw";
 import boundSrc from "../forms/BoundFieldsForm.tsx?raw";
 import cliCommandSrc from "../forms/CliCommandBuilder.tsx?raw";
+import schemaBuilderSrc from "../forms/SchemaBuilder/SchemaBuilder.tsx?raw";
+import schemaBuilderSchemaSrc from "../forms/SchemaBuilder/builderSchema.ts?raw";
+import schemaBuilderGenerateSrc from "../forms/SchemaBuilder/generate.ts?raw";
 import conditionalSrc from "../forms/ConditionalForm.tsx?raw";
 import contextSrc from "../forms/ContextForm.tsx?raw";
 import dependentSrc from "../forms/DependentFieldsForm.tsx?raw";
@@ -150,6 +153,13 @@ const sources = {
   onboardingMui: onboardingMuiFiles,
   genMui: generatedMuiFiles,
   cliCommand: single("CliCommandBuilder.tsx", cliCommandSrc),
+  // Explicit order (not the module glob): the component leads so the code
+  // panel opens on the useForm call, then the schema and the emitter bridge.
+  schemaBuilder: [
+    { path: "SchemaBuilder.tsx", source: stripHarness(schemaBuilderSrc) },
+    { path: "builderSchema.ts", source: stripHarness(schemaBuilderSchemaSrc) },
+    { path: "generate.ts", source: stripHarness(schemaBuilderGenerateSrc) },
+  ],
   shadSignup: single("ShadcnSignupForm.tsx", shadSignupSrc),
   shadCheckout: single("ShadcnCheckoutForm.tsx", shadCheckoutSrc),
   shadSettings: single("ShadcnSettingsForm.tsx", shadSettingsSrc),

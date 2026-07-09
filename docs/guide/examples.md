@@ -228,6 +228,18 @@ what the current CLI emits — so the tab is always the generator's real, untouc
 Compare it against the hand-built MUI Onboarding tab to see exactly what the
 generator gives you versus what you might grow it into.
 
+## Schema builder: the generator in your browser
+
+The **Schema builder** tab ([direct link](https://scrumrot.github.io/formstand/examples/#/schema-builder))
+runs the real formstand-gen emitters in the browser: design fields and
+sections in a formstand form and the generated files (all the `--ui` /
+`--layout` / `--sections` / `--columns` combinations) regenerate on every
+keystroke. Everything downstream of the CLI's IR is a pure string builder,
+so the playground imports the emitters straight from the CLI's source — the
+output is exactly what `npx formstand-gen` writes to disk. Every playground
+tab is directly linkable the same way: `examples/#/<tab-name>` in
+kebab-case.
+
 ## Running locally
 
 ```bash

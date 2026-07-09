@@ -7,6 +7,10 @@ import "prismjs/components/prism-tsx";
 
 export type CodeViewProps = Readonly<{
   source: string;
+  // The shell's panel behavior (and its smoke assertions) key off
+  // .state-dump — demos embedding a CodeView in their own body pass a
+  // class list without it.
+  className?: string;
 }>;
 
 // Read-only highlighted source for the "View code" panel. Prism over an
@@ -15,14 +19,17 @@ export type CodeViewProps = Readonly<{
 // styles. The HTML injection is safe by construction — `source` is our own
 // demo code inlined by Vite's ?raw at build time, and Prism escapes it
 // during tokenization.
-export const CodeView = ({ source }: CodeViewProps) => {
+export const CodeView = ({
+  source,
+  className = "state-dump code-view",
+}: CodeViewProps) => {
   const html = useMemo(
     () => Prism.highlight(source, Prism.languages["tsx"] ?? {}, "tsx"),
     [source],
   );
 
   return (
-    <pre className="state-dump code-view" style={{ maxHeight: 480, overflow: "auto" }}>
+    <pre className={className} style={{ maxHeight: 480, overflow: "auto" }}>
       <code dangerouslySetInnerHTML={{ __html: html }} />
     </pre>
   );

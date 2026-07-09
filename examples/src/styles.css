@@ -198,6 +198,34 @@ button.secondary.active {
 .code-panel .code-tree + .code-view {
   margin-top: 8px;
 }
+/* Schema builder: section editors and the in-body generated-output viewer
+ * (which reuses .code-panel/.code-tree but sits in the demo body, so its
+ * pre carries .command-line instead of the shell's .state-dump). */
+.builder-section {
+  border: 1px solid #1f2530;
+  border-radius: 8px;
+  padding: 12px 14px 8px;
+  margin-bottom: 12px;
+  background: #0d1016;
+}
+.builder-optional {
+  align-items: center;
+  color: #8b94a7;
+  font-size: 13px;
+  margin-top: 8px;
+  white-space: nowrap;
+}
+.builder-field-row button.secondary {
+  margin-top: 2px;
+}
+.builder-output {
+  margin-top: 24px;
+  border-top: 1px solid #1f2530;
+  padding-top: 16px;
+}
+.builder-output .code-tree {
+  margin-top: 12px;
+}
 @media (min-width: 1100px) {
   .demo-split {
     display: grid;

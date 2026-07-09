@@ -1,4 +1,4 @@
-import { type ReactElement, useState } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import FolderRoundedIcon from "@mui/icons-material/FolderRounded";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
@@ -27,6 +27,7 @@ import { NestedArraysForm } from "./forms/NestedArraysForm";
 import { NestedForm } from "./forms/NestedForm";
 import { OptimisticForm } from "./forms/OptimisticForm";
 import { PerfBenchmarkForm } from "./forms/PerfBenchmarkForm";
+import { SchemaBuilder } from "./forms/SchemaBuilder/SchemaBuilder";
 import { ServerErrorsForm } from "./forms/ServerErrorsForm";
 import { TagInputForm } from "./forms/TagInputForm";
 import { WizardForm } from "./forms/WizardForm";
@@ -193,6 +194,11 @@ const TABS: readonly Tab[] = [
     render: () => <CliCommandBuilder />,
   },
   {
+    key: "schemaBuilder",
+    label: "Schema builder",
+    render: () => <SchemaBuilder />,
+  },
+  {
     key: "genMui",
     label: "Onboarding (CLI output)",
     render: () => (
@@ -246,6 +252,7 @@ const GROUP_OF: Readonly<Record<TabKey, GroupTitle>> = {
   onboardingShadcn: "shadcn/ui",
   genMui: "Generated",
   cliCommand: "Generated",
+  schemaBuilder: "Generated",
 };
 
 const GROUP_TITLES: readonly GroupTitle[] = [
@@ -261,8 +268,39 @@ const GROUPS = GROUP_TITLES.map((title) => ({
   tabs: TABS.filter((tab) => GROUP_OF[tab.key] === title),
 }));
 
+// Every demo gets a direct link: the tab key in kebab-case after "#/"
+// (e.g. #/schema-builder). Hash routing on purpose — the playground deploys
+// to static GitHub Pages, where deep paths would 404 without server tricks.
+const slugOf = (key: TabKey): string =>
+  key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+
+const KEY_BY_SLUG: Readonly<Record<string, TabKey>> = Object.fromEntries(
+  TABS.map((tab) => [slugOf(tab.key), tab.key]),
+);
+
+const tabFromHash = (): TabKey | undefined =>
+  KEY_BY_SLUG[window.location.hash.replace(/^#\/?/, "")];
+
+const useHashTab = (fallback: TabKey) => {
+  const [active, setActive] = useState<TabKey>(() => tabFromHash() ?? fallback);
+  // Back/forward and hand-edited links drive the state too.
+  useEffect(() => {
+    const onHashChange = () => {
+      const key = tabFromHash();
+      if (key !== undefined) setActive(key);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+  const select = (key: TabKey) => {
+    setActive(key);
+    window.location.hash = `/${slugOf(key)}`;
+  };
+  return { active, select };
+};
+
 export const App = () => {
-  const [active, setActive] = useState<TabKey>("basic");
+  const { active, select } = useHashTab("basic");
   const current = TABS.find((t) => t.key === active);
 
   return (
@@ -309,7 +347,7 @@ export const App = () => {
             onSelectedItemsChange={(_event, itemId) => {
               // Group nodes only expand/collapse; leaves switch the demo.
               if (typeof itemId === "string" && !itemId.startsWith("group:")) {
-                setActive(itemId as TabKey);
+                select(itemId as TabKey);
               }
             }}
             sx={{
