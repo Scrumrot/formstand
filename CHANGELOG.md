@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+### formstand-cli
+
+- Generated shadcn output defines one `ariaInvalid` helper (used by the
+  inlined adapters and the select trigger) instead of repeating the ternary
+  four times, and the generated `FieldError` computes the message once —
+  cosmetic; runtime behavior unchanged. Internally the MUI and shadcn
+  backends now share their emitted snippets (error helper, `BoundFieldProps`,
+  the leaf switch), so the generators can't drift.
+
+### Docs & examples (no package changes)
+
+- The playground demos bind shadcn's `Input`/`Textarea` with the library's
+  own exported `textInputProps`/`numberInputProps` — the shadcn adapter now
+  covers only the Radix dialect, and the "field has an error" predicate
+  lives once in `examples/src/fieldErrors.ts` (shared by both adapters).
+- The copy-in shadcn kit is trimmed to what the demos render (Badge/Button
+  variants, dead peer-disabled label classes) and every component exports a
+  `Readonly` props type.
+
 ## formstand-cli 0.2.1 — 2026-07-09
 
 ### Fixed

@@ -1,10 +1,16 @@
 import { memo, useState } from "react";
 import { ArrowUpIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import { type Form, useField, useFieldArray, useForm } from "formstand";
+import {
+  type Form,
+  textInputProps,
+  useField,
+  useFieldArray,
+  useForm,
+} from "formstand";
 import { z } from "zod";
 import { useDemoForm } from "../demo/DemoShell";
 import { FieldError } from "./FieldError";
-import { shadcnInputProps, shadcnSelectProps } from "./shadcnAdapter";
+import { shadcnSelectProps } from "./shadcnAdapter";
 import { Button } from "./ui/button";
 import {
   Card,
@@ -43,21 +49,24 @@ const schema = z.object({
   members: z
     .array(memberSchema)
     .min(1, "add at least one member")
-    // Cross-row rule: the issue lands on the *second* copy's email path, so
-    // the error renders under the row that introduced the duplicate.
+    // Cross-row rule: an email is a duplicate when an earlier row already
+    // holds it (findIndex returns the FIRST match), so the issue lands on
+    // the row that introduced the copy and renders under its email field.
     .superRefine((members, ctx) => {
-      const firstIndexByEmail = new Map<string, number>();
-      members.forEach((member, index) => {
-        const key = member.email.toLowerCase();
-        if (key !== "" && firstIndexByEmail.has(key)) {
+      members
+        .map((member, index) => ({ key: member.email.toLowerCase(), index }))
+        .filter(
+          ({ key, index }) =>
+            key !== "" &&
+            members.findIndex((m) => m.email.toLowerCase() === key) !== index,
+        )
+        .forEach(({ index }) => {
           ctx.addIssue({
             code: "custom",
             message: "duplicate email",
             path: [index, "email"],
           });
-        }
-        if (!firstIndexByEmail.has(key)) firstIndexByEmail.set(key, index);
-      });
+        });
     }),
 });
 
@@ -84,11 +93,11 @@ const MemberRow = memo(({ form, index, move, remove }: MemberRowProps) => {
   return (
     <div className="grid grid-cols-[1fr_1.3fr_auto_auto_auto] items-start gap-2">
       <div className="grid gap-1">
-        <Input placeholder="Name" {...shadcnInputProps(name)} />
+        <Input placeholder="Name" {...textInputProps(name)} />
         <FieldError field={name} />
       </div>
       <div className="grid gap-1">
-        <Input placeholder="email@team.dev" {...shadcnInputProps(email)} />
+        <Input placeholder="email@team.dev" {...textInputProps(email)} />
         <FieldError field={email} />
       </div>
       <Select {...shadcnSelectProps(role)}>
@@ -153,7 +162,7 @@ export const ShadcnTeamForm = () => {
       <CardContent className="grid gap-4">
         <div className="grid max-w-xs gap-2">
           <Label htmlFor="team-name">Team name</Label>
-          <Input id="team-name" {...shadcnInputProps(teamName)} />
+          <Input id="team-name" {...textInputProps(teamName)} />
           <FieldError field={teamName} />
         </div>
 

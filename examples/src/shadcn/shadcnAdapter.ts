@@ -1,81 +1,20 @@
-import type { ChangeEvent } from "react";
-import {
-  type UseFieldReturn,
-  numberToInputText,
-  parseNumberText,
-} from "formstand";
+import type { UseFieldReturn } from "formstand";
+import { type ErrorSlice, ariaInvalid } from "../fieldErrors";
 
-// The formstand → shadcn/ui bridge. Same shape as the MUI adapter: each
-// builder takes a `useField` result and returns a spreadable props object
-// for the matching component. Two dialects meet here — the Input/Textarea
-// components take native DOM events, while the Radix-based widgets
-// (Checkbox, Switch, Select, Slider, RadioGroup) take value-first callbacks
-// (`onCheckedChange`, `onValueChange`) and signal "done editing" through
-// close/commit events rather than blur. Errors surface as `aria-invalid`
-// (the components style themselves off it); render the message with
-// <FieldError field={...} />.
+// The formstand → shadcn/ui bridge — the Radix half only. shadcn's Input
+// and Textarea take native DOM events, so the library's own exported
+// builders bind them with nothing extra:
+//
+//   <Input {...textInputProps(field)} />
+//   <Input {...numberInputProps(field)} />
+//
+// What needs bridging is the Radix dialect: Checkbox, Switch, Select,
+// Slider, and RadioGroup take value-first callbacks (`onCheckedChange`,
+// `onValueChange`) and signal "done editing" through close/commit events
+// rather than blur. Errors surface as `aria-invalid` (the components style
+// themselves off it); render the message with <FieldError field={...} />.
 
-type ErrorSlice = Readonly<{ error: readonly string[] | undefined }>;
-
-const hasError = (field: ErrorSlice): boolean =>
-  field.error !== undefined && field.error.length > 0;
-
-// aria-invalid only when true — `aria-invalid="false"` is noise for
-// screen readers and would make every pristine control style-relevant.
-const ariaInvalid = (field: ErrorSlice): true | undefined =>
-  hasError(field) ? true : undefined;
-
-export type ShadcnInputProps = Readonly<{
-  name: string;
-  value: string;
-  onChange: (
-    event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-  ) => void;
-  onBlur: () => void;
-  "aria-invalid": true | undefined;
-}>;
-
-export const shadcnInputProps = <T extends string | null | undefined>(
-  field: UseFieldReturn<T>,
-): ShadcnInputProps => ({
-  name: field.path,
-  value: field.value ?? "",
-  onChange: (event) => {
-    const text = event.target.value;
-    // Clearing a nullable field writes null back (mirrors textInputProps),
-    // so z.string().nullable() round-trips instead of getting stuck at "".
-    field.setValue(
-      (text === "" && field.emptyValue === null ? null : text) as T,
-    );
-  },
-  onBlur: field.onBlur,
-  "aria-invalid": ariaInvalid(field),
-});
-
-export type ShadcnNumberInputProps = Readonly<{
-  type: "number";
-  name: string;
-  value: string;
-  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  onBlur: () => void;
-  "aria-invalid": true | undefined;
-}>;
-
-export const shadcnNumberInputProps = <T extends number | null | undefined>(
-  field: UseFieldReturn<T>,
-): ShadcnNumberInputProps => ({
-  type: "number",
-  name: field.path,
-  value: numberToInputText(field.value),
-  onChange: (event) => {
-    const parsed = parseNumberText(event.target.value);
-    field.setValue(
-      (parsed.kind === "number" ? parsed.value : field.emptyValue) as T,
-    );
-  },
-  onBlur: field.onBlur,
-  "aria-invalid": ariaInvalid(field),
-});
+export { ariaInvalid };
 
 export type ShadcnCheckboxProps = Readonly<{
   name: string;
@@ -113,7 +52,8 @@ export const shadcnSwitchProps = <T extends boolean | null | undefined>(
   onBlur: field.onBlur,
 });
 
-// Spread onto <Select> (the Radix Root); pair with your own SelectTrigger.
+// Spread onto <Select> (the Radix Root); pair with your own SelectTrigger
+// (give the trigger `aria-invalid={ariaInvalid(field)}` for error styling).
 // Radix has no blur event on the root — closing the dropdown is the "done
 // editing" signal, so it maps to the field's blur trigger and onBlur-mode
 // forms validate when the menu closes.
@@ -175,3 +115,7 @@ export const shadcnSliderProps = <T extends number>(
   onValueChange: (value) => field.setValue((value[0] ?? field.value) as T),
   onValueCommit: () => field.onBlur(),
 });
+
+// Re-exported so demo code can keep a single adapter import even though the
+// slice type lives in the shared module.
+export type { ErrorSlice };

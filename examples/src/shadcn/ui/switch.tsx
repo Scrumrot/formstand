@@ -2,10 +2,11 @@ import type { ComponentProps } from "react";
 import { Switch as SwitchPrimitive } from "radix-ui";
 import { cn } from "../cn";
 
-export const Switch = ({
-  className,
-  ...props
-}: ComponentProps<typeof SwitchPrimitive.Root>) => (
+export type SwitchProps = Readonly<
+  ComponentProps<typeof SwitchPrimitive.Root>
+>;
+
+export const Switch = ({ className, ...props }: SwitchProps) => (
   <SwitchPrimitive.Root
     data-slot="switch"
     className={cn(

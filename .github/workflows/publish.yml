@@ -1,3 +1,22 @@
+# Tag-triggered releases: v* publishes formstand (root), cli-v* publishes
+# formstand-cli (cli/). The publishing mechanics — stated once, applying to
+# BOTH jobs (edit them in lockstep):
+#
+# - Auth is npm trusted publishing (OIDC): npmjs.com is configured to trust
+#   this repo + workflow file per package, `id-token: write` enables the
+#   exchange, and no token secret exists anywhere.
+# - `node-version: ">=24.8"` pins trusted publishing's npm >= 11.5.1 floor:
+#   Node 24.8+ is the first line bundling npm >= 11.6 (24.0-24.4 shipped
+#   11.3/11.4, below the floor), and a bare "24" would trust whatever 24.x a
+#   toolcache holds. Never upgrade npm in place instead (npm install -g
+#   npm@latest) — it leaves a broken install whose libnpmpublish can't
+#   resolve its sigstore dependency.
+# - `npm publish --provenance` keeps the flag explicit even though trusted
+#   publishing generates provenance by default: the flag is fail-CLOSED
+#   (publish errors if attestation can't be produced), where the automatic
+#   path silently skips it.
+# - Each job fails fast when the pushed tag doesn't match the package.json
+#   version it would publish.
 name: Publish
 
 on:
@@ -17,9 +36,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Fail fast on a tag that doesn't match the version being published —
-      # otherwise the tag would silently publish whatever version package.json
-      # happens to hold.
       - name: Verify tag matches package.json version
         run: |
           expected="${GITHUB_REF_NAME#v}"
@@ -29,12 +45,6 @@ jobs:
             exit 1
           fi
 
-      # Trusted publishing needs npm >= 11.5.1; Node 24.8+ is the first line
-      # bundling npm >= 11.6 (24.0-24.4 shipped 11.3/11.4, below the floor),
-      # so the floor is pinned explicitly rather than trusting whatever 24.x
-      # a toolcache holds. Never upgrade npm in place instead (npm install
-      # -g npm@latest) — it leaves a broken install whose libnpmpublish
-      # can't resolve its sigstore dependency.
       - uses: actions/setup-node@v6
         with:
           node-version: ">=24.8"
@@ -52,11 +62,6 @@ jobs:
       - name: Typecheck, lint, test
         run: npm run typecheck && npm run lint && npm run test:coverage
 
-      # Authenticates via OIDC trusted publishing (configured on npmjs.com
-      # for this repo + workflow file) — no token secret. --provenance stays
-      # explicit even though trusted publishing generates it by default:
-      # the flag is fail-CLOSED (publish errors if attestation can't be
-      # produced), where the automatic path silently skips it.
       - name: Publish formstand
         run: npm publish --provenance
 
@@ -66,9 +71,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Fail fast on a tag that doesn't match the version being published —
-      # otherwise the tag would silently publish whatever version package.json
-      # happens to hold.
       - name: Verify tag matches cli/package.json version
         run: |
           expected="${GITHUB_REF_NAME#cli-v}"
@@ -79,12 +81,6 @@ jobs:
           fi
         working-directory: cli
 
-      # Trusted publishing needs npm >= 11.5.1; Node 24.8+ is the first line
-      # bundling npm >= 11.6 (24.0-24.4 shipped 11.3/11.4, below the floor),
-      # so the floor is pinned explicitly rather than trusting whatever 24.x
-      # a toolcache holds. Never upgrade npm in place instead (npm install
-      # -g npm@latest) — it leaves a broken install whose libnpmpublish
-      # can't resolve its sigstore dependency.
       - uses: actions/setup-node@v6
         with:
           node-version: ">=24.8"
@@ -102,11 +98,6 @@ jobs:
         working-directory: cli
 
       # prepublishOnly runs typecheck + test + build before the publish.
-      # Authenticates via OIDC trusted publishing (configured on npmjs.com
-      # for this repo + workflow file) — no token secret. --provenance stays
-      # explicit even though trusted publishing generates it by default:
-      # the flag is fail-CLOSED (publish errors if attestation can't be
-      # produced), where the automatic path silently skips it.
       - name: Publish formstand-cli
         run: npm publish --provenance
         working-directory: cli

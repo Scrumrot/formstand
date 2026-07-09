@@ -6,11 +6,15 @@ import { cn } from "../cn";
 export const Select = SelectPrimitive.Root;
 export const SelectValue = SelectPrimitive.Value;
 
+export type SelectTriggerProps = Readonly<
+  ComponentProps<typeof SelectPrimitive.Trigger>
+>;
+
 export const SelectTrigger = ({
   className,
   children,
   ...props
-}: ComponentProps<typeof SelectPrimitive.Trigger>) => (
+}: SelectTriggerProps) => (
   <SelectPrimitive.Trigger
     data-slot="select-trigger"
     className={cn(
@@ -30,11 +34,15 @@ export const SelectTrigger = ({
 // scoped under `.shadcn-scope`, so the content renders in place instead
 // (popper positioning still floats it over the page) to stay inside the
 // themed subtree. In an app with :root-level variables, keep the Portal.
+export type SelectContentProps = Readonly<
+  ComponentProps<typeof SelectPrimitive.Content>
+>;
+
 export const SelectContent = ({
   className,
   children,
   ...props
-}: ComponentProps<typeof SelectPrimitive.Content>) => (
+}: SelectContentProps) => (
   <SelectPrimitive.Content
     data-slot="select-content"
     position="popper"
@@ -50,11 +58,15 @@ export const SelectContent = ({
   </SelectPrimitive.Content>
 );
 
+export type SelectItemProps = Readonly<
+  ComponentProps<typeof SelectPrimitive.Item>
+>;
+
 export const SelectItem = ({
   className,
   children,
   ...props
-}: ComponentProps<typeof SelectPrimitive.Item>) => (
+}: SelectItemProps) => (
   <SelectPrimitive.Item
     data-slot="select-item"
     className={cn(

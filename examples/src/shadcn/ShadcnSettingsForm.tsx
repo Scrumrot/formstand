@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   type Form,
+  textInputProps,
   useField,
   useForm,
   useFormSelectorShallow,
@@ -11,7 +12,6 @@ import { z } from "zod";
 import { useDemoForm } from "../demo/DemoShell";
 import { FieldError } from "./FieldError";
 import {
-  shadcnInputProps,
   shadcnSelectProps,
   shadcnSliderProps,
   shadcnSwitchProps,
@@ -71,11 +71,7 @@ const DirtyBadges = ({ form }: Readonly<{ form: Form<Schema> }>) => {
       {dirtyPaths.length === 0 ? (
         <span className="text-sm text-muted-foreground">none</span>
       ) : (
-        dirtyPaths.map((path) => (
-          <Badge key={path} variant="outline">
-            {path}
-          </Badge>
-        ))
+        dirtyPaths.map((path) => <Badge key={path}>{path}</Badge>)
       )}
     </div>
   );
@@ -120,7 +116,7 @@ export const ShadcnSettingsForm = () => {
         <CardContent className="grid gap-4">
           <div className="grid gap-2">
             <Label htmlFor="settings-name">Display name</Label>
-            <Input id="settings-name" {...shadcnInputProps(displayName)} />
+            <Input id="settings-name" {...textInputProps(displayName)} />
             <FieldError field={displayName} />
           </div>
           <div className="grid gap-2">

@@ -7,11 +7,15 @@ import { cn } from "../cn";
 // Thumb — that's the element carrying role="slider", and Radix gives a
 // single thumb no name of its own (the Root is a <span>, so label
 // htmlFor/id association can't name it either).
+export type SliderProps = Readonly<
+  ComponentProps<typeof SliderPrimitive.Root>
+>;
+
 export const Slider = ({
   className,
   "aria-label": ariaLabel,
   ...props
-}: ComponentProps<typeof SliderPrimitive.Root>) => (
+}: SliderProps) => (
   <SliderPrimitive.Root
     data-slot="slider"
     className={cn(

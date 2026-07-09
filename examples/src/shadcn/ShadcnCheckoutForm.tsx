@@ -1,14 +1,15 @@
 import { useState } from "react";
-import { useField, useForm, useFormSelector } from "formstand";
+import {
+  numberInputProps,
+  textInputProps,
+  useField,
+  useForm,
+  useFormSelector,
+} from "formstand";
 import { z } from "zod";
 import { useDemoForm } from "../demo/DemoShell";
 import { FieldError } from "./FieldError";
-import {
-  shadcnInputProps,
-  shadcnNumberInputProps,
-  shadcnRadioGroupProps,
-  shadcnSelectProps,
-} from "./shadcnAdapter";
+import { ariaInvalid, shadcnRadioGroupProps, shadcnSelectProps } from "./shadcnAdapter";
 import { Button } from "./ui/button";
 import {
   Card,
@@ -100,7 +101,7 @@ export const ShadcnCheckoutForm = () => {
           <Select {...shadcnSelectProps(country)}>
             <SelectTrigger
               className="w-full"
-              aria-invalid={country.error?.length ? true : undefined}
+              aria-invalid={ariaInvalid(country)}
             >
               <SelectValue placeholder="Select a country" />
             </SelectTrigger>
@@ -143,7 +144,7 @@ export const ShadcnCheckoutForm = () => {
           <Input
             id="checkout-qty"
             className="w-24"
-            {...shadcnNumberInputProps(quantity)}
+            {...numberInputProps(quantity)}
           />
           <FieldError field={quantity} />
         </div>
@@ -153,7 +154,7 @@ export const ShadcnCheckoutForm = () => {
           <Textarea
             id="checkout-note"
             placeholder="Happy birthday!"
-            {...shadcnInputProps(giftNote)}
+            {...textInputProps(giftNote)}
           />
           <p className="text-sm text-muted-foreground">
             nullable field — store value is{" "}

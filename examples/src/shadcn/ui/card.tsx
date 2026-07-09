@@ -1,7 +1,10 @@
 import type { ComponentProps } from "react";
 import { cn } from "../cn";
 
-export const Card = ({ className, ...props }: ComponentProps<"div">) => (
+// One alias for all six parts — every card piece is a styled <div>.
+export type CardProps = Readonly<ComponentProps<"div">>;
+
+export const Card = ({ className, ...props }: CardProps) => (
   <div
     data-slot="card"
     className={cn(
@@ -12,7 +15,7 @@ export const Card = ({ className, ...props }: ComponentProps<"div">) => (
   />
 );
 
-export const CardHeader = ({ className, ...props }: ComponentProps<"div">) => (
+export const CardHeader = ({ className, ...props }: CardProps) => (
   <div
     data-slot="card-header"
     className={cn("grid gap-1.5 px-4", className)}
@@ -20,7 +23,7 @@ export const CardHeader = ({ className, ...props }: ComponentProps<"div">) => (
   />
 );
 
-export const CardTitle = ({ className, ...props }: ComponentProps<"div">) => (
+export const CardTitle = ({ className, ...props }: CardProps) => (
   <div
     data-slot="card-title"
     className={cn("font-semibold leading-none", className)}
@@ -31,7 +34,7 @@ export const CardTitle = ({ className, ...props }: ComponentProps<"div">) => (
 export const CardDescription = ({
   className,
   ...props
-}: ComponentProps<"div">) => (
+}: CardProps) => (
   <div
     data-slot="card-description"
     className={cn("text-sm text-muted-foreground", className)}
@@ -42,11 +45,11 @@ export const CardDescription = ({
 export const CardContent = ({
   className,
   ...props
-}: ComponentProps<"div">) => (
+}: CardProps) => (
   <div data-slot="card-content" className={cn("px-4", className)} {...props} />
 );
 
-export const CardFooter = ({ className, ...props }: ComponentProps<"div">) => (
+export const CardFooter = ({ className, ...props }: CardProps) => (
   <div
     data-slot="card-footer"
     className={cn("flex items-center px-4", className)}

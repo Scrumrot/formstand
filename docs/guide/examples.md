@@ -37,7 +37,7 @@ Five demos bind formstand to [Material UI](https://mui.com/) through a ~60-line 
 
 ## shadcn/ui
 
-Four demos bind formstand to [shadcn/ui](https://ui.shadcn.com/) components through the same adapter pattern — [shadcnAdapter.ts](https://github.com/Scrumrot/formstand/blob/main/examples/src/shadcn/shadcnAdapter.ts) turns a `useField` result into spreadable props, bridging two dialects: `Input`/`Textarea` take native DOM events, while the Radix-based widgets (`Checkbox`, `Switch`, `Select`, `Slider`, `RadioGroup`) take value-first callbacks (`onCheckedChange`, `onValueChange`) and signal "done editing" through close/commit events instead of blur. Errors surface as `aria-invalid`, which the components style themselves off. `formstand-gen --ui shadcn` generates forms against this pattern.
+Four demos bind formstand to [shadcn/ui](https://ui.shadcn.com/) components. shadcn's `Input` and `Textarea` take native DOM events, so the library's own exported `textInputProps`/`numberInputProps` bind them with nothing extra — the adapter file, [shadcnAdapter.ts](https://github.com/Scrumrot/formstand/blob/main/examples/src/shadcn/shadcnAdapter.ts), only bridges the Radix dialect: `Checkbox`, `Switch`, `Select`, `Slider`, and `RadioGroup` take value-first callbacks (`onCheckedChange`, `onValueChange`) and signal "done editing" through close/commit events instead of blur. Errors surface as `aria-invalid`, which the components style themselves off. `formstand-gen --ui shadcn` generates forms against this pattern.
 
 | Demo | What it shows | Source |
 | --- | --- | --- |
@@ -162,6 +162,10 @@ Every block below embeds the demo's actual source file at build time, so it can 
 
 ::: details The adapter (shadcnAdapter.ts) — shadcnAdapter.ts
 <<< ../../examples/src/shadcn/shadcnAdapter.ts
+:::
+
+::: details Shared error helpers (used by both adapters) — fieldErrors.ts
+<<< ../../examples/src/fieldErrors.ts
 :::
 
 ::: details Error line — FieldError.tsx

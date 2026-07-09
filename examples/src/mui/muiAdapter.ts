@@ -5,6 +5,7 @@ import {
   numberToInputText,
   parseNumberText,
 } from "formstand";
+import { firstError, hasError } from "../fieldErrors";
 
 // The formstand → Material UI bridge. Each builder takes a `useField` result
 // and returns a spreadable props object for the matching MUI component —
@@ -13,13 +14,6 @@ import {
 // line instead of `aria-invalid` (MUI wires the aria attributes itself).
 // This ~60-line file is the whole integration; copy the pattern for any
 // other UI kit.
-
-type ErrorSlice = Readonly<{ error: readonly string[] | undefined }>;
-
-const hasError = (field: ErrorSlice): boolean =>
-  field.error !== undefined && field.error.length > 0;
-
-const firstError = (field: ErrorSlice): string | undefined => field.error?.[0];
 
 export type MuiTextFieldProps = Readonly<{
   name: string;

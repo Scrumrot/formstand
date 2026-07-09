@@ -47,88 +47,66 @@ const generate = (
   return { file, code };
 };
 
+// Every fixture is emitted once per backend, and each backend's outputs are
+// typechecked as ONE program — ts.createProgram re-parses the library
+// source, zod's types, and @types/react from scratch every call, so one
+// program per compiler configuration (not per fixture) keeps the suite's
+// cost flat as fixtures accumulate. The fixtures deliberately span the edge
+// cases: hostile names (escaping), colliding array names (identifier
+// suffixes), and a leaf-free schema (usage-gated helpers/imports).
+const fixturesFor = (
+  emit: Emitter,
+  tag: string,
+): Readonly<{
+  dir: string;
+  profile: Readonly<{ file: string; code: string }>;
+  hostile: Readonly<{ file: string; code: string }>;
+  colliding: Readonly<{ file: string; code: string }>;
+  leafFree: Readonly<{ file: string; code: string }>;
+  files: readonly string[];
+}> => {
+  const dir = freshTmpDir(`typecheck-${tag}`);
+  const profile = generate(emit, profileSchema, "profileSchema", "ProfileForm", dir);
+  const hostile = generate(emit, hostileSchema, "hostileSchema", "HostileForm", dir);
+  const colliding = generate(emit, collidingSchema, "collidingSchema", "CollidingForm", dir);
+  const leafFree = generate(emit, leafFreeSchema, "leafFreeSchema", "LeafFreeForm", dir);
+  return {
+    dir,
+    profile,
+    hostile,
+    colliding,
+    leafFree,
+    files: [profile.file, hostile.file, colliding.file, leafFree.file],
+  };
+};
+
+const plain = fixturesFor(emitPlainForm, "plain");
+const mui = fixturesFor(emitMuiForm, "mui");
+const shadcn = fixturesFor(emitShadcnForm, "shadcn");
+
 describe("generated components", () => {
-  // THE BIG ONE: the generated plain-form component must typecheck against
-  // the real library source ("formstand" mapped to ../../src/index.ts) with
-  // strict on and zero diagnostics.
-  it("plain form typechecks against the library source", () => {
-    const dir = freshTmpDir("typecheck");
-    const { file } = generate(
-      emitPlainForm,
-      profileSchema,
-      "profileSchema",
-      "ProfileForm",
-      dir,
-    );
-    expect(typecheckDiagnostics([file])).toEqual([]);
+  // THE BIG ONE: every plain-backend output must typecheck against the real
+  // library source ("formstand" mapped to ../../src/index.ts) with strict on
+  // and zero diagnostics.
+  it("plain outputs typecheck against the library source", () => {
+    expect(typecheckDiagnostics(plain.files)).toEqual([]);
   });
 
-  // The MUI variant typechecks too: @mui/material is mapped to a structural
+  // The MUI variants typecheck too: @mui/material is mapped to a structural
   // stub declaring exactly the props the emitter uses.
-  it("mui form typechecks against the library source and the MUI stub", () => {
-    const dir = freshTmpDir("typecheck-mui");
-    const { file } = generate(
-      emitMuiForm,
-      profileSchema,
-      "profileSchema",
-      "ProfileForm",
-      dir,
-    );
-    expect(typecheckDiagnostics([file], muiStubPaths)).toEqual([]);
+  it("mui outputs typecheck against the library source and the MUI stub", () => {
+    expect(typecheckDiagnostics(mui.files, muiStubPaths)).toEqual([]);
   });
 
-  it("hostile field names typecheck in plain output; the dot field is skipped but initialized", () => {
-    const dir = freshTmpDir("typecheck-hostile");
-    const { file, code } = generate(
-      emitPlainForm,
-      hostileSchema,
-      "hostileSchema",
-      "HostileForm",
-      dir,
-    );
-    expect(typecheckDiagnostics([file])).toEqual([]);
-    // No binding for the dot-in-name field...
-    expect(code).not.toContain('path={"a.b"}');
-    expect(code).toContain(
-      '{/* TODO: field "a.b" skipped — "." in a key is not path-addressable',
-    );
-    // ...but initialValues still materializes the key.
-    expect(code).toContain('"a.b": "",');
-    // The nested dot field inside array rows is skipped too.
-    expect(code).toContain(
-      '{/* TODO: field "deep.dot" skipped — "." in a key is not path-addressable',
-    );
-  });
-
-  // The shadcn variant typechecks too: the consumer's "@/components/ui/*"
-  // modules are declared by a structural ambient stub.
-  it("shadcn form typechecks against the library source and the shadcn stub", () => {
-    const dir = freshTmpDir("typecheck-shadcn");
-    const { file, code } = generate(
-      emitShadcnForm,
-      profileSchema,
-      "profileSchema",
-      "ProfileForm",
-      dir,
-    );
-    expect(typecheckDiagnostics([file, shadcnStubFile])).toEqual([]);
+  it("shadcn outputs typecheck against the library source and the shadcn stub", () => {
+    expect(
+      typecheckDiagnostics([...shadcn.files, shadcnStubFile]),
+    ).toEqual([]);
     // The shadcn conventions the emitter promises: alias imports and
     // aria-invalid error styling (no MUI-style error/helperText props).
-    expect(code).toContain('from "@/components/ui/input"');
-    expect(code).toContain('"aria-invalid":');
-    expect(code).not.toContain("helperText");
-  });
-
-  it("hostile field names typecheck in shadcn output", () => {
-    const dir = freshTmpDir("typecheck-hostile-shadcn");
-    const { file } = generate(
-      emitShadcnForm,
-      hostileSchema,
-      "hostileSchema",
-      "HostileForm",
-      dir,
-    );
-    expect(typecheckDiagnostics([file, shadcnStubFile])).toEqual([]);
+    expect(shadcn.profile.code).toContain('from "@/components/ui/input"');
+    expect(shadcn.profile.code).toContain('"aria-invalid":');
+    expect(shadcn.profile.code).not.toContain("helperText");
   });
 
   // The stub is typed with the emitter's shapes, so it can only prove
@@ -136,73 +114,38 @@ describe("generated components", () => {
   // real Radix-based components, so a shadcn/Radix prop-contract change
   // fails HERE instead of in every consumer's app.
   it("shadcn form typechecks against the real shadcn/Radix components", () => {
-    const dir = freshTmpDir("typecheck-shadcn-real");
-    const { file } = generate(
-      emitShadcnForm,
-      profileSchema,
-      "profileSchema",
-      "ProfileForm",
-      dir,
-    );
-    expect(typecheckDiagnostics([file], realShadcnPaths)).toEqual([]);
+    expect(
+      typecheckDiagnostics([shadcn.profile.file], realShadcnPaths),
+    ).toEqual([]);
   });
 
-  // A schema with no scalar leaves must still emit compilable code: every
-  // helper, type, and import in the preamble is usage-gated (BoundFieldProps
-  // references FieldFormApi, whose import only exists when a leaf renders).
-  it("leaf-free schemas emit compilable output in all three backends", () => {
-    const dir = freshTmpDir("typecheck-leaf-free");
-    const plain = generate(
-      emitPlainForm,
-      leafFreeSchema,
-      "leafFreeSchema",
-      "LeafFreePlainForm",
-      dir,
+  it("hostile field names: the dot field is skipped but initialized", () => {
+    // No binding for the dot-in-name field...
+    expect(plain.hostile.code).not.toContain('path={"a.b"}');
+    expect(plain.hostile.code).toContain(
+      '{/* TODO: field "a.b" skipped — "." in a key is not path-addressable',
     );
-    const mui = generate(
-      emitMuiForm,
-      leafFreeSchema,
-      "leafFreeSchema",
-      "LeafFreeMuiForm",
-      dir,
+    // ...but initialValues still materializes the key.
+    expect(plain.hostile.code).toContain('"a.b": "",');
+    // The nested dot field inside array rows is skipped too.
+    expect(plain.hostile.code).toContain(
+      '{/* TODO: field "deep.dot" skipped — "." in a key is not path-addressable',
     );
-    const shadcn = generate(
-      emitShadcnForm,
-      leafFreeSchema,
-      "leafFreeSchema",
-      "LeafFreeShadcnForm",
-      dir,
-    );
-    expect(typecheckDiagnostics([plain.file])).toEqual([]);
-    expect(typecheckDiagnostics([mui.file], muiStubPaths)).toEqual([]);
-    expect(typecheckDiagnostics([shadcn.file, shadcnStubFile])).toEqual([]);
   });
 
-  it("hostile field names typecheck in mui output", () => {
-    const dir = freshTmpDir("typecheck-hostile-mui");
-    const { file } = generate(
-      emitMuiForm,
-      hostileSchema,
-      "hostileSchema",
-      "HostileForm",
-      dir,
-    );
-    expect(typecheckDiagnostics([file], muiStubPaths)).toEqual([]);
+  it("colliding array names get suffixed identifiers", () => {
+    expect(plain.colliding.code).toContain("const userNamesArray = ");
+    expect(plain.colliding.code).toContain("const userNamesArray2 = ");
+    expect(plain.colliding.code).toContain("type UserNamesItem2 = ");
+    expect(plain.colliding.code).toContain("const emptyUserNamesItem2 = ");
   });
 
-  it("colliding array names get suffixed identifiers and typecheck", () => {
-    const dir = freshTmpDir("typecheck-colliding");
-    const { file, code } = generate(
-      emitPlainForm,
-      collidingSchema,
-      "collidingSchema",
-      "CollidingForm",
-      dir,
-    );
-    expect(code).toContain("const userNamesArray = ");
-    expect(code).toContain("const userNamesArray2 = ");
-    expect(code).toContain("type UserNamesItem2 = ");
-    expect(code).toContain("const emptyUserNamesItem2 = ");
-    expect(typecheckDiagnostics([file])).toEqual([]);
+  // Leaf-free output must not reference usage-gated helpers/types whose
+  // imports were (correctly) omitted — the typecheck programs above prove it
+  // compiles; this pins the mechanism.
+  it("leaf-free output omits BoundFieldProps in every backend", () => {
+    expect(plain.leafFree.code).not.toContain("BoundFieldProps");
+    expect(mui.leafFree.code).not.toContain("BoundFieldProps");
+    expect(shadcn.leafFree.code).not.toContain("BoundFieldProps");
   });
 });

@@ -1,10 +1,9 @@
 import type { ComponentProps } from "react";
 import { cn } from "../cn";
 
-export const Textarea = ({
-  className,
-  ...props
-}: ComponentProps<"textarea">) => (
+export type TextareaProps = Readonly<ComponentProps<"textarea">>;
+
+export const Textarea = ({ className, ...props }: TextareaProps) => (
   <textarea
     data-slot="textarea"
     className={cn(

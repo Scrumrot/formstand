@@ -3,10 +3,11 @@ import { CircleIcon } from "lucide-react";
 import { RadioGroup as RadioGroupPrimitive } from "radix-ui";
 import { cn } from "../cn";
 
-export const RadioGroup = ({
-  className,
-  ...props
-}: ComponentProps<typeof RadioGroupPrimitive.Root>) => (
+export type RadioGroupProps = Readonly<
+  ComponentProps<typeof RadioGroupPrimitive.Root>
+>;
+
+export const RadioGroup = ({ className, ...props }: RadioGroupProps) => (
   <RadioGroupPrimitive.Root
     data-slot="radio-group"
     // `group` lets the items react to aria-invalid set on the Root (where
@@ -16,10 +17,14 @@ export const RadioGroup = ({
   />
 );
 
+export type RadioGroupItemProps = Readonly<
+  ComponentProps<typeof RadioGroupPrimitive.Item>
+>;
+
 export const RadioGroupItem = ({
   className,
   ...props
-}: ComponentProps<typeof RadioGroupPrimitive.Item>) => (
+}: RadioGroupItemProps) => (
   <RadioGroupPrimitive.Item
     data-slot="radio-group-item"
     className={cn(

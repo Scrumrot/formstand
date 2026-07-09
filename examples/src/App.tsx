@@ -40,6 +40,24 @@ type Tab = Readonly<{
   render: () => ReactElement;
 }>;
 
+// The wrapper div is shadcn's MuiThemeBridge equivalent — the Tailwind theme
+// variables and the scoped preflight both key off .shadcn-scope. Every
+// shadcn demo goes through this helper so a new tab can't forget the scope
+// (an unwrapped demo renders unthemed and unreset).
+const shadcnTab = (
+  key: TabKey,
+  label: string,
+  Demo: () => ReactElement,
+): Tab => ({
+  key,
+  label,
+  render: () => (
+    <div className="shadcn-scope">
+      <Demo />
+    </div>
+  ),
+});
+
 const TABS: readonly Tab[] = [
   { key: "basic", label: "Basic + modes", render: () => <BasicForm /> },
   { key: "bound", label: "Bound fields", render: () => <BoundFieldsForm /> },
@@ -124,44 +142,10 @@ const TABS: readonly Tab[] = [
       </MuiThemeBridge>
     ),
   },
-  // The wrapper div is shadcn's MuiThemeBridge equivalent: the Tailwind
-  // theme variables and the scoped preflight both key off .shadcn-scope.
-  {
-    key: "shadSignup",
-    label: "shadcn: Signup",
-    render: () => (
-      <div className="shadcn-scope">
-        <ShadcnSignupForm />
-      </div>
-    ),
-  },
-  {
-    key: "shadCheckout",
-    label: "shadcn: Checkout",
-    render: () => (
-      <div className="shadcn-scope">
-        <ShadcnCheckoutForm />
-      </div>
-    ),
-  },
-  {
-    key: "shadSettings",
-    label: "shadcn: Settings",
-    render: () => (
-      <div className="shadcn-scope">
-        <ShadcnSettingsForm />
-      </div>
-    ),
-  },
-  {
-    key: "shadTeam",
-    label: "shadcn: Team",
-    render: () => (
-      <div className="shadcn-scope">
-        <ShadcnTeamForm />
-      </div>
-    ),
-  },
+  shadcnTab("shadSignup", "shadcn: Signup", ShadcnSignupForm),
+  shadcnTab("shadCheckout", "shadcn: Checkout", ShadcnCheckoutForm),
+  shadcnTab("shadSettings", "shadcn: Settings", ShadcnSettingsForm),
+  shadcnTab("shadTeam", "shadcn: Team", ShadcnTeamForm),
 ];
 
 export const App = () => {

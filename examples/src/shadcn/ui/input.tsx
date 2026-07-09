@@ -1,7 +1,9 @@
 import type { ComponentProps } from "react";
 import { cn } from "../cn";
 
-export const Input = ({ className, ...props }: ComponentProps<"input">) => (
+export type InputProps = Readonly<ComponentProps<"input">>;
+
+export const Input = ({ className, ...props }: InputProps) => (
   <input
     data-slot="input"
     className={cn(

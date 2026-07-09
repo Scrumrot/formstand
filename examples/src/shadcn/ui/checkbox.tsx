@@ -3,10 +3,11 @@ import { CheckIcon } from "lucide-react";
 import { Checkbox as CheckboxPrimitive } from "radix-ui";
 import { cn } from "../cn";
 
-export const Checkbox = ({
-  className,
-  ...props
-}: ComponentProps<typeof CheckboxPrimitive.Root>) => (
+export type CheckboxProps = Readonly<
+  ComponentProps<typeof CheckboxPrimitive.Root>
+>;
+
+export const Checkbox = ({ className, ...props }: CheckboxProps) => (
   <CheckboxPrimitive.Root
     data-slot="checkbox"
     className={cn(

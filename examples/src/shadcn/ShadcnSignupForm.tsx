@@ -1,9 +1,14 @@
 import { useState } from "react";
-import { useField, useForm, useIsSubmitting } from "formstand";
+import {
+  textInputProps,
+  useField,
+  useForm,
+  useIsSubmitting,
+} from "formstand";
 import { z } from "zod";
 import { useDemoForm } from "../demo/DemoShell";
 import { FieldError } from "./FieldError";
-import { shadcnCheckboxProps, shadcnInputProps } from "./shadcnAdapter";
+import { shadcnCheckboxProps } from "./shadcnAdapter";
 import { Button } from "./ui/button";
 import {
   Card,
@@ -80,7 +85,7 @@ export const ShadcnSignupForm = () => {
       <CardContent className="grid gap-4">
         <div className="grid gap-2">
           <Label htmlFor="signup-username">Username</Label>
-          <Input id="signup-username" {...shadcnInputProps(username)} />
+          <Input id="signup-username" {...textInputProps(username)} />
           {username.isValidating ? (
             <p className="text-sm text-muted-foreground">
               checking availability…
@@ -94,7 +99,7 @@ export const ShadcnSignupForm = () => {
           <Input
             id="signup-email"
             placeholder="you@example.com"
-            {...shadcnInputProps(email)}
+            {...textInputProps(email)}
           />
           <FieldError field={email} />
         </div>
@@ -103,7 +108,7 @@ export const ShadcnSignupForm = () => {
           <Input
             id="signup-password"
             type="password"
-            {...shadcnInputProps(password)}
+            {...textInputProps(password)}
           />
           <FieldError field={password} />
         </div>
@@ -112,7 +117,7 @@ export const ShadcnSignupForm = () => {
           <Input
             id="signup-confirm"
             type="password"
-            {...shadcnInputProps(confirm)}
+            {...textInputProps(confirm)}
           />
           <FieldError field={confirm} />
         </div>

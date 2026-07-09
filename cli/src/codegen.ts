@@ -1,12 +1,13 @@
 import { pascalCase } from "./casing";
 import { type FieldSpec, type NamedField, labelFromName } from "./ir";
 
-// Code emitters: zod schema source, initial values, and the two component
-// backends (plain HTML inputs bound via formstand's components, and a MUI v9
-// variant with an inlined adapter). Both backends share one IR walk and one
-// form scaffold (emitForm); a Backend supplies the leaf renderers, section
-// wrappers, and header imports. All emitters are pure string builders over
-// the IR.
+// Code emitters: zod schema source, initial values, and the three component
+// backends (plain HTML inputs bound via formstand's components; MUI v9 and
+// shadcn/ui variants with inlined adapters). All backends share one IR walk
+// and one form scaffold (emitForm); a Backend supplies the leaf renderers,
+// section wrappers, and header imports, and the two kit backends also share
+// their emitted snippets (fieldError helper, BoundFieldProps, the leaf
+// switch). All emitters are pure string builders over the IR.
 
 export type SchemaImport = Readonly<{
   // Local identifier the generated component uses for the schema.
@@ -612,6 +613,86 @@ export const emitPlainForm = (options: EmitFormOptions): string =>
   emitForm(plainBackend, options);
 
 // ---------------------------------------------------------------------------
+// Snippets shared by the component-kit backends (MUI + shadcn)
+// ---------------------------------------------------------------------------
+
+const hasLeafUsage = (usage: KindUsage): boolean =>
+  usage.string || usage.date || usage.number || usage.boolean || usage.enum;
+
+// The emitted first-error helper — one definition so the two generators
+// can't drift in error semantics.
+const FIELD_ERROR_HELPER: readonly string[] = [
+  "const fieldError = (",
+  "  field: Readonly<{ error: readonly string[] | undefined }>,",
+  "): string | undefined =>",
+  "  field.error !== undefined && field.error.length > 0",
+  "    ? field.error[0]",
+  "    : undefined;",
+];
+
+// Gated like the components that use it: BoundFieldProps references
+// FieldFormApi, whose import only exists when some leaf renders — an
+// unconditional type would emit non-compiling code for leaf-free schemas.
+const boundFieldProps = (usage: KindUsage): readonly string[] =>
+  hasLeafUsage(usage)
+    ? [
+        "",
+        "type BoundFieldProps = Readonly<{",
+        "  form: FieldFormApi;",
+        "  path: string;",
+        "  label: string;",
+        "}>;",
+      ]
+    : [];
+
+// Both kit backends emit identical Bound* elements per leaf kind; they
+// differ only in the date-picker TODO wording and which component binds a
+// boolean (MUI renders a Switch, shadcn a Checkbox).
+const boundLeaf =
+  (dateTodo: string, booleanField: string): Backend["leaf"] =>
+  (spec, attr, label, level) => {
+    const todo = todoComment(spec, level);
+    switch (spec.kind) {
+      case "string":
+        return [
+          ...todo,
+          `${ind(level)}<BoundTextField form={form} ${attr} ${jsxAttr("label", label)} />`,
+        ];
+      case "date":
+        return [
+          ...todo,
+          `${ind(level)}{/* TODO: ${dateTodo} */}`,
+          `${ind(level)}<BoundTextField form={form} ${attr} ${jsxAttr("label", label)} />`,
+        ];
+      case "number":
+        return [
+          ...todo,
+          `${ind(level)}<BoundNumberField form={form} ${attr} ${jsxAttr("label", label)} />`,
+        ];
+      case "boolean":
+        return [
+          ...todo,
+          `${ind(level)}<${booleanField} form={form} ${attr} ${jsxAttr("label", label)} />`,
+        ];
+      case "enum":
+        return [
+          ...todo,
+          `${ind(level)}<BoundSelectField`,
+          `${ind(level + 1)}form={form}`,
+          `${ind(level + 1)}${attr}`,
+          `${ind(level + 1)}${jsxAttr("label", label)}`,
+          `${ind(level + 1)}options={[${spec.options.map(q).join(", ")}]}`,
+          `${ind(level)}/>`,
+        ];
+      case "object":
+      case "array":
+        return [
+          `${ind(level)}{/* unreachable: containers render elsewhere */}`,
+        ];
+    }
+  };
+
+// ---------------------------------------------------------------------------
 // MUI backend (@mui/material v9)
 // ---------------------------------------------------------------------------
 
@@ -621,14 +702,6 @@ export const emitPlainForm = (options: EmitFormOptions): string =>
 
 const muiAdapterSection = (usage: KindUsage): string => {
   const needsError = usage.string || usage.date || usage.number || usage.enum;
-  const errorHelper = [
-    "const fieldError = (",
-    "  field: Readonly<{ error: readonly string[] | undefined }>,",
-    "): string | undefined =>",
-    "  field.error !== undefined && field.error.length > 0",
-    "    ? field.error[0]",
-    "    : undefined;",
-  ];
   const textAdapter = [
     "",
     "const muiTextFieldProps = (field: UseFieldReturn<string | null | undefined>) => ({",
@@ -683,7 +756,7 @@ const muiAdapterSection = (usage: KindUsage): string => {
   ];
   return [
     "// ---- formstand → MUI adapter ----------------------------------------------",
-    ...(needsError ? errorHelper : []),
+    ...(needsError ? FIELD_ERROR_HELPER : []),
     ...(usage.string || usage.date ? textAdapter : []),
     ...(usage.number ? numberAdapter : []),
     ...(usage.enum ? selectAdapter : []),
@@ -692,21 +765,7 @@ const muiAdapterSection = (usage: KindUsage): string => {
 };
 
 const muiBoundComponents = (usage: KindUsage): string => {
-  const hasLeaf =
-    usage.string || usage.date || usage.number || usage.boolean || usage.enum;
-  // Gated like the components that use it: BoundFieldProps references
-  // FieldFormApi, whose import only exists when some leaf renders — an
-  // unconditional type would emit non-compiling code for leaf-free schemas.
-  const propsType = hasLeaf
-    ? [
-        "",
-        "type BoundFieldProps = Readonly<{",
-        "  form: FieldFormApi;",
-        "  path: string;",
-        "  label: string;",
-        "}>;",
-      ]
-    : [];
+  const propsType = boundFieldProps(usage);
   const text = [
     "",
     "const BoundTextField = ({ form, path, label }: BoundFieldProps) => {",
@@ -762,50 +821,10 @@ const muiBoundComponents = (usage: KindUsage): string => {
   ].join("\n");
 };
 
-const muiLeaf = (
-  spec: FieldSpec,
-  attr: string,
-  label: string,
-  level: number,
-): readonly string[] => {
-  const todo = todoComment(spec, level);
-  switch (spec.kind) {
-    case "string":
-      return [
-        ...todo,
-        `${ind(level)}<BoundTextField form={form} ${attr} ${jsxAttr("label", label)} />`,
-      ];
-    case "date":
-      return [
-        ...todo,
-        `${ind(level)}{/* TODO: date input — consider @mui/x-date-pickers; this binds plain text */}`,
-        `${ind(level)}<BoundTextField form={form} ${attr} ${jsxAttr("label", label)} />`,
-      ];
-    case "number":
-      return [
-        ...todo,
-        `${ind(level)}<BoundNumberField form={form} ${attr} ${jsxAttr("label", label)} />`,
-      ];
-    case "boolean":
-      return [
-        ...todo,
-        `${ind(level)}<BoundSwitchField form={form} ${attr} ${jsxAttr("label", label)} />`,
-      ];
-    case "enum":
-      return [
-        ...todo,
-        `${ind(level)}<BoundSelectField`,
-        `${ind(level + 1)}form={form}`,
-        `${ind(level + 1)}${attr}`,
-        `${ind(level + 1)}${jsxAttr("label", label)}`,
-        `${ind(level + 1)}options={[${spec.options.map(q).join(", ")}]}`,
-        `${ind(level)}/>`,
-      ];
-    case "object":
-    case "array":
-      return [`${ind(level)}{/* unreachable: containers render elsewhere */}`];
-  }
-};
+const muiLeaf = boundLeaf(
+  "date input — consider @mui/x-date-pickers; this binds plain text",
+  "BoundSwitchField",
+);
 
 // Typography renders section headings: any addressable object field at any
 // depth needs it (array sections are covered by the arrays.length check).
@@ -827,8 +846,7 @@ const anyAddressableObjectField = (spec: FieldSpec): boolean => {
 
 const muiBackend: Backend = {
   header: (usage, arrays, root) => {
-    const hasLeaf =
-      usage.string || usage.number || usage.boolean || usage.date || usage.enum;
+    const hasLeaf = hasLeafUsage(usage);
     const muiImports = [
       "Box",
       "Button",
@@ -932,31 +950,31 @@ export const emitMuiForm = (options: EmitFormOptions): string =>
 // change events.
 
 const shadcnAdapterSection = (usage: KindUsage): string => {
-  const hasLeaf =
-    usage.string || usage.date || usage.number || usage.boolean || usage.enum;
+  const hasLeaf = hasLeafUsage(usage);
   const errorHelper = [
-    "const fieldError = (",
+    ...FIELD_ERROR_HELPER,
+    "",
+    "const ariaInvalid = (",
     "  field: Readonly<{ error: readonly string[] | undefined }>,",
-    "): string | undefined =>",
-    "  field.error !== undefined && field.error.length > 0",
-    "    ? field.error[0]",
-    "    : undefined;",
+    "): true | undefined => (fieldError(field) !== undefined ? true : undefined);",
     "",
     "const FieldError = ({",
     "  field,",
     "}: Readonly<{",
     "  field: Readonly<{ error: readonly string[] | undefined }>;",
-    "}>) =>",
-    "  fieldError(field) !== undefined ? (",
-    '    <p className="text-sm text-destructive">{fieldError(field)}</p>',
+    "}>) => {",
+    "  const message = fieldError(field);",
+    "  return message !== undefined ? (",
+    '    <p className="text-sm text-destructive">{message}</p>',
     "  ) : null;",
+    "};",
   ];
   const textAdapter = [
     "",
     "const shadcnTextInputProps = (field: UseFieldReturn<string | null | undefined>) => ({",
     "  name: field.path,",
     '  value: field.value ?? "",',
-    '  "aria-invalid": fieldError(field) !== undefined ? true : undefined,',
+    '  "aria-invalid": ariaInvalid(field),',
     "  onChange: (e: ChangeEvent<HTMLInputElement>) => {",
     "    const text = e.target.value;",
     '    field.setValue(text === "" && field.emptyValue === null ? null : text);',
@@ -970,7 +988,7 @@ const shadcnAdapterSection = (usage: KindUsage): string => {
     '  type: "number" as const,',
     "  name: field.path,",
     "  value: numberToInputText(field.value),",
-    '  "aria-invalid": fieldError(field) !== undefined ? true : undefined,',
+    '  "aria-invalid": ariaInvalid(field),',
     "  onChange: (e: ChangeEvent<HTMLInputElement>) => {",
     "    const parsed = parseNumberText(e.target.value);",
     '    field.setValue(parsed.kind === "number" ? parsed.value : field.emptyValue);',
@@ -996,7 +1014,7 @@ const shadcnAdapterSection = (usage: KindUsage): string => {
     "const shadcnCheckboxProps = (field: UseFieldReturn<boolean | null | undefined>) => ({",
     "  name: field.path,",
     "  checked: field.value ?? false,",
-    '  "aria-invalid": fieldError(field) !== undefined ? true : undefined,',
+    '  "aria-invalid": ariaInvalid(field),',
     '  onCheckedChange: (checked: boolean | "indeterminate") =>',
     "    field.setValue(checked === true),",
     "  onBlur: field.onBlur,",
@@ -1013,21 +1031,7 @@ const shadcnAdapterSection = (usage: KindUsage): string => {
 };
 
 const shadcnBoundComponents = (usage: KindUsage): string => {
-  const hasLeaf =
-    usage.string || usage.date || usage.number || usage.boolean || usage.enum;
-  // Gated like the components that use it: BoundFieldProps references
-  // FieldFormApi, whose import only exists when some leaf renders — an
-  // unconditional type would emit non-compiling code for leaf-free schemas.
-  const propsType = hasLeaf
-    ? [
-        "",
-        "type BoundFieldProps = Readonly<{",
-        "  form: FieldFormApi;",
-        "  path: string;",
-        "  label: string;",
-        "}>;",
-      ]
-    : [];
+  const propsType = boundFieldProps(usage);
   const text = [
     "",
     "const BoundTextField = ({ form, path, label }: BoundFieldProps) => {",
@@ -1070,7 +1074,7 @@ const shadcnBoundComponents = (usage: KindUsage): string => {
     "        <SelectTrigger",
     "          id={path}",
     '          className="w-full"',
-    "          aria-invalid={fieldError(field) !== undefined ? true : undefined}",
+    "          aria-invalid={ariaInvalid(field)}",
     "        >",
     "          <SelectValue placeholder={`Select ${label.toLowerCase()}`} />",
     "        </SelectTrigger>",
@@ -1111,55 +1115,14 @@ const shadcnBoundComponents = (usage: KindUsage): string => {
   ].join("\n");
 };
 
-const shadcnLeaf = (
-  spec: FieldSpec,
-  attr: string,
-  label: string,
-  level: number,
-): readonly string[] => {
-  const todo = todoComment(spec, level);
-  switch (spec.kind) {
-    case "string":
-      return [
-        ...todo,
-        `${ind(level)}<BoundTextField form={form} ${attr} ${jsxAttr("label", label)} />`,
-      ];
-    case "date":
-      return [
-        ...todo,
-        `${ind(level)}{/* TODO: date input — consider shadcn's Calendar-in-Popover pattern; this binds plain text */}`,
-        `${ind(level)}<BoundTextField form={form} ${attr} ${jsxAttr("label", label)} />`,
-      ];
-    case "number":
-      return [
-        ...todo,
-        `${ind(level)}<BoundNumberField form={form} ${attr} ${jsxAttr("label", label)} />`,
-      ];
-    case "boolean":
-      return [
-        ...todo,
-        `${ind(level)}<BoundCheckboxField form={form} ${attr} ${jsxAttr("label", label)} />`,
-      ];
-    case "enum":
-      return [
-        ...todo,
-        `${ind(level)}<BoundSelectField`,
-        `${ind(level + 1)}form={form}`,
-        `${ind(level + 1)}${attr}`,
-        `${ind(level + 1)}${jsxAttr("label", label)}`,
-        `${ind(level + 1)}options={[${spec.options.map(q).join(", ")}]}`,
-        `${ind(level)}/>`,
-      ];
-    case "object":
-    case "array":
-      return [`${ind(level)}{/* unreachable: containers render elsewhere */}`];
-  }
-};
+const shadcnLeaf = boundLeaf(
+  "date input — consider shadcn's Calendar-in-Popover pattern; this binds plain text",
+  "BoundCheckboxField",
+);
 
 const shadcnBackend: Backend = {
   header: (usage, arrays) => {
-    const hasLeaf =
-      usage.string || usage.number || usage.boolean || usage.date || usage.enum;
+    const hasLeaf = hasLeafUsage(usage);
     const formstandValueImports = [
       ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
       ...(hasLeaf ? ["useField"] : []),
