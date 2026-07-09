@@ -7,3 +7,7 @@ coverage
 .idea
 docs/.vitepress/dist
 docs/.vitepress/cache
+
+# Personal scratch space — working notes, not part of the playground
+# (remove this ignore when a recipe graduates into the app)
+examples/src/recipes/
