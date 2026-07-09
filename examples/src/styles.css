@@ -95,7 +95,7 @@ body {
   padding: 20px 20px 96px;
 }
 .content-inner {
-  max-width: 900px;
+  max-width: 100%;
 }
 .demo-title {
   margin: 0 0 14px;
@@ -143,9 +143,6 @@ body {
   .content {
     padding: 36px 48px 140px;
   }
-  .content-inner {
-    max-width: 1020px;
-  }
 }
 
 /* 4K / very wide: use the room without stretching line lengths. */
@@ -160,9 +157,6 @@ body {
   }
   .content {
     padding: 56px 96px 160px;
-  }
-  .content-inner {
-    max-width: 1380px;
   }
   .card {
     padding: 36px;
