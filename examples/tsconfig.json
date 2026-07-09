@@ -18,5 +18,8 @@
       "formstand": ["../src/index.ts"]
     }
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "vite.config.ts"],
+  // Personal scratch space (gitignored, see the root .gitignore): sketches
+  // there may be pseudocode and must not gate the build.
+  "exclude": ["src/recipes"]
 }

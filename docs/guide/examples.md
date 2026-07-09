@@ -7,6 +7,7 @@ Every feature has a working, interactive demo in the **[live playground](https:/
 | Basic + modes | The smallest real form, plus a live switcher for every validation mode (`onChange`/`onBlur`/`onSubmit`/`onTouched`/`all`) and `reValidateMode` | [BasicForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/BasicForm.tsx) |
 | Bound fields | All four shipped components — `TextField`, `NumberField`, `SelectField`, `CheckboxField` — with their a11y wiring, `validateOnMount`, a `useIsValid`-gated submit, and `focusFirstError` | [BoundFieldsForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/BoundFieldsForm.tsx) |
 | Form context | `createFormContext`: zero prop drilling with typed paths intact, all four flag hooks as a status bar, `useFormError`, and `adoptValues` as the post-save rebase | [ContextForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/ContextForm.tsx) |
+| Hooks factory | `createFormHooks(form, "invoice")`: a module-singleton form baked into exported hooks (`useInvoiceField`…) — no provider, no `form` prop anywhere | [HooksFactoryForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/HooksFactoryForm.tsx) |
 | Nested + submit | Nested object paths and the full `handleSubmit` flow | [NestedForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/NestedForm.tsx) |
 | Field array | `useFieldArray` basics: push, remove, reorder with stable row IDs | [ArrayForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/ArrayForm.tsx) |
 | Async | An `async .refine` username check with `debounceMs`, `isValidating` spinners, and race handling | [AsyncForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/AsyncForm.tsx) |
@@ -62,6 +63,10 @@ Every block below embeds the demo's actual source file at build time, so it can 
 
 ::: details Form context — ContextForm.tsx
 <<< ../../examples/src/forms/ContextForm.tsx
+:::
+
+::: details Hooks factory — HooksFactoryForm.tsx
+<<< ../../examples/src/forms/HooksFactoryForm.tsx
 :::
 
 ::: details Nested + submit — NestedForm.tsx

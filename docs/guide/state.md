@@ -156,7 +156,36 @@ const NameField = () => {
 };
 ```
 
-The factory pattern (one `createFormContext` call per form shape) carries the schema's type through the context, so children keep full path inference. `useFormContext` throws when used outside its matching `Provider`. For small trees, just passing `form` as a prop works fine; for a single app-wide form, a module-scope `createForm` also works.
+The factory pattern (one `createFormContext` call per form shape) carries the schema's type through the context, so children keep full path inference. `useFormContext` throws when used outside its matching `Provider`. For small trees, just passing `form` as a prop works fine; for a single app-wide form, a module-scope `createForm` also works — and pairs with `createFormHooks` below.
+
+## Pre-wired hooks: `createFormHooks`
+
+For a form that is a genuine module-level singleton — one instance for the app's lifetime, like settings or a global compose box — skip the provider entirely: bake the form into the hooks once and export them as a domain API.
+
+```tsx
+import { createForm, createFormHooks } from "formstand";
+
+const form = createForm(invoiceSchema, { initialValues, mode: "onBlur" });
+
+export const {
+  useInvoiceField,
+  useInvoiceFieldArray,
+  useInvoiceSelector,
+  useInvoiceIsDirty,
+} = createFormHooks(form, "invoice");
+
+// Anywhere in the app — no provider, no form prop:
+const CustomerField = () => {
+  const customer = useInvoiceField("customer"); // path inference intact
+  return <input {...textInputProps(customer)} />;
+};
+```
+
+The optional name is baked into the hook names at both the type level and runtime (`"invoice"` → `useInvoiceField`, `useInvoiceSelector`, `useInvoiceIsDirty`…), so a typo'd destructure is a compile error; omit it for unprefixed names (`useField`, `useSelector`, …). Every returned hook keeps its unbound signature minus the `form` argument — typed paths, item inference in `useInvoiceFieldArray`, path-scoped flags.
+
+::: warning A singleton is a singleton
+The module-level form never unmounts: its state persists across route changes until you `reset()` it, and under SSR (Next.js and friends) module scope is shared **across requests** on the server — keep `createFormHooks` forms to client-only modules, and use `useForm` + `createFormContext` for anything with a per-mount lifecycle.
+:::
 
 ## Next
 

@@ -126,7 +126,7 @@ const reconcileIds = (prev: IdState, nextItems: readonly unknown[]): IdState => 
 // for arrays reached through optional ancestors, so strip that before
 // extracting; a non-array path yields `never`, which makes every write
 // (`push(never)`) an immediate error instead of a silently-`unknown` bind.
-type ArrayItemOf<T> = [NonNullable<T>] extends [readonly (infer U)[]]
+export type ArrayItemOf<T> = [NonNullable<T>] extends [readonly (infer U)[]]
   ? U
   : never;
 

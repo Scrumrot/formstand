@@ -130,6 +130,7 @@ type FieldValidationResult =
 | `useIsSubmitting` | `useIsSubmitting(form): boolean` | `state.isSubmitting` |
 | `useSubmitCount` | `useSubmitCount(form): number` | `state.submitCount` |
 | `createFormContext` | `createFormContext<TSchema>(): { Provider, useFormContext }` | typed context factory for prop-drilling-free forms |
+| `createFormHooks` | `createFormHooks(form, name?): FormHooks` | every hook pre-wired to one form, with the name baked into the hook names (`"invoice"` → `useInvoiceField`…) — the provider-free way to share a module-singleton form; see [State](../guide/state#pre-wired-hooks-createformhooks) |
 
 The pre-0.2 names `useFormState` / `useFormStateShallow` were renamed to `useFormSelector` / `useFormSelectorShallow` (React DOM ships its own, deprecated, `useFormState` and auto-imports regularly grabbed the wrong one); the deprecated aliases were removed in 0.4.0.
 

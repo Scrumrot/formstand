@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `createFormHooks(form, name?)` — every hook pre-wired to one form, the
+  provider-free way to share a module-singleton form. The optional name is
+  baked into the hook names at the type level and at runtime
+  (`createFormHooks(form, "invoice")` → `useInvoiceField`,
+  `useInvoiceFieldArray`, `useInvoiceSelector`, `useInvoiceSelectorShallow`,
+  `useInvoiceError`, `useInvoiceIsDirty`, `useInvoiceIsValid`,
+  `useInvoiceIsSubmitting`, `useInvoiceSubmitCount`), so a typo'd
+  destructure is a compile error; omit the name for unprefixed keys. Every
+  bound hook keeps its unbound signature minus the `form` argument — typed
+  paths, array item inference, path-scoped flags. Documented alongside
+  `createFormContext` with the singleton/SSR caveat; new "Hooks factory"
+  playground tab.
+
 ## 0.6.0 — 2026-07-09
 
 ### Added

@@ -35,6 +35,14 @@ export type { ValidationMode, ValidationTrigger } from "./core/mode";
 
 export { useForm } from "./react/useForm";
 export { createFormContext } from "./react/FormContext";
+export { createFormHooks } from "./react/createFormHooks";
+export type {
+  BoundUseField,
+  BoundUseFieldArray,
+  BoundUseFlag,
+  BoundUseSelector,
+  FormHooks,
+} from "./react/createFormHooks";
 export type {
   FormProviderProps,
   FormContextApi,

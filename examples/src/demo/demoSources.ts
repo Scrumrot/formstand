@@ -12,6 +12,7 @@ import contextSrc from "../forms/ContextForm.tsx?raw";
 import dependentSrc from "../forms/DependentFieldsForm.tsx?raw";
 import derivedSrc from "../forms/DerivedFieldForm.tsx?raw";
 import fileSrc from "../forms/FileUploadForm.tsx?raw";
+import hooksFactorySrc from "../forms/HooksFactoryForm.tsx?raw";
 import invoiceSrc from "../forms/InvoiceForm.tsx?raw";
 import nestedArraysSrc from "../forms/NestedArraysForm.tsx?raw";
 import nestedSrc from "../forms/NestedForm.tsx?raw";
@@ -44,6 +45,7 @@ const sources = {
   basic: basicSrc,
   bound: boundSrc,
   context: contextSrc,
+  hooksFactory: hooksFactorySrc,
   nested: nestedSrc,
   array: arraySrc,
   async: asyncSrc,

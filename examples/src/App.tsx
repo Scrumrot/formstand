@@ -11,6 +11,7 @@ import { ContextForm } from "./forms/ContextForm";
 import { DependentFieldsForm } from "./forms/DependentFieldsForm";
 import { DerivedFieldForm } from "./forms/DerivedFieldForm";
 import { FileUploadForm } from "./forms/FileUploadForm";
+import { HooksFactoryForm } from "./forms/HooksFactoryForm";
 import { InvoiceForm } from "./forms/InvoiceForm";
 import { NestedArraysForm } from "./forms/NestedArraysForm";
 import { NestedForm } from "./forms/NestedForm";
@@ -62,6 +63,11 @@ const TABS: readonly Tab[] = [
   { key: "basic", label: "Basic + modes", render: () => <BasicForm /> },
   { key: "bound", label: "Bound fields", render: () => <BoundFieldsForm /> },
   { key: "context", label: "Form context", render: () => <ContextForm /> },
+  {
+    key: "hooksFactory",
+    label: "Hooks factory",
+    render: () => <HooksFactoryForm />,
+  },
   { key: "nested", label: "Nested + submit", render: () => <NestedForm /> },
   { key: "array", label: "Field array", render: () => <ArrayForm /> },
   { key: "async", label: "Async", render: () => <AsyncForm /> },
