@@ -215,7 +215,11 @@ export const App = () => {
   return (
     <div className="shell">
       <aside className="sidebar">
-      <div className="brand">
+      <a
+        className="brand"
+        href="https://scrumrot.github.io/formstand/"
+        title="formstand docs"
+      >
         {/* The mark: a form (with its green check) on a music stand. */}
         <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
           <g
@@ -242,7 +246,7 @@ export const App = () => {
         </svg>
         <h1>formstand</h1>
         <span className="brand-badge">playground</span>
-      </div>
+      </a>
 
       <nav className="nav" aria-label="Demos">
         {GROUPS.map((group) => (
@@ -276,7 +280,7 @@ export const App = () => {
         <h2 className="demo-title">{current?.label ?? ""}</h2>
         <div className="card">
           {current !== undefined ? (
-            <DemoShell key={current.key} source={DEMO_SOURCES[current.key]}>
+            <DemoShell key={current.key} files={DEMO_SOURCES[current.key]}>
               {current.render()}
             </DemoShell>
           ) : null}

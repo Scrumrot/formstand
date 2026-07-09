@@ -21,6 +21,7 @@ export default defineConfig({
       "zod",
       "@mui/material",
       "@mui/icons-material",
+      "@mui/x-tree-view",
       "@emotion/react",
       "@emotion/styled",
       "radix-ui",

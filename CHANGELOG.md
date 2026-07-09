@@ -11,6 +11,11 @@
   through HD to 4K; on mobile the nav becomes wrapping chips above the
   content. `/guide/` on the docs site now lands on a guide index instead
   of a 404.
+- View state / View code move to a panel on the demo's right (stacked
+  below on narrow screens), toggled by the same two buttons; multi-file
+  demos (Onboarding) get a file-tree navigator (@mui/x-tree-view with
+  folder/file icons) opening on hooks.ts; the sidebar brand links back to
+  the docs and stays pinned while the demo list scrolls.
 - The Perf demo registers its form like every other tab, so View state
   works (the shell only mounts the panel while open, so a closed panel
   costs the benchmark nothing — the copy says to close it while running).

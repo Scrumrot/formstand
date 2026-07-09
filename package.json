@@ -64,6 +64,7 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^9.2.0",
     "@mui/material": "^9.2.0",
+    "@mui/x-tree-view": "^9.9.0",
     "@testing-library/react": "^16.1.0",
     "@types/node": "^26.1.0",
     "@types/prismjs": "^1.26.6",

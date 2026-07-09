@@ -41,9 +41,16 @@ const stripHarness = (source: string): string =>
     .filter((line) => !line.includes("useDemoForm"))
     .join("\n");
 
-// The Onboarding demo is a whole feature module (schema/types/hooks +
-// per-field and per-section files), so its "View code" panel concatenates
-// every file with a banner, in reading order.
+// Every demo's source is a file list: single-file demos hold one entry,
+// module demos (Onboarding) hold the whole folder — the shell shows a file
+// tree when there is more than one.
+export type DemoFile = Readonly<{ path: string; source: string }>;
+
+const single = (path: string, raw: string): readonly DemoFile[] => [
+  { path, source: stripHarness(raw) },
+];
+
+// Reading order for the Onboarding module's file tree.
 const ONBOARDING_ORDER = [
   "schema.ts",
   "types.ts",
@@ -61,62 +68,59 @@ const onboardingRank = (path: string): number => {
   return index === -1 ? ONBOARDING_ORDER.length : index;
 };
 
-const onboardingSrc = Object.entries(
+const onboardingFiles: readonly DemoFile[] = Object.entries(
   import.meta.glob("../forms/OnboardingForm/**/*.{ts,tsx}", {
     query: "?raw",
     import: "default",
     eager: true,
   }),
 )
-  .map(([path, src]) => ({
+  .map(([path, raw]) => ({
     path: path.replace("../forms/OnboardingForm/", ""),
-    src,
+    source: stripHarness(raw),
   }))
   .sort(
     (a, b) =>
       onboardingRank(a.path) - onboardingRank(b.path) ||
       a.path.localeCompare(b.path),
-  )
-  .map(({ path, src }) => `// ────────── ${path}\n${src}`)
-  .join("\n");
+  );
 
 const sources = {
-  basic: basicSrc,
-  bound: boundSrc,
-  context: contextSrc,
-  hooksFactory: hooksFactorySrc,
-  onboarding: onboardingSrc,
-  nested: nestedSrc,
-  array: arraySrc,
-  async: asyncSrc,
-  wizard: wizardSrc,
-  conditional: conditionalSrc,
-  invoice: invoiceSrc,
-  nestedArrays: nestedArraysSrc,
-  server: serverSrc,
-  autosave: autosaveSrc,
-  dependent: dependentSrc,
-  optimistic: optimisticSrc,
-  file: fileSrc,
-  derived: derivedSrc,
-  tag: tagSrc,
-  perf: perfSrc,
-  muiCheckout: muiCheckoutSrc,
-  muiJob: muiJobSrc,
-  muiInvoice: muiInvoiceSrc,
-  muiSettings: muiSettingsSrc,
-  muiSurvey: muiSurveySrc,
-  shadSignup: shadSignupSrc,
-  shadCheckout: shadCheckoutSrc,
-  shadSettings: shadSettingsSrc,
-  shadTeam: shadTeamSrc,
+  basic: single("BasicForm.tsx", basicSrc),
+  bound: single("BoundFieldsForm.tsx", boundSrc),
+  context: single("ContextForm.tsx", contextSrc),
+  hooksFactory: single("HooksFactoryForm.tsx", hooksFactorySrc),
+  onboarding: onboardingFiles,
+  nested: single("NestedForm.tsx", nestedSrc),
+  array: single("ArrayForm.tsx", arraySrc),
+  async: single("AsyncForm.tsx", asyncSrc),
+  wizard: single("WizardForm.tsx", wizardSrc),
+  conditional: single("ConditionalForm.tsx", conditionalSrc),
+  invoice: single("InvoiceForm.tsx", invoiceSrc),
+  nestedArrays: single("NestedArraysForm.tsx", nestedArraysSrc),
+  server: single("ServerErrorsForm.tsx", serverSrc),
+  autosave: single("AutosaveForm.tsx", autosaveSrc),
+  dependent: single("DependentFieldsForm.tsx", dependentSrc),
+  optimistic: single("OptimisticForm.tsx", optimisticSrc),
+  file: single("FileUploadForm.tsx", fileSrc),
+  derived: single("DerivedFieldForm.tsx", derivedSrc),
+  tag: single("TagInputForm.tsx", tagSrc),
+  perf: single("PerfBenchmarkForm.tsx", perfSrc),
+  muiCheckout: single("MuiCheckoutWizard.tsx", muiCheckoutSrc),
+  muiJob: single("MuiJobApplication.tsx", muiJobSrc),
+  muiInvoice: single("MuiInvoiceBuilder.tsx", muiInvoiceSrc),
+  muiSettings: single("MuiProfileSettings.tsx", muiSettingsSrc),
+  muiSurvey: single("MuiSurveyBuilder.tsx", muiSurveySrc),
+  shadSignup: single("ShadcnSignupForm.tsx", shadSignupSrc),
+  shadCheckout: single("ShadcnCheckoutForm.tsx", shadCheckoutSrc),
+  shadSettings: single("ShadcnSettingsForm.tsx", shadSettingsSrc),
+  shadTeam: single("ShadcnTeamForm.tsx", shadTeamSrc),
 } as const;
 
 // App.tsx derives its TabKey from this map, so the tab list and the source
 // map cannot drift.
 export type DemoSourceKey = keyof typeof sources;
 
-export const DEMO_SOURCES: Readonly<Record<DemoSourceKey, string>> =
-  Object.fromEntries(
-    Object.entries(sources).map(([key, src]) => [key, stripHarness(src)]),
-  ) as Record<DemoSourceKey, string>;
+export const DEMO_SOURCES: Readonly<
+  Record<DemoSourceKey, readonly DemoFile[]>
+> = sources;
