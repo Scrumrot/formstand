@@ -13,7 +13,13 @@ const statePres = (card: HTMLElement): readonly HTMLElement[] =>
 // React error #185) fails CI instead of shipping a blank page. One walk
 // covers rendering AND the shell's View code / View state toggles.
 describe("examples playground smoke test", () => {
-  it("every tab renders content and has working View code / View state toggles", () => {
+  // Deliberately heavy: 27 tabs of full component trees (MUI + Radix)
+  // rendered twice each under StrictMode, plus both shell toggles — CI
+  // runners with V8 coverage instrumentation blow the default 5s.
+  it(
+    "every tab renders content and has working View code / View state toggles",
+    { timeout: 30_000 },
+    () => {
     render(
       <StrictMode>
         <App />
@@ -73,5 +79,6 @@ describe("examples playground smoke test", () => {
       fireEvent.click(stateButton);
       expect(statePres(card as HTMLElement)).toHaveLength(0);
     });
-  });
+    },
+  );
 });
