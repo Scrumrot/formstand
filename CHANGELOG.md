@@ -4,6 +4,9 @@
 
 ### Docs & examples (no package changes)
 
+- A "CLI command builder" tab: a formstand form (cross-field superRefine,
+  conditional fields) whose live-updating formstand-gen command line is
+  useFormSelector-derived state, with a copy button.
 - A "Generated" playground group whose Onboarding tab is formstand-gen's
   untouched `--layout module --ui mui` output for the Onboarding schema —
   CI regenerates it and fails on drift, so the demo is provably what the

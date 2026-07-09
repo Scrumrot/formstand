@@ -10,6 +10,7 @@ import { AsyncForm } from "./forms/AsyncForm";
 import { AutosaveForm } from "./forms/AutosaveForm";
 import { BasicForm } from "./forms/BasicForm";
 import { BoundFieldsForm } from "./forms/BoundFieldsForm";
+import { CliCommandBuilder } from "./forms/CliCommandBuilder";
 import { ConditionalForm } from "./forms/ConditionalForm";
 import { ContextForm } from "./forms/ContextForm";
 import { DependentFieldsForm } from "./forms/DependentFieldsForm";
@@ -187,6 +188,11 @@ const TABS: readonly Tab[] = [
   shadcnTab("shadTeam", "shadcn: Team", ShadcnTeamForm),
   shadcnTab("onboardingShadcn", "shadcn: Onboarding", ShadcnOnboardingForm),
   {
+    key: "cliCommand",
+    label: "CLI command builder",
+    render: () => <CliCommandBuilder />,
+  },
+  {
     key: "genMui",
     label: "Onboarding (CLI output)",
     render: () => (
@@ -239,6 +245,7 @@ const GROUP_OF: Readonly<Record<TabKey, GroupTitle>> = {
   shadTeam: "shadcn/ui",
   onboardingShadcn: "shadcn/ui",
   genMui: "Generated",
+  cliCommand: "Generated",
 };
 
 const GROUP_TITLES: readonly GroupTitle[] = [

@@ -7,6 +7,7 @@ import asyncSrc from "../forms/AsyncForm.tsx?raw";
 import autosaveSrc from "../forms/AutosaveForm.tsx?raw";
 import basicSrc from "../forms/BasicForm.tsx?raw";
 import boundSrc from "../forms/BoundFieldsForm.tsx?raw";
+import cliCommandSrc from "../forms/CliCommandBuilder.tsx?raw";
 import conditionalSrc from "../forms/ConditionalForm.tsx?raw";
 import contextSrc from "../forms/ContextForm.tsx?raw";
 import dependentSrc from "../forms/DependentFieldsForm.tsx?raw";
@@ -148,6 +149,7 @@ const sources = {
   muiSurvey: single("MuiSurveyBuilder.tsx", muiSurveySrc),
   onboardingMui: onboardingMuiFiles,
   genMui: generatedMuiFiles,
+  cliCommand: single("CliCommandBuilder.tsx", cliCommandSrc),
   shadSignup: single("ShadcnSignupForm.tsx", shadSignupSrc),
   shadCheckout: single("ShadcnCheckoutForm.tsx", shadCheckoutSrc),
   shadSettings: single("ShadcnSettingsForm.tsx", shadSettingsSrc),

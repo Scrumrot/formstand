@@ -327,6 +327,19 @@ button.secondary:hover:not([disabled]) {
   align-items: center;
   margin-bottom: 8px;
 }
+/* The command builder's live command line — same terminal look as the
+ * state dump, but its own class so the shell's panel assertions (and
+ * animation) don't apply to demo content. */
+.command-line {
+  background: #07090d;
+  border: 1px solid #1f2530;
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: #c3cbd9;
+  word-break: break-all;
+}
 .state-dump {
   animation: fs-fade 0.2s ease-out both;
   margin-top: 24px;
