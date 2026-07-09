@@ -1,6 +1,6 @@
 # Changelog
 
-## formstand-cli Unreleased
+## formstand-cli 0.2.2 — 2026-07-09
 
 - Generated array hooks drop the explicit item type
   (`useFieldArray(form, "items")`): formstand ≥ 0.5 infers it from the
