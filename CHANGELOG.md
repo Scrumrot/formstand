@@ -2,19 +2,6 @@
 
 ## Unreleased
 
-### formstand-cli
-
-- `--sections flat|panel|collapsible` and `--columns 1|2|3`: minimal visual
-  layout options, working with both `--layout single` and `--layout module`
-  and all three uis. Sections render as flat headings (default, unchanged
-  output), bordered panels, or collapsible sections; fields inside each
-  section flow into 1–3 evenly spaced columns, with nested sections
-  spanning the full row. Each ui speaks its own dialect: inline styles for
-  `plain` (`<details>`/`<summary>` when collapsible), `Card`/`Accordion` +
-  `sx` grids for `mui`, Tailwind classes (`md:grid-cols-2`,
-  `bg-card … shadow-sm`, `<details>`) for `shadcn`. The defaults emit
-  byte-identical output to 0.4.0.
-
 ### Docs & examples (no package changes)
 
 - The CLI command builder gains Sections and Field columns selects, and the
@@ -61,6 +48,21 @@
   costs the benchmark nothing — the copy says to close it while running).
   The benchmark writes `field0` instead of the mid-grid field, so the
   change is visible without scrolling.
+
+## formstand-cli 0.5.0 — 2026-07-09
+
+### Added
+
+- `--sections flat|panel|collapsible` and `--columns 1|2|3`: minimal visual
+  layout options, working with both `--layout single` and `--layout module`
+  and all three uis. Sections render as flat headings (default, unchanged
+  output), bordered panels, or collapsible sections; fields inside each
+  section flow into 1–3 evenly spaced columns, with nested sections
+  spanning the full row. Each ui speaks its own dialect: inline styles for
+  `plain` (`<details>`/`<summary>` when collapsible), `Card`/`Accordion` +
+  `sx` grids for `mui`, Tailwind classes (`md:grid-cols-2`,
+  `bg-card … shadow-sm`, `<details>`) for `shadcn`. The defaults emit
+  byte-identical output to 0.4.0.
 
 ## formstand-cli 0.4.0 — 2026-07-09
 
