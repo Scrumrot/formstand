@@ -14,6 +14,16 @@
   Emitted kit modules are typechecked in CI against the MUI stub and both
   the shadcn stub and the repo's real Radix components.
 
+### Docs & examples (no package changes)
+
+- Brand pass on the docs site and playground: the formstand mark (a form
+  with its green check, resting on a music stand) as logo and favicon, a
+  brass/ink palette replacing the stock VitePress indigo, hand-drawn SVG
+  feature icons replacing the emoji, and restrained motion (hero float,
+  card lift, tab/button transitions, demo fade-in) — all disabled under
+  prefers-reduced-motion. The playground gains a branded header and
+  focus-visible states.
+
 ## formstand-cli 0.3.0 — 2026-07-09
 
 ### Added

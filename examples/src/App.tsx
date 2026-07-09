@@ -166,7 +166,34 @@ export const App = () => {
 
   return (
     <div className="layout">
-      <h1>formstand</h1>
+      <div className="brand">
+        {/* The mark: a form (with its green check) on a music stand. */}
+        <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
+          <g
+            stroke="#D99A3D"
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <rect x="12" y="7" width="40" height="29" rx="6" />
+            <path d="M20 17h16" />
+            <path d="M20 26h9" />
+            <path d="M32 36v13" />
+            <path d="M32 49l-11 9" />
+            <path d="M32 49l11 9" />
+            <path d="M32 49v9" />
+          </g>
+          <path
+            d="M37 25l4 4 7.5-8.5"
+            stroke="#86C166"
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <h1>formstand</h1>
+        <span className="brand-badge">playground</span>
+      </div>
       <p className="subtitle">
         Interactive playground — every demo runs against the real library.
         The source for each tab lives in{" "}

@@ -21,6 +21,7 @@ export default defineConfig({
   lastUpdated: true,
   sitemap: { hostname: "https://scrumrot.github.io/formstand/" },
   themeConfig: {
+    logo: { src: "/logo.svg", alt: "formstand" },
     editLink: {
       pattern: "https://github.com/Scrumrot/formstand/edit/main/docs/:path",
       text: "Edit this page on GitHub",

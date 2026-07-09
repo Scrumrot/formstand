@@ -1,0 +1,137 @@
+/*
+ * formstand brand layer over the default VitePress theme.
+ *
+ * Identity: "a form on a music stand" — brass strokes (#d99a3d family) with
+ * a sap-green check (#86c166) for anything that means "valid". Motion is
+ * deliberate and small: one slow hero float, lift-on-hover cards, and
+ * color/transform transitions — all disabled under prefers-reduced-motion.
+ */
+
+/* ---- palette -------------------------------------------------------- */
+
+:root {
+  /* brass, darkened for contrast on light backgrounds */
+  --vp-c-brand-1: #a06d1f;
+  --vp-c-brand-2: #8f5f18;
+  --vp-c-brand-3: #7c5213;
+  --vp-c-brand-soft: rgba(217, 154, 61, 0.16);
+  --fs-check: #4e8a2e;
+}
+
+.dark {
+  --vp-c-brand-1: #e2a94e;
+  --vp-c-brand-2: #d99a3d;
+  --vp-c-brand-3: #c0842c;
+  --vp-c-brand-soft: rgba(226, 169, 78, 0.16);
+  --fs-check: #86c166;
+}
+
+/* ---- home hero ------------------------------------------------------ */
+
+:root {
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(
+    115deg,
+    #e2a94e 20%,
+    #c96f2f 90%
+  );
+  --vp-home-hero-image-background-image: radial-gradient(
+    circle,
+    rgba(217, 154, 61, 0.38) 0%,
+    rgba(134, 193, 102, 0.14) 45%,
+    transparent 65%
+  );
+  --vp-home-hero-image-filter: blur(48px);
+}
+
+/* The mark drifts like a stand being set down — slow enough to feel calm. */
+.VPHero .image-src {
+  animation: fs-hero-float 7s ease-in-out infinite;
+}
+
+@keyframes fs-hero-float {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) translateY(0);
+  }
+  50% {
+    transform: translate(-50%, -50%) translateY(-8px);
+  }
+}
+
+/* ---- feature cards --------------------------------------------------- */
+
+.VPFeature {
+  border: 1px solid var(--vp-c-bg-soft);
+  transition:
+    border-color 0.25s ease,
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.VPFeature:hover {
+  border-color: var(--vp-c-brand-1);
+  transform: translateY(-3px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
+}
+
+.VPFeature .icon {
+  background-color: var(--vp-c-brand-soft);
+  border-radius: 8px;
+}
+
+/* ---- chrome details --------------------------------------------------- */
+
+/* Nav logo breathes a little on hover. */
+.VPNavBarTitle .logo {
+  transition: transform 0.25s ease;
+}
+
+.VPNavBarTitle:hover .logo {
+  transform: translateY(-1px) rotate(-3deg);
+}
+
+/* Sidebar active item gets the brass edge. */
+.VPSidebarItem.is-active > .item > .link > .text {
+  color: var(--vp-c-brand-1);
+}
+
+/* Buttons keep the default sizes but move with intent. */
+.VPButton {
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.15s ease;
+}
+
+.VPButton:hover {
+  transform: translateY(-1px);
+}
+
+.VPButton:active {
+  transform: translateY(0);
+}
+
+/* "Tip" custom blocks read as validation passing. */
+.custom-block.tip {
+  border-color: var(--fs-check);
+}
+
+/* ---- motion opt-out --------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .VPHero .image-src {
+    animation: none;
+  }
+
+  .VPFeature,
+  .VPFeature:hover,
+  .VPButton,
+  .VPButton:hover,
+  .VPNavBarTitle .logo,
+  .VPNavBarTitle:hover .logo {
+    transition: none;
+    transform: none;
+  }
+}
