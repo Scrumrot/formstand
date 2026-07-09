@@ -4,6 +4,11 @@
 
 ### Docs & examples (no package changes)
 
+- A "Generated" playground group whose Onboarding tab is formstand-gen's
+  untouched `--layout module --ui mui` output for the Onboarding schema —
+  CI regenerates it and fails on drift, so the demo is provably what the
+  current CLI emits (scripts/generate-cli-demos.mjs).
+
 - MUI and shadcn variants of the Onboarding feature module (31 demos now):
   same shared schema, option lists, and blank draft as the plain module
   (re-exported, so the three can't drift), each with its own form instance

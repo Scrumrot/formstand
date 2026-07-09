@@ -55,6 +55,7 @@ const MODULE_ORDER = [
   "schema.ts",
   "types.ts",
   "hooks.ts",
+  "adapter.",
   "fields/",
   "sections/",
   "OnboardingForm.tsx",
@@ -110,6 +111,15 @@ const onboardingShadcnFiles = moduleFiles(
   "../shadcn/OnboardingForm/",
 );
 
+const generatedMuiFiles = moduleFiles(
+  import.meta.glob("../generated/OnboardingForm/**/*.{ts,tsx}", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }),
+  "../generated/OnboardingForm/",
+);
+
 const sources = {
   basic: single("BasicForm.tsx", basicSrc),
   bound: single("BoundFieldsForm.tsx", boundSrc),
@@ -137,6 +147,7 @@ const sources = {
   muiSettings: single("MuiProfileSettings.tsx", muiSettingsSrc),
   muiSurvey: single("MuiSurveyBuilder.tsx", muiSurveySrc),
   onboardingMui: onboardingMuiFiles,
+  genMui: generatedMuiFiles,
   shadSignup: single("ShadcnSignupForm.tsx", shadSignupSrc),
   shadCheckout: single("ShadcnCheckoutForm.tsx", shadCheckoutSrc),
   shadSettings: single("ShadcnSettingsForm.tsx", shadSettingsSrc),

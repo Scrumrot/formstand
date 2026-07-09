@@ -3,7 +3,7 @@ import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import FolderRoundedIcon from "@mui/icons-material/FolderRounded";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
-import { DemoShell } from "./demo/DemoShell";
+import { DemoShell, useDemoForm } from "./demo/DemoShell";
 import { DEMO_SOURCES, type DemoSourceKey } from "./demo/demoSources";
 import { ArrayForm } from "./forms/ArrayForm";
 import { AsyncForm } from "./forms/AsyncForm";
@@ -15,6 +15,10 @@ import { ContextForm } from "./forms/ContextForm";
 import { DependentFieldsForm } from "./forms/DependentFieldsForm";
 import { DerivedFieldForm } from "./forms/DerivedFieldForm";
 import { FileUploadForm } from "./forms/FileUploadForm";
+import {
+  OnboardingForm as GeneratedOnboardingForm,
+  onboardingForm as generatedOnboardingForm,
+} from "./generated/OnboardingForm";
 import { HooksFactoryForm } from "./forms/HooksFactoryForm";
 import { OnboardingForm } from "./forms/OnboardingForm";
 import { InvoiceForm } from "./forms/InvoiceForm";
@@ -65,6 +69,14 @@ const shadcnTab = (
     </div>
   ),
 });
+
+// The generated module ships without the playground harness (it's the
+// CLI's untouched output), so this wrapper registers its form with the
+// shell to power the View state panel.
+const GeneratedOnboardingDemo = () => {
+  useDemoForm(generatedOnboardingForm);
+  return <GeneratedOnboardingForm />;
+};
 
 const TABS: readonly Tab[] = [
   { key: "basic", label: "Basic + modes", render: () => <BasicForm /> },
@@ -174,9 +186,23 @@ const TABS: readonly Tab[] = [
   shadcnTab("shadSettings", "shadcn: Settings", ShadcnSettingsForm),
   shadcnTab("shadTeam", "shadcn: Team", ShadcnTeamForm),
   shadcnTab("onboardingShadcn", "shadcn: Onboarding", ShadcnOnboardingForm),
+  {
+    key: "genMui",
+    label: "Onboarding (CLI output)",
+    render: () => (
+      <MuiThemeBridge>
+        <GeneratedOnboardingDemo />
+      </MuiThemeBridge>
+    ),
+  },
 ];
 
-type GroupTitle = "Core" | "Patterns" | "Material UI" | "shadcn/ui";
+type GroupTitle =
+  | "Core"
+  | "Patterns"
+  | "Material UI"
+  | "shadcn/ui"
+  | "Generated";
 
 // Exhaustive over TabKey on purpose: a new demo that isn't assigned a
 // sidebar group is a compile error, not a missing nav entry.
@@ -212,6 +238,7 @@ const GROUP_OF: Readonly<Record<TabKey, GroupTitle>> = {
   shadSettings: "shadcn/ui",
   shadTeam: "shadcn/ui",
   onboardingShadcn: "shadcn/ui",
+  genMui: "Generated",
 };
 
 const GROUP_TITLES: readonly GroupTitle[] = [
@@ -219,6 +246,7 @@ const GROUP_TITLES: readonly GroupTitle[] = [
   "Patterns",
   "Material UI",
   "shadcn/ui",
+  "Generated",
 ];
 
 const GROUPS = GROUP_TITLES.map((title) => ({

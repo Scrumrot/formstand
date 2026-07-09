@@ -68,3 +68,9 @@ jobs:
       - name: CLI typecheck, test, build
         run: npm run typecheck && npm test && npm run build
         working-directory: cli
+
+      # The "Generated" playground tab must be exactly what the current CLI
+      # emits — regenerate and fail on drift, so the demo can't quietly go
+      # stale as the emitters evolve.
+      - name: Verify generated demos match the CLI's output
+        run: node scripts/generate-cli-demos.mjs && git diff --exit-code examples/src/generated
