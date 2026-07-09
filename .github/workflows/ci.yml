@@ -54,6 +54,13 @@ jobs:
         run: npm run build
         working-directory: examples
 
+      # The built bundle must hold exactly one React copy — the formstand
+      # alias reaches outside the examples package, and a second resolved
+      # React crashes the deployed playground at startup. Only the artifact
+      # shows this; jsdom tests can't.
+      - name: Check the bundle holds a single React
+        run: node scripts/check-single-react.mjs
+
       - name: Install CLI dependencies
         run: npm ci
         working-directory: cli
