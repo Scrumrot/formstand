@@ -199,7 +199,7 @@ export const MuiInvoiceBuilder = () => {
   });
   useDemoForm(form);
   const customer = useField(form, "customer");
-  const items = useFieldArray<LineItem>(form, "items");
+  const items = useFieldArray(form, "items");
   const isDirty = useIsDirty(form);
   const isSubmitting = useIsSubmitting(form);
   const [saved, setSaved] = useState(false);

@@ -17,7 +17,7 @@ describe("useFieldArray", () => {
   it("exposes items and length for the path", () => {
     const { result } = renderHook(() => {
       const form = useTestForm();
-      return { form, users: useFieldArray<{ email: string }>(form, "users") };
+      return { form, users: useFieldArray(form, "users") };
     });
     expect(result.current.users.items).toHaveLength(2);
     expect(result.current.users.length).toBe(2);
@@ -26,7 +26,7 @@ describe("useFieldArray", () => {
   it("push appends a new item", () => {
     const { result } = renderHook(() => {
       const form = useTestForm();
-      return { form, users: useFieldArray<{ email: string }>(form, "users") };
+      return { form, users: useFieldArray(form, "users") };
     });
     act(() => {
       result.current.users.push({ email: "c@c.com" });
@@ -38,7 +38,7 @@ describe("useFieldArray", () => {
   it("remove deletes by index", () => {
     const { result } = renderHook(() => {
       const form = useTestForm();
-      return { form, users: useFieldArray<{ email: string }>(form, "users") };
+      return { form, users: useFieldArray(form, "users") };
     });
     act(() => {
       result.current.users.remove(0);
@@ -49,7 +49,7 @@ describe("useFieldArray", () => {
   it("insert / move / swap work", () => {
     const { result } = renderHook(() => {
       const form = useTestForm();
-      return { form, users: useFieldArray<{ email: string }>(form, "users") };
+      return { form, users: useFieldArray(form, "users") };
     });
 
     act(() => {

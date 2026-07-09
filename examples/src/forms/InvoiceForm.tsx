@@ -1,5 +1,5 @@
 import {
-  type FieldFormApi,
+  type Form,
   numberInputProps,
   textInputProps,
   useField,
@@ -21,24 +21,20 @@ const schema = z.object({
   lineItems: z.array(lineItemSchema).min(1, "at least one item"),
 });
 
-type LineItem = z.input<typeof lineItemSchema>;
+type Schema = typeof schema;
 
 type LineItemRowProps = Readonly<{
-  form: FieldFormApi;
+  // Typed as Form<Schema> (not the schema-less FieldFormApi) so useField
+  // infers each field's value type straight from the path.
+  form: Form<Schema>;
   index: number;
   onRemove: () => void;
 }>;
 
 const LineItemRow = ({ form, index, onRemove }: LineItemRowProps) => {
-  const description = useField<string>(form, `lineItems.${index}.description`);
-  const quantity = useField<number | undefined>(
-    form,
-    `lineItems.${index}.quantity`,
-  );
-  const unitPrice = useField<number | undefined>(
-    form,
-    `lineItems.${index}.unitPrice`,
-  );
+  const description = useField(form, `lineItems.${index}.description`);
+  const quantity = useField(form, `lineItems.${index}.quantity`);
+  const unitPrice = useField(form, `lineItems.${index}.unitPrice`);
 
   const qty = quantity.value ?? 0;
   const price = unitPrice.value ?? 0;
@@ -95,11 +91,8 @@ const LineItemRow = ({ form, index, onRemove }: LineItemRowProps) => {
   );
 };
 
-const Total = ({ form }: Readonly<{ form: FieldFormApi }>) => {
-  const items = useFormSelectorShallow(form, (s) => {
-    const list = (s.values as { lineItems?: readonly LineItem[] }).lineItems;
-    return list ?? [];
-  });
+const Total = ({ form }: Readonly<{ form: Form<Schema> }>) => {
+  const items = useFormSelectorShallow(form, (s) => s.values.lineItems ?? []);
   const total = items.reduce(
     (acc, item) => acc + (item.quantity ?? 0) * (item.unitPrice ?? 0),
     0,
@@ -121,7 +114,7 @@ export const InvoiceForm = () => {
   });
   useDemoForm(form);
   const customer = useField(form, "customer");
-  const lineItems = useFieldArray<LineItem>(form, "lineItems");
+  const lineItems = useFieldArray(form, "lineItems");
 
   return (
     <form

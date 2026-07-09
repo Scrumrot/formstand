@@ -42,8 +42,6 @@ const memberSchema = z.object({
   role: z.enum(["engineer", "designer", "manager"]),
 });
 
-type Member = z.infer<typeof memberSchema>;
-
 const schema = z.object({
   teamName: z.string().min(2, "2+ characters"),
   members: z
@@ -146,7 +144,7 @@ export const ShadcnTeamForm = () => {
   });
   useDemoForm(form);
   const teamName = useField(form, "teamName");
-  const members = useFieldArray<Member>(form, "members");
+  const members = useFieldArray(form, "members");
   const [savedCount, setSavedCount] = useState<number | null>(null);
 
   return (

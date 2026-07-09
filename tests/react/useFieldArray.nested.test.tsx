@@ -25,11 +25,11 @@ describe("nested useFieldArray", () => {
     const { result } = renderHook(() => {
       const form = useForm(schema, { initialValues: initial });
       const albums = useFieldArray(form, "albums");
-      const tracks0 = useFieldArray<{ title: string }>(
+      const tracks0 = useFieldArray(
         form,
         "albums.0.tracks",
       );
-      const tracks1 = useFieldArray<{ title: string }>(
+      const tracks1 = useFieldArray(
         form,
         "albums.1.tracks",
       );

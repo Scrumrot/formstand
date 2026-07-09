@@ -12,7 +12,7 @@ describe("useFieldArray.error", () => {
   it("surfaces array-level errors at the array path", () => {
     const { result } = renderHook(() => {
       const form = useForm(schema, { initialValues: { users: [] } });
-      return { form, users: useFieldArray<{ email: string }>(form, "users") };
+      return { form, users: useFieldArray(form, "users") };
     });
 
     expect(result.current.users.error).toBeUndefined();
@@ -25,7 +25,7 @@ describe("useFieldArray.error", () => {
   it("clears the array-level error once the array is populated and re-validated", () => {
     const { result } = renderHook(() => {
       const form = useForm(schema, { initialValues: { users: [] } });
-      return { form, users: useFieldArray<{ email: string }>(form, "users") };
+      return { form, users: useFieldArray(form, "users") };
     });
 
     act(() => {

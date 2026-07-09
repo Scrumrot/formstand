@@ -230,7 +230,7 @@ const SectionEditor = ({
   onMoveDown,
 }: SectionEditorProps) => {
   const title = useField(form, `sections.${index}.title`);
-  const questions = useFieldArray<Question>(
+  const questions = useFieldArray(
     form,
     `sections.${index}.questions`,
   );
@@ -340,7 +340,7 @@ export const MuiSurveyBuilder = () => {
   });
   useDemoForm(form);
   const title = useField(form, "title");
-  const sections = useFieldArray<Section>(form, "sections");
+  const sections = useFieldArray(form, "sections");
   const rootError = useFormError(form);
   const [published, setPublished] = useState(false);
 

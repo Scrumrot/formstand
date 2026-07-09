@@ -15,7 +15,7 @@ const useTestForm = () =>
 
 const useTestArray = () => {
   const form = useTestForm();
-  return { form, users: useFieldArray<{ email: string }>(form, "users") };
+  return { form, users: useFieldArray(form, "users") };
 };
 
 describe("useFieldArray stable IDs", () => {
@@ -75,7 +75,7 @@ describe("useFieldArray stable IDs", () => {
           ],
         },
       });
-      return { form, users: useFieldArray<{ email: string }>(form, "users") };
+      return { form, users: useFieldArray(form, "users") };
     });
     const ids = result.current.users.fields.map((f) => f.id);
 

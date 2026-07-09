@@ -2,8 +2,37 @@
 
 ## Unreleased
 
+### formstand
+
+#### Breaking
+
+- `useFieldArray` infers the item type from a `Form<TSchema>` and a typed
+  path — `useFieldArray(form, "users")` (and template paths like
+  `` `albums.${index}.tracks` ``) needs no type argument, and `push`/`insert`
+  are typed against the schema's item. Consequently the old explicit
+  `useFieldArray<TItem>(form, path)` spelling is a **compile error on typed
+  forms** (drop the generic); it remains the way to bind schema-less
+  `FieldFormApi` forms, where there is nothing to infer from. A non-array
+  path types the items as `never`; a typo'd path is rejected against the
+  full `FieldPath` union, like `useField`. Path selectors return
+  `UseFieldArrayReturn<unknown>` (dynamic paths carry no type), also like
+  `useField`.
+
+#### Fixed (site only)
+
+- The deployed playground bundled two copies of React (the formstand alias
+  reaches outside the examples package, so its imports resolved the repo
+  root's copy) — every tab crashed at startup with a null hooks
+  dispatcher. The examples build now dedupes react/zustand/zod and CI
+  asserts the bundle holds exactly one React.
+
 ### formstand-cli
 
+- Generated array hooks drop the explicit item type
+  (`useFieldArray(form, "items")`): formstand ≥ 0.5 infers it from the
+  schema through the path — and rejects the old explicit spelling on typed
+  forms. On formstand 0.4 the generated code still compiles, with untyped
+  items.
 - Generated shadcn output defines one `ariaInvalid` helper (used by the
   inlined adapters and the select trigger) instead of repeating the ternary
   four times, and the generated `FieldError` computes the message once —

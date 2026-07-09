@@ -24,9 +24,6 @@ const schema = z.object({
 });
 
 type Schema = typeof schema;
-type Album = z.input<typeof albumSchema>;
-type Track = z.input<typeof trackSchema>;
-
 type TrackRowProps = Readonly<{
   form: Form<Schema>;
   albumIndex: number;
@@ -124,7 +121,7 @@ const AlbumRow = ({
   canDown,
 }: AlbumRowProps) => {
   const albumTitle = useField(form, `albums.${index}.title`);
-  const tracks = useFieldArray<Track>(form, `albums.${index}.tracks`);
+  const tracks = useFieldArray(form, `albums.${index}.tracks`);
 
   return (
     <div
@@ -209,7 +206,7 @@ export const NestedArraysForm = () => {
     mode: "onBlur",
   });
   useDemoForm(form);
-  const albums = useFieldArray<Album>(form, "albums");
+  const albums = useFieldArray(form, "albums");
 
   return (
     <form

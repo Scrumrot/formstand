@@ -25,7 +25,7 @@ This page maps the react-hook-form API you know onto its formstand counterpart, 
 | `formState.isSubmitting` | `useIsSubmitting(form)` |
 | `formState.isSubmitted` / `submitCount` | `useSubmitCount(form)` (`> 0` ≙ `isSubmitted`) |
 | `formState.isValid` / `isValidating` | `useIsValid(form)` / `state.isValidatingForm` and per-field `state.isValidating[path]` |
-| `useFieldArray({ control, name })` | `useFieldArray<Item>(form, "items")` — same stable-identity story: `fields[i].id` as the React key; `push`/`remove`/`insert`/`move`/`swap` (no `prepend`/`update` — `insert(0, item)` and `setValue("items.2", item)`) — see [Field arrays](./field-arrays) |
+| `useFieldArray({ control, name })` | `useFieldArray(form, "items")` (item type inferred from the schema) — same stable-identity story: `fields[i].id` as the React key; `push`/`remove`/`insert`/`move`/`swap` (no `prepend`/`update` — `insert(0, item)` and `setValue("items.2", item)`) — see [Field arrays](./field-arrays) |
 | `mode` / `reValidateMode` | same option names, one semantic difference — see below |
 | `<Controller render={...} />` / `useController` | no controller: `useField` + a small adapter that maps `UseFieldReturn` onto your UI kit's props — the [MUI demos](./examples#material-ui) show the full pattern |
 

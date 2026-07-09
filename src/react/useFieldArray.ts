@@ -1,7 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
+import type { z } from "zod";
 import type { StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand/react";
 import { useShallow } from "zustand/react/shallow";
+import type { Form } from "../core/createForm";
+import type { FieldPath, FieldValue } from "../core/fieldPath";
 import { getAtPath } from "../core/path";
 import type { FormState } from "../core/types";
 
@@ -119,10 +122,41 @@ const reconcileIds = (prev: IdState, nextItems: readonly unknown[]): IdState => 
   };
 };
 
-export const useFieldArray = <TItem = unknown>(
+// The element type at an array-valued path. FieldValue re-adds `| undefined`
+// for arrays reached through optional ancestors, so strip that before
+// extracting; a non-array path yields `never`, which makes every write
+// (`push(never)`) an immediate error instead of a silently-`unknown` bind.
+type ArrayItemOf<T> = [NonNullable<T>] extends [readonly (infer U)[]]
+  ? U
+  : never;
+
+// Overload order mirrors useField (and is just as deliberate): the
+// typed-path overload sits last so a typo'd path on a Form<TSchema> is
+// blamed on the path argument against the full FieldPath union, and the
+// `schema?: undefined` brand forces a real Form past the widened structural
+// overload — without it, `useFieldArray(form, "users")` would bind there
+// and return UseFieldArrayReturn<unknown> instead of inferring the item
+// type from the path. Schema-less FieldFormApi forms keep the explicit
+// TItem parameter (there is nothing to infer from).
+export function useFieldArray<TSchema extends z.ZodType>(
+  form: Form<TSchema>,
+  pathSelector: (state: FormState<z.input<TSchema>>) => string,
+): UseFieldArrayReturn<unknown>;
+export function useFieldArray<TItem = unknown>(
+  form: FieldArrayFormApi & { readonly schema?: undefined },
+  path: string | ((state: FormState<unknown>) => string),
+): UseFieldArrayReturn<TItem>;
+export function useFieldArray<
+  TSchema extends z.ZodType,
+  P extends FieldPath<z.input<TSchema>>,
+>(
+  form: Form<TSchema>,
+  path: P,
+): UseFieldArrayReturn<ArrayItemOf<FieldValue<z.input<TSchema>, P>>>;
+export function useFieldArray<TItem = unknown>(
   form: FieldArrayFormApi,
   pathArg: string | ((state: FormState<unknown>) => string),
-): UseFieldArrayReturn<TItem> => {
+): UseFieldArrayReturn<TItem> {
   const path = useStore(form.store, (state) =>
     typeof pathArg === "function" ? pathArg(state) : pathArg,
   );
@@ -214,4 +248,4 @@ export const useFieldArray = <TItem = unknown>(
     }),
     [fields, items, error, push, remove, insert, move, swap],
   );
-};
+}

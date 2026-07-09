@@ -12,10 +12,10 @@ const schema = z.object({
   users: z.array(z.object({ email: z.string(), name: z.string() })).min(1, "add at least one user"),
 });
 
-type User = z.input<typeof schema>["users"][number];
-
 const UsersEditor = ({ form }: { form: Form<typeof schema> }) => {
-  const users = useFieldArray<User>(form, "users");
+  // The item type is inferred from the schema through the path — push()
+  // below knows a user is { email: string; name: string }.
+  const users = useFieldArray(form, "users");
 
   return (
     <>
@@ -38,6 +38,8 @@ The hook returns:
 - `length` — the current length.
 - `error` — the **array-level** error (e.g. from `z.array().min(1)`), keyed at the array's own path.
 - `push(item)`, `remove(index)`, `insert(index, item)`, `move(from, to)`, `swap(a, b)` — thin wrappers over the form's `arrayPush` / `arrayRemove` / `arrayInsert` / `arrayMove` / `arraySwap`.
+
+With a `Form<TSchema>` and a typed path (including template paths like `` `albums.${index}.tracks` ``), `TItem` is **inferred from the schema** — no type argument. The explicit `useFieldArray<TItem>(form, path)` form is for schema-less `FieldFormApi` forms (there is nothing to infer from); passing it alongside a typed form is a compile error. Dynamic paths via a selector function return `UseFieldArrayReturn<unknown>`, like `useField`.
 
 The path can also be a selector function, like `useField`'s — see [Typed paths](./typed-paths#path-as-a-selector).
 
@@ -72,7 +74,7 @@ const schema = z.object({
 
 const AlbumRow = ({ form, index }: { form: Form<typeof schema>; index: number }) => {
   const title = useField(form, `albums.${index}.title`);
-  const tracks = useFieldArray<Track>(form, `albums.${index}.tracks`);
+  const tracks = useFieldArray(form, `albums.${index}.tracks`);
 
   return (
     <fieldset>

@@ -333,7 +333,9 @@ const arrayHooks = (arrays: readonly ArrayEntry[], level: number): string =>
   arrays
     .map(
       (entry) =>
-        `${ind(level)}const ${entry.hookName} = useFieldArray<${entry.itemTypeName}>(form, ${q(entry.path)});`,
+        // No explicit item type: formstand >= 0.5 infers it from the typed
+        // form + path (and the explicit generic errors on typed forms).
+        `${ind(level)}const ${entry.hookName} = useFieldArray(form, ${q(entry.path)});`,
     )
     .join("\n");
 

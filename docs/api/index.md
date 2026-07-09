@@ -121,7 +121,7 @@ type FieldValidationResult =
 | --- | --- | --- |
 | `useForm` | `useForm(schema, options): Form<TSchema>` | lazy-creates a form held for the component's lifetime; schema/options changes after mount are ignored (warned once) |
 | `useField` | `useField(form, path, options?): UseFieldReturn<V>` | one field's slice + helpers; `path` may be a selector `(state) => string` (returns `UseFieldReturn<unknown>`); `options: { debounceMs?: number }` debounces triggered validation |
-| `useFieldArray` | `useFieldArray<TItem>(form, path): UseFieldArrayReturn<TItem>` | array ops + stable ids; see [Field arrays](../guide/field-arrays) |
+| `useFieldArray` | `useFieldArray(form, path): UseFieldArrayReturn<TItem>` — `TItem` inferred from the schema through the path (explicit `<TItem>` only for schema-less `FieldFormApi` forms) | array ops + stable ids; see [Field arrays](../guide/field-arrays) |
 | `useFormSelector` | `useFormSelector(form, selector): U` | selector-style subscription over `FormState` |
 | `useFormSelectorShallow` | `useFormSelectorShallow(form, selector): U` | shallow-compared variant, required for object/array-returning selectors |
 | `useFormError` | `useFormError(form): readonly string[] \| undefined` | shortcut for the root `""` error |

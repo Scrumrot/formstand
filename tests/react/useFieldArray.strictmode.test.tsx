@@ -21,7 +21,7 @@ describe("useFieldArray under StrictMode", () => {
         const form = useForm(schema, {
           initialValues: { items: ["a", "b", "c"] },
         });
-        return { form, arr: useFieldArray<string>(form, "items") };
+        return { form, arr: useFieldArray(form, "items") };
       },
       { wrapper },
     );
@@ -47,7 +47,7 @@ describe("useFieldArray under StrictMode", () => {
     const { result } = renderHook(
       () => {
         const form = useForm(schema, { initialValues: { items: ["a"] } });
-        return { form, arr: useFieldArray<string>(form, "items") };
+        return { form, arr: useFieldArray(form, "items") };
       },
       { wrapper },
     );

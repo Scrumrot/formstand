@@ -1,9 +1,4 @@
-import {
-  type FieldFormApi,
-  useField,
-  useFieldArray,
-  useForm,
-} from "formstand";
+import { type Form, useField, useFieldArray, useForm } from "formstand";
 import { useDemoForm } from "../demo/DemoShell";
 import { z } from "zod";
 
@@ -17,10 +12,12 @@ const schema = z.object({
     .min(1, "at least one user required"),
 });
 
-type UserItem = Readonly<{ email: string }>;
+type Schema = typeof schema;
 
 type UserRowProps = Readonly<{
-  form: FieldFormApi;
+  // Typed as Form<Schema> (not the schema-less FieldFormApi) so useField
+  // infers each field's value type straight from the path.
+  form: Form<Schema>;
   id: string;
   index: number;
   onRemove: () => void;
@@ -39,7 +36,7 @@ const UserRow = ({
   canMoveUp,
   canMoveDown,
 }: UserRowProps) => {
-  const email = useField<string>(form, `users.${index}.email`);
+  const email = useField(form, `users.${index}.email`);
   return (
     <div className="array-item">
       <div>
@@ -72,7 +69,9 @@ export const ArrayForm = () => {
     mode: "onBlur",
   });
   useDemoForm(form);
-  const users = useFieldArray<UserItem>(form, "users");
+  // The item type is inferred from the schema through the path — push()
+  // below knows a user is { email: string } with no annotation.
+  const users = useFieldArray(form, "users");
 
   return (
     <form

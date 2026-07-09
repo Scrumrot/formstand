@@ -16,7 +16,7 @@ const initial = {
 
 const useUsers = () => {
   const form = useForm(schema, { initialValues: initial });
-  return { form, users: useFieldArray<{ email: string }>(form, "users") };
+  return { form, users: useFieldArray(form, "users") };
 };
 
 describe("useFieldArray ids survive mutations that bypass the hook", () => {
@@ -101,8 +101,8 @@ describe("useFieldArray ids survive mutations that bypass the hook", () => {
       const form = useForm(schema, { initialValues: initial });
       return {
         form,
-        a: useFieldArray<{ email: string }>(form, "users"),
-        b: useFieldArray<{ email: string }>(form, "users"),
+        a: useFieldArray(form, "users"),
+        b: useFieldArray(form, "users"),
       };
     });
 
@@ -129,7 +129,7 @@ describe("useFieldArray ids survive mutations that bypass the hook", () => {
   it("handles duplicate primitive values with distinct stable ids", () => {
     const { result } = renderHook(() => {
       const form = useForm(schema, { initialValues: initial });
-      return { form, tags: useFieldArray<string>(form, "tags") };
+      return { form, tags: useFieldArray(form, "tags") };
     });
 
     act(() => {
