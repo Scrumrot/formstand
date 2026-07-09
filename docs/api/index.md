@@ -125,8 +125,8 @@ type FieldValidationResult =
 | `useFormSelector` | `useFormSelector(form, selector): U` | selector-style subscription over `FormState` |
 | `useFormSelectorShallow` | `useFormSelectorShallow(form, selector): U` | shallow-compared variant, required for object/array-returning selectors |
 | `useFormError` | `useFormError(form): readonly string[] \| undefined` | shortcut for the root `""` error |
-| `useIsDirty` | `useIsDirty(form): boolean` | any field dirty (derived) |
-| `useIsValid` | `useIsValid(form): boolean` | no errors currently in the merged map (not a fresh validation) |
+| `useIsDirty` | `useIsDirty(form, path?): boolean` | any field dirty (derived); a typed path scopes it to that subtree (`"shipping"` covers `shipping.city`) |
+| `useIsValid` | `useIsValid(form, path?): boolean` | no errors currently in the merged map (not a fresh validation); a typed path scopes it to errors at or under that path |
 | `useIsSubmitting` | `useIsSubmitting(form): boolean` | `state.isSubmitting` |
 | `useSubmitCount` | `useSubmitCount(form): number` | `state.submitCount` |
 | `createFormContext` | `createFormContext<TSchema>(): { Provider, useFormContext }` | typed context factory for prop-drilling-free forms |

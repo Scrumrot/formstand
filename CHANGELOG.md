@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `useIsDirty(form, path?)` and `useIsValid(form, path?)`: an optional
+  typed path scopes the flag to a subtree with the library's usual prefix
+  semantics (`"shipping"` covers `shipping.city`; for validity the path's
+  own key counts, so array-level errors match their array's path).
+  Subscriptions stay boolean-only — the component re-renders when the flag
+  flips, not on every keystroke like `useField(...).dirty`. Omitting the
+  path keeps the whole-form behavior; schema-less `FieldFormApi`-style
+  forms take plain string paths.
+
 ## formstand-cli 0.2.2 — 2026-07-09
 
 - Generated array hooks drop the explicit item type

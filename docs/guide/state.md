@@ -29,7 +29,7 @@ type FormState<TValues> = Readonly<{
 
 A field is dirty while its value differs *structurally* from `initialValues` at that path — arrays and plain objects compare deep, `Date`s compare by timestamp (re-picking the same date must not leave a field permanently dirty), everything else by `Object.is`. Because it's derived rather than tracked by writers, it can't drift: `arrayPush` followed by `arrayRemove` reads clean again, and `reset` is clean *by definition*.
 
-Read it per field (`useField(...).dirty`, `form.getFieldState(path).dirty`), form-wide (`useIsDirty(form)`), or as a PATCH-style payload:
+Read it per field (`useField(...).dirty`, `form.getFieldState(path).dirty`), form-wide or scoped to a subtree (`useIsDirty(form)`, `useIsDirty(form, "shipping")` — a boolean-only subscription, unlike `useField`), or as a PATCH-style payload:
 
 ```ts
 form.dirtyFields(); // minimal divergent paths, e.g. ["profile.name", "tags"]
@@ -118,8 +118,10 @@ const unsubscribe = form.watchValues((values) => scheduleAutosave(values));
 ## Flag hooks
 
 ```ts
-useIsDirty(form);       // any field dirty (derived from values vs initialValues)
-useIsValid(form);       // no errors currently in the merged map
+useIsDirty(form);             // any field dirty (derived from values vs initialValues)
+useIsDirty(form, "shipping"); // ...scoped to a subtree (covers shipping.city etc.)
+useIsValid(form);             // no errors currently in the merged map
+useIsValid(form, "shipping"); // ...only errors at or under the path
 useIsSubmitting(form);  // state.isSubmitting
 useSubmitCount(form);   // state.submitCount
 ```
