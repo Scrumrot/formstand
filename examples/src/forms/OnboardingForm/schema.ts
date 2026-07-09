@@ -99,3 +99,42 @@ export const onboardingSchema = z.object({
     )
     .min(1, "add at least one contact"),
 });
+
+// A blank draft: required numbers/enums start undefined and nullable
+// fields null — deliberately not schema-satisfying yet (hence the cast);
+// validation reports the gaps on submit. Shared by all three Onboarding
+// modules (plain, MUI, shadcn) so the drafts can't drift.
+export const blankOnboardingValues = {
+  personal: {
+    firstName: "",
+    lastName: "",
+    preferredName: null,
+    email: "",
+    phone: "",
+  },
+  address: {
+    street: "",
+    unit: null,
+    city: "",
+    region: undefined,
+    postalCode: "",
+    country: undefined,
+  },
+  employment: {
+    jobTitle: "",
+    department: undefined,
+    startDate: "",
+    employmentType: "full-time",
+    salary: undefined,
+    remote: false,
+    managerEmail: "",
+  },
+  equipment: {
+    laptop: undefined,
+    monitorCount: 1,
+    needsPhone: false,
+    shirtSize: undefined,
+    notes: null,
+  },
+  emergencyContacts: [{ name: "", relationship: "", phone: "" }],
+} as unknown as z.input<typeof onboardingSchema>;

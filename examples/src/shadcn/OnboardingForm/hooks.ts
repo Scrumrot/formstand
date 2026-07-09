@@ -1,10 +1,8 @@
 import { createForm, createFormHooks } from "formstand";
 import { blankOnboardingValues, onboardingSchema } from "./schema";
 
-// One module-level form for the whole feature; everything below imports
-// these hooks instead of receiving `form` via props or a provider. (This is
-// the createFormHooks singleton pattern — for a per-mount lifecycle, use
-// useForm + createFormContext instead.)
+// This kit variant owns its own form instance (its state is independent
+// of the plain module's) but shares the schema and blank draft with it.
 export const onboardingForm = createForm(onboardingSchema, {
   initialValues: blankOnboardingValues,
   mode: "onBlur",

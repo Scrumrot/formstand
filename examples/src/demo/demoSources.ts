@@ -50,40 +50,65 @@ const single = (path: string, raw: string): readonly DemoFile[] => [
   { path, source: stripHarness(raw) },
 ];
 
-// Reading order for the Onboarding module's file tree.
-const ONBOARDING_ORDER = [
+// Reading order for the Onboarding modules' file trees.
+const MODULE_ORDER = [
   "schema.ts",
   "types.ts",
   "hooks.ts",
   "fields/",
   "sections/",
   "OnboardingForm.tsx",
+  "MuiOnboardingForm.tsx",
+  "ShadcnOnboardingForm.tsx",
   "index.ts",
 ];
 
-const onboardingRank = (path: string): number => {
-  const index = ONBOARDING_ORDER.findIndex((prefix) =>
-    path.startsWith(prefix),
-  );
-  return index === -1 ? ONBOARDING_ORDER.length : index;
+const moduleRank = (path: string): number => {
+  const index = MODULE_ORDER.findIndex((prefix) => path.startsWith(prefix));
+  return index === -1 ? MODULE_ORDER.length : index;
 };
 
-const onboardingFiles: readonly DemoFile[] = Object.entries(
+const moduleFiles = (
+  globbed: Readonly<Record<string, string>>,
+  prefix: string,
+): readonly DemoFile[] =>
+  Object.entries(globbed)
+    .map(([path, raw]) => ({
+      path: path.replace(prefix, ""),
+      source: stripHarness(raw),
+    }))
+    .sort(
+      (a, b) =>
+        moduleRank(a.path) - moduleRank(b.path) ||
+        a.path.localeCompare(b.path),
+    );
+
+const onboardingFiles = moduleFiles(
   import.meta.glob("../forms/OnboardingForm/**/*.{ts,tsx}", {
     query: "?raw",
     import: "default",
     eager: true,
   }),
-)
-  .map(([path, raw]) => ({
-    path: path.replace("../forms/OnboardingForm/", ""),
-    source: stripHarness(raw),
-  }))
-  .sort(
-    (a, b) =>
-      onboardingRank(a.path) - onboardingRank(b.path) ||
-      a.path.localeCompare(b.path),
-  );
+  "../forms/OnboardingForm/",
+);
+
+const onboardingMuiFiles = moduleFiles(
+  import.meta.glob("../mui/OnboardingForm/**/*.{ts,tsx}", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }),
+  "../mui/OnboardingForm/",
+);
+
+const onboardingShadcnFiles = moduleFiles(
+  import.meta.glob("../shadcn/OnboardingForm/**/*.{ts,tsx}", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }),
+  "../shadcn/OnboardingForm/",
+);
 
 const sources = {
   basic: single("BasicForm.tsx", basicSrc),
@@ -111,10 +136,12 @@ const sources = {
   muiInvoice: single("MuiInvoiceBuilder.tsx", muiInvoiceSrc),
   muiSettings: single("MuiProfileSettings.tsx", muiSettingsSrc),
   muiSurvey: single("MuiSurveyBuilder.tsx", muiSurveySrc),
+  onboardingMui: onboardingMuiFiles,
   shadSignup: single("ShadcnSignupForm.tsx", shadSignupSrc),
   shadCheckout: single("ShadcnCheckoutForm.tsx", shadCheckoutSrc),
   shadSettings: single("ShadcnSettingsForm.tsx", shadSettingsSrc),
   shadTeam: single("ShadcnTeamForm.tsx", shadTeamSrc),
+  onboardingShadcn: onboardingShadcnFiles,
 } as const;
 
 // App.tsx derives its TabKey from this map, so the tab list and the source

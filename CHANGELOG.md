@@ -4,6 +4,15 @@
 
 ### Docs & examples (no package changes)
 
+- MUI and shadcn variants of the Onboarding feature module (31 demos now):
+  same shared schema, option lists, and blank draft as the plain module
+  (re-exported, so the three can't drift), each with its own form instance
+  and pre-wired hooks — MUI sections are Accordions with dirty/valid chips,
+  shadcn sections are collapsible with badges. The CLI generates the same
+  architecture from the same schema (`--layout module --ui mui|shadcn`).
+- The sidebar demo list is a tree view (x-tree-view): brass group folders,
+  form-check leaf icons, brass selection.
+
 - The playground gets a real app layout: grouped demo navigation in a
   sidebar (Core / Patterns / Material UI / shadcn/ui — the group map is
   exhaustive over the tab keys, so an unassigned demo is a compile error),

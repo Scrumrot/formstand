@@ -1,4 +1,8 @@
 import { type ReactElement, useState } from "react";
+import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
+import FolderRoundedIcon from "@mui/icons-material/FolderRounded";
+import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
+import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import { DemoShell } from "./demo/DemoShell";
 import { DEMO_SOURCES, type DemoSourceKey } from "./demo/demoSources";
 import { ArrayForm } from "./forms/ArrayForm";
@@ -26,7 +30,9 @@ import { MuiInvoiceBuilder } from "./mui/MuiInvoiceBuilder";
 import { MuiJobApplication } from "./mui/MuiJobApplication";
 import { MuiProfileSettings } from "./mui/MuiProfileSettings";
 import { MuiSurveyBuilder } from "./mui/MuiSurveyBuilder";
+import { MuiOnboardingForm } from "./mui/OnboardingForm";
 import { MuiThemeBridge } from "./mui/MuiThemeBridge";
+import { ShadcnOnboardingForm } from "./shadcn/OnboardingForm";
 import { ShadcnCheckoutForm } from "./shadcn/ShadcnCheckoutForm";
 import { ShadcnSettingsForm } from "./shadcn/ShadcnSettingsForm";
 import { ShadcnSignupForm } from "./shadcn/ShadcnSignupForm";
@@ -154,10 +160,20 @@ const TABS: readonly Tab[] = [
       </MuiThemeBridge>
     ),
   },
+  {
+    key: "onboardingMui",
+    label: "MUI: Onboarding",
+    render: () => (
+      <MuiThemeBridge>
+        <MuiOnboardingForm />
+      </MuiThemeBridge>
+    ),
+  },
   shadcnTab("shadSignup", "shadcn: Signup", ShadcnSignupForm),
   shadcnTab("shadCheckout", "shadcn: Checkout", ShadcnCheckoutForm),
   shadcnTab("shadSettings", "shadcn: Settings", ShadcnSettingsForm),
   shadcnTab("shadTeam", "shadcn: Team", ShadcnTeamForm),
+  shadcnTab("onboardingShadcn", "shadcn: Onboarding", ShadcnOnboardingForm),
 ];
 
 type GroupTitle = "Core" | "Patterns" | "Material UI" | "shadcn/ui";
@@ -190,10 +206,12 @@ const GROUP_OF: Readonly<Record<TabKey, GroupTitle>> = {
   muiInvoice: "Material UI",
   muiSettings: "Material UI",
   muiSurvey: "Material UI",
+  onboardingMui: "Material UI",
   shadSignup: "shadcn/ui",
   shadCheckout: "shadcn/ui",
   shadSettings: "shadcn/ui",
   shadTeam: "shadcn/ui",
+  onboardingShadcn: "shadcn/ui",
 };
 
 const GROUP_TITLES: readonly GroupTitle[] = [
@@ -249,21 +267,67 @@ export const App = () => {
       </a>
 
       <nav className="nav" aria-label="Demos">
-        {GROUPS.map((group) => (
-          <div key={group.title} className="nav-group">
-            <div className="nav-group-title">{group.title}</div>
-            {group.tabs.map((tab) => (
-              <button
-                key={tab.key}
-                className={`nav-tab ${tab.key === active ? "active" : ""}`}
-                onClick={() => setActive(tab.key)}
-                type="button"
+        <MuiThemeBridge>
+          <SimpleTreeView
+            selectedItems={active}
+            defaultExpandedItems={GROUP_TITLES.map((title) => `group:${title}`)}
+            onSelectedItemsChange={(_event, itemId) => {
+              // Group nodes only expand/collapse; leaves switch the demo.
+              if (typeof itemId === "string" && !itemId.startsWith("group:")) {
+                setActive(itemId as TabKey);
+              }
+            }}
+            sx={{
+              "& .MuiTreeItem-content": { py: 0.4, borderRadius: 1.5 },
+              "& .MuiTreeItem-content.Mui-selected": {
+                backgroundColor: "rgba(226, 169, 78, 0.16)",
+              },
+              "& .MuiTreeItem-content.Mui-selected:hover": {
+                backgroundColor: "rgba(226, 169, 78, 0.24)",
+              },
+            }}
+          >
+            {GROUPS.map((group) => (
+              <TreeItem
+                key={group.title}
+                itemId={`group:${group.title}`}
+                label={
+                  <span
+                    style={{ display: "flex", alignItems: "center", gap: 8 }}
+                  >
+                    <FolderRoundedIcon
+                      sx={{ fontSize: 17, color: "#d99a3d" }}
+                    />
+                    {group.title}
+                  </span>
+                }
               >
-                {tab.label}
-              </button>
+                {group.tabs.map((tab) => (
+                  <TreeItem
+                    key={tab.key}
+                    className="nav-tab"
+                    itemId={tab.key}
+                    label={
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          fontSize: 14,
+                        }}
+                      >
+                        <FactCheckOutlinedIcon
+                          sx={{ fontSize: 15, color: "#7c879b" }}
+                        />
+                        {tab.label}
+                      </span>
+                    }
+                  />
+                ))}
+              </TreeItem>
             ))}
-          </div>
-        ))}
+          </SimpleTreeView>
+        </MuiThemeBridge>
       </nav>
 
       <p className="sidebar-foot">

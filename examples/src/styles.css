@@ -31,49 +31,10 @@ body {
   padding: 18px 20px 14px;
   border-bottom: 1px solid #1f2530;
 }
+/* The demo nav is an x-tree-view (styled via MUI's sx); the wrapper only
+ * needs breathing room. */
 .nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-}
-.nav-group {
-  display: contents;
-}
-.nav-group-title {
-  width: 100%;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-  color: #5d6a80;
-  margin: 10px 0 2px;
-}
-.nav-tab {
-  background: transparent;
-  border: 1px solid transparent;
-  color: #8b94a7;
-  padding: 7px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  text-align: left;
-  transition:
-    color 0.18s ease,
-    background-color 0.18s ease,
-    border-color 0.18s ease;
-}
-.nav-tab:hover {
-  color: #d8dde6;
-  background: var(--fs-accent-soft);
-}
-.nav-tab:focus-visible {
-  outline: 2px solid var(--fs-accent);
-  outline-offset: -2px;
-}
-.nav-tab.active {
-  color: #f0e2c4;
-  background: var(--fs-accent-soft);
-  border-color: var(--fs-accent);
+  margin: 0 -4px;
 }
 .sidebar-foot {
   font-size: 13px;
@@ -120,15 +81,6 @@ body {
     overflow-y: auto;
     padding: 20px 16px 24px;
   }
-  .nav {
-    flex-direction: column;
-    flex-wrap: nowrap;
-    align-items: stretch;
-    gap: 2px;
-  }
-  .nav-group-title {
-    margin: 14px 0 4px;
-  }
   .content {
     padding: 28px 32px 120px;
   }
@@ -150,10 +102,6 @@ body {
   .sidebar {
     width: 320px;
     padding: 36px 26px;
-  }
-  .nav-tab {
-    font-size: 15px;
-    padding: 9px 14px;
   }
   .content {
     padding: 56px 96px 160px;
@@ -451,7 +399,6 @@ button.secondary:hover:not([disabled]) {
   .state-dump {
     animation: none;
   }
-  .nav-tab,
   .brand svg,
   .sidebar-foot a,
   .field input,

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, within } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { App } from "../examples/src/App";
@@ -25,9 +25,11 @@ describe("examples playground smoke test", () => {
         <App />
       </StrictMode>,
     );
-    const tabs = screen
-      .getAllByRole("button")
-      .filter((el) => el.className.includes("tab"));
+    // The sidebar is a tree view: demo leaves carry the nav-tab class and
+    // switch tabs when their content row is clicked.
+    const tabs = Array.from(
+      document.querySelectorAll<HTMLElement>(".nav-tab .MuiTreeItem-content"),
+    );
     expect(tabs.length).toBeGreaterThanOrEqual(18);
 
     tabs.forEach((tab) => {
