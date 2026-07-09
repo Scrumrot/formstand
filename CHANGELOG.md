@@ -11,6 +11,11 @@
   through HD to 4K; on mobile the nav becomes wrapping chips above the
   content. `/guide/` on the docs site now lands on a guide index instead
   of a 404.
+- The Perf demo registers its form like every other tab, so View state
+  works (the shell only mounts the panel while open, so a closed panel
+  costs the benchmark nothing — the copy says to close it while running).
+  The benchmark writes `field0` instead of the mid-grid field, so the
+  change is visible without scrolling.
 
 ## formstand-cli 0.4.0 — 2026-07-09
 

@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { type FieldFormApi, useField, useForm } from "formstand";
 import { z } from "zod";
+import { useDemoForm } from "../demo/DemoShell";
 
 const SIZES = [10, 50, 200, 500] as const;
 type Size = (typeof SIZES)[number];
@@ -60,9 +61,11 @@ const Benchmark = ({ size, appendResult }: BenchmarkProps) => {
   const schema = useMemo(() => buildSchema(size), [size]);
   const initial = useMemo(() => buildInitial(size), [size]);
   const form = useForm(schema, { initialValues: initial, mode: "onSubmit" });
-  // Deliberately NOT registered with the playground shell: an open
-  // "View state" panel would re-render its JSON dump inside every timed
-  // flushSync iteration and corrupt the ms/setValue measurement.
+  // Registered like every demo — the shell mounts the state panel only
+  // while it's open, so a closed panel costs the benchmark nothing. (An
+  // OPEN panel re-renders its JSON dump inside every timed flushSync
+  // iteration, which is why the copy says to close it before running.)
+  useDemoForm(form);
   const renderCounterRef = useRef({ count: 0 });
   const onRender = () => {
     renderCounterRef.current.count += 1;
@@ -74,7 +77,10 @@ const Benchmark = ({ size, appendResult }: BenchmarkProps) => {
   );
 
   const runBenchmark = () => {
-    const path = `field${Math.floor(size / 2)}`;
+    // field0 on purpose: it's the first input in the grid, so you can watch
+    // it tick to iter-99 without scrolling (the target field is arbitrary
+    // for the measurement — one subscribed field re-renders either way).
+    const path = "field0";
     const before = renderCounterRef.current.count;
     const start = performance.now();
     Array.from({ length: 100 }).forEach((_, i) => {
@@ -127,10 +133,15 @@ export const PerfBenchmarkForm = () => {
 
   return (
     <div>
-      <p className="subtitle">
+      <p style={{ color: "#8b94a7", fontSize: 14, marginTop: 0 }}>
         Synthetic benchmark: a flat form with N string fields rendered via{" "}
-        <code>useField</code>. The "renders / setValue" column counts how many
-        Row components re-render per setValue (ideally 1: the targeted field).
+        <code>useField</code>. Run it and watch <code>field0</code> (top-left)
+        tick to <code>iter-99</code> — the "renders / setValue" column counts
+        how many Row components re-render per write (ideally 1: only the
+        targeted field). The inputs are live too; type in any of them. Keep
+        the View state panel <em>closed</em> while running: an open panel
+        re-renders its JSON dump inside every timed iteration and inflates
+        the numbers.
       </p>
 
       <div className="row" style={{ marginBottom: 16 }}>

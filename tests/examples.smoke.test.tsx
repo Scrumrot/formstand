@@ -59,16 +59,10 @@ describe("examples playground smoke test", () => {
       fireEvent.click(codeButton);
       expect(statePres(card as HTMLElement)).toHaveLength(0);
 
-      // View state: every demo registers its live form with the shell —
-      // except Perf, which opts out on purpose (an open state panel inside
-      // the timed flushSync loop would corrupt the benchmark numbers).
+      // View state: every demo registers its live form with the shell.
       const stateButton = scope.getByRole("button", {
         name: "View state",
       }) as HTMLButtonElement;
-      if (tab.textContent === "Perf") {
-        expect(stateButton.disabled, "Perf opts out of View state").toBe(true);
-        return;
-      }
       expect(
         stateButton.disabled,
         `View state disabled on tab "${tab.textContent}"`,
