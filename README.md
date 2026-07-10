@@ -429,7 +429,8 @@ form.handleSubmit(async (data) => {
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) — note the repo has three
 independent npm roots (`.`, `examples/`, `cli/`), and the root test suite
-needs `examples/` installed.
+needs `examples/` installed. Where the project is headed lives in
+[ROADMAP.md](./ROADMAP.md).
 
 ## License
 

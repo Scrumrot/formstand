@@ -4,6 +4,10 @@
 
 ### Docs & examples (no package changes)
 
+- ROADMAP.md: a living plan for the library and the CLI — the 0.9/cli-0.6
+  cycle (dates as a first-class field kind, hot-path performance,
+  DevTools, CLI config + watch), the next tier, the parking lot, and the
+  review's deferred cleanup items.
 - The theme is one preference across the docs site and the playground:
   the playground stores its light/dark choice under VitePress's own
   localStorage key (same origin), so flipping either surface's toggle
