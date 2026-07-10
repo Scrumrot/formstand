@@ -103,11 +103,12 @@ Constraints on the array itself (`z.array(...).min(1)`, `.max(n)`, a `.refine` o
 
 ## Metadata follows rows
 
-Array ops don't just move values — every path-keyed map is re-keyed through the same index mapping, so `errors`, `touched`, `isValidating`, and server verdicts stay attached to their rows:
+Array ops don't just move values — `errors`, `touched`, and server verdicts are re-keyed through the same index mapping, so they stay attached to their rows:
 
 - After `remove(0)`, an error on `items.1.name` becomes an error on `items.0.name` — same row, new index.
 - A [server error](./errors) on a row survives a reorder (that row's value didn't change); a server verdict on the *array itself* or an ancestor is released — the op changed that value.
 - Dirtiness is derived, not stored, so `push` followed by `remove` reads clean again.
+- In-flight `isValidating` flags under the array are **dropped**, not re-keyed: the async pass that set one no longer matches the reshaped rows, and its result will be discarded as stale — re-keying the flag would show a spinner no pass is going to clear.
 
 Out-of-range or non-integer indices are refused with a console warning rather than corrupting the re-keyed maps, and an op on a path whose value isn't an array is skipped with a warning.
 

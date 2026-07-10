@@ -86,11 +86,11 @@ What should a cleared input write back? `useField` answers by **introspecting th
 - `.optional()` → clearing writes `undefined` (also the default for unrecognized shapes).
 - For schema-less forms (a bare `FieldFormApi` without a schema), it falls back to a runtime heuristic: `null` if the field's *initial value* was `null`, else `undefined`.
 
-The builders use it consistently: `numberInputProps` and `NumberField` write `emptyValue` when the text is empty; `textInputProps` and `selectProps` write `null` on a cleared value when `emptyValue` is `null` (a non-nullable text field cleared to `""` just stays `""`).
+The builders use it consistently: `numberInputProps` and `NumberField` write `emptyValue` when the text is empty; `textInputProps` and `selectProps` write `null` on a cleared value when `emptyValue` is `null` (a non-nullable text field cleared to `""` just stays `""`). `checkboxProps` is the deliberate exception: a checkbox has exactly two visual states, so unchecking always writes `false` — restoring `null` on uncheck would make `false` unreachable for a nullable boolean. If "unset" must be distinguishable from "no", use a select or radio group instead.
 
 ## `SelectField` placeholder and null handling
 
-A native `<select>` with a value that matches no option silently *displays* the first option while your state says otherwise. `SelectField` stays controlled by rendering a disabled empty `<option value="">` whenever the field value is `undefined` or `null` (or whenever you pass `placeholder`), showing your `placeholder` text if given:
+A native `<select>` with a value that matches no option silently *displays* the first option while your state says otherwise. `SelectField` stays controlled by rendering an empty `<option value="">` whenever the field value is `undefined` or `null` (or whenever you pass `placeholder`), showing your `placeholder` text if given. For a **nullable** field the empty option is also selectable and stays visible after a choice — picking it clears the field back to `null` (the `emptyValue` round-trip); everywhere else it is a disabled placeholder:
 
 ```tsx
 <SelectField

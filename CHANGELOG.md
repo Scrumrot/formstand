@@ -2,7 +2,81 @@
 
 ## Unreleased
 
+### formstand
+
+#### Fixed (2026-07 full-repo review)
+
+- `valuesEqual` compared only the first object's keys, so two objects with
+  equal key counts but different key sets (one holding `undefined`) read as
+  equal — dirty flags, `diff()`, and server-error release could all treat a
+  real change as clean. Key sets must now match (`Object.hasOwn`), and the
+  compare is symmetric.
+- `setAtPath` no longer spreads a `Date`/`Map`/`Set`/class instance at an
+  intermediate path into a plain object (silently destroying it); the write
+  is refused with a console warning, like other unwritable shapes.
+- Path reads return own properties only: `getAtPath(values,
+  "lookup.constructor")` on a `z.record` is `undefined` instead of leaking
+  `Object.prototype` members as field values.
+- A throwing `onInvalid` handler now resolves `submit()` with
+  `{ kind: "error" }` like a throwing `onValid`, instead of rejecting out of
+  a DOM event handler.
+- `restore()` no longer resurrects a snapshotted `isSubmitting` — the flag
+  reflects live submit passes, so a mid-submit snapshot restored later can't
+  disable submit buttons forever (same rule the validation flags already
+  followed).
+- `SelectField` on a nullable field keeps its empty option visible and
+  selectable after a choice, so the field can be cleared back to `null`
+  through the UI (the `emptyValue` round-trip `selectProps` always
+  supported). Non-nullable fields keep the disabled placeholder.
+- `useFieldArray` no longer hands a removed row's id to a row appended in
+  the same update (React treated it as a reorder and resurrected the dead
+  row's DOM state); the same-index fallback still keeps an edited row's id.
+- `useForm` now also warns when the CONTENT of `initialValues` changes after
+  mount (the async-fetch pattern with a module-hoisted schema — previously
+  silently ignored with no warning at all). Inline literals with identical
+  content stay silent.
+- Docs: `field-arrays.md` claimed array ops re-key `isValidating`; they
+  deliberately drop in-flight flags (the pass that set them is stale) — the
+  guide now says so. `components.md` documents the `checkboxProps`
+  unchecked-writes-`false` tradeoff for nullable booleans.
+
+### formstand-cli
+
+#### Fixed (2026-07 full-repo review)
+
+- Digit-leading schema keys ("2fa", "2ndOwners") emitted invalid
+  identifiers (`const 2ndOwnersArray`); pascalCase/camelCase results are
+  now underscore-prefixed when they'd start with a digit.
+- Array-row fields named JS reserved words ("new", "delete") emitted
+  reserved-word `const` declarations in module sections; row bindings now
+  use an identifier-safe variant (`new_`).
+- A field named after the module prefix (field "contact" in ContactForm)
+  collided with the bound `useContactField` hook from `hooks.ts` — a
+  duplicate declaration plus self-recursion; component names are now
+  deduped against the hook names too (`ContactField2`).
+- Boolean-only schemas with `--ui mui --layout module` emitted an
+  `adapter.ts` using `ChangeEvent` without importing it.
+- `--name` is validated as an identifier (reserved words rejected) instead
+  of interpolating verbatim into declarations and file names.
+- Cross-drive input/`--out` on Windows produced an unresolvable
+  `"./D:/..."` import specifier; the CLI now fails loudly at generation
+  time.
+- zod's `.nonoptional()` unwrapped transparently, letting an inner
+  `.optional()` win — the field's checked `initialValues` annotation then
+  failed to typecheck; `.nonoptional()` now re-requires the field.
+- A field literally named `__proto__` silently vanished from emitted object
+  literals (prototype-setter semantics); it's now emitted as a computed key.
+- `--sections panel` with `--ui mui` rendered different chrome per
+  `--layout` (single-file used `CardHeader`, module used `Typography` in
+  `CardContent`); both emitters now share the module shape, the grid
+  strings come from one set of helpers instead of six inline copies, and
+  `emitInitialValues`/`blankNeedsCast` read one shared blank-value table so
+  they can't drift.
+
 ### Docs & examples (no package changes)
+
+- The docs nav gains a "Built on" menu and the footer links to
+  [zod](https://zod.dev) and [zustand](https://zustand.docs.pmnd.rs).
 
 - A "Schema builder" tab: formstand-gen running in the browser. A formstand
   form describes a schema (fields, sections, arrays, enum options — with

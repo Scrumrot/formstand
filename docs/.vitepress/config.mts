@@ -34,6 +34,13 @@ export default defineConfig({
         link: "https://scrumrot.github.io/formstand/examples/",
       },
       { text: "Changelog", link: "https://github.com/Scrumrot/formstand/blob/main/CHANGELOG.md" },
+      {
+        text: "Built on",
+        items: [
+          { text: "zod", link: "https://zod.dev" },
+          { text: "zustand", link: "https://zustand.docs.pmnd.rs" },
+        ],
+      },
     ],
     sidebar: {
       "/guide/": [
@@ -69,7 +76,8 @@ export default defineConfig({
     ],
     search: { provider: "local" },
     footer: {
-      message: "Released under the MIT License.",
+      message:
+        'Built on <a href="https://zod.dev" target="_blank" rel="noreferrer">zod</a> and <a href="https://zustand.docs.pmnd.rs" target="_blank" rel="noreferrer">zustand</a>. Released under the MIT License.',
     },
   },
 });
