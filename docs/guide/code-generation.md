@@ -59,6 +59,8 @@ The type is expanded through the TypeScript compiler: primitives, `Date`, string
 | `--layout single\|module` | `single` (default): one file. `module`: a feature-module folder (`schema.ts`/`types.ts`/`hooks.ts` via [`createFormHooks`](./state#pre-wired-hooks-createformhooks), one file per field, one per section with path-scoped flags) — `--out` names the folder; works with all three uis (kit modules get a shared `adapter.ts(x)`); requires formstand ≥ 0.7 |
 | `--sections flat\|panel\|collapsible` | section chrome: `flat` headings (default), bordered `panel`s, or `collapsible` sections (`<details>`; MUI `Accordion`) |
 | `--columns 1\|2\|3` | evenly spaced field columns inside each section (default `1`); nested sections span the full row |
+| `--config <file>` | config file (default `formstand.config.{ts,mts,js,mjs}` in the working directory) with project defaults for `ui`/`layout`/`sections`/`columns` via `defineConfig` — flags win |
+| `--watch` | regenerate whenever the input changes (requires `--out`) |
 | `--name MyForm` | component name, default derived from the input |
 | `--out FILE` | write the component here instead of stdout (parent dirs created) |
 | `--schema-out FILE` | type mode: where the generated zod schema goes |

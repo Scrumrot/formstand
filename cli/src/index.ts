@@ -13,4 +13,6 @@ export type { SchemaImport, EmitFormOptions } from "./codegen";
 export { emitModuleForm, joinModuleFiles } from "./moduleLayout";
 export type { EmitModuleOptions, ModuleFile } from "./moduleLayout";
 export { labelFromName } from "./ir";
+export { defineConfig } from "./config";
+export type { FormstandConfig } from "./config";
 export type { FieldSpec, NamedField, SharedSpecProps } from "./ir";

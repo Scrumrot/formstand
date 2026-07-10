@@ -4,6 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createJiti } from "jiti";
 import { camelCase, isReservedWord, pascalCase } from "./casing";
+import { type FormstandConfig, type Layout, type Ui } from "./config";
 import {
   type EmitFormOptions,
   type VisualOptions,
@@ -54,6 +55,11 @@ Options:
   --out <file>        write the component here instead of stdout
   --schema-out <file> (type mode) where to write the generated zod schema
                       (default: <schemaName>.ts next to --out)
+  --config <file>     config file (default: formstand.config.{ts,mts,js,mjs}
+                      in the working directory). Holds project defaults for
+                      ui/layout/sections/columns; explicit flags win.
+  --watch             regenerate whenever the input file changes (requires
+                      --out)
   --force             overwrite existing output files
   -h, --help          show this help
 
@@ -65,14 +71,10 @@ Examples:
   formstand-gen src/profileSchema.ts --ui mui --sections panel --columns 2
 `;
 
-type Ui = "plain" | "mui" | "shadcn";
-
 const UI_VALUES: readonly Ui[] = ["plain", "mui", "shadcn"];
 
 const isUi = (value: string): value is Ui =>
   (UI_VALUES as readonly string[]).includes(value);
-
-type Layout = "single" | "module";
 
 const LAYOUT_VALUES: readonly Layout[] = ["single", "module"];
 
@@ -105,32 +107,62 @@ type CliOptions = Readonly<{
   name?: string;
   out?: string;
   schemaOut?: string;
+  config?: string;
+  watch: boolean;
+  force: boolean;
+}>;
+
+// What the flag parser produces: the config-mergeable axes stay undefined
+// until resolveOptions applies config values and then the defaults, so
+// "--ui plain" (explicit) and "no --ui" (config decides) are distinct.
+export type ParsedCliOptions = Readonly<{
+  input: string;
+  exportName?: string;
+  typeName?: string;
+  ui?: Ui;
+  layout?: Layout;
+  sections?: Sections;
+  columns?: Columns;
+  name?: string;
+  out?: string;
+  schemaOut?: string;
+  config?: string;
+  watch: boolean;
   force: boolean;
 }>;
 
 type ParseResult =
   | Readonly<{ kind: "help" }>
   | Readonly<{ kind: "error"; message: string }>
-  | Readonly<{ kind: "ok"; options: CliOptions }>;
+  | Readonly<{ kind: "ok"; options: ParsedCliOptions }>;
 
 type PartialOptions = Readonly<{
   input?: string;
   exportName?: string;
   typeName?: string;
-  ui: Ui;
-  layout: Layout;
-  sections: Sections;
-  columns: Columns;
+  ui?: Ui;
+  layout?: Layout;
+  sections?: Sections;
+  columns?: Columns;
   name?: string;
   out?: string;
   schemaOut?: string;
+  config?: string;
+  watch: boolean;
   force: boolean;
 }>;
 
 const VALUE_FLAGS: Readonly<
   Record<
     string,
-    "exportName" | "typeName" | "ui" | "layout" | "name" | "out" | "schemaOut"
+    | "exportName"
+    | "typeName"
+    | "ui"
+    | "layout"
+    | "name"
+    | "out"
+    | "schemaOut"
+    | "config"
   >
 > = {
   "--export": "exportName",
@@ -140,6 +172,7 @@ const VALUE_FLAGS: Readonly<
   "--name": "name",
   "--out": "out",
   "--schema-out": "schemaOut",
+  "--config": "config",
 };
 
 const parseRest = (
@@ -154,6 +187,7 @@ const parseRest = (
   }
   if (head === "--help" || head === "-h") return { kind: "help" };
   if (head === "--force") return parseRest(rest, { ...acc, force: true });
+  if (head === "--watch") return parseRest(rest, { ...acc, watch: true });
   if (head === "--sections") {
     const [value, ...after] = rest;
     if (value === undefined) {
@@ -226,13 +260,89 @@ const parseRest = (
 };
 
 export const parseArgs = (argv: readonly string[]): ParseResult =>
-  parseRest(argv, {
-    ui: "plain",
-    layout: "single",
-    sections: "flat",
-    columns: 1,
-    force: false,
-  });
+  parseRest(argv, { watch: false, force: false });
+
+const CONFIG_BASENAMES = [
+  "formstand.config.ts",
+  "formstand.config.mts",
+  "formstand.config.js",
+  "formstand.config.mjs",
+];
+
+// Validate an unknown config value against the same guards the flags use,
+// so a typo'd config fails as loudly as a typo'd flag.
+const parseConfig = (raw: unknown, from: string): FormstandConfig => {
+  if (typeof raw !== "object" || raw === null) {
+    throw new Error(`${from}: expected a default-exported config object`);
+  }
+  const record = raw as Readonly<Record<string, unknown>>;
+  const known = new Set(["ui", "layout", "sections", "columns"]);
+  Object.keys(record)
+    .filter((key) => !known.has(key))
+    .forEach((key) => {
+      stderr(`note: ${from}: ignoring unknown config key "${key}"`);
+    });
+  const { ui, layout, sections, columns } = record;
+  if (ui !== undefined && (typeof ui !== "string" || !isUi(ui))) {
+    throw new Error(`${from}: ui must be one of ${UI_VALUES.join(", ")}`);
+  }
+  if (
+    layout !== undefined &&
+    (typeof layout !== "string" || !isLayout(layout))
+  ) {
+    throw new Error(
+      `${from}: layout must be one of ${LAYOUT_VALUES.join(", ")}`,
+    );
+  }
+  if (
+    sections !== undefined &&
+    (typeof sections !== "string" || !isSections(sections))
+  ) {
+    throw new Error(
+      `${from}: sections must be one of ${SECTIONS_VALUES.join(", ")}`,
+    );
+  }
+  const columnsValue =
+    columns === undefined ? undefined : COLUMNS_BY_TEXT[String(columns)];
+  if (columns !== undefined && columnsValue === undefined) {
+    throw new Error(`${from}: columns must be 1, 2, or 3`);
+  }
+  return {
+    ...(ui !== undefined ? { ui: ui as Ui } : {}),
+    ...(layout !== undefined ? { layout: layout as Layout } : {}),
+    ...(sections !== undefined ? { sections: sections as Sections } : {}),
+    ...(columnsValue !== undefined ? { columns: columnsValue } : {}),
+  };
+};
+
+const loadConfig = async (explicit?: string): Promise<FormstandConfig> => {
+  const file =
+    explicit !== undefined
+      ? path.resolve(explicit)
+      : CONFIG_BASENAMES.map((name) => path.resolve(name)).find((candidate) =>
+          fs.existsSync(candidate),
+        );
+  if (file === undefined) return {};
+  if (explicit !== undefined && !fs.existsSync(file)) {
+    throw new Error(`config file not found: ${explicit}`);
+  }
+  const mod = await loadModule(file, relToCwd(file));
+  // jiti's ESM interop may flatten the default export; accept either shape.
+  const candidate = mod["default"] ?? mod;
+  return parseConfig(candidate, relToCwd(file));
+};
+
+// Flags win over config; config wins over built-in defaults.
+export const resolveOptions = (
+  parsed: ParsedCliOptions,
+  config: FormstandConfig,
+): CliOptions => ({
+  ...parsed,
+  ui: parsed.ui ?? config.ui ?? "plain",
+  layout: parsed.layout ?? config.layout ?? "single",
+  sections: parsed.sections ?? config.sections ?? "flat",
+  columns: parsed.columns ?? config.columns ?? 1,
+});
 
 const visualOf = (options: CliOptions): VisualOptions => ({
   sections: options.sections,
@@ -602,6 +712,39 @@ const runTypeMode = (options: CliOptions): number => {
   return 0;
 };
 
+// Regenerate on input change. The first run respects --force; reruns
+// overwrite the destinations they themselves wrote. Watching the parent
+// directory (filtered to the input's basename) survives editors that save
+// via rename, which would kill a watcher on the file itself.
+const runWatch = async (options: CliOptions): Promise<number> => {
+  if (options.out === undefined) {
+    stderr("error: --watch requires --out (regenerating to stdout repeats forever)");
+    return 1;
+  }
+  const first = await run(options);
+  if (first !== 0) return first;
+  const inputAbs = path.resolve(options.input);
+  stderr(`watching ${relToCwd(inputAbs)} (ctrl+c to stop)`);
+  // A sanctioned mutable ref (like the pass tokens): debounce state for the
+  // watcher callback.
+  const pending: { timer: NodeJS.Timeout | undefined } = { timer: undefined };
+  return new Promise<number>(() => {
+    fs.watch(path.dirname(inputAbs), (_event, filename) => {
+      if (filename !== null && filename !== path.basename(inputAbs)) return;
+      if (pending.timer !== undefined) clearTimeout(pending.timer);
+      pending.timer = setTimeout(() => {
+        void run({ ...options, force: true }).then((code) => {
+          stderr(
+            code === 0
+              ? `regenerated (${new Date().toLocaleTimeString()})`
+              : "regeneration failed; still watching",
+          );
+        });
+      }, 80);
+    });
+  });
+};
+
 const run = async (options: CliOptions): Promise<number> => {
   if (!fs.existsSync(path.resolve(options.input))) {
     stderr(`error: input file not found: ${options.input}`);
@@ -624,7 +767,9 @@ export const main = async (argv: readonly string[]): Promise<number> => {
       return 1;
     case "ok":
       try {
-        return await run(parsed.options);
+        const config = await loadConfig(parsed.options.config);
+        const options = resolveOptions(parsed.options, config);
+        return options.watch ? await runWatch(options) : await run(options);
       } catch (e) {
         stderr(`error: ${e instanceof Error ? e.message : String(e)}`);
         return 1;

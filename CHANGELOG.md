@@ -27,6 +27,17 @@
 
 ### formstand-cli
 
+- `formstand.config.ts` (also `.mts`/`.js`/`.mjs`, or `--config <file>`):
+  project defaults for `ui`/`layout`/`sections`/`columns`, written with the
+  typed `defineConfig` export. Precedence is flags > config > built-ins,
+  and config typos fail as loudly as flag typos.
+- `--watch`: regenerate whenever the input file changes (requires
+  `--out`; reruns overwrite their own output). Watches the parent
+  directory so editors that save via rename don't kill the watcher.
+- A kind × optional × nullable matrix test pins `emitInitialValues` and
+  `blankNeedsCast` agreement in both directions: the no-cast combos must
+  typecheck with the checked annotation, and every cast combo is proven
+  to genuinely need it.
 - Date fields emit real bindings instead of a text input with a cast and
   a TODO: `DateField` (plain), `muiDateFieldProps` (MUI `type="date"`
   TextField with a floated label), `shadcnDateInputProps` (shadcn Input).

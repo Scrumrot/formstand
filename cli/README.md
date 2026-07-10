@@ -49,6 +49,8 @@ Without `--out`, both files print to stdout separated by `// --- file: ...` head
 | `--name <MyForm>` | component name (default derived from the schema/type name) |
 | `--out <file>` | write the component here instead of stdout |
 | `--schema-out <file>` | type mode: where the generated zod schema goes (default `<schemaName>.ts` next to `--out`) |
+| `--config <file>` | config file (default: `formstand.config.{ts,mts,js,mjs}` in the working directory) holding project defaults for `ui`/`layout`/`sections`/`columns`; explicit flags win |
+| `--watch` | regenerate whenever the input file changes (requires `--out`) |
 | `--force` | overwrite existing output files |
 
 ## What is generated
@@ -85,6 +87,23 @@ formstand-gen src/profileSchema.ts --layout module --out src/ProfileForm
 formstand-gen src/types.ts --type Profile --layout module --out src/ProfileForm
 formstand-gen src/profileSchema.ts --ui mui --sections panel --columns 2 --layout module --out src/ProfileForm
 ```
+
+## Config file
+
+Project defaults live in `formstand.config.ts` next to where you run the CLI (flags always win):
+
+```ts
+import { defineConfig } from "formstand-cli";
+
+export default defineConfig({
+  ui: "mui",
+  layout: "module",
+  sections: "panel",
+  columns: 2,
+});
+```
+
+`defineConfig` is an identity function with types — completion and typo-checking in the config file. Pair it with `--watch` for schema-first development: edit the schema, the module regenerates.
 
 ## Supported schema surface
 
