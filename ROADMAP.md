@@ -88,6 +88,12 @@ that ships as a compile error in USER code when it drifts.
   playground tabs, seeded with the demo source + formstand from npm.
 - **Brand collateral.** OG images for docs/playground pages and a README
   header — the identity exists; it just doesn't travel yet.
+- **VitePress 2 migration.** The docs run VitePress 1.x, whose nested
+  vite-5 toolchain carries dismissed Dependabot alerts (local dev/build
+  only — the deployed site is static). v2 alpha ships vite 8, but a first
+  attempt rendered our custom theme blank (builds fine, no console
+  errors — theme/CSS API changes to chase). Migrate when v2 stabilizes,
+  then un-dismiss nothing: the alerts close themselves.
 
 ## Later / parking lot
 

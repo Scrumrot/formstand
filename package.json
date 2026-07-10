@@ -98,5 +98,14 @@
     "zod",
     "react",
     "validation"
-  ]
+  ],
+  "overrides": {
+    "esbuild": "^0.28.1",
+    "vitepress": {
+      "esbuild": "^0.21.3",
+      "vite": {
+        "esbuild": "^0.21.3"
+      }
+    }
+  }
 }

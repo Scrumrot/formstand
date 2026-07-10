@@ -4,6 +4,12 @@
 
 ### CI (no package changes)
 
+- Dependabot triage: esbuild pinned to the patched 0.28.1 line via npm
+  overrides in the root and cli (dev-server advisories), scoped to spare
+  vitepress 1.x's nested vite-5 toolchain (esbuild 0.28 can't downlevel to
+  vite 5's browser targets). The remaining vitepress-nested alerts are
+  dismissed as tolerable risk — local docs dev/build only — with the
+  VitePress 2 migration tracked on the roadmap as the real fix.
 - Workflows declare least-privilege GITHUB_TOKEN permissions (CodeQL:
   actions/missing-workflow-permissions).
 
