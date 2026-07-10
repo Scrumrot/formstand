@@ -66,6 +66,25 @@ jobs:
       - name: Check the bundle holds a single React
         run: node scripts/check-single-react.mjs
 
+      # Real-browser e2e over the BUILT bundle — the deployed-artifact class
+      # of bug (dual React, blank renders, broken mobile shell) that jsdom
+      # can't see. Screenshots upload for eyeballing either way.
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: examples
+
+      - name: Playground e2e (built bundle, real Chromium)
+        run: node e2e/playground.e2e.mjs
+        working-directory: examples
+
+      - name: Upload e2e screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playground-screenshots
+          path: examples/e2e/artifacts/
+          if-no-files-found: ignore
+
       - name: Install CLI dependencies
         run: npm ci
         working-directory: cli

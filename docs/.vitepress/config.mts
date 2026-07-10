@@ -55,6 +55,7 @@ export default defineConfig({
             { text: "Field arrays", link: "/guide/field-arrays" },
             { text: "Form state & lifecycle", link: "/guide/state" },
             { text: "Recipes", link: "/guide/recipes" },
+            { text: "SSR & Next.js", link: "/guide/ssr" },
             {
               text: "Migrating from react-hook-form",
               link: "/guide/migrating-from-react-hook-form",

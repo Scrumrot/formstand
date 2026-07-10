@@ -11,3 +11,6 @@ docs/.vitepress/cache
 # Personal scratch space — working notes, not part of the playground
 # (remove this ignore when a recipe graduates into the app)
 examples/src/recipes/
+
+# e2e screenshot output (uploaded as CI artifacts, never committed)
+examples/e2e/artifacts/
