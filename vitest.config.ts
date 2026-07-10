@@ -36,15 +36,21 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/**"],
+      // "src/**" also matches examples/src (measured since the smoke test
+      // landed) — but NOT the CLI sources the Schema builder demo imports:
+      // cli/ has its own test suite gating its emitters, and one demo render
+      // exercising a fraction of their branches would tank the global
+      // numbers here without measuring anything cli's suite doesn't.
+      exclude: ["cli/**"],
       reporter: ["text", "html", "json-summary"],
-      // Set ~2-3 points below measured levels (2026-07: statements 81.26,
-      // branches 79.07, functions 70.73, lines 81.34) so coverage drift
+      // Set ~2-3 points below measured levels (2026-07: statements 84.8,
+      // branches 76.27, functions 76.59, lines 85) so coverage drift
       // fails CI without making every ordinary change a threshold fight.
       thresholds: {
-        statements: 78,
-        branches: 76,
-        functions: 68,
-        lines: 78,
+        statements: 82,
+        branches: 74,
+        functions: 74,
+        lines: 82,
       },
     },
   },

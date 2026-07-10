@@ -20,7 +20,8 @@ import {
   builderSchema,
   initialBuilderValues,
 } from "./builderSchema";
-import { generateFiles, joinModuleFiles } from "./generate";
+import { generateFiles } from "./generate";
+import { makeZip } from "./zip";
 
 // formstand-gen, running in the browser: this form's values ARE the CLI's
 // IR (see ./generate), so every keystroke re-runs the real emitters and the
@@ -38,13 +39,46 @@ const KIND_LABELS: Readonly<Record<FieldKind, string>> = {
   enum: "select (enum)",
 };
 
-type FieldRowInputsProps = Readonly<{
-  name: UseFieldReturn<string>;
-  kind: UseFieldReturn<FieldKind>;
-  optional: UseFieldReturn<boolean>;
-  options: UseFieldReturn<string>;
-  onRemove: () => void;
+type MoveProps = Readonly<{
+  onUp: () => void;
+  onDown: () => void;
+  isFirst: boolean;
+  isLast: boolean;
 }>;
+
+// Reordering is useFieldArray's move(): stable row IDs keep the inputs'
+// state (and focus) with their row.
+const MoveButtons = ({ onUp, onDown, isFirst, isLast }: MoveProps) => (
+  <>
+    <button
+      className="secondary"
+      type="button"
+      onClick={onUp}
+      disabled={isFirst}
+      aria-label="move up"
+    >
+      ↑
+    </button>
+    <button
+      className="secondary"
+      type="button"
+      onClick={onDown}
+      disabled={isLast}
+      aria-label="move down"
+    >
+      ↓
+    </button>
+  </>
+);
+
+type FieldRowInputsProps = MoveProps &
+  Readonly<{
+    name: UseFieldReturn<string>;
+    kind: UseFieldReturn<FieldKind>;
+    optional: UseFieldReturn<boolean>;
+    options: UseFieldReturn<string>;
+    onRemove: () => void;
+  }>;
 
 // One field row: name + kind + optional, with the enum-options input
 // appearing only for selects (its "needs options" rule is a cross-field
@@ -55,6 +89,7 @@ const FieldRowInputs = ({
   optional,
   options,
   onRemove,
+  ...move
 }: FieldRowInputsProps) => (
   <div className="row builder-field-row" style={{ alignItems: "flex-start" }}>
     <div className="field" style={{ flex: 2 }}>
@@ -81,19 +116,21 @@ const FieldRowInputs = ({
       <input {...checkboxProps(optional)} />
       optional
     </label>
+    <MoveButtons {...move} />
     <button className="secondary" type="button" onClick={onRemove}>
       ✕
     </button>
   </div>
 );
 
-type RootFieldRowProps = Readonly<{
-  form: BuilderForm;
-  index: number;
-  onRemove: () => void;
-}>;
+type RootFieldRowProps = MoveProps &
+  Readonly<{
+    form: BuilderForm;
+    index: number;
+    onRemove: () => void;
+  }>;
 
-const RootFieldRow = ({ form, index, onRemove }: RootFieldRowProps) => {
+const RootFieldRow = ({ form, index, onRemove, ...move }: RootFieldRowProps) => {
   const name = useField(form, `rootFields.${index}.name`);
   const kind = useField(form, `rootFields.${index}.kind`);
   const optional = useField(form, `rootFields.${index}.optional`);
@@ -105,22 +142,25 @@ const RootFieldRow = ({ form, index, onRemove }: RootFieldRowProps) => {
       optional={optional}
       options={options}
       onRemove={onRemove}
+      {...move}
     />
   );
 };
 
-type SectionFieldRowProps = Readonly<{
-  form: BuilderForm;
-  sectionIndex: number;
-  index: number;
-  onRemove: () => void;
-}>;
+type SectionFieldRowProps = MoveProps &
+  Readonly<{
+    form: BuilderForm;
+    sectionIndex: number;
+    index: number;
+    onRemove: () => void;
+  }>;
 
 const SectionFieldRow = ({
   form,
   sectionIndex,
   index,
   onRemove,
+  ...move
 }: SectionFieldRowProps) => {
   const name = useField(form, `sections.${sectionIndex}.fields.${index}.name`);
   const kind = useField(form, `sections.${sectionIndex}.fields.${index}.kind`);
@@ -139,17 +179,19 @@ const SectionFieldRow = ({
       optional={optional}
       options={options}
       onRemove={onRemove}
+      {...move}
     />
   );
 };
 
-type SectionEditorProps = Readonly<{
-  form: BuilderForm;
-  index: number;
-  onRemove: () => void;
-}>;
+type SectionEditorProps = MoveProps &
+  Readonly<{
+    form: BuilderForm;
+    index: number;
+    onRemove: () => void;
+  }>;
 
-const SectionEditor = ({ form, index, onRemove }: SectionEditorProps) => {
+const SectionEditor = ({ form, index, onRemove, ...move }: SectionEditorProps) => {
   const name = useField(form, `sections.${index}.name`);
   const kind = useField(form, `sections.${index}.kind`);
   const rows = useFieldArray(form, `sections.${index}.fields`);
@@ -166,6 +208,7 @@ const SectionEditor = ({ form, index, onRemove }: SectionEditorProps) => {
             <option value="array">array — repeating rows</option>
           </select>
         </div>
+        <MoveButtons {...move} />
         <button className="secondary" type="button" onClick={onRemove}>
           Remove section
         </button>
@@ -177,6 +220,10 @@ const SectionEditor = ({ form, index, onRemove }: SectionEditorProps) => {
           sectionIndex={index}
           index={fieldIndex}
           onRemove={() => rows.remove(fieldIndex)}
+          onUp={() => rows.move(fieldIndex, fieldIndex - 1)}
+          onDown={() => rows.move(fieldIndex, fieldIndex + 1)}
+          isFirst={fieldIndex === 0}
+          isLast={fieldIndex === rows.fields.length - 1}
         />
       ))}
       <span className="error">{rows.error?.[0] ?? " "}</span>
@@ -202,10 +249,36 @@ const useGeneratedFiles = (form: BuilderForm) => {
   }, [values]);
 };
 
+// Zip the files under a folder named for the component, so unzipping gives
+// the same tree formstand-gen --out would have written.
+const downloadZip = (
+  formName: string,
+  files: readonly Readonly<{ path: string; content: string }>[],
+): void => {
+  const bytes = makeZip(
+    files.map((file) => ({
+      path: `${formName}/${file.path}`,
+      content: file.content,
+    })),
+  );
+  // .buffer, not the view: TS's lib dts disagree across versions on whether
+  // a Uint8Array is a BlobPart. makeZip's array is freshly allocated and
+  // exactly sized, so its buffer IS the archive.
+  const url = URL.createObjectURL(
+    new Blob([bytes.buffer as ArrayBuffer], { type: "application/zip" }),
+  );
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${formName}.zip`;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
 const GeneratedOutput = ({ form }: Readonly<{ form: BuilderForm }>) => {
   const generated = useGeneratedFiles(form);
+  const formName = useFormSelector(form, (state) => state.values.formName);
   const [selected, setSelected] = useState<string | null>(null);
-  const [copied, setCopied] = useState<"file" | "all" | null>(null);
+  const [copied, setCopied] = useState<"file" | null>(null);
   const files = generated ?? [];
   const demoFiles = useMemo(
     () => files.map((file) => ({ path: file.path, source: file.content })),
@@ -216,9 +289,9 @@ const GeneratedOutput = ({ form }: Readonly<{ form: BuilderForm }>) => {
     files.find((file) => file.path === "hooks.ts") ??
     files[0];
 
-  const copy = (which: "file" | "all", text: string) => {
+  const copy = (text: string) => {
     void navigator.clipboard?.writeText(text);
-    setCopied(which);
+    setCopied("file");
     setTimeout(() => setCopied(null), 1600);
   };
 
@@ -231,16 +304,16 @@ const GeneratedOutput = ({ form }: Readonly<{ form: BuilderForm }>) => {
             <button
               className="secondary"
               type="button"
-              onClick={() => copy("file", current.content)}
+              onClick={() => copy(current.content)}
             >
               {copied === "file" ? "Copied!" : `Copy ${current.path}`}
             </button>
             <button
               className="secondary"
               type="button"
-              onClick={() => copy("all", joinModuleFiles(files))}
+              onClick={() => downloadZip(formName, files)}
             >
-              {copied === "all" ? "Copied!" : "Copy all files"}
+              Download .zip
             </button>
           </>
         ) : null}
@@ -336,6 +409,10 @@ export const SchemaBuilder = () => {
           form={form}
           index={index}
           onRemove={() => rootRows.remove(index)}
+          onUp={() => rootRows.move(index, index - 1)}
+          onDown={() => rootRows.move(index, index + 1)}
+          isFirst={index === 0}
+          isLast={index === rootRows.fields.length - 1}
         />
       ))}
       <button
@@ -353,6 +430,10 @@ export const SchemaBuilder = () => {
           form={form}
           index={index}
           onRemove={() => sectionRows.remove(index)}
+          onUp={() => sectionRows.move(index, index - 1)}
+          onDown={() => sectionRows.move(index, index + 1)}
+          isFirst={index === 0}
+          isLast={index === sectionRows.fields.length - 1}
         />
       ))}
       <button

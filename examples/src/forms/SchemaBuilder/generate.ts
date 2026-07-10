@@ -20,12 +20,10 @@ import {
 import {
   type ModuleFile,
   emitModuleForm,
-  joinModuleFiles,
 } from "../../../../cli/src/moduleLayout";
 import { type BuilderValues, parseEnumOptions } from "./builderSchema";
 
 export type { ModuleFile };
-export { joinModuleFiles };
 
 type FieldRow = BuilderValues["rootFields"][number];
 
