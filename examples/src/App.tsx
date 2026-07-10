@@ -324,6 +324,15 @@ const BLURBS: Readonly<Record<TabKey, string>> = {
     "Design a schema and the real formstand-gen emitters regenerate the files on every keystroke, right in your browser.",
 };
 
+// Demos whose content is legitimately wide — Perf's autofill grid, the
+// Schema builder's field rows + output viewer, the Invoice table — skip
+// the demo body's readable-measure cap.
+const WIDE_DEMOS: ReadonlySet<TabKey> = new Set([
+  "perf",
+  "schemaBuilder",
+  "muiInvoice",
+]);
+
 const GROUP_TITLES: readonly GroupTitle[] = [
   "Core",
   "Patterns",
@@ -620,6 +629,7 @@ export const App = () => {
             eyebrow={GROUP_OF[current.key]}
             title={current.label}
             blurb={BLURBS[current.key]}
+            wide={WIDE_DEMOS.has(current.key)}
             files={DEMO_SOURCES[current.key]}
           >
             {current.render()}

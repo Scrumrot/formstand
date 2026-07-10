@@ -18,6 +18,9 @@ export type DemoShellProps = Readonly<{
   eyebrow: string;
   title: string;
   blurb: string;
+  // Wide demos (grids, tables, side-by-side viewers) opt out of the
+  // readable-measure cap on the demo body.
+  wide?: boolean;
   files: readonly DemoFile[];
   children: ReactNode;
 }>;
@@ -107,6 +110,7 @@ export const DemoShell = ({
   eyebrow,
   title,
   blurb,
+  wide = false,
   files,
   children,
 }: DemoShellProps) => {
@@ -150,7 +154,7 @@ export const DemoShell = ({
           </div>
         </header>
         <div className={`demo-split ${panel !== null ? "panel-open" : ""}`}>
-          <div className="demo-body">{children}</div>
+          <div className={`demo-body${wide ? " wide" : ""}`}>{children}</div>
           {panel !== null ? (
             <aside className="demo-panel">
               {/* The header toggles are out of reach behind the mobile

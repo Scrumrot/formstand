@@ -393,6 +393,13 @@ h1 {
 .demo-body {
   animation: fs-rise 0.28s ease-out both;
   min-width: 0;
+  /* Forms read best at a bounded measure — without this they stretch to
+   * whatever a 4K card offers. Wide demos opt out via .wide (see
+   * WIDE_DEMOS in App). */
+  max-width: 760px;
+}
+.demo-body.wide {
+  max-width: none;
 }
 .demo-split {
   display: block;

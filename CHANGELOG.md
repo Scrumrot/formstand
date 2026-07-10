@@ -4,6 +4,9 @@
 
 ### Docs & examples (no package changes)
 
+- The demo body caps at a readable 760px measure; legitimately wide demos
+  (Perf's grid, the Schema builder, the Invoice table) opt out via an
+  explicit WIDE_DEMOS set.
 - The demo card gets a real header: group eyebrow, title, a one-line
   description of what each demo shows (exhaustive over the tab keys, like
   the group map), and the View state / View code toggles plus a copy-link
