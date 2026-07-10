@@ -61,27 +61,31 @@ export type SlotAtPath =
   | Readonly<{ exists: true; value: unknown }>
   | Readonly<{ exists: false }>;
 
-// Resolve `path` while checking that every numeric segment addresses a real
-// slot: an in-range array index, or a record key (containers decide,
-// mirroring readSegment). An out-of-range index — including any index into
-// an absent or non-container value — addresses no slot at all: a full-form
-// parse would never key an error there. Object properties reached by STRING
-// segments may be legitimately absent (an empty optional field is still
-// addressable). Returns the resolved value so callers don't walk the path
-// twice.
+// Resolve `path` while checking that every segment is read from a real
+// container: an in-range array index, or a key on a plain record (containers
+// decide, mirroring readSegment). A segment into an absent or non-container
+// value addresses no slot at all — a full-form parse would key that error at
+// the missing ANCESTOR, not here, so field-scoped validation must skip it
+// rather than parse the leaf's subschema against undefined (which would
+// fabricate a spurious "required" error the full pass never produces). Note
+// this checks the CONTAINER, not the value: a leaf that is undefined at the
+// FINAL step through a real record is still an addressable (legitimately
+// empty) slot. Returns the resolved value so callers don't walk twice.
 export const slotAtPath = (obj: unknown, path: string): SlotAtPath => {
   const walked = parsePath(path).reduce<
     Readonly<{ ok: boolean; current: unknown }>
   >(
     (acc, segment) => {
-      const outOfBounds =
-        typeof segment === "number" &&
-        (Array.isArray(acc.current)
-          ? segment >= acc.current.length
-          : !isPlainRecord(acc.current));
-      return !acc.ok || outOfBounds
+      const container = acc.current;
+      const addressable =
+        typeof segment === "number"
+          ? Array.isArray(container)
+            ? segment < container.length
+            : isPlainRecord(container)
+          : isPlainRecord(container);
+      return !acc.ok || !addressable
         ? { ok: false, current: undefined }
-        : { ok: true, current: readSegment(acc.current, segment) };
+        : { ok: true, current: readSegment(container, segment) };
     },
     { ok: true, current: obj },
   );

@@ -57,4 +57,35 @@ describe("validateField prefix scope", () => {
     expect(result.kind).toBe("invalid");
     expect(form.getState().errors["confirm"]).toEqual(["must match password"]);
   });
+
+  // Regression (2026-07 review #1): a field under an absent required
+  // ancestor must not fabricate a "required" error in the fast path — the
+  // full-form parse keys that at the ancestor (out of the field's scope),
+  // so the field is valid/skipped. Sync and async must agree.
+  it("skips a field whose required ancestor is undefined (sync == async)", async () => {
+    const schema = z.object({ a: z.object({ b: z.string() }) });
+    const blank = () =>
+      createForm(schema, {
+        initialValues: { a: undefined } as unknown as z.input<typeof schema>,
+      });
+    const syncForm = blank();
+    const sync = syncForm.validateFields(["a.b"]);
+    const syncBool = typeof sync === "boolean" ? sync : await sync;
+    const asyncForm = blank();
+    const asyncBool = await asyncForm.validateFieldsAsync(["a.b"]);
+    expect(syncBool).toBe(true);
+    expect(asyncBool).toBe(true);
+    expect(syncForm.getState().errors["a.b"]).toBeUndefined();
+    expect(asyncForm.getState().errors["a.b"]).toBeUndefined();
+  });
+
+  it("still validates a field when its ancestor is present", () => {
+    const schema = z.object({ a: z.object({ b: z.string().min(1) }) });
+    const form = createForm(schema, { initialValues: { a: { b: "" } } });
+    expect(form.validateFields(["a.b"])).toBe(false);
+    expect(form.getState().errors["a.b"]).toBeDefined();
+    form.setValue("a.b", "ok");
+    expect(form.validateFields(["a.b"])).toBe(true);
+    expect(form.getState().errors["a.b"]).toBeUndefined();
+  });
 });

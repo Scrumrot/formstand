@@ -77,6 +77,32 @@ describe("useVariantField", () => {
     });
   });
 
+  // Regression (2026-07 review #4): an OPTIONAL/nullable union must keep the
+  // guard — UnionValueAt strips the nullish part (NonNullable), so the
+  // discriminant and common keys are still rejected. Without the fix, the
+  // undefined member collapsed keyof to never and every key leaked through.
+  it("keeps the guard when the union field is optional", () => {
+    const optionalSchema = z.object({
+      payment: z
+        .discriminatedUnion("method", [
+          z.object({ method: z.literal("card"), cardNumber: z.string() }),
+          z.object({ method: z.literal("paypal"), email: z.string() }),
+        ])
+        .optional(),
+    });
+    renderHook(() => {
+      const form = useForm(optionalSchema, { initialValues: {} });
+      // @ts-expect-error the discriminant is common — rejected even optional
+      useVariantField(form, "payment", "method");
+      // @ts-expect-error not a variant field
+      useVariantField(form, "payment", "nope");
+      // a real variant field is still accepted and typed
+      const cardNumber = useVariantField(form, "payment", "cardNumber");
+      expectTypeOf(cardNumber.value).toEqualTypeOf<string | undefined>();
+      return null;
+    });
+  });
+
   it("a field from the inactive variant reads undefined", () => {
     const { result } = setup();
     // method is "card", so email (paypal-only) has no value.

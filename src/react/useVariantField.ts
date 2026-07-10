@@ -47,7 +47,11 @@ export type VariantKeys<V> = Exclude<AllKeys<V>, CommonKeys<V>> & string;
 // non-union path yields `never` field keys, so the call simply won't
 // typecheck a field argument.
 export type UnionValueAt<TValues, P extends string> = P extends keyof TValues
-  ? TValues[P]
+  ? // NonNullable is essential: for an OPTIONAL/nullable union field the
+    // resolved value includes undefined, which collapses `keyof V` to never
+    // — VariantKeys would then leak EVERY key (discriminant included) and
+    // the whole guard inverts. Strip the nullish part first.
+    NonNullable<TValues[P]>
   : P extends `${infer Head}.${infer Tail}`
     ? Head extends keyof TValues
       ? UnionValueAt<NonNullable<TValues[Head]>, Tail>
