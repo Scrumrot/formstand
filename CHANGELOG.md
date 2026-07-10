@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### formstand-cli
+
+- Generated `initialValues` (and array empty-item constants) only use the
+  `as unknown as` escape hatch when the blank draft genuinely can't
+  typecheck (a required number/date/enum starts `undefined`); every other
+  schema gets a checked type annotation, so typos in edited initial values
+  are compile errors again.
+- `--layout module`: the generated `index.ts` now re-exports `./schema` and
+  `./types` alongside `./hooks`, so consumers can type submit handlers and
+  server code (`ProfileValues`, `profileSchema`) off the module's public
+  API instead of deep-importing its files.
+
 ### Docs & examples (no package changes)
 
 - A "Schema builder" tab: formstand-gen running in the browser. A formstand
@@ -11,6 +23,10 @@
   cli/src — pure string builders, no Node APIs) regenerate the output files
   on every keystroke, shown in a file tree with copy-file / copy-all. All
   the CLI axes are selects: --ui, --layout, --sections, --columns.
+- The Schema builder's "Copy all files" is now "Download .zip" — a
+  dependency-free STORE-only zip writer (~50 lines, in the demo's own
+  source) bundles the generated files under a folder named for the
+  component, exactly the tree `--out` would have written.
 - Every demo has a direct link: hash routes like
   `examples/#/schema-builder` (kebab-cased tab keys), synced both ways so
   back/forward and hand-edited URLs work. Hash routing because GitHub Pages

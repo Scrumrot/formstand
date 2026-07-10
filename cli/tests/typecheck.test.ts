@@ -165,7 +165,8 @@ describe("generated components", () => {
     expect(plain.colliding.code).toContain("const userNamesArray = ");
     expect(plain.colliding.code).toContain("const userNamesArray2 = ");
     expect(plain.colliding.code).toContain("type UserNamesItem2 = ");
-    expect(plain.colliding.code).toContain("const emptyUserNamesItem2 = ");
+    // Cast-agnostic: string items get a checked annotation, not the cast.
+    expect(plain.colliding.code).toContain("const emptyUserNamesItem2");
   });
 
   // --sections/--columns land in the section wrappers; the typecheck
@@ -191,6 +192,18 @@ describe("generated components", () => {
     expect(mui.profile.code).not.toContain("Card");
     expect(mui.profile.code).not.toContain("Accordion");
     expect(shadcn.profile.code).not.toContain("bg-card");
+  });
+
+  // The blank-draft cast is emitted only when the draft genuinely can't
+  // typecheck (a required number/date/enum starts undefined); otherwise the
+  // initial values get a checked annotation — the typecheck programs above
+  // prove the annotated form actually compiles.
+  it("initialValues are cast only when the blank draft needs it", () => {
+    // profileSchema's required `role` enum forces the cast...
+    expect(plain.profile.code).toContain("as unknown as FormValues");
+    // ...but leafFreeSchema's blank draft is fully legal: checked, not cast.
+    expect(plain.leafFree.code).toContain("const initialValues: FormValues =");
+    expect(plain.leafFree.code).not.toContain("as unknown as FormValues");
   });
 
   // Leaf-free output must not reference usage-gated helpers/types whose

@@ -2,6 +2,7 @@ import { camelCase, pascalCase } from "./casing";
 import {
   DEFAULT_VISUAL,
   type EmitFormOptions,
+  blankNeedsCast,
   type KindUsage,
   type ObjectSpec,
   type SchemaImport,
@@ -852,10 +853,20 @@ const hooksFile = (
       `import { ${schemaImport.name} } from "./schema";`,
       `import type { ${naming.valuesType} } from "./types";`,
       "",
-      "// A form starts blank: required numbers/dates/enums begin undefined, so",
-      "// these initial values intentionally do not satisfy the schema yet —",
-      "// hence the cast. Validation reports the gaps on submit.",
-      `const initialValues = ${emitInitialValues(root, 0)} as unknown as ${naming.valuesType};`,
+      ...(blankNeedsCast(root)
+        ? [
+            "// A form starts blank: required numbers/dates/enums begin",
+            "// undefined, so these initial values intentionally do not satisfy",
+            "// the schema yet; hence the cast. Validation reports the gaps on",
+            "// submit.",
+            `const initialValues = ${emitInitialValues(root, 0)} as unknown as ${naming.valuesType};`,
+          ]
+        : [
+            "// A form starts blank, and every field here has a legal blank",
+            '// state (strings "", booleans false, optional/nullable',
+            "// undefined/null), so the draft typechecks as-is; no cast needed.",
+            `const initialValues: ${naming.valuesType} = ${emitInitialValues(root, 0)};`,
+          ]),
       "",
       "// One module-level form for the whole feature; every file below imports",
       "// these pre-wired hooks instead of receiving `form` via props or a",
@@ -1151,7 +1162,9 @@ const arraySectionFile = (
       `  valid: ${naming.hook("IsValid")}(${q(section.key)}),`,
       "});",
       "",
-      `const ${emptyName} = ${emitInitialValues(spec.item, 0)} as unknown as NonNullable<${naming.valuesType}[${q(section.key)}]>[number];`,
+      blankNeedsCast(spec.item)
+        ? `const ${emptyName} = ${emitInitialValues(spec.item, 0)} as unknown as NonNullable<${naming.valuesType}[${q(section.key)}]>[number];`
+        : `const ${emptyName}: NonNullable<${naming.valuesType}[${q(section.key)}]>[number] = ${emitInitialValues(spec.item, 0)};`,
       "",
       `const ${rowName} = ({`,
       "  index,",
@@ -1235,8 +1248,12 @@ const indexFile = (naming: Naming): ModuleFile => ({
   content: [
     HEADER,
     `export { ${naming.formName} } from "./${naming.formName}";`,
-    "// The form and its pre-wired hooks are the module's public API.",
+    "// The module's public API: the pre-wired hooks, plus the schema and",
+    "// draft types consumers need to type their own submit handlers and",
+    "// server code.",
     `export * from "./hooks";`,
+    `export * from "./schema";`,
+    `export * from "./types";`,
     "",
   ].join("\n"),
 });

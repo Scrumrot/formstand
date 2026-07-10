@@ -20,11 +20,11 @@ export const useEmergencyContactsSection = () => ({
   valid: useOnboardingIsValid("emergencyContacts"),
 });
 
-const emptyEmergencyContactsItem = {
+const emptyEmergencyContactsItem: NonNullable<OnboardingValues["emergencyContacts"]>[number] = {
   name: "",
   relationship: "",
   phone: "",
-} as unknown as NonNullable<OnboardingValues["emergencyContacts"]>[number];
+};
 
 const EmergencyContactsRow = ({
   index,

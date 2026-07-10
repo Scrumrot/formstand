@@ -3,9 +3,10 @@ import { createForm, createFormHooks } from "formstand";
 import { onboardingSchema } from "./schema";
 import type { OnboardingValues } from "./types";
 
-// A form starts blank: required numbers/dates/enums begin undefined, so
-// these initial values intentionally do not satisfy the schema yet —
-// hence the cast. Validation reports the gaps on submit.
+// A form starts blank: required numbers/dates/enums begin
+// undefined, so these initial values intentionally do not satisfy
+// the schema yet; hence the cast. Validation reports the gaps on
+// submit.
 const initialValues = {
   personal: {
     firstName: "",

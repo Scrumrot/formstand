@@ -133,6 +133,28 @@ export const emitInitialValues = (spec: FieldSpec, level = 0): string => {
   }
 };
 
+// Whether the blank draft (emitInitialValues) already satisfies the z.input
+// type: strings/booleans always have a blank literal, arrays start [], and
+// optional/nullable leaves legally hold undefined/null. Only REQUIRED
+// numbers/dates/enums must start undefined against the type's word, so the
+// cast is decidable from the IR: a checked type annotation when the blank
+// draft typechecks, the as-unknown-as escape hatch only when it can't.
+export const blankNeedsCast = (spec: FieldSpec): boolean => {
+  switch (spec.kind) {
+    case "object":
+      return spec.fields.some((field) => blankNeedsCast(field.spec));
+    case "array":
+      return false;
+    case "number":
+    case "date":
+    case "enum":
+      return !spec.nullable && !spec.optional;
+    case "string":
+    case "boolean":
+      return false;
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Zod schema source (for type-mode users, and round-trippable from the IR)
 // ---------------------------------------------------------------------------
@@ -325,10 +347,19 @@ const valuesTypeAndInitials = (ir: FieldSpec, schemaName: string): string =>
   [
     `type FormValues = z.input<typeof ${schemaName}>;`,
     "",
-    "// A form starts blank: required numbers/dates/enums begin undefined, so",
-    "// these initial values intentionally do not satisfy the schema yet —",
-    "// hence the cast. Validation reports the gaps on submit.",
-    `const initialValues = ${emitInitialValues(ir, 0)} as unknown as FormValues;`,
+    ...(blankNeedsCast(ir)
+      ? [
+          "// A form starts blank: required numbers/dates/enums begin undefined,",
+          "// so these initial values intentionally do not satisfy the schema",
+          "// yet; hence the cast. Validation reports the gaps on submit.",
+          `const initialValues = ${emitInitialValues(ir, 0)} as unknown as FormValues;`,
+        ]
+      : [
+          '// A form starts blank, and every field here has a legal blank state',
+          '// (strings "", booleans false, optional/nullable undefined/null),',
+          "// so the draft typechecks as-is; no cast needed.",
+          `const initialValues: FormValues = ${emitInitialValues(ir, 0)};`,
+        ]),
   ].join("\n");
 
 const arrayItemDecls = (arrays: readonly ArrayEntry[]): string =>
@@ -337,7 +368,9 @@ const arrayItemDecls = (arrays: readonly ArrayEntry[]): string =>
       "",
       `type ${entry.itemTypeName} = ${entry.itemTypeExpr};`,
       "",
-      `const ${entry.emptyItemName} = ${emitInitialValues(entry.item, 0)} as unknown as ${entry.itemTypeName};`,
+      blankNeedsCast(entry.item)
+        ? `const ${entry.emptyItemName} = ${emitInitialValues(entry.item, 0)} as unknown as ${entry.itemTypeName};`
+        : `const ${entry.emptyItemName}: ${entry.itemTypeName} = ${emitInitialValues(entry.item, 0)};`,
     ])
     .join("\n");
 

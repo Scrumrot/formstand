@@ -89,6 +89,15 @@ describe("emitModuleForm", () => {
     expect(section?.content).toContain('useProfileIsDirty("contacts")');
   });
 
+  // Consumers type submit handlers and server code off the module's public
+  // API — the schema and draft types must not need deep imports.
+  it("index.ts re-exports the hooks, schema, and types", () => {
+    const index = files.find((f) => f.path === "index.ts");
+    expect(index?.content).toContain('export * from "./hooks";');
+    expect(index?.content).toContain('export * from "./schema";');
+    expect(index?.content).toContain('export * from "./types";');
+  });
+
   // THE BIG ONE: the whole emitted module must typecheck against the real
   // library source with strict on and zero diagnostics.
   it("the emitted module typechecks against the library source", () => {
