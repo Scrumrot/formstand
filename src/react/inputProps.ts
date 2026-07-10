@@ -138,10 +138,15 @@ export const parseDateText = (text: string): ParsedDateText => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
   if (match === null) return { kind: "invalid" };
   const [, year, month, day] = match;
-  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  const y = Number(year);
+  const date = new Date(y, Number(month) - 1, Number(day));
+  // The Date constructor maps two-digit years 0–99 to 1900–1999, so a valid
+  // "0099-01-01" would fail the survival check below; force the literal year
+  // back on for years under 100 before checking rollover.
+  if (y < 100) date.setFullYear(y);
   // The parts must survive the Date constructor — rollovers are invalid,
   // not silently the 3rd of next month.
-  return date.getFullYear() === Number(year) &&
+  return date.getFullYear() === y &&
     date.getMonth() === Number(month) - 1 &&
     date.getDate() === Number(day)
     ? { kind: "date", value: date }
@@ -157,9 +162,29 @@ export const dateInputProps = <T extends Date | null | undefined>(
   "aria-invalid": ariaInvalid(field),
   onChange: (e) => {
     const parsed = parseDateText(e.target.value);
-    field.setValue(
-      (parsed.kind === "date" ? parsed.value : field.emptyValue) as T,
-    );
+    if (parsed.kind !== "date") {
+      field.setValue(field.emptyValue as T);
+      return;
+    }
+    // Preserve the existing value's time-of-day: <input type="date"> only
+    // edits the calendar date, so re-picking the SAME day on a value that
+    // carried a time (an initial `new Date()`) must stay a no-op — otherwise
+    // the new local-midnight Date differs from the timestamped original and
+    // the field reads spuriously dirty. Changing the day keeps that time.
+    const current = field.value;
+    const next =
+      current instanceof Date && !Number.isNaN(current.getTime())
+        ? new Date(
+            parsed.value.getFullYear(),
+            parsed.value.getMonth(),
+            parsed.value.getDate(),
+            current.getHours(),
+            current.getMinutes(),
+            current.getSeconds(),
+            current.getMilliseconds(),
+          )
+        : parsed.value;
+    field.setValue(next as T);
   },
   onBlur: field.onBlur,
 });

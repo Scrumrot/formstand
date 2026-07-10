@@ -4,6 +4,32 @@
 
 ### formstand
 
+#### Fixed (0.9 self-review)
+
+- `validateFields` no longer fabricates a "required" error for a field
+  whose required ancestor is `undefined` (the field-scoped fast path parsed
+  the leaf against undefined where the full-form parse keys the error at the
+  ancestor) — sync and async agreed again. `slotAtPath` now checks the
+  container at each step.
+- `useVariantField` keeps its type guard for **optional/nullable**
+  discriminated unions (a missing `NonNullable` let the nullish member
+  collapse `keyof` to `never` and leak every key, including the
+  discriminant).
+- `devtools` is active only in non-production builds
+  (`NODE_ENV !== "production"`), so opting in during development never
+  streams a shipped form's state to an end user with the extension.
+- `parseDateText` accepts calendar years under 100 (the Date constructor
+  maps 0–99 to 1900–1999; the literal year is forced back on).
+- `DateField` / `dateInputProps` preserve the existing value's time-of-day,
+  so re-picking the same day on a timestamped value is no longer spuriously
+  dirty (and changing the day keeps the time).
+- `parsePath`'s cached segment array is frozen — it is shared across callers
+  now, so external mutation throws instead of corrupting the cache.
+- `useVariantField` docs the write-gating contract (gate variant-field
+  writes on the discriminant, like rendering).
+
+#### Added
+
 - `useVariantField(form, unionPath, field)`: typed access to the
   variant-specific fields of a `z.discriminatedUnion` — the ones
   `FieldPath` omits because they exist in only some union members (the

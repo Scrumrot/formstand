@@ -20,6 +20,15 @@ import { type FieldFormApi, type UseFieldReturn, useField } from "./useField";
 // The hook is called unconditionally (React's rules) — every variant's
 // fields bind every render; you render the matching ones based on the
 // discriminant. Runtime behavior is exactly useField on the joined path.
+//
+// Gate WRITES on the discriminant too, not just rendering: the returned
+// setter writes `${unionPath}.${field}` regardless of the active variant, so
+// calling a card field's setValue while the paypal variant is active injects
+// a stray key into the stored object. z.discriminatedUnion strips it on
+// parse (validation looks clean), but dirtyFields()/persistForm see the
+// polluted shape. Render the matching fields only — as the example shows —
+// and their setters fire only for the active variant. formstand-gen's output
+// follows this; hand-written forms must too.
 
 // The value of `field` across the members of union `V` that declare it.
 // Distributes over V: each member contributes V[field] when it has field,

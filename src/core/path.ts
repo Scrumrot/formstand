@@ -25,10 +25,16 @@ const parseCache = new Map<string, readonly PathSegment[]>();
 export const parsePath = (path: string): readonly PathSegment[] => {
   const cached = parseCache.get(path);
   if (cached !== undefined) return cached;
-  const segments =
+  // Frozen because the array is now SHARED across every caller (and cached):
+  // parsePath is a public export, and pre-cache each call returned a private
+  // array that was safe to mutate. Freezing enforces the `readonly` type at
+  // runtime so an external `.sort()`/`.reverse()`/`.push()` throws instead of
+  // silently corrupting the cache for every later lookup of this path.
+  const segments = Object.freeze(
     path === ""
       ? []
-      : path.split(".").map((s) => (isIndexSegment(s) ? Number(s) : s));
+      : path.split(".").map((s) => (isIndexSegment(s) ? Number(s) : s)),
+  );
   if (parseCache.size >= PARSE_CACHE_MAX) parseCache.clear();
   parseCache.set(path, segments);
   return segments;

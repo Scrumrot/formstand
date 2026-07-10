@@ -474,7 +474,15 @@ export const createForm = <TSchema extends z.ZodType>(
               typeof options.devtools === "string"
                 ? options.devtools
                 : "formstand",
-            enabled: true,
+            // Non-production only, matching zustand's own devtools default:
+            // opting in during development must NOT stream every keystroke to
+            // an end user who happens to have the extension installed, where
+            // a module-singleton form's unbounded time-travel history is a
+            // real memory + serialization cost. Guarded for environments
+            // without process (a bundler defines NODE_ENV in real dev).
+            enabled:
+              typeof process !== "undefined" &&
+              process.env?.["NODE_ENV"] !== "production",
           }),
         );
 
