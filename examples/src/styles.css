@@ -108,11 +108,27 @@ body {
   font-weight: 650;
   letter-spacing: -0.02em;
   color: var(--text-bright);
+  /* Truncate rather than overflow: on a narrow bar with wide fonts an
+   * overflowing brand used to sit on top of the actions and eat their
+   * clicks (caught by the e2e). */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The "playground" badge is decorative — drop it on the mobile bar where
+ * space is tight; the docs site and desktop sidebar keep it. */
+.topbar-brand .brand-badge {
+  display: none;
 }
 .topbar-actions {
   display: flex;
   align-items: center;
   gap: 6px;
+  /* Own stacking context so the actions always sit above the brand link,
+   * even if the brand's box grows. */
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
 }
 .icon-button {
   display: inline-flex;
