@@ -4,6 +4,19 @@
 
 ### formstand
 
+- Redux DevTools: `createForm(schema, { devtools: "checkout" })` connects
+  the form's store to the extension via zustand's middleware — every write
+  named, inspectable, and time-travelable. Off by default and inert
+  without the extension.
+- Hot-path performance (the 2026-07 review's efficiency findings, no API
+  changes): `parsePath` is memoized (every field subscription re-parsed
+  its path per store notification); `validateFields` parses just the
+  requested subschemas when they're extractable — cross-field rules still
+  force the full parse, because extraction bails on refined levels — so a
+  wizard step stops paying for the whole schema per click; `diff()`/
+  `dirtyFields()` deep-compare each node once instead of once per ancestor
+  level; `focusFirstError` runs its focusability DOM walks only on
+  name-matched candidates instead of every named control in the document.
 - Dates are a first-class field kind: `DateField` (an `<input type="date">`
   bound to Date-typed paths) joins the shipped components, with
   `dateInputProps` / `dateToInputText` / `parseDateText` exported for

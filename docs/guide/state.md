@@ -100,6 +100,19 @@ form.updateState((state) => ({
 
 The patch type omits `errors` — it's derived; patch `schemaErrors`/`serverErrors` instead and the merged map is recomputed. Note `updateState` is a raw patch: unlike `setValue`, it does not run the [server-error release contract](./errors#when-a-server-error-is-released) for you.
 
+## Redux DevTools
+
+The store is zustand underneath, so the Redux DevTools extension works with one option:
+
+```ts
+const form = createForm(schema, {
+  initialValues,
+  devtools: "checkout", // the instance name in the extension
+});
+```
+
+Every state write shows up inspectable and time-travelable, named per form so several forms stay distinguishable (`devtools: true` uses the name "formstand"). Off by default; with the option set but the extension absent, the middleware is inert — safe to leave on in development builds.
+
 ## Subscriptions outside React
 
 ```ts
