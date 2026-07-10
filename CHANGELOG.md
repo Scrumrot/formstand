@@ -2,9 +2,9 @@
 
 ## Unreleased
 
-### formstand
+## 0.9.0 — 2026-07-10
 
-#### Fixed (0.9 self-review)
+### Fixed
 
 - `validateFields` no longer fabricates a "required" error for a field
   whose required ancestor is `undefined` (the field-scoped fast path parsed
@@ -28,7 +28,7 @@
 - `useVariantField` docs the write-gating contract (gate variant-field
   writes on the discriminant, like rendering).
 
-#### Added
+### Added
 
 - `useVariantField(form, unionPath, field)`: typed access to the
   variant-specific fields of a `z.discriminatedUnion` — the ones
@@ -62,40 +62,6 @@
   throughout (never `toISOString()` — June 1 stays June 1 west of UTC),
   the `emptyValue` round-trip on clear, and rollover rejection
   (`2026-02-31` is invalid, not March 3).
-
-### formstand-cli
-
-- Discriminated unions (`z.discriminatedUnion`) at a field position: the
-  generator emits a discriminant select plus per-variant conditional
-  blocks, binding variant fields through the library's `useVariantField`
-  (single-file) or bound `use{Name}VariantField` (module layout) — fully
-  typed, no casts. All six emit paths (plain/mui/shadcn × single-file/
-  module) typecheck against the real helper. Initial values pick the
-  first variant; the schema round-trips. Nested-in-section unions,
-  unions in array rows, and non-scalar variant fields keep a TODO.
-- Nested-array row extraction (`--layout module`): an array inside a
-  section object, or an array inside an array row, now generates its own
-  Row/Rows component pair with a bound `useFieldArray` on the template
-  path (two numeric holes for arrays-in-rows,
-  `contacts.${parentIndex}.phones.${index}.number`) instead of a TODO
-  comment. One extraction level per array — deeper nesting keeps a TODO.
-- `formstand.config.ts` (also `.mts`/`.js`/`.mjs`, or `--config <file>`):
-  project defaults for `ui`/`layout`/`sections`/`columns`, written with the
-  typed `defineConfig` export. Precedence is flags > config > built-ins,
-  and config typos fail as loudly as flag typos.
-- `--watch`: regenerate whenever the input file changes (requires
-  `--out`; reruns overwrite their own output). Watches the parent
-  directory so editors that save via rename don't kill the watcher.
-- A kind × optional × nullable matrix test pins `emitInitialValues` and
-  `blankNeedsCast` agreement in both directions: the no-cast combos must
-  typecheck with the checked annotation, and every cast combo is proven
-  to genuinely need it.
-- Date fields emit real bindings instead of a text input with a cast and
-  a TODO: `DateField` (plain), `muiDateFieldProps` (MUI `type="date"`
-  TextField with a floated label), `shadcnDateInputProps` (shadcn Input).
-  `DATE_CAST` and the per-backend date TODOs are gone from generated
-  output — forms with dates submit successfully out of the box. Requires
-  formstand ≥ 0.9 for date fields.
 
 ### CI (no package changes)
 
@@ -147,6 +113,40 @@
   stay dark in both themes.
 - The GitHub link in the shell shows the repo's star count (best-effort,
   cached per session, skipped under tests).
+
+## formstand-cli 0.6.0 — 2026-07-10
+
+- Discriminated unions (`z.discriminatedUnion`) at a field position: the
+  generator emits a discriminant select plus per-variant conditional
+  blocks, binding variant fields through the library's `useVariantField`
+  (single-file) or bound `use{Name}VariantField` (module layout) — fully
+  typed, no casts. All six emit paths (plain/mui/shadcn × single-file/
+  module) typecheck against the real helper. Initial values pick the
+  first variant; the schema round-trips. Nested-in-section unions,
+  unions in array rows, and non-scalar variant fields keep a TODO.
+- Nested-array row extraction (`--layout module`): an array inside a
+  section object, or an array inside an array row, now generates its own
+  Row/Rows component pair with a bound `useFieldArray` on the template
+  path (two numeric holes for arrays-in-rows,
+  `contacts.${parentIndex}.phones.${index}.number`) instead of a TODO
+  comment. One extraction level per array — deeper nesting keeps a TODO.
+- `formstand.config.ts` (also `.mts`/`.js`/`.mjs`, or `--config <file>`):
+  project defaults for `ui`/`layout`/`sections`/`columns`, written with the
+  typed `defineConfig` export. Precedence is flags > config > built-ins,
+  and config typos fail as loudly as flag typos.
+- `--watch`: regenerate whenever the input file changes (requires
+  `--out`; reruns overwrite their own output). Watches the parent
+  directory so editors that save via rename don't kill the watcher.
+- A kind × optional × nullable matrix test pins `emitInitialValues` and
+  `blankNeedsCast` agreement in both directions: the no-cast combos must
+  typecheck with the checked annotation, and every cast combo is proven
+  to genuinely need it.
+- Date fields emit real bindings instead of a text input with a cast and
+  a TODO: `DateField` (plain), `muiDateFieldProps` (MUI `type="date"`
+  TextField with a floated label), `shadcnDateInputProps` (shadcn Input).
+  `DATE_CAST` and the per-backend date TODOs are gone from generated
+  output — forms with dates submit successfully out of the box. Requires
+  formstand ≥ 0.9 for date fields.
 
 ## 0.8.0 — 2026-07-10
 
