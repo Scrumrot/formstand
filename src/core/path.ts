@@ -14,10 +14,25 @@ const isIndexSegment = (s: string): boolean => {
   return Number.isInteger(n) && n >= 0 && String(n) === s;
 };
 
-export const parsePath = (path: string): readonly PathSegment[] =>
-  path === ""
-    ? []
-    : path.split(".").map((s) => (isIndexSegment(s) ? Number(s) : s));
+// Hot path: every field subscription re-resolves its path on every store
+// notification (getAtPath in selectors), so parsing is memoized — a form's
+// paths are a small fixed set. Bounded like equality's dirtyCache: a
+// pathological unbounded key set resets the cache instead of growing it
+// forever (the reset only costs re-parsing, never correctness).
+const PARSE_CACHE_MAX = 4096;
+const parseCache = new Map<string, readonly PathSegment[]>();
+
+export const parsePath = (path: string): readonly PathSegment[] => {
+  const cached = parseCache.get(path);
+  if (cached !== undefined) return cached;
+  const segments =
+    path === ""
+      ? []
+      : path.split(".").map((s) => (isIndexSegment(s) ? Number(s) : s));
+  if (parseCache.size >= PARSE_CACHE_MAX) parseCache.clear();
+  parseCache.set(path, segments);
+  return segments;
+};
 
 const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);

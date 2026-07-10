@@ -2,21 +2,24 @@ import type { ErrorMap } from "../core/types";
 import { isPathOrChild } from "../core/validation";
 
 // The shared candidate walk for focusFirstError/focusField: form controls
-// with a `name`, in DOM order, minus the ones that can't take focus. Hidden
-// and disabled controls, and controls inside a closed <dialog>, can't —
-// without the filter, a leading <input type="hidden" name="csrf"> would
-// swallow focusFirstError's root fallback, and a name match inside a
-// not-yet-opened dialog would shadow the visible one.
-const focusableControls = (scope: ParentNode): readonly HTMLElement[] =>
-  [
-    ...scope.querySelectorAll<HTMLElement>(
-      "input[name], select[name], textarea[name]",
-    ),
-  ].filter(
-    (el) =>
-      !el.matches(':disabled, [type="hidden"]') &&
-      el.closest("dialog:not([open])") === null,
-  );
+// with a `name`, in DOM order. Focusability is a SEPARATE, later filter —
+// matches()/closest() are ancestor walks, so they run on the few
+// name-matched candidates instead of every named control in the document
+// (a failed submit on a page with hundreds of controls shouldn't pay
+// hundreds of DOM traversals to focus one input).
+const namedControls = (scope: ParentNode): readonly HTMLElement[] => [
+  ...scope.querySelectorAll<HTMLElement>(
+    "input[name], select[name], textarea[name]",
+  ),
+];
+
+// Hidden and disabled controls, and controls inside a closed <dialog>,
+// can't take focus — without the filter, a leading <input type="hidden"
+// name="csrf"> would swallow focusFirstError's root fallback, and a name
+// match inside a not-yet-opened dialog would shadow the visible one.
+const isFocusCandidate = (el: HTMLElement): boolean =>
+  !el.matches(':disabled, [type="hidden"]') &&
+  el.closest("dialog:not([open])") === null;
 
 // Does `el` actually hold focus? Ask the element's OWN root (document or
 // shadow root): document.activeElement retargets to the shadow HOST for a
@@ -80,10 +83,10 @@ export const focusFirstError = (
     (k) => k !== "" && (errors[k]?.length ?? 0) > 0,
   );
   const hasRootError = (errors[""]?.length ?? 0) > 0;
-  const controls = focusableControls(scope);
-  const fieldMatches = controls.filter((el) =>
-    nameMatchesAny(el, erroredPaths),
-  );
+  const controls = namedControls(scope);
+  const fieldMatches = controls
+    .filter((el) => nameMatchesAny(el, erroredPaths))
+    .filter(isFocusCandidate);
   // The root-"" fallback ("focus the first control") is only meaningful when
   // "first control" is unambiguous. With the default document scope on a
   // page holding several <form>s, the first control could belong to a form
@@ -93,7 +96,11 @@ export const focusFirstError = (
     hasRootError &&
     (root !== undefined || document.querySelectorAll("form").length <= 1);
   const candidates =
-    fieldMatches.length > 0 ? fieldMatches : rootFallbackApplies ? controls : [];
+    fieldMatches.length > 0
+      ? fieldMatches
+      : rootFallbackApplies
+        ? controls.filter(isFocusCandidate)
+        : [];
   return focusFirstOf(candidates);
 };
 
@@ -120,10 +127,14 @@ export const focusFirstError = (
 // Returns whether a control actually received focus. Safe to import during
 // SSR — it only touches the DOM when called.
 export const focusField = (path: string, root?: ParentNode): boolean => {
-  const controls = focusableControls(root ?? document);
+  const controls = namedControls(root ?? document);
   return path === ""
     ? (root !== undefined ||
         document.querySelectorAll("form").length <= 1) &&
-        focusFirstOf(controls)
-    : focusFirstOf(controls.filter((el) => nameMatchesAny(el, [path])));
+        focusFirstOf(controls.filter(isFocusCandidate))
+    : focusFirstOf(
+        controls
+          .filter((el) => nameMatchesAny(el, [path]))
+          .filter(isFocusCandidate),
+      );
 };

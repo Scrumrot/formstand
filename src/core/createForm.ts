@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import type { StoreApi } from "zustand/vanilla";
 import { createStore } from "zustand/vanilla";
+import { devtools } from "zustand/middleware";
 import {
   type IndexMapper,
   insertAt,
@@ -43,6 +44,12 @@ export type CreateFormOptions<TSchema extends z.ZodType> = Readonly<{
   // schemas validate in the background. Note this surfaces errors for untouched
   // fields right away — gate error display on `touched` if that's not wanted.
   validateOnMount?: boolean;
+  // Connect the form's store to the Redux DevTools extension (zustand's
+  // devtools middleware), named so multiple forms are distinguishable:
+  // `devtools: "checkout"` shows a "checkout" instance with every state
+  // write inspectable and time-travelable. `true` uses "formstand". Off by
+  // default; when the extension isn't installed the middleware is inert.
+  devtools?: boolean | string;
 }>;
 
 export type SubmitHandler<TSchema extends z.ZodType> = (
@@ -285,8 +292,11 @@ const dirtyPathsOf = (
   initial: unknown,
   prefix: string,
 ): readonly string[] => {
-  if (valuesEqual(values, initial)) return [];
+  if (Object.is(values, initial)) return [];
   if (isPlainObject(values) && isPlainObject(initial)) {
+    // One structural recursion: the deep compare runs only at leaf/array
+    // boundaries below, never per ancestor level — otherwise every node is
+    // re-deep-compared once per level above it (O(n × depth) for diff()).
     const keys = new Set([...Object.keys(values), ...Object.keys(initial)]);
     const childPaths = [...keys].flatMap((k) =>
       dirtyPathsOf(
@@ -295,13 +305,17 @@ const dirtyPathsOf = (
         prefix === "" ? k : `${prefix}.${k}`,
       ),
     );
-    // valuesEqual said the objects differ, but no child diverges by its own
-    // comparison — a key-count mismatch where the extra key holds undefined
-    // ({} vs { nickname: undefined }). Report the object itself so diff()/
-    // dirtyFields() stay non-empty whenever isFieldDirty/useIsDirty say dirty.
-    return childPaths.length > 0 ? childPaths : [prefix];
+    if (childPaths.length > 0) return childPaths;
+    // Every shared key compared equal, so the key SETS decide: a mismatch
+    // where the extra key holds undefined ({} vs { nickname: undefined })
+    // reports the object itself, keeping diff()/dirtyFields() non-empty
+    // whenever isFieldDirty/useIsDirty say dirty (valuesEqual's own rule).
+    const sameKeySet =
+      Object.keys(values).length === Object.keys(initial).length &&
+      Object.keys(values).every((k) => Object.hasOwn(initial, k));
+    return sameKeySet ? [] : [prefix];
   }
-  return [prefix];
+  return valuesEqual(values, initial) ? [] : [prefix];
 };
 
 // Key for the whole-form async validation's ownership token (internal —
@@ -447,7 +461,22 @@ export const createForm = <TSchema extends z.ZodType>(
     reValidateMode: initialReValidateMode,
   };
 
-  const store = createStore<FormState<Values>>(() => initial);
+  // The devtools middleware is opt-in and otherwise absent — a plain store
+  // has zero overhead. `enabled` stays true when opted in even in
+  // production builds: opting in IS the signal, and without the browser
+  // extension the middleware is inert anyway.
+  const store =
+    options.devtools === undefined || options.devtools === false
+      ? createStore<FormState<Values>>(() => initial)
+      : createStore<FormState<Values>>()(
+          devtools(() => initial, {
+            name:
+              typeof options.devtools === "string"
+                ? options.devtools
+                : "formstand",
+            enabled: true,
+          }),
+        );
 
   // A full pass replaces the schema channel wholesale; the server channel is
   // untouched, which is the whole preservation story — a background pass
@@ -493,7 +522,53 @@ export const createForm = <TSchema extends z.ZodType>(
         : result.kind === "valid";
     }
     try {
-      const result = validateSync(schema, store.getState().values);
+      const values = store.getState().values;
+      // Fast path: when every requested path extracts a subschema, parse
+      // just those slots instead of the whole form (a wizard step on a
+      // 200-field schema stops paying for the other 190 fields per click).
+      // This matches the full parse EXACTLY because extraction bailing is
+      // what guards cross-field rules: fieldSchemaAtPath returns null when
+      // any traversed level carries refinements or wrappers, so an
+      // ancestor refine that could key errors into these paths forces the
+      // full parse below.
+      const scopes = paths.map((path) => ({
+        path,
+        scope: fieldScopeFor(path, values),
+      }));
+      if (
+        scopes.every(
+          ({ scope }) =>
+            scope.kind === "skip" ||
+            (scope.kind === "parse" && scope.viaSubschema),
+        )
+      ) {
+        const merged = scopes.reduce<ErrorMap>(
+          (acc, { path, scope }) =>
+            scope.kind === "skip"
+              ? acc
+              : {
+                  ...acc,
+                  ...scopeSettledResult(
+                    validateSync(scope.schema, scope.value),
+                    path,
+                    true,
+                  ),
+                },
+          {},
+        );
+        store.setState((state) => ({
+          ...state,
+          ...errorChannels(state, {
+            schemaErrors: reuseErrorRefs(
+              mergeScopedErrors(state.schemaErrors, merged, paths),
+              state.schemaErrors,
+            ),
+            serverErrors: omitScope(state.serverErrors, paths),
+          }),
+        }));
+        return Object.values(merged).flat().length === 0;
+      }
+      const result = validateSync(schema, values);
       const fullErrors =
         result.kind === "invalid" ? result.errors : emptyErrors;
       store.setState((state) => ({
