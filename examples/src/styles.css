@@ -11,35 +11,183 @@
   --fs-accent-deep: #c0842c;
   --fs-accent-soft: rgba(226, 169, 78, 0.12);
   --fs-check: #86c166;
+  /* Theme surface/text palette — dark is the default; html[data-theme]
+   * (set by the shell's theme toggle) swaps the whole set. Terminal
+   * surfaces (.state-dump/.command-line/.code-view) deliberately stay
+   * dark in BOTH themes, so their colors are literals below, not vars. */
+  --bg: #0b0d12;
+  --bg-card: #11151c;
+  --bg-inset: #0d1016;
+  --border: #1f2530;
+  --border-strong: #2a3140;
+  --text: #d8dde6;
+  --text-bright: #e6ebf5;
+  --text-label: #b0b8c7;
+  --text-muted: #8b94a7;
+  --accent-text: #f0e2c4;
+  --error: #ff7878;
+  --pending: #c89b3c;
+  --shadow-card: 0 12px 32px rgba(0, 0, 0, 0.28);
+  --backdrop: rgba(3, 5, 9, 0.55);
+}
+:root[data-theme="light"] {
+  --fs-accent: #c0842c;
+  --fs-accent-deep: #a86f1e;
+  --fs-accent-soft: rgba(192, 132, 44, 0.14);
+  --bg: #f6f4ee;
+  --bg-card: #ffffff;
+  --bg-inset: #efece3;
+  --border: #e2dccd;
+  --border-strong: #cdc5b1;
+  --text: #333945;
+  --text-bright: #171c26;
+  --text-label: #4e5666;
+  --text-muted: #6d7585;
+  --accent-text: #7a5416;
+  --error: #c03535;
+  --pending: #8a6a1f;
+  --shadow-card: 0 10px 28px rgba(90, 80, 60, 0.14);
+  --backdrop: rgba(40, 36, 28, 0.4);
 }
 * { box-sizing: border-box; }
 body {
   font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
   margin: 0;
-  background: #0b0d12;
-  color: #d8dde6;
+  background: var(--bg);
+  color: var(--text);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
-/* Layout: sidebar nav + content. Mobile-first (stacked, wrapping chips),
- * then side-by-side from tablet up, scaling paddings/widths through HD to
- * 4K. All selectors stay class-scoped (see the note at the top). */
+/* Layout: sidebar nav + content. Mobile-first (top app bar + off-canvas
+ * drawer), then real sidebar from tablet up, scaling paddings/widths
+ * through HD to 4K. All selectors stay class-scoped (see the note at the
+ * top). */
 .shell {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
 }
+/* Mobile app bar: menu / title / theme + GitHub. Hidden from tablet up. */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 12px;
+}
+.topbar-brand {
+  margin: 0;
+  padding: 0;
+  position: static;
+  flex: 1;
+  min-width: 0;
+}
+.topbar-brand svg {
+  width: 26px;
+  height: 26px;
+}
+.topbar-title {
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--text-bright);
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    border-color 0.18s ease,
+    color 0.18s ease,
+    background-color 0.18s ease;
+}
+.icon-button:hover {
+  border-color: var(--fs-accent);
+  color: var(--accent-text);
+}
+.icon-button svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+.gh-stars {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding-right: 2px;
+}
 .sidebar {
   padding: 18px 20px 14px;
-  border-bottom: 1px solid #1f2530;
+  border-bottom: 1px solid var(--border);
+}
+/* Mobile: the sidebar is an off-canvas drawer under the app bar. */
+@media (max-width: 759.98px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(300px, 86vw);
+    background: var(--bg);
+    border-bottom: 0;
+    border-right: 1px solid var(--border-strong);
+    z-index: 40;
+    overflow-y: auto;
+    transform: translateX(-105%);
+    transition: transform 0.25s ease;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 12px 0 40px rgba(0, 0, 0, 0.45);
+  }
+}
+.nav-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--backdrop);
+  z-index: 35;
+}
+@media (min-width: 760px) {
+  .topbar,
+  .nav-backdrop {
+    display: none;
+  }
 }
 /* The demo nav is an x-tree-view (styled via MUI's sx); the wrapper only
  * needs breathing room. */
 .nav {
   margin: 0 -4px;
 }
+.sidebar-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 16px;
+}
+/* On mobile the drawer duplicates the app bar's controls — hide them. */
+@media (max-width: 759.98px) {
+  .sidebar-controls {
+    display: none;
+  }
+}
 .sidebar-foot {
   font-size: 13px;
-  color: #8b94a7;
-  margin: 16px 0 0;
+  color: var(--text-muted);
+  margin: 12px 0 0;
 }
 .sidebar-foot a {
   color: var(--fs-accent);
@@ -61,7 +209,7 @@ body {
 .demo-title {
   margin: 0 0 14px;
   font-size: 20px;
-  color: #e6ebf5;
+  color: var(--text-bright);
   letter-spacing: -0.01em;
 }
 
@@ -74,7 +222,7 @@ body {
     width: 232px;
     flex-shrink: 0;
     border-bottom: 0;
-    border-right: 1px solid #1f2530;
+    border-right: 1px solid var(--border);
     position: sticky;
     top: 0;
     max-height: 100vh;
@@ -129,7 +277,7 @@ h1 {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: #0b0d12;
+  background: var(--bg);
   padding: 4px 0 10px;
 }
 .brand svg {
@@ -154,18 +302,18 @@ h1 {
   font-size: 11px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: #8b94a7;
-  border: 1px solid #2a3140;
+  color: var(--text-muted);
+  border: 1px solid var(--border-strong);
   border-radius: 999px;
   padding: 3px 9px;
   transform: translateY(2px);
 }
 .card {
-  background: #11151c;
-  border: 1px solid #1f2530;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 24px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--shadow-card);
 }
 .demo-body {
   animation: fs-rise 0.28s ease-out both;
@@ -178,6 +326,26 @@ h1 {
   margin-top: 20px;
   min-width: 0;
 }
+/* Mobile: an open panel becomes a bottom sheet (the toggle buttons ride
+ * along at its top, so closing is one tap). Closed, the panel is just the
+ * two buttons in normal flow. */
+@media (max-width: 759.98px) {
+  .demo-split.panel-open .demo-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 25;
+    margin-top: 0;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border-strong);
+    border-radius: 14px 14px 0 0;
+    padding: 12px 14px 16px;
+    max-height: 78vh;
+    overflow: auto;
+    box-shadow: 0 -16px 40px rgba(0, 0, 0, 0.45);
+  }
+}
 .demo-panel-tabs {
   display: flex;
   gap: 8px;
@@ -185,15 +353,15 @@ h1 {
 }
 button.secondary.active {
   border-color: var(--fs-accent);
-  color: #f0e2c4;
+  color: var(--accent-text);
   background: var(--fs-accent-soft);
 }
 .code-panel .code-tree {
   margin-top: 24px;
-  border: 1px solid #1f2530;
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 4px;
-  background: #0d1016;
+  background: var(--bg-inset);
 }
 .code-panel .code-tree + .code-view {
   margin-top: 8px;
@@ -202,15 +370,15 @@ button.secondary.active {
  * (which reuses .code-panel/.code-tree but sits in the demo body, so its
  * pre carries .command-line instead of the shell's .state-dump). */
 .builder-section {
-  border: 1px solid #1f2530;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px 14px 8px;
   margin-bottom: 12px;
-  background: #0d1016;
+  background: var(--bg-inset);
 }
 .builder-optional {
   align-items: center;
-  color: #8b94a7;
+  color: var(--text-muted);
   font-size: 13px;
   margin-top: 8px;
   white-space: nowrap;
@@ -220,7 +388,7 @@ button.secondary.active {
 }
 .builder-output {
   margin-top: 24px;
-  border-top: 1px solid #1f2530;
+  border-top: 1px solid var(--border);
   padding-top: 16px;
 }
 .builder-output .code-tree {
@@ -263,7 +431,7 @@ button.secondary.active {
 }
 .field label {
   font-size: 13px;
-  color: #b0b8c7;
+  color: var(--text-label);
 }
 /* Text-input chrome excludes checkboxes on purpose: a checkbox matching
  * the padded/bordered box styles renders at ~40px for one frame during
@@ -271,9 +439,9 @@ button.secondary.active {
  * shoving everything below it down and back. Checkboxes stay native. */
 .field input:not([type="checkbox"]),
 .field select {
-  background: #0b0d12;
-  border: 1px solid #2a3140;
-  color: #e6ebf5;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  color: var(--text-bright);
   padding: 10px 12px;
   border-radius: 6px;
   font-size: 14px;
@@ -295,12 +463,12 @@ button.secondary.active {
   outline-offset: 2px;
 }
 .field .error {
-  color: #ff7878;
+  color: var(--error);
   font-size: 12px;
   min-height: 14px;
 }
 .field .pending {
-  color: #c89b3c;
+  color: var(--pending);
   font-size: 12px;
 }
 .row {
@@ -333,8 +501,8 @@ button.primary[disabled] {
 }
 button.secondary {
   background: transparent;
-  border: 1px solid #2a3140;
-  color: #d8dde6;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
   padding: 6px 12px;
   border-radius: 6px;
   cursor: pointer;
@@ -346,7 +514,7 @@ button.secondary {
 }
 button.secondary:hover:not([disabled]) {
   border-color: var(--fs-accent);
-  color: #f0e2c4;
+  color: var(--accent-text);
 }
 .array-item {
   display: grid;
@@ -355,9 +523,8 @@ button.secondary:hover:not([disabled]) {
   align-items: center;
   margin-bottom: 8px;
 }
-/* The command builder's live command line — same terminal look as the
- * state dump, but its own class so the shell's panel assertions (and
- * animation) don't apply to demo content. */
+/* Terminal surfaces stay dark in BOTH themes (code on dark reads better
+ * and keeps the Prism palette working), so their colors are literals. */
 .command-line {
   background: #07090d;
   border: 1px solid #1f2530;
@@ -440,8 +607,11 @@ button.secondary:hover:not([disabled]) {
   .state-dump {
     animation: none;
   }
+  body,
+  .sidebar,
   .brand svg,
   .sidebar-foot a,
+  .icon-button,
   .field input,
   .field select,
   button.primary,

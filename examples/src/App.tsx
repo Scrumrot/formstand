@@ -1,4 +1,10 @@
 import { type ReactElement, useEffect, useState } from "react";
+import {
+  ThemeModeProvider,
+  type ThemeMode,
+  useGitHubStars,
+  useThemeModeState,
+} from "./theme";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import FolderRoundedIcon from "@mui/icons-material/FolderRounded";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
@@ -299,42 +305,168 @@ const useHashTab = (fallback: TabKey) => {
   return { active, select };
 };
 
+const REPO = "Scrumrot/formstand";
+
+// The mark: a form (with its green check) on a music stand.
+const BrandMark = () => (
+  <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
+    <g
+      stroke="#D99A3D"
+      strokeWidth="5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="12" y="7" width="40" height="29" rx="6" />
+      <path d="M20 17h16" />
+      <path d="M20 26h9" />
+      <path d="M32 36v13" />
+      <path d="M32 49l-11 9" />
+      <path d="M32 49l11 9" />
+      <path d="M32 49v9" />
+    </g>
+    <path
+      d="M37 25l4 4 7.5-8.5"
+      stroke="#86C166"
+      strokeWidth="5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+type ThemeToggleProps = Readonly<{ mode: ThemeMode; onToggle: () => void }>;
+
+const ThemeToggle = ({ mode, onToggle }: ThemeToggleProps) => (
+  <button
+    className="icon-button"
+    type="button"
+    aria-label={mode === "dark" ? "switch to light theme" : "switch to dark theme"}
+    onClick={onToggle}
+  >
+    {mode === "dark" ? (
+      // sun: switch TO light
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="4.5" stroke="currentColor" strokeWidth="2" />
+        <g stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <path d="M12 2.5v2.5" />
+          <path d="M12 19v2.5" />
+          <path d="M2.5 12h2.5" />
+          <path d="M19 12h2.5" />
+          <path d="M5 5l1.8 1.8" />
+          <path d="M17.2 17.2l1.8 1.8" />
+          <path d="M19 5l-1.8 1.8" />
+          <path d="M6.8 17.2l-1.8 1.8" />
+        </g>
+      </svg>
+    ) : (
+      // moon: switch TO dark
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+          d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinejoin="round"
+        />
+      </svg>
+    )}
+  </button>
+);
+
+const starText = (stars: number): string =>
+  stars >= 1000 ? `${(stars / 1000).toFixed(1)}k` : String(stars);
+
+const GitHubLink = () => {
+  const stars = useGitHubStars(REPO);
+  return (
+    <a
+      className="icon-button gh-link"
+      href={`https://github.com/${REPO}`}
+      target="_blank"
+      rel="noreferrer"
+      aria-label="formstand on GitHub"
+    >
+      <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
+      </svg>
+      {stars !== null ? (
+        <span className="gh-stars" title={`${stars} stars`}>
+          {"★"} {starText(stars)}
+        </span>
+      ) : null}
+    </a>
+  );
+};
+
 export const App = () => {
   const { active, select } = useHashTab("basic");
+  const { mode, toggle } = useThemeModeState();
+  const [navOpen, setNavOpen] = useState(false);
   const current = TABS.find((t) => t.key === active);
+  const choose = (key: TabKey) => {
+    select(key);
+    // Picking a demo from the mobile drawer should land you ON the demo.
+    setNavOpen(false);
+  };
+
+  useEffect(() => {
+    if (!navOpen) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setNavOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [navOpen]);
 
   return (
+    <ThemeModeProvider mode={mode}>
     <div className="shell">
-      <aside className="sidebar">
+      {/* Mobile-only app bar: menu, title, theme + GitHub (CSS hides it
+          from tablet up, where the sidebar carries the same controls). */}
+      <header className="topbar">
+        <button
+          className="icon-button"
+          type="button"
+          aria-label="open demo list"
+          onClick={() => setNavOpen(true)}
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <g stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M4 6h16" />
+              <path d="M4 12h16" />
+              <path d="M4 18h16" />
+            </g>
+          </svg>
+        </button>
+        <a
+          className="brand topbar-brand"
+          href="https://scrumrot.github.io/formstand/"
+          title="formstand docs"
+        >
+          <BrandMark />
+          <span className="topbar-title">formstand</span>
+          <span className="brand-badge">playground</span>
+        </a>
+        <div className="topbar-actions">
+          <ThemeToggle mode={mode} onToggle={toggle} />
+          <GitHubLink />
+        </div>
+      </header>
+
+      {navOpen ? (
+        <div
+          className="nav-backdrop"
+          aria-hidden="true"
+          onClick={() => setNavOpen(false)}
+        />
+      ) : null}
+
+      <aside className={`sidebar${navOpen ? " open" : ""}`}>
       <a
         className="brand"
         href="https://scrumrot.github.io/formstand/"
         title="formstand docs"
       >
-        {/* The mark: a form (with its green check) on a music stand. */}
-        <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
-          <g
-            stroke="#D99A3D"
-            strokeWidth="5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <rect x="12" y="7" width="40" height="29" rx="6" />
-            <path d="M20 17h16" />
-            <path d="M20 26h9" />
-            <path d="M32 36v13" />
-            <path d="M32 49l-11 9" />
-            <path d="M32 49l11 9" />
-            <path d="M32 49v9" />
-          </g>
-          <path
-            d="M37 25l4 4 7.5-8.5"
-            stroke="#86C166"
-            strokeWidth="5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <BrandMark />
         <h1>formstand</h1>
         <span className="brand-badge">playground</span>
       </a>
@@ -347,7 +479,7 @@ export const App = () => {
             onSelectedItemsChange={(_event, itemId) => {
               // Group nodes only expand/collapse; leaves switch the demo.
               if (typeof itemId === "string" && !itemId.startsWith("group:")) {
-                select(itemId as TabKey);
+                choose(itemId as TabKey);
               }
             }}
             sx={{
@@ -403,6 +535,10 @@ export const App = () => {
         </MuiThemeBridge>
       </nav>
 
+      <div className="sidebar-controls">
+        <ThemeToggle mode={mode} onToggle={toggle} />
+        <GitHubLink />
+      </div>
       <p className="sidebar-foot">
         Every demo runs against the real library. Source:{" "}
         <a href="https://github.com/Scrumrot/formstand/tree/main/examples/src">
@@ -425,5 +561,6 @@ export const App = () => {
       </div>
     </main>
   </div>
+    </ThemeModeProvider>
   );
 };

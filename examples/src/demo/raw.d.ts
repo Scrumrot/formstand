@@ -12,4 +12,8 @@ interface ImportMeta {
     pattern: string,
     options: Readonly<{ query: "?raw"; import: "default"; eager: true }>,
   ): Readonly<Record<string, string>>;
+  // The slice of import.meta.env the shell reads (vitest sets VITEST so
+  // effects can skip network calls under test). Optional: absent outside
+  // Vite/vitest.
+  readonly env?: Readonly<Record<string, string | undefined>>;
 }

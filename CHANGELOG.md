@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Docs & examples (no package changes)
+
+- Mobile playground shell: a top app bar (menu / title / controls), the
+  demo list as an off-canvas drawer that closes on pick, and the View
+  state / View code panel as a bottom sheet — all CSS-driven, desktop
+  layout unchanged.
+- Light theme: a toggle in the app bar (and sidebar on desktop), defaulting
+  to the OS preference and persisted per browser. One variable palette in
+  styles.css drives the shell; the MUI bridge and the shadcn scope follow
+  the same html[data-theme] switch. Terminal/code surfaces deliberately
+  stay dark in both themes.
+- The GitHub link in the shell shows the repo's star count (best-effort,
+  cached per session, skipped under tests).
+
 ## 0.8.0 — 2026-07-10
 
 #### Fixed (2026-07 full-repo review)
