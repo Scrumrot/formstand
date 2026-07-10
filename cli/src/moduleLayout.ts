@@ -1,8 +1,12 @@
-import { camelCase, pascalCase } from "./casing";
+import { camelCase, camelIdent, pascalCase } from "./casing";
 import {
   DEFAULT_VISUAL,
   type EmitFormOptions,
   blankNeedsCast,
+  gridColsClass,
+  gridSxProps,
+  gridStyleProps,
+  hasLeafUsage,
   type KindUsage,
   type ObjectSpec,
   type SchemaImport,
@@ -134,8 +138,14 @@ const collectLeaves = (
     }
   });
 
-const buildPlan = (root: ObjectSpec): Plan => {
-  const used = new Set<string>();
+const buildPlan = (root: ObjectSpec, naming: Naming): Plan => {
+  // Pre-claim the bound hook's name shape: a field named after the module
+  // prefix (field "contact" in ContactForm) would otherwise get
+  // componentName ContactField, whose exported hook useContactField
+  // collides with the identically named import from ../hooks — a duplicate
+  // declaration plus a self-recursive call. Seeding pushes it to
+  // ContactField2/useContactField2.
+  const used = new Set<string>([`${naming.prefix}Field`]);
   const claim = (base: string): string => {
     const name = `${base}${identifierSuffix(base, used)}`;
     used.add(name);
@@ -477,7 +487,7 @@ const objectShell = (
   const cols = visual.columns;
   switch (ui) {
     case "mui": {
-      const gridSx = `display: "grid", gridTemplateColumns: "repeat(${cols}, minmax(0, 1fr))", gap: 2`;
+      const gridSx = gridSxProps(cols);
       switch (visual.sections) {
         case "flat":
           return cols === 1
@@ -525,7 +535,7 @@ const objectShell = (
       break;
     }
     case "shadcn": {
-      const colsClass = cols > 1 ? ` md:grid-cols-${cols}` : "";
+      const colsClass = gridColsClass(cols);
       switch (visual.sections) {
         case "flat":
         case "panel":
@@ -552,10 +562,7 @@ const objectShell = (
       break;
     }
     case "plain": {
-      const grid =
-        cols > 1
-          ? `display: "grid", gridTemplateColumns: "repeat(${cols}, minmax(0, 1fr))", gap: 16`
-          : "";
+      const grid = cols > 1 ? gridStyleProps(cols) : "";
       switch (visual.sections) {
         case "flat":
         case "panel": {
@@ -888,11 +895,12 @@ const hooksFile = (
 // The kit adapter the single-file backends inline, exported once — only for
 // the kit uis, and only when some leaf actually renders a control.
 const adapterFile = (ui: ModuleUi, usage: KindUsage): ModuleFile | undefined => {
-  const hasLeaf =
-    usage.string || usage.date || usage.number || usage.boolean || usage.enum;
-  if (ui === "plain" || !hasLeaf) return undefined;
+  if (ui === "plain" || !hasLeafUsage(usage)) return undefined;
   const needsText = usage.string || usage.date;
-  const needsChangeEvent = needsText || usage.number || (ui === "mui" && usage.enum);
+  // mui's Switch adapter also types its onChange with ChangeEvent, so a
+  // boolean-only schema needs the import too.
+  const needsChangeEvent =
+    needsText || usage.number || (ui === "mui" && (usage.enum || usage.boolean));
   const formstandValues = [
     ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
   ];
@@ -1078,7 +1086,10 @@ const arraySectionFile = (
 
   const used = new Set<string>(["index", "onRemove", "field", "rows"]);
   const rowVars = itemLeaves.map((field) => {
-    const base = camelCase(field.name).length === 0 ? "value" : camelCase(field.name);
+    // camelIdent, not camelCase: these become const bindings, and a field
+    // named "new"/"delete" would otherwise emit a reserved-word declaration.
+    const base =
+      camelIdent(field.name).length === 0 ? "value" : camelIdent(field.name);
     const name = `${base}${identifierSuffix(base, used)}`;
     used.add(name);
     return { field, varName: name };
@@ -1269,7 +1280,7 @@ export const emitModuleForm = (
   const visual = options.visual ?? DEFAULT_VISUAL;
   const root = assertObjectRoot(options.ir);
   const naming = namingFor(options.formName);
-  const plan = buildPlan(root);
+  const plan = buildPlan(root, naming);
   const adapter = adapterFile(ui, collectUsage(root));
 
   return [

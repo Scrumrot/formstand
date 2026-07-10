@@ -47,8 +47,15 @@ export const ind = (level: number): string => "  ".repeat(level);
 export const q = (value: string): string => JSON.stringify(value);
 
 const IDENT_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+// "__proto__" must be a COMPUTED key: in an object literal both `__proto__:`
+// and `"__proto__":` are the prototype setter (zero own keys), so the
+// emitted schema shape and initialValues would silently drop the field.
 const propKey = (name: string): string =>
-  IDENT_RE.test(name) ? name : q(name);
+  name === "__proto__"
+    ? `["__proto__"]`
+    : IDENT_RE.test(name)
+      ? name
+      : q(name);
 
 // JSX string attributes have no backslash escapes, so a quote in the value
 // cannot be escaped in place. Every string-valued attribute is therefore
@@ -106,9 +113,45 @@ export const unaddressableFieldPaths = (ir: FieldSpec): readonly string[] => {
 // Initial values
 // ---------------------------------------------------------------------------
 
-// Blank-form defaults: strings start "", booleans false, numbers/dates/enums
-// undefined, nullable scalars null, arrays empty. Objects are always
-// materialized (even optional ones) so their fields are addressable.
+// The ONE table of blank-form defaults: what a blank leaf holds, paired
+// with whether that blank satisfies z.input. emitInitialValues and
+// blankNeedsCast both read it, so the emitted expression and the
+// annotate-vs-cast decision cannot drift apart — a disagreement would ship
+// as a compile error in every user's generated file.
+type BlankLeaf = Readonly<{ expr: string; satisfiesInput: boolean }>;
+
+const blankLeaf = (
+  spec: Extract<
+    FieldSpec,
+    Readonly<{ kind: "string" | "boolean" | "number" | "date" | "enum" }>
+  >,
+): BlankLeaf => {
+  switch (spec.kind) {
+    case "string":
+      return spec.nullable
+        ? { expr: "null", satisfiesInput: true }
+        : spec.optional
+          ? { expr: "undefined", satisfiesInput: true }
+          : { expr: '""', satisfiesInput: true };
+    case "boolean":
+      return spec.nullable
+        ? { expr: "null", satisfiesInput: true }
+        : spec.optional
+          ? { expr: "undefined", satisfiesInput: true }
+          : { expr: "false", satisfiesInput: true };
+    case "number":
+    case "date":
+    case "enum":
+      // No blank literal exists for a required one — undefined is the only
+      // honest start, and it doesn't satisfy the input type.
+      return spec.nullable
+        ? { expr: "null", satisfiesInput: true }
+        : { expr: "undefined", satisfiesInput: spec.optional };
+  }
+};
+
+// Blank-form defaults per blankLeaf; arrays start empty, and objects are
+// always materialized (even optional ones) so their fields are addressable.
 export const emitInitialValues = (spec: FieldSpec, level = 0): string => {
   switch (spec.kind) {
     case "object": {
@@ -122,36 +165,22 @@ export const emitInitialValues = (spec: FieldSpec, level = 0): string => {
     }
     case "array":
       return "[]";
-    case "string":
-      return spec.nullable ? "null" : spec.optional ? "undefined" : '""';
-    case "boolean":
-      return spec.nullable ? "null" : spec.optional ? "undefined" : "false";
-    case "number":
-    case "date":
-    case "enum":
-      return spec.nullable ? "null" : "undefined";
+    default:
+      return blankLeaf(spec).expr;
   }
 };
 
-// Whether the blank draft (emitInitialValues) already satisfies the z.input
-// type: strings/booleans always have a blank literal, arrays start [], and
-// optional/nullable leaves legally hold undefined/null. Only REQUIRED
-// numbers/dates/enums must start undefined against the type's word, so the
-// cast is decidable from the IR: a checked type annotation when the blank
-// draft typechecks, the as-unknown-as escape hatch only when it can't.
+// Whether the blank draft needs the as-unknown-as escape hatch: derived
+// from the same blankLeaf table emitInitialValues emits from, so a checked
+// type annotation is used exactly when the draft genuinely typechecks.
 export const blankNeedsCast = (spec: FieldSpec): boolean => {
   switch (spec.kind) {
     case "object":
       return spec.fields.some((field) => blankNeedsCast(field.spec));
     case "array":
       return false;
-    case "number":
-    case "date":
-    case "enum":
-      return !spec.nullable && !spec.optional;
-    case "string":
-    case "boolean":
-      return false;
+    default:
+      return !blankLeaf(spec).satisfiesInput;
   }
 };
 
@@ -602,10 +631,7 @@ const plainBackend = (visual: VisualOptions): Backend => {
   // Section roots span the full row so nested sections inside a parent grid
   // never get squeezed into one column (harmless outside a grid).
   const span = cols > 1 ? `gridColumn: "1 / -1"` : "";
-  const grid =
-    cols > 1
-      ? `display: "grid", gridTemplateColumns: "repeat(${cols}, minmax(0, 1fr))", gap: 16`
-      : "";
+  const grid = cols > 1 ? gridStyleProps(cols) : "";
   const styleAttr = (...parts: readonly string[]): string => {
     const body = parts.filter((part) => part !== "").join(", ");
     return body === "" ? "" : ` style={{ ${body} }}`;
@@ -706,18 +732,20 @@ export const emitPlainForm = (options: EmitFormOptions): string =>
 // Snippets shared by the component-kit backends (MUI + shadcn)
 // ---------------------------------------------------------------------------
 
-// Inline grid style for the plain backend (self-contained, no CSS file);
-// sx object for MUI; Tailwind classes for shadcn.
-export const gridStyleExpr = (columns: number): string =>
-  `{ display: "grid", gridTemplateColumns: "repeat(${columns}, minmax(0, 1fr))", gap: 16 }`;
+// The grid each section's fields flow into, in each ui's dialect — emitted
+// as PROPERTY/CLASS fragments (not whole objects) so wrappers can merge
+// them with span and chrome styles. One source: the single-file backends
+// and the module layout must emit identical grids for the same --columns.
+export const gridStyleProps = (columns: number): string =>
+  `display: "grid", gridTemplateColumns: "repeat(${columns}, minmax(0, 1fr))", gap: 16`;
 
-export const gridSxExpr = (columns: number): string =>
-  `{ display: "grid", gridTemplateColumns: "repeat(${columns}, minmax(0, 1fr))", gap: 2 }`;
+export const gridSxProps = (columns: number): string =>
+  `display: "grid", gridTemplateColumns: "repeat(${columns}, minmax(0, 1fr))", gap: 2`;
 
-export const gridClasses = (columns: number): string =>
-  columns === 1 ? "grid gap-4" : `grid gap-4 md:grid-cols-${columns}`;
+export const gridColsClass = (columns: number): string =>
+  columns > 1 ? ` md:grid-cols-${columns}` : "";
 
-const hasLeafUsage = (usage: KindUsage): boolean =>
+export const hasLeafUsage = (usage: KindUsage): boolean =>
   usage.string || usage.date || usage.number || usage.boolean || usage.enum;
 
 // Prefixes the top-level `const` declarations of an emitted block with
@@ -969,7 +997,7 @@ const muiBackend = (visual: VisualOptions): Backend => {
   const cols = visual.columns;
   // Every section container is a CSS grid (a one-column grid with gap: 2 is
   // exactly a Stack); section roots span the parent grid's full row.
-  const gridSx = `display: "grid", gridTemplateColumns: "repeat(${cols}, minmax(0, 1fr))", gap: 2`;
+  const gridSx = gridSxProps(cols);
   const span = cols > 1 ? `gridColumn: "1 / -1", ` : "";
   const sectionOpen = (label: string, level: number): readonly string[] => {
     switch (visual.sections) {
@@ -985,10 +1013,14 @@ const muiBackend = (visual: VisualOptions): Backend => {
               `${ind(level + 1)}<Typography variant="subtitle1" sx={{ gridColumn: "1 / -1" }}>${jsxText(label)}</Typography>`,
             ];
       case "panel":
+        // Same chrome shape as the module layout's objectShell (which puts
+        // the heading INSIDE the grid CardContent so it can carry the
+        // dirty/valid flags) — the two emitters must not drift for the
+        // same --sections flag.
         return [
           `${ind(level)}<Card variant="outlined"${cols > 1 ? ` sx={{ gridColumn: "1 / -1" }}` : ""}>`,
-          `${ind(level + 1)}<CardHeader title=${q(label)} />`,
           `${ind(level + 1)}<CardContent sx={{ ${gridSx} }}>`,
+          `${ind(level + 2)}<Typography variant="subtitle1"${cols > 1 ? ` sx={{ gridColumn: "1 / -1" }}` : ""}>${jsxText(label)}</Typography>`,
         ];
       case "collapsible":
         return [
@@ -1025,7 +1057,7 @@ const muiBackend = (visual: VisualOptions): Backend => {
       "Box",
       "Button",
       ...(hasSection && visual.sections === "panel"
-        ? ["Card", "CardContent", "CardHeader"]
+        ? ["Card", "CardContent"]
         : []),
       ...(usage.boolean ? ["FormControlLabel"] : []),
       ...(usage.enum ? ["MenuItem"] : []),
@@ -1034,7 +1066,7 @@ const muiBackend = (visual: VisualOptions): Backend => {
       ...(usage.string || usage.date || usage.number || usage.enum
         ? ["TextField"]
         : []),
-      ...(hasSection && visual.sections !== "panel" ? ["Typography"] : []),
+      ...(hasSection ? ["Typography"] : []),
     ];
     const formstandValueImports = [
       ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
@@ -1307,7 +1339,7 @@ const shadcnBackend = (visual: VisualOptions): Backend => {
   // md:col-span-full keeps nested sections on their own row inside a parent
   // grid (no effect when the parent stacks).
   const span = cols > 1 ? " md:col-span-full" : "";
-  const colsClass = cols > 1 ? ` md:grid-cols-${cols}` : "";
+  const colsClass = gridColsClass(cols);
   // shadcn's Card recipe, applied to the section wrapper itself.
   const panelChrome = " bg-card text-card-foreground shadow-sm";
   const sectionOpen = (label: string, level: number): readonly string[] => {

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createJiti } from "jiti";
-import { camelCase, pascalCase } from "./casing";
+import { camelCase, isReservedWord, pascalCase } from "./casing";
 import {
   type EmitFormOptions,
   type VisualOptions,
@@ -199,6 +199,18 @@ const parseRest = (
         message: `--layout must be one of ${LAYOUT_VALUES.map((layout) => `"${layout}"`).join(", ")}, got "${value}"`,
       };
     }
+    // The name is interpolated verbatim as a declared identifier (and, for
+    // --layout module, as file names and the index.ts export) — reject
+    // anything that would emit unparseable code.
+    if (
+      head === "--name" &&
+      (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(value) || isReservedWord(value))
+    ) {
+      return {
+        kind: "error",
+        message: `--name must be a valid identifier (PascalCase recommended, e.g. ProfileForm), got "${value}"`,
+      };
+    }
     return parseRest(after, { ...acc, [key]: value });
   }
   if (head.startsWith("-")) {
@@ -235,11 +247,19 @@ const deriveFormName = (base: string): string => {
 
 // Relative import specifier from one directory to a target module file.
 export const moduleSpecifier = (fromDir: string, targetAbs: string): string => {
-  const relative = path
-    .relative(fromDir, targetAbs)
+  const relative = path.relative(fromDir, targetAbs);
+  // On Windows, path.relative across drives returns the target ABSOLUTE —
+  // "./D:/schemas/x" would be an unresolvable specifier, so fail loudly at
+  // generation time instead (main() reports thrown errors and exits 1).
+  if (path.isAbsolute(relative)) {
+    throw new Error(
+      `cannot build a relative import from ${fromDir} to ${targetAbs} (different drives?); keep the input and --out on the same drive`,
+    );
+  }
+  const specifier = relative
     .replace(/\\/g, "/")
     .replace(/\.(tsx|ts|mts|cts|jsx|js)$/, "");
-  return relative.startsWith(".") ? relative : `./${relative}`;
+  return specifier.startsWith(".") ? specifier : `./${specifier}`;
 };
 
 const relToCwd = (fileAbs: string): string => {

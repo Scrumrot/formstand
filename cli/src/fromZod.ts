@@ -165,6 +165,15 @@ const walk = (
     // Form values are typed as z.input, so a pipe's input side is the field.
     case "pipe":
       return walk(def.in, flags, depth, nextSeen);
+    // .nonoptional() re-requires a possibly-optional inner schema: the
+    // OUTER wrapper wins for z.input, so the inner optional must not
+    // re-mark the field (a transparent unwrap here previously emitted
+    // optional:true and a checked initialValues annotation that failed to
+    // typecheck against the required input type).
+    case "nonoptional": {
+      const inner = walk(def.innerType, flags, depth, nextSeen);
+      return { ...inner, optional: false };
+    }
     default:
       // Wrappers we don't know by name but that carry an inner schema
       // (readonly, catch, ...) unwrap transparently.
