@@ -2,12 +2,6 @@
 
 ## Unreleased
 
-### formstand-cli
-
-- Emitted string literals escape U+2028/U+2029 (JSON.stringify leaves the
-  JS line separators raw — a syntax error for pre-ES2019 parsers of the
-  GENERATED file, and CodeQL's js/bad-code-sanitization).
-
 ### CI (no package changes)
 
 - Workflows declare least-privilege GITHUB_TOKEN permissions (CodeQL:
@@ -148,6 +142,14 @@
   costs the benchmark nothing — the copy says to close it while running).
   The benchmark writes `field0` instead of the mid-grid field, so the
   change is visible without scrolling.
+
+## formstand-cli 0.5.3 — 2026-07-10
+
+### Fixed
+
+- Emitted string literals escape U+2028/U+2029 (JSON.stringify leaves the
+  JS line separators raw — a syntax error for pre-ES2019 parsers of the
+  GENERATED file, and CodeQL's js/bad-code-sanitization).
 
 ## formstand-cli 0.5.2 — 2026-07-10
 
