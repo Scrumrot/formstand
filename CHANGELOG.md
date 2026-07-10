@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-### formstand
+## 0.8.0 — 2026-07-10
 
 #### Fixed (2026-07 full-repo review)
 
@@ -39,39 +39,6 @@
   deliberately drop in-flight flags (the pass that set them is stale) — the
   guide now says so. `components.md` documents the `checkboxProps`
   unchecked-writes-`false` tradeoff for nullable booleans.
-
-### formstand-cli
-
-#### Fixed (2026-07 full-repo review)
-
-- Digit-leading schema keys ("2fa", "2ndOwners") emitted invalid
-  identifiers (`const 2ndOwnersArray`); pascalCase/camelCase results are
-  now underscore-prefixed when they'd start with a digit.
-- Array-row fields named JS reserved words ("new", "delete") emitted
-  reserved-word `const` declarations in module sections; row bindings now
-  use an identifier-safe variant (`new_`).
-- A field named after the module prefix (field "contact" in ContactForm)
-  collided with the bound `useContactField` hook from `hooks.ts` — a
-  duplicate declaration plus self-recursion; component names are now
-  deduped against the hook names too (`ContactField2`).
-- Boolean-only schemas with `--ui mui --layout module` emitted an
-  `adapter.ts` using `ChangeEvent` without importing it.
-- `--name` is validated as an identifier (reserved words rejected) instead
-  of interpolating verbatim into declarations and file names.
-- Cross-drive input/`--out` on Windows produced an unresolvable
-  `"./D:/..."` import specifier; the CLI now fails loudly at generation
-  time.
-- zod's `.nonoptional()` unwrapped transparently, letting an inner
-  `.optional()` win — the field's checked `initialValues` annotation then
-  failed to typecheck; `.nonoptional()` now re-requires the field.
-- A field literally named `__proto__` silently vanished from emitted object
-  literals (prototype-setter semantics); it's now emitted as a computed key.
-- `--sections panel` with `--ui mui` rendered different chrome per
-  `--layout` (single-file used `CardHeader`, module used `Typography` in
-  `CardContent`); both emitters now share the module shape, the grid
-  strings come from one set of helpers instead of six inline copies, and
-  `emitInitialValues`/`blankNeedsCast` read one shared blank-value table so
-  they can't drift.
 
 ### Docs & examples (no package changes)
 
@@ -137,6 +104,39 @@
   costs the benchmark nothing — the copy says to close it while running).
   The benchmark writes `field0` instead of the mid-grid field, so the
   change is visible without scrolling.
+
+## formstand-cli 0.5.2 — 2026-07-10
+
+#### Fixed (2026-07 full-repo review)
+
+- Digit-leading schema keys ("2fa", "2ndOwners") emitted invalid
+  identifiers (`const 2ndOwnersArray`); pascalCase/camelCase results are
+  now underscore-prefixed when they'd start with a digit.
+- Array-row fields named JS reserved words ("new", "delete") emitted
+  reserved-word `const` declarations in module sections; row bindings now
+  use an identifier-safe variant (`new_`).
+- A field named after the module prefix (field "contact" in ContactForm)
+  collided with the bound `useContactField` hook from `hooks.ts` — a
+  duplicate declaration plus self-recursion; component names are now
+  deduped against the hook names too (`ContactField2`).
+- Boolean-only schemas with `--ui mui --layout module` emitted an
+  `adapter.ts` using `ChangeEvent` without importing it.
+- `--name` is validated as an identifier (reserved words rejected) instead
+  of interpolating verbatim into declarations and file names.
+- Cross-drive input/`--out` on Windows produced an unresolvable
+  `"./D:/..."` import specifier; the CLI now fails loudly at generation
+  time.
+- zod's `.nonoptional()` unwrapped transparently, letting an inner
+  `.optional()` win — the field's checked `initialValues` annotation then
+  failed to typecheck; `.nonoptional()` now re-requires the field.
+- A field literally named `__proto__` silently vanished from emitted object
+  literals (prototype-setter semantics); it's now emitted as a computed key.
+- `--sections panel` with `--ui mui` rendered different chrome per
+  `--layout` (single-file used `CardHeader`, module used `Typography` in
+  `CardContent`); both emitters now share the module shape, the grid
+  strings come from one set of helpers instead of six inline copies, and
+  `emitInitialValues`/`blankNeedsCast` read one shared blank-value table so
+  they can't drift.
 
 ## formstand-cli 0.5.1 — 2026-07-09
 

@@ -1,6 +1,6 @@
 {
   "name": "formstand",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Zod-schema-first React 19 form library backed by zustand",
   "license": "MIT",
   "author": "Tim Frank <timfrankdev@gmail.com>",
