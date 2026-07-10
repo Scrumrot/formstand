@@ -226,11 +226,66 @@ body {
 .content-inner {
   max-width: 100%;
 }
+/* Card header: eyebrow (group) / title / blurb on the left, the shell
+ * actions (state, code, copy link) on the right. The hairline divider
+ * separates shell chrome from demo content. */
+.demo-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+.demo-heading {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 260px;
+}
+.demo-eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--fs-accent);
+}
 .demo-title {
-  margin: 0 0 14px;
+  margin: 0;
   font-size: 20px;
   color: var(--text-bright);
   letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.demo-blurb {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 68ch;
+}
+.demo-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+button.secondary.icon-only {
+  padding: 6px;
+  line-height: 0;
+}
+button.secondary.icon-only svg {
+  width: 16px;
+  height: 16px;
+}
+.nav-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 7px;
+  line-height: 16px;
 }
 
 /* Tablet and up: real sidebar, sticky, scrollable. */
@@ -366,10 +421,15 @@ h1 {
     box-shadow: 0 -16px 40px rgba(0, 0, 0, 0.45);
   }
 }
-.demo-panel-tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 4px;
+.panel-close {
+  display: none;
+}
+@media (max-width: 759.98px) {
+  .panel-close {
+    display: block;
+    width: 100%;
+    margin-bottom: 8px;
+  }
 }
 button.secondary.active {
   border-color: var(--fs-accent);

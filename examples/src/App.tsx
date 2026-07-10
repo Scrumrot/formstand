@@ -261,6 +261,69 @@ const GROUP_OF: Readonly<Record<TabKey, GroupTitle>> = {
   schemaBuilder: "Generated",
 };
 
+// One honest line per demo — what it shows, in the library's own terms.
+// Exhaustive over TabKey (like GROUP_OF), so a new demo without a blurb is
+// a compile error.
+const BLURBS: Readonly<Record<TabKey, string>> = {
+  basic:
+    "The smallest real form, plus a live switcher for every validation mode and reValidateMode.",
+  bound:
+    "The four shipped components — TextField, NumberField, SelectField, CheckboxField — with their a11y wiring and a validity-gated submit.",
+  context:
+    "createFormContext: zero prop drilling with typed paths intact, the flag hooks as a status bar, and adoptValues as the post-save rebase.",
+  hooksFactory:
+    'createFormHooks(form, "invoice"): a module-singleton form baked into exported hooks — no provider, no form prop anywhere.',
+  onboarding:
+    "A 26-field, five-section feature module: one file per field, one per section, with path-scoped dirty/valid badges in each section header.",
+  nested: "Nested object paths and the full handleSubmit flow.",
+  array: "useFieldArray basics: push, remove, and reorder with stable row ids.",
+  async:
+    "An async refine username check with debounce, isValidating spinners, and race handling.",
+  wizard:
+    "A multi-step form gating each step on its own fields with validateFields.",
+  conditional: "Fields that appear based on other fields' values.",
+  invoice: "A larger, realistic form: line-item arrays with derived totals.",
+  nestedArrays: "Arrays inside array rows, with ids stable at both levels.",
+  server:
+    "Server errors that survive background revalidation and release when you edit the field.",
+  autosave:
+    "Draft persistence with watchValues + localStorage, restored on mount, with dirtyFields() reporting what changed.",
+  dependent: "Cross-field reactions with watchValue.",
+  optimistic: "Optimistic UI with snapshot()/restore() rollback.",
+  file: "File inputs and validating File values.",
+  derived:
+    "Computed values via selectors — consistent by construction, never stored.",
+  tag: "A tag input over an array of primitives.",
+  perf: "A 200-row stress test showing per-field re-render isolation.",
+  muiCheckout:
+    "A Stepper wizard gating each step with validateFields, and a billing-same-as-shipping Switch that copies values.",
+  muiJob:
+    "Autocomplete over an array field, a salary Slider, an async email check, and a server rejection via setError.",
+  muiInvoice:
+    "useFieldArray rendered as a MUI Table with reorder/delete, derived totals, and a dirty-gated save.",
+  muiSettings:
+    "Card-sectioned settings with a nullable bio, live dirtyFields() chips, and Save/Discard as adoptValues/reset.",
+  muiSurvey:
+    "Nested field arrays (sections → questions) with type-switched editors and a root-level refine.",
+  onboardingMui:
+    "The Onboarding feature module over Material UI: Accordion sections with dirty/valid chips.",
+  shadSignup:
+    "An async username check isolated to its subschema, a cross-field password confirmation, and a must-accept Checkbox.",
+  shadCheckout:
+    "A checkout over shadcn/ui — the Radix dialect (onCheckedChange, onValueChange) bound through the adapter.",
+  shadSettings:
+    "Settings over shadcn/ui components with aria-invalid error styling.",
+  shadTeam: "A team editor: field arrays over shadcn/ui cards.",
+  onboardingShadcn:
+    "The Onboarding feature module over shadcn/ui: collapsible sections with dirty/valid badges.",
+  genMui:
+    "formstand-gen's untouched --layout module --ui mui --sections panel output — CI regenerates it and fails on drift.",
+  cliCommand:
+    "Fill the options and the formstand-gen command updates live — the command line is useFormSelector-derived state.",
+  schemaBuilder:
+    "Design a schema and the real formstand-gen emitters regenerate the files on every keystroke, right in your browser.",
+};
+
 const GROUP_TITLES: readonly GroupTitle[] = [
   "Core",
   "Patterns",
@@ -504,6 +567,7 @@ export const App = () => {
                       sx={{ fontSize: 17, color: "#d99a3d" }}
                     />
                     {group.title}
+                    <span className="nav-count">{group.tabs.length}</span>
                   </span>
                 }
               >
@@ -550,14 +614,17 @@ export const App = () => {
 
     <main className="content">
       <div className="content-inner">
-        <h2 className="demo-title">{current?.label ?? ""}</h2>
-        <div className="card">
-          {current !== undefined ? (
-            <DemoShell key={current.key} files={DEMO_SOURCES[current.key]}>
-              {current.render()}
-            </DemoShell>
-          ) : null}
-        </div>
+        {current !== undefined ? (
+          <DemoShell
+            key={current.key}
+            eyebrow={GROUP_OF[current.key]}
+            title={current.label}
+            blurb={BLURBS[current.key]}
+            files={DEMO_SOURCES[current.key]}
+          >
+            {current.render()}
+          </DemoShell>
+        ) : null}
       </div>
     </main>
   </div>

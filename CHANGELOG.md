@@ -4,6 +4,14 @@
 
 ### Docs & examples (no package changes)
 
+- The demo card gets a real header: group eyebrow, title, a one-line
+  description of what each demo shows (exhaustive over the tab keys, like
+  the group map), and the View state / View code toggles plus a copy-link
+  button as a right-aligned action cluster — shell chrome separated from
+  demo content by a hairline. The nav groups show demo counts, and the
+  mobile bottom sheet gains its own Close button (the header toggles sit
+  behind it).
+
 - Mobile playground shell: a top app bar (menu / title / controls), the
   demo list as an off-canvas drawer that closes on pick, and the View
   state / View code panel as a bottom sheet — all CSS-driven, desktop

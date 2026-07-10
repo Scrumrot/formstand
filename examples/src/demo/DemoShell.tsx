@@ -13,6 +13,11 @@ import type { DemoFile } from "./demoSources";
 import { FileTree } from "./FileTree";
 
 export type DemoShellProps = Readonly<{
+  // The demo's group title, name, and one-line description — the shell
+  // renders them as the card header so every demo states what it shows.
+  eyebrow: string;
+  title: string;
+  blurb: string;
   files: readonly DemoFile[];
   children: ReactNode;
 }>;
@@ -61,7 +66,50 @@ const CodePanel = ({ files }: Readonly<{ files: readonly DemoFile[] }>) => {
 
 type Panel = "state" | "code";
 
-export const DemoShell = ({ files, children }: DemoShellProps) => {
+// Sharing a demo is one tap: the hash routes make every tab a URL.
+const CopyLinkButton = () => {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      className="secondary icon-only"
+      type="button"
+      aria-label="copy link to this demo"
+      title="copy link to this demo"
+      onClick={() => {
+        void navigator.clipboard?.writeText(window.location.href);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1600);
+      }}
+    >
+      {copied ? (
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M5 12.5l4.5 4.5L19 7.5"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <g stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M10 14a4.5 4.5 0 0 0 6.4.4l3-3a4.5 4.5 0 1 0-6.4-6.4l-1.5 1.5" />
+            <path d="M14 10a4.5 4.5 0 0 0-6.4-.4l-3 3a4.5 4.5 0 1 0 6.4 6.4l1.5-1.5" />
+          </g>
+        </svg>
+      )}
+    </button>
+  );
+};
+
+export const DemoShell = ({
+  eyebrow,
+  title,
+  blurb,
+  files,
+  children,
+}: DemoShellProps) => {
   const [form, setForm] = useState<unknown>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
 
@@ -70,10 +118,14 @@ export const DemoShell = ({ files, children }: DemoShellProps) => {
 
   return (
     <DemoFormContext.Provider value={setForm}>
-      <div className={`demo-split ${panel !== null ? "panel-open" : ""}`}>
-        <div className="demo-body">{children}</div>
-        <aside className="demo-panel">
-          <div className="demo-panel-tabs">
+      <div className="card">
+        <header className="demo-header">
+          <div className="demo-heading">
+            <span className="demo-eyebrow">{eyebrow}</span>
+            <h2 className="demo-title">{title}</h2>
+            <p className="demo-blurb">{blurb}</p>
+          </div>
+          <div className="demo-actions">
             <button
               className={`secondary ${panel === "state" ? "active" : ""}`}
               type="button"
@@ -94,12 +146,29 @@ export const DemoShell = ({ files, children }: DemoShellProps) => {
             >
               View code
             </button>
+            <CopyLinkButton />
           </div>
-          {panel === "state" && form !== null ? (
-            <StateDump form={form as Form<z.ZodType>} />
+        </header>
+        <div className={`demo-split ${panel !== null ? "panel-open" : ""}`}>
+          <div className="demo-body">{children}</div>
+          {panel !== null ? (
+            <aside className="demo-panel">
+              {/* The header toggles are out of reach behind the mobile
+                  bottom sheet — give the sheet its own close. */}
+              <button
+                className="secondary panel-close"
+                type="button"
+                onClick={() => setPanel(null)}
+              >
+                Close
+              </button>
+              {panel === "state" && form !== null ? (
+                <StateDump form={form as Form<z.ZodType>} />
+              ) : null}
+              {panel === "code" ? <CodePanel files={files} /> : null}
+            </aside>
           ) : null}
-          {panel === "code" ? <CodePanel files={files} /> : null}
-        </aside>
+        </div>
       </div>
     </DemoFormContext.Provider>
   );
