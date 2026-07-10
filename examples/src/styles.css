@@ -50,6 +50,20 @@
   --backdrop: rgba(40, 36, 28, 0.4);
 }
 * { box-sizing: border-box; }
+/* Pin the page to exactly the viewport width so nothing (a wide pre, an
+ * unwrappable row) can pan the whole page sideways on mobile — wide demo
+ * content scrolls inside its own panes instead. The vw lines are the
+ * pre-15.4 WebKit fallback for dvw; overflow-x is `clip`, NOT `hidden`,
+ * because hidden would make body a scroll container and break the sticky
+ * topbar/sidebar. */
+html,
+body {
+  width: 100vw;
+  width: 100dvw;
+  max-width: 100vw;
+  max-width: 100dvw;
+  overflow-x: clip;
+}
 body {
   font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
   margin: 0;
@@ -201,6 +215,12 @@ body {
 .content {
   flex: 1;
   min-width: 0;
+  /* Full viewport width on mobile (column layout); in the desktop row
+   * layout flex-basis governs the main-axis size, so this stays inert
+   * there and max-width keeps it honest either way. */
+  width: 100vw;
+  width: 100dvw;
+  max-width: 100%;
   padding: 20px 20px 96px;
 }
 .content-inner {
