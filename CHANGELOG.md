@@ -2,18 +2,6 @@
 
 ## Unreleased
 
-### formstand-cli
-
-- Generated `initialValues` (and array empty-item constants) only use the
-  `as unknown as` escape hatch when the blank draft genuinely can't
-  typecheck (a required number/date/enum starts `undefined`); every other
-  schema gets a checked type annotation, so typos in edited initial values
-  are compile errors again.
-- `--layout module`: the generated `index.ts` now re-exports `./schema` and
-  `./types` alongside `./hooks`, so consumers can type submit handlers and
-  server code (`ProfileValues`, `profileSchema`) off the module's public
-  API instead of deep-importing its files.
-
 ### Docs & examples (no package changes)
 
 - A "Schema builder" tab: formstand-gen running in the browser. A formstand
@@ -75,6 +63,20 @@
   costs the benchmark nothing — the copy says to close it while running).
   The benchmark writes `field0` instead of the mid-grid field, so the
   change is visible without scrolling.
+
+## formstand-cli 0.5.1 — 2026-07-09
+
+### Fixed
+
+- Generated `initialValues` (and array empty-item constants) only use the
+  `as unknown as` escape hatch when the blank draft genuinely can't
+  typecheck (a required number/date/enum starts `undefined`); every other
+  schema gets a checked type annotation, so typos in edited initial values
+  are compile errors again.
+- `--layout module`: the generated `index.ts` now re-exports `./schema` and
+  `./types` alongside `./hooks`, so consumers can type submit handlers and
+  server code (`ProfileValues`, `profileSchema`) off the module's public
+  API instead of deep-importing its files.
 
 ## formstand-cli 0.5.0 — 2026-07-09
 
