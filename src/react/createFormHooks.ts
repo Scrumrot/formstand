@@ -9,6 +9,12 @@ import {
   useField,
 } from "./useField";
 import {
+  type UnionValueAt,
+  type VariantFieldValue,
+  type VariantKeys,
+  useVariantField,
+} from "./useVariantField";
+import {
   type ArrayItemOf,
   type FieldArrayFormApi,
   type UseFieldArrayReturn,
@@ -60,6 +66,19 @@ export type BoundUseField<TSchema extends z.ZodType> = {
   ): UseFieldReturn<FieldValue<z.input<TSchema>, P>>;
 };
 
+// The variant-field accessor bound to the form: the type math (variant-only
+// field keys, value across declaring variants) lives in useVariantField; the
+// bound signature just drops the form parameter.
+export type BoundUseVariantField<TSchema extends z.ZodType> = <
+  P extends string,
+  TField extends VariantKeys<UnionValueAt<z.input<TSchema>, P>>,
+>(
+  unionPath: P,
+  field: TField,
+) => UseFieldReturn<
+  VariantFieldValue<UnionValueAt<z.input<TSchema>, P>, TField> | undefined
+>;
+
 export type BoundUseFieldArray<TSchema extends z.ZodType> = {
   (
     pathSelector: (state: FormState<z.input<TSchema>>) => string,
@@ -82,6 +101,8 @@ export type BoundUseFlag<TSchema extends z.ZodType> = (
 // ({ useInvoceField } fails to compile against createFormHooks(f, "invoice")).
 export type FormHooks<TSchema extends z.ZodType, N extends string> = Readonly<
   { [K in `use${Capitalize<N>}Field`]: BoundUseField<TSchema> } & {
+    [K in `use${Capitalize<N>}VariantField`]: BoundUseVariantField<TSchema>;
+  } & {
     [K in `use${Capitalize<N>}FieldArray`]: BoundUseFieldArray<TSchema>;
   } & { [K in `use${Capitalize<N>}Selector`]: BoundUseSelector<TSchema> } & {
     [K in `use${Capitalize<N>}SelectorShallow`]: BoundUseSelector<TSchema>;
@@ -116,6 +137,16 @@ export const createFormHooks = <
     options?: UseFieldOptions,
   ): UseFieldReturn<unknown> => useField(structural, path, options);
 
+  const useBoundVariantField = (
+    unionPath: string,
+    field: string,
+  ): UseFieldReturn<unknown> =>
+    useVariantField(
+      structural as FieldFormApi & { readonly schema?: undefined },
+      unionPath,
+      field,
+    );
+
   const useBoundFieldArray = (
     path: string | ((state: FormState<unknown>) => string),
   ): UseFieldArrayReturn<unknown> => useFieldArray(structural, path);
@@ -147,6 +178,7 @@ export const createFormHooks = <
   // tests on both the key names and the bound signatures.
   return {
     [`use${prefix}Field`]: useBoundField,
+    [`use${prefix}VariantField`]: useBoundVariantField,
     [`use${prefix}FieldArray`]: useBoundFieldArray,
     [`use${prefix}Selector`]: useBoundSelector,
     [`use${prefix}SelectorShallow`]: useBoundSelectorShallow,

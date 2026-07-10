@@ -66,6 +66,7 @@ export {
   useSubmitCount,
 } from "./react/useFormFlags";
 export { useField } from "./react/useField";
+export { useVariantField } from "./react/useVariantField";
 export type {
   UseFieldReturn,
   FieldFormApi,

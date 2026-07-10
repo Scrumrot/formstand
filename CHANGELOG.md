@@ -4,6 +4,13 @@
 
 ### formstand
 
+- `useVariantField(form, unionPath, field)`: typed access to the
+  variant-specific fields of a `z.discriminatedUnion` — the ones
+  `FieldPath` omits because they exist in only some union members (the
+  discriminant stays a common key, bound with plain `useField`). Typed as
+  the field's value across the variants that declare it, widened with
+  `| undefined`; a non-variant field or the discriminant itself is a
+  compile error. `createFormHooks` gains a bound `use{Name}VariantField`.
 - `persistForm(form, { key })`: the autosave recipe as a first-class
   helper — debounced JSON drafts to any `{ getItem, setItem, removeItem }`
   storage, draft auto-apply on start (`adopt` rebases clean, `restore`

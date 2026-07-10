@@ -29,6 +29,7 @@ describe("createFormHooks", () => {
     expect(Object.keys(hooks).sort()).toEqual(
       [
         "useInvoiceField",
+        "useInvoiceVariantField",
         "useInvoiceFieldArray",
         "useInvoiceSelector",
         "useInvoiceSelectorShallow",
@@ -40,7 +41,27 @@ describe("createFormHooks", () => {
       ].sort(),
     );
     expectTypeOf(hooks).toHaveProperty("useInvoiceField");
+    expectTypeOf(hooks).toHaveProperty("useInvoiceVariantField");
     expectTypeOf(hooks).toHaveProperty("useInvoiceIsDirty");
+  });
+
+  it("the bound variant-field hook types the value and rejects common keys", () => {
+    const unionSchema = z.object({
+      payment: z.discriminatedUnion("method", [
+        z.object({ method: z.literal("card"), cardNumber: z.string() }),
+        z.object({ method: z.literal("paypal"), email: z.string() }),
+      ]),
+    });
+    const { usePayVariantField } = createFormHooks(
+      createForm(unionSchema, {
+        initialValues: { payment: { method: "card", cardNumber: "" } },
+      }),
+      "pay",
+    );
+    const { result } = renderHook(() =>
+      usePayVariantField("payment", "cardNumber"),
+    );
+    expectTypeOf(result.current.value).toEqualTypeOf<string | undefined>();
   });
 
   it("no name means unprefixed keys", () => {

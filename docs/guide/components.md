@@ -72,6 +72,37 @@ Each builder spreads `name`, the controlled `value`/`checked`, `aria-invalid`, `
 
 `DateField` renders `<input type="date">` bound to a `Date`-typed field. Display and parsing go through the exported `dateToInputText` / `parseDateText` rules, which treat the value as a **local calendar date**: the input's `"yyyy-MM-dd"` maps to local midnight, never through `toISOString()` — a date picked as June 1 must not render as May 31 for users west of UTC. Clearing writes the field's `emptyValue` (`null` for `z.date().nullable()`), rollover text like `2026-02-31` is rejected rather than silently becoming March 3, and `dateInputProps` is exported for custom markup and UI-kit adapters. For picker widgets, bind MUI X's `DatePicker` or shadcn's `Calendar` with a small adapter that reuses these same two functions.
 
+## Discriminated unions
+
+A `z.discriminatedUnion` field types its value as a union of variant objects. The **discriminant** (the key present in every variant) binds with plain `useField` — it's a common key, fully typed. The **variant-specific** fields (present in only some branches) live at paths `FieldPath` omits, so `useVariantField` binds those:
+
+```tsx
+const schema = z.object({
+  payment: z.discriminatedUnion("method", [
+    z.object({ method: z.literal("card"), cardNumber: z.string() }),
+    z.object({ method: z.literal("paypal"), email: z.string() }),
+  ]),
+});
+
+function PaymentFields({ form }: { form: Form<typeof schema> }) {
+  const method = useField(form, "payment.method");          // typed "card" | "paypal"
+  const cardNumber = useVariantField(form, "payment", "cardNumber"); // string | undefined
+  const email = useVariantField(form, "payment", "email");           // string | undefined
+  return (
+    <>
+      <SelectField form={form} path="payment.method" options={[
+        { value: "card", label: "Card" },
+        { value: "paypal", label: "PayPal" },
+      ]} />
+      {method.value === "card" ? <input {...textInputProps(cardNumber)} /> : null}
+      {method.value === "paypal" ? <input {...textInputProps(email)} /> : null}
+    </>
+  );
+}
+```
+
+`useVariantField(form, unionPath, field)` types the result as the field's value across the variants that declare it, widened with `| undefined` (the field is absent while a different variant is active). A field name no variant declares — or the discriminant itself — is a compile error. Call it unconditionally (React's rules) and render the matching fields based on the discriminant. `createFormHooks` exposes a bound `use{Name}VariantField`. `formstand-gen` generates this shape for discriminated-union fields.
+
 ## `NumberField` and partial entries
 
 A controlled `<input type="number">` coerces away intermediate text like `-` or `1e` mid-keystroke. `NumberField` avoids this by rendering a `type="text"` input with `inputMode="decimal"` and keeping the raw text locally while you type:
