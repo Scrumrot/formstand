@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-### formstand-cli
+## formstand-cli 0.6.1 — 2026-07-10
+
+### Added
 
 - Custom templates (`--template <file>` or `template:` in the config): a
   `defineTemplate({ name, imports, leaf })` module overrides the per-kind
