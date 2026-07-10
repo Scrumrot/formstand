@@ -32,6 +32,12 @@
 
 ### formstand-cli
 
+- Nested-array row extraction (`--layout module`): an array inside a
+  section object, or an array inside an array row, now generates its own
+  Row/Rows component pair with a bound `useFieldArray` on the template
+  path (two numeric holes for arrays-in-rows,
+  `contacts.${parentIndex}.phones.${index}.number`) instead of a TODO
+  comment. One extraction level per array — deeper nesting keeps a TODO.
 - `formstand.config.ts` (also `.mts`/`.js`/`.mjs`, or `--config <file>`):
   project defaults for `ui`/`layout`/`sections`/`columns`, written with the
   typed `defineConfig` export. Precedence is flags > config > built-ins,
