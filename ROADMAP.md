@@ -98,7 +98,11 @@ that ships as a compile error in USER code when it drifts.
 ## Later / parking lot
 
 _2026-07-10: the whole parking lot below was promoted into the 0.9 cycle
-on Tim's call — items stay listed here until they ship._
+on Tim's call and has now SHIPPED — persistForm, SSR guide, Playwright e2e
+job + visual checks, nested-array extraction, discriminated unions
+(library `useVariantField` + CLI emitter), and the Schema builder's
+paste-TypeScript mode. Kept here as a record; see the CHANGELOG for
+details._
 
 - **Type mode in the browser** — the TS compiler runs in browsers, but the
   virtual-FS setup and a ~2 MB lazy chunk make this disproportionate until
