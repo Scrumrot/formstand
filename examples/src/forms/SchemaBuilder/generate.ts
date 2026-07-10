@@ -84,35 +84,44 @@ const emitComponent = (
   }
 };
 
+// The option axes shared by both input modes (the builder form and paste-TS).
+export type GenerateOptions = Readonly<{
+  ui: BuilderValues["ui"];
+  layout: BuilderValues["layout"];
+  sectionStyle: BuilderValues["sectionStyle"];
+  columns: BuilderValues["columns"];
+}>;
+
+// The shared emit path: an IR + a name + the option axes -> the module files.
 // Mirrors the CLI's type mode (the schema is generated, not imported): the
 // module layout puts it in schema.ts, the single layout writes it alongside
 // the component.
-export const generateFiles = (
-  values: BuilderValues,
+export const generateFilesFromIr = (
+  ir: FieldSpec,
+  formName: string,
+  options: GenerateOptions,
 ): readonly ModuleFile[] => {
-  const ir = toIr(values);
-  const formName = values.formName;
   const stem = camelCase(formName.replace(/Form$/, ""));
   const schemaName = `${stem.length === 0 ? "form" : stem}Schema`;
   const visual: VisualOptions = {
-    sections: values.sectionStyle,
-    columns: Number(values.columns) as VisualOptions["columns"],
+    sections: options.sectionStyle,
+    columns: Number(options.columns) as VisualOptions["columns"],
   };
   const schemaSource = emitZodSchema(ir, schemaName);
-  return values.layout === "module"
+  return options.layout === "module"
     ? emitModuleForm({
         ir,
         formName,
         schemaImport: { name: schemaName, from: "./schema", kind: "named" },
         schemaSource,
-        ui: values.ui,
+        ui: options.ui,
         visual,
       })
     : [
         { path: `${schemaName}.ts`, content: schemaSource },
         {
           path: `${formName}.tsx`,
-          content: emitComponent(values.ui, {
+          content: emitComponent(options.ui, {
             ir,
             formName,
             schemaImport: {
@@ -125,3 +134,14 @@ export const generateFiles = (
         },
       ];
 };
+
+// The builder-form entry: values -> IR -> the shared emit path.
+export const generateFiles = (
+  values: BuilderValues,
+): readonly ModuleFile[] =>
+  generateFilesFromIr(toIr(values), values.formName, {
+    ui: values.ui,
+    layout: values.layout,
+    sectionStyle: values.sectionStyle,
+    columns: values.columns,
+  });

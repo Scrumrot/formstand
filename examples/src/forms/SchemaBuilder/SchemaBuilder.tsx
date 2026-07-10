@@ -20,7 +20,8 @@ import {
   builderSchema,
   initialBuilderValues,
 } from "./builderSchema";
-import { generateFiles } from "./generate";
+import { generateFiles, generateFilesFromIr, type ModuleFile } from "./generate";
+import { parseTypeScript } from "./parseTypeScript";
 import { makeZip } from "./zip";
 
 // formstand-gen, running in the browser: this form's values ARE the CLI's
@@ -241,14 +242,6 @@ const SectionEditor = ({ form, index, onRemove, ...move }: SectionEditorProps) =
 // Re-emit on every change: the values snapshot is referentially stable, so
 // the memo only re-runs the emitters when something was actually edited.
 // Invalid drafts generate nothing (null) instead of broken code.
-const useGeneratedFiles = (form: BuilderForm) => {
-  const values = useFormSelector(form, (state) => state.values);
-  return useMemo(() => {
-    const parsed = builderSchema.safeParse(values);
-    return parsed.success ? generateFiles(parsed.data) : null;
-  }, [values]);
-};
-
 // Zip the files under a folder named for the component, so unzipping gives
 // the same tree formstand-gen --out would have written.
 const downloadZip = (
@@ -274,9 +267,13 @@ const downloadZip = (
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
-const GeneratedOutput = ({ form }: Readonly<{ form: BuilderForm }>) => {
-  const generated = useGeneratedFiles(form);
-  const formName = useFormSelector(form, (state) => state.values.formName);
+type GeneratedOutputProps = Readonly<{
+  files: readonly ModuleFile[] | null;
+  formName: string;
+  error?: string;
+}>;
+
+const GeneratedOutput = ({ files: generated, formName, error }: GeneratedOutputProps) => {
   const [selected, setSelected] = useState<string | null>(null);
   const [copied, setCopied] = useState<"file" | null>(null);
   const files = generated ?? [];
@@ -320,7 +317,7 @@ const GeneratedOutput = ({ form }: Readonly<{ form: BuilderForm }>) => {
       </div>
       {generated === null || current === undefined ? (
         <p className="error" style={{ marginTop: 8 }}>
-          Fix the highlighted fields above and the files will regenerate.
+          {error ?? "Nothing to generate yet."}
         </p>
       ) : (
         <div className="code-panel builder-code">
@@ -340,6 +337,23 @@ const GeneratedOutput = ({ form }: Readonly<{ form: BuilderForm }>) => {
   );
 };
 
+// A worked example so paste mode generates something on first switch.
+const SAMPLE_TS = `interface Contact {
+  fullName: string;
+  email: string;
+  age?: number;
+  role: "admin" | "editor" | "viewer";
+  newsletter: boolean;
+  address: {
+    street: string;
+    city: string;
+    postalCode?: string;
+  };
+  tags: string[];
+}`;
+
+type InputMode = "build" | "paste";
+
 export const SchemaBuilder = () => {
   const form = useForm(builderSchema, {
     initialValues: initialBuilderValues,
@@ -354,21 +368,83 @@ export const SchemaBuilder = () => {
   const rootRows = useFieldArray(form, "rootFields");
   const sectionRows = useFieldArray(form, "sections");
 
+  const [mode, setMode] = useState<InputMode>("build");
+  const [tsSource, setTsSource] = useState(SAMPLE_TS);
+  const values = useFormSelector(form, (state) => state.values);
+
+  // One emit path, two IR sources. Build mode reads the field rows; paste
+  // mode parses the TS into IR (both feed the REAL emitters). The option
+  // axes (ui/layout/sections/columns) come from the form in either mode.
+  const output = useMemo(() => {
+    if (mode === "build") {
+      const parsed = builderSchema.safeParse(values);
+      return parsed.success
+        ? {
+            files: generateFiles(parsed.data),
+            formName: parsed.data.formName,
+            error: undefined,
+          }
+        : {
+            files: null,
+            formName: values.formName,
+            error: "Fix the highlighted fields above and the files will regenerate.",
+          };
+    }
+    const parsed = parseTypeScript(tsSource);
+    if (!parsed.ok) {
+      return { files: null, formName: values.formName, error: parsed.error };
+    }
+    return {
+      files: generateFilesFromIr(parsed.ir, parsed.formName, {
+        ui: values.ui,
+        layout: values.layout,
+        sectionStyle: values.sectionStyle,
+        columns: values.columns,
+      }),
+      formName: parsed.formName,
+      error: undefined,
+    };
+  }, [mode, values, tsSource]);
+
   return (
     <div>
       <p className="subtitle-text" style={{ color: "#8b94a7", fontSize: 13, marginTop: 0 }}>
-        Design a schema and the <strong>real formstand-gen emitters</strong>{" "}
-        (imported from the CLI's source, running in your browser) regenerate
-        the files on every keystroke — the same output <code>npx
-        formstand-gen</code> writes to disk.
+        Design a schema — or paste a TypeScript type — and the{" "}
+        <strong>real formstand-gen emitters</strong> (imported from the CLI's
+        source, running in your browser) regenerate the files on every
+        keystroke, the same output <code>npx formstand-gen</code> writes to
+        disk.
       </p>
 
+      <div className="builder-modes" role="tablist" aria-label="Input mode">
+        <button
+          className={`secondary ${mode === "build" ? "active" : ""}`}
+          type="button"
+          role="tab"
+          aria-selected={mode === "build"}
+          onClick={() => setMode("build")}
+        >
+          Build fields
+        </button>
+        <button
+          className={`secondary ${mode === "paste" ? "active" : ""}`}
+          type="button"
+          role="tab"
+          aria-selected={mode === "paste"}
+          onClick={() => setMode("paste")}
+        >
+          Paste a TypeScript type
+        </button>
+      </div>
+
       <div className="row" style={{ alignItems: "flex-start" }}>
-        <div className="field" style={{ flex: 2 }}>
-          <label>Component name</label>
-          <input placeholder="ContactForm" {...textInputProps(formName)} />
-          <span className="error">{formName.error?.[0] ?? " "}</span>
-        </div>
+        {mode === "build" ? (
+          <div className="field" style={{ flex: 2 }}>
+            <label>Component name</label>
+            <input placeholder="ContactForm" {...textInputProps(formName)} />
+            <span className="error">{formName.error?.[0] ?? " "}</span>
+          </div>
+        ) : null}
         <div className="field" style={{ flex: 1 }}>
           <label>UI (--ui)</label>
           <select {...selectProps(ui)}>
@@ -402,6 +478,29 @@ export const SchemaBuilder = () => {
         </div>
       </div>
 
+      {mode === "paste" ? (
+        <div className="field" style={{ marginTop: 16 }}>
+          <label>
+            TypeScript type or interface (the component name comes from it)
+          </label>
+          <textarea
+            className="builder-ts-input"
+            spellCheck={false}
+            rows={14}
+            value={tsSource}
+            onChange={(e) => setTsSource(e.target.value)}
+          />
+          <span className="subtitle-text" style={{ color: "#8b94a7", fontSize: 12 }}>
+            Supports string / number / boolean / Date, arrays, nested objects,
+            string-literal unions, and optional / nullable. Anything else
+            becomes a text field with a TODO — same as{" "}
+            <code>formstand-gen --type</code>.
+          </span>
+        </div>
+      ) : null}
+
+      {mode === "build" ? (
+        <>
       <h3 style={{ marginBottom: 4 }}>Top-level fields</h3>
       {rootRows.fields.map((row, index) => (
         <RootFieldRow
@@ -443,8 +542,14 @@ export const SchemaBuilder = () => {
       >
         + section
       </button>
+        </>
+      ) : null}
 
-      <GeneratedOutput form={form} />
+      <GeneratedOutput
+        files={output.files}
+        formName={output.formName}
+        {...(output.error !== undefined ? { error: output.error } : {})}
+      />
     </div>
   );
 };

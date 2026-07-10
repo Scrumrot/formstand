@@ -12,6 +12,7 @@ import schemaBuilderSrc from "../forms/SchemaBuilder/SchemaBuilder.tsx?raw";
 import schemaBuilderSchemaSrc from "../forms/SchemaBuilder/builderSchema.ts?raw";
 import schemaBuilderGenerateSrc from "../forms/SchemaBuilder/generate.ts?raw";
 import schemaBuilderZipSrc from "../forms/SchemaBuilder/zip.ts?raw";
+import schemaBuilderParseSrc from "../forms/SchemaBuilder/parseTypeScript.ts?raw";
 import conditionalSrc from "../forms/ConditionalForm.tsx?raw";
 import contextSrc from "../forms/ContextForm.tsx?raw";
 import dependentSrc from "../forms/DependentFieldsForm.tsx?raw";
@@ -160,6 +161,7 @@ const sources = {
     { path: "SchemaBuilder.tsx", source: stripHarness(schemaBuilderSrc) },
     { path: "builderSchema.ts", source: stripHarness(schemaBuilderSchemaSrc) },
     { path: "generate.ts", source: stripHarness(schemaBuilderGenerateSrc) },
+    { path: "parseTypeScript.ts", source: stripHarness(schemaBuilderParseSrc) },
     { path: "zip.ts", source: stripHarness(schemaBuilderZipSrc) },
   ],
   shadSignup: single("ShadcnSignupForm.tsx", shadSignupSrc),

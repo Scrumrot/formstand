@@ -84,6 +84,13 @@
 
 ### Docs & examples (no package changes)
 
+- The Schema builder gains a **Paste a TypeScript type** mode: paste an
+  interface or type alias and the same in-browser emitters generate the
+  form — no TypeScript compiler in the bundle, a focused ~250-line parser
+  covers the CLI's type-mode subset (string/number/boolean/Date, arrays,
+  nested objects, string-literal unions, optional/nullable) and degrades
+  the rest to a text field with a TODO. Both input modes share one emit
+  path.
 - ROADMAP.md: a living plan for the library and the CLI — the 0.9/cli-0.6
   cycle (dates as a first-class field kind, hot-path performance,
   DevTools, CLI config + watch), the next tier, the parking lot, and the

@@ -489,6 +489,31 @@ button.secondary.active {
 .builder-field-row button.secondary {
   margin-top: 2px;
 }
+.builder-modes {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 16px;
+}
+.builder-ts-input {
+  width: 100%;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-strong);
+  color: var(--text-bright);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+.builder-ts-input:focus {
+  border-color: var(--fs-accent);
+  box-shadow: 0 0 0 3px var(--fs-accent-soft);
+}
 .builder-output {
   margin-top: 24px;
   border-top: 1px solid var(--border);
