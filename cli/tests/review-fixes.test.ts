@@ -145,6 +145,40 @@ describe("cli argument hardening", () => {
   });
 });
 
+describe("date fields are real bindings (0.9 cycle)", () => {
+  it("no date TODO, no DATE_CAST, per-ui date builders", () => {
+    const schema = z.object({ birthday: z.date().optional() });
+    const plain = emitPlainForm({
+      ir: fromZod(schema),
+      formName: "BdayForm",
+      schemaImport: { name: "s", from: "./s", kind: "named" },
+    });
+    expect(plain).toContain("<DateField");
+    expect(plain).not.toContain("TODO: date input");
+
+    const mui = emitMuiForm({
+      ir: fromZod(schema),
+      formName: "BdayForm",
+      schemaImport: { name: "s", from: "./s", kind: "named" },
+    });
+    expect(mui).toContain("muiDateFieldProps");
+    expect(mui).toContain("parseDateText");
+    expect(mui).not.toContain("TODO: date input");
+
+    const moduleOut = joinModuleFiles(
+      emitModuleForm({
+        ir: fromZod(schema),
+        formName: "BdayForm",
+        ui: "shadcn",
+        schemaImport: { name: "s", from: "./schema", kind: "named" },
+        schemaSource: emitZodSchema(fromZod(schema), "s"),
+      }),
+    );
+    expect(moduleOut).toContain("shadcnDateInputProps");
+    expect(moduleOut).not.toContain("as unknown as UseFieldReturn");
+  });
+});
+
 describe("zod unwrapping", () => {
   it(".optional().nonoptional() is required again (checked annotation compiles)", () => {
     const schema = z.object({ name: z.string().optional().nonoptional() });

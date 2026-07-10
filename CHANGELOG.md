@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### formstand
+
+- Dates are a first-class field kind: `DateField` (an `<input type="date">`
+  bound to Date-typed paths) joins the shipped components, with
+  `dateInputProps` / `dateToInputText` / `parseDateText` exported for
+  custom markup and UI-kit adapters. Local calendar-date semantics
+  throughout (never `toISOString()` — June 1 stays June 1 west of UTC),
+  the `emptyValue` round-trip on clear, and rollover rejection
+  (`2026-02-31` is invalid, not March 3).
+
+### formstand-cli
+
+- Date fields emit real bindings instead of a text input with a cast and
+  a TODO: `DateField` (plain), `muiDateFieldProps` (MUI `type="date"`
+  TextField with a floated label), `shadcnDateInputProps` (shadcn Input).
+  `DATE_CAST` and the per-backend date TODOs are gone from generated
+  output — forms with dates submit successfully out of the box. Requires
+  formstand ≥ 0.9 for date fields.
+
 ### CI (no package changes)
 
 - Dependabot triage: esbuild pinned to the patched 0.28.1 line via npm

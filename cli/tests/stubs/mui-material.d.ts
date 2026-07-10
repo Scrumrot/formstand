@@ -97,12 +97,16 @@ export declare const TextField: (
   props: Readonly<{
     fullWidth?: boolean;
     select?: boolean;
+    type?: string;
     label?: ReactNode;
     name?: string;
     value?: unknown;
     error?: boolean;
     helperText?: ReactNode;
-    slotProps?: Readonly<{ input?: Readonly<Record<string, unknown>> }>;
+    slotProps?: Readonly<{
+      input?: Readonly<Record<string, unknown>>;
+      inputLabel?: Readonly<Record<string, unknown>>;
+    }>;
     onChange?: TextChangeHandler;
     onBlur?: () => void;
     children?: ReactNode;

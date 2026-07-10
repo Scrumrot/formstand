@@ -208,20 +208,8 @@ const buildPlan = (root: ObjectSpec, naming: Naming): Plan => {
 // Leaf rendering, per kit
 // ---------------------------------------------------------------------------
 
-const todoTexts = (spec: FieldSpec): readonly string[] => [
-  ...(spec.todo !== undefined ? [commentText(spec.todo)] : []),
-  ...(spec.kind === "date"
-    ? [
-        "date input — swap in a date picker; this binds a Date-typed field as plain text through a cast",
-      ]
-    : []),
-];
-
-// Date-typed fields bind a text input, so the hook result is cast to the
-// string shape the prop builders take — flagged by the TODO the file gets.
-const isDateBinding = (spec: FieldSpec): boolean => spec.kind === "date";
-
-const DATE_CAST = " as unknown as UseFieldReturn<string | null | undefined>";
+const todoTexts = (spec: FieldSpec): readonly string[] =>
+  spec.todo !== undefined ? [commentText(spec.todo)] : [];
 
 type ImportLine = Readonly<{ from: string; names: readonly string[] }>;
 
@@ -255,7 +243,9 @@ const leafImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] => {
             ? "checkboxProps"
             : spec.kind === "enum"
               ? "selectProps"
-              : "textInputProps";
+              : spec.kind === "date"
+                ? "dateInputProps"
+                : "textInputProps";
       return [{ from: "formstand", names: [builder] }];
     }
     case "mui":
@@ -274,6 +264,11 @@ const leafImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] => {
           return [
             { from: "@mui/material", names: ["TextField"] },
             { from: "../adapter", names: ["muiNumberFieldProps"] },
+          ];
+        case "date":
+          return [
+            { from: "@mui/material", names: ["TextField"] },
+            { from: "../adapter", names: ["muiDateFieldProps"] },
           ];
         default:
           return [
@@ -316,6 +311,15 @@ const leafImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] => {
               names: ["FieldError", "shadcnNumberInputProps"],
             },
           ];
+        case "date":
+          return [
+            { from: "@/components/ui/input", names: ["Input"] },
+            { from: "@/components/ui/label", names: ["Label"] },
+            {
+              from: "../adapter",
+              names: ["FieldError", "shadcnDateInputProps"],
+            },
+          ];
         default:
           return [
             { from: "@/components/ui/input", names: ["Input"] },
@@ -351,12 +355,14 @@ const leafJsx = (
               `${indent}    </select>`,
             ]
           : [
-              `${indent}    <input${spec.kind === "date" ? ' type="date"' : ""} {...${
+              `${indent}    <input {...${
                 spec.kind === "number"
                   ? "numberInputProps"
                   : spec.kind === "boolean"
                     ? "checkboxProps"
-                    : "textInputProps"
+                    : spec.kind === "date"
+                      ? "dateInputProps"
+                      : "textInputProps"
               }(${varName})} />`,
             ];
       return [
@@ -392,6 +398,10 @@ const leafJsx = (
         case "number":
           return [
             `${indent}<TextField fullWidth label=${labelAttr} {...muiNumberFieldProps(${varName})} />`,
+          ];
+        case "date":
+          return [
+            `${indent}<TextField fullWidth label=${labelAttr} {...muiDateFieldProps(${varName})} />`,
           ];
         default:
           return [
@@ -437,11 +447,13 @@ const leafJsx = (
           const builder =
             spec.kind === "number"
               ? "shadcnNumberInputProps"
-              : "shadcnTextInputProps";
+              : spec.kind === "date"
+                ? "shadcnDateInputProps"
+                : "shadcnTextInputProps";
           return [
             `${indent}<div className="grid gap-2">`,
             `${indent}  <Label htmlFor=${id}>${labelAttr}</Label>`,
-            `${indent}  <Input id=${id}${spec.kind === "date" ? ' type="date"' : ""} {...${builder}(${varName})} />`,
+            `${indent}  <Input id=${id} {...${builder}(${varName})} />`,
             `${indent}  <FieldError field={${varName}} />`,
             `${indent}</div>`,
           ];
@@ -903,6 +915,7 @@ const adapterFile = (ui: ModuleUi, usage: KindUsage): ModuleFile | undefined => 
     needsText || usage.number || (ui === "mui" && (usage.enum || usage.boolean));
   const formstandValues = [
     ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
+    ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
   ];
   return {
     path: ui === "mui" ? "adapter.ts" : "adapter.tsx",
@@ -930,11 +943,7 @@ const fieldFile = (
   const path = field.segments.join(".");
   const propsType = `${field.componentName}Props`;
   const hookName = `use${field.componentName}`;
-  const dateCast = isDateBinding(field.spec);
-  const imports = mergeImports([
-    ...leafImports(ui, field.spec),
-    ...(dateCast ? [{ from: "formstand", names: ["type UseFieldReturn"] }] : []),
-  ]);
+  const imports = mergeImports([...leafImports(ui, field.spec)]);
   return {
     path: `fields/${field.componentName}.tsx`,
     content: [
@@ -950,7 +959,7 @@ const fieldFile = (
       `  label = ${q(field.label)},`,
       `}: ${propsType}) => {`,
       ...todoTexts(field.spec).map((text) => `  // TODO: ${text}`),
-      `  const field = ${hookName}()${dateCast ? DATE_CAST : ""};`,
+      `  const field = ${hookName}();`,
       "  return (",
       ...leafJsx(ui, field.spec, "field", "{label}", `{${q(path)}}`, "    "),
       "  );",
@@ -1097,7 +1106,6 @@ const arraySectionFile = (
 
   const rowSpecs =
     spec.item.kind === "object" ? itemLeaves.map((f) => f.spec) : [spec.item];
-  const anyDateBinding = rowSpecs.some(isDateBinding);
 
   const dynamicId = (name: string | undefined): string =>
     name === undefined
@@ -1108,10 +1116,10 @@ const arraySectionFile = (
     spec.item.kind === "object"
       ? rowVars.map(
           ({ field, varName }) =>
-            `  const ${varName} = ${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}.${templateEscape(field.name)}\`)${isDateBinding(field.spec) ? DATE_CAST : ""};`,
+            `  const ${varName} = ${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}.${templateEscape(field.name)}\`);`,
         )
       : [
-          `  const field = ${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}\`)${isDateBinding(spec.item) ? DATE_CAST : ""};`,
+          `  const field = ${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}\`);`,
         ];
 
   const rowBody =
@@ -1144,9 +1152,6 @@ const arraySectionFile = (
     // The outer wrapper is objectShell, so panel/collapsible chrome pulls
     // its own components in.
     ...objectSectionImports(ui, visual),
-    ...(anyDateBinding
-      ? [{ from: "formstand", names: ["type UseFieldReturn"] }]
-      : []),
   ]);
 
   return {

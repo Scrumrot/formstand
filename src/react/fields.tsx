@@ -4,6 +4,7 @@ import type { Form } from "../core/createForm";
 import type { FieldPath } from "../core/fieldPath";
 import {
   checkboxProps,
+  dateInputProps,
   numberToInputText,
   parseNumberText,
   selectProps,
@@ -84,6 +85,52 @@ export const TextField = <F extends FieldFormApi>({
         type={type}
         placeholder={placeholder}
         autoComplete={autoComplete}
+        aria-describedby={hasError(field.error) ? errorId : undefined}
+      />
+      <ErrorText id={errorId} error={field.error} />
+    </div>
+  );
+};
+
+export type DateFieldProps<F extends FieldFormApi = FieldFormApi> = Readonly<{
+  form: F;
+  path: PathsOf<F>;
+  label?: ReactNode;
+  min?: string;
+  max?: string;
+  ref?: FieldRef<HTMLInputElement>;
+}>;
+
+// <input type="date"> holds Date-typed state: display and parsing go
+// through the shared dateInputProps rules (local calendar-date semantics —
+// see inputProps.ts), so a nullable date clears back to null and an
+// invalid/partial entry writes the field's emptyValue. No raw-text state:
+// unlike number inputs, the date control has no partial entries to
+// preserve — the browser only fires change with "" or a complete date.
+export const DateField = <F extends FieldFormApi>({
+  form,
+  path,
+  label,
+  min,
+  max,
+  ref,
+}: DateFieldProps<F>) => {
+  const id = useId();
+  const errorId = `${id}-error`;
+  const field = useField<Date | null | undefined>(form, path);
+  return (
+    <div className="zf-field">
+      {label !== undefined ? (
+        <label htmlFor={id} className="zf-label">
+          {label}
+        </label>
+      ) : null}
+      <input
+        id={id}
+        ref={ref}
+        {...dateInputProps(field)}
+        min={min}
+        max={max}
         aria-describedby={hasError(field.error) ? errorId : undefined}
       />
       <ErrorText id={errorId} error={field.error} />

@@ -69,12 +69,14 @@ export type {
 export {
   TextField,
   NumberField,
+  DateField,
   CheckboxField,
   SelectField,
 } from "./react/fields";
 export type {
   TextFieldProps,
   NumberFieldProps,
+  DateFieldProps,
   CheckboxFieldProps,
   SelectFieldProps,
   SelectFieldOption,
@@ -91,17 +93,23 @@ export type {
 export {
   textInputProps,
   numberInputProps,
+  dateInputProps,
   checkboxProps,
   selectProps,
-  // The number-text rules the built-in bindings use — exported so adapters
-  // for other UI kits (MUI, etc.) can share them instead of re-deriving.
+  // The number/date text rules the built-in bindings use — exported so
+  // adapters for other UI kits (MUI, etc.) can share them instead of
+  // re-deriving.
   numberToInputText,
   parseNumberText,
+  dateToInputText,
+  parseDateText,
 } from "./react/inputProps";
 export type {
   TextInputProps,
   NumberInputProps,
+  DateInputProps,
   CheckboxProps,
   SelectProps,
   ParsedNumberText,
+  ParsedDateText,
 } from "./react/inputProps";

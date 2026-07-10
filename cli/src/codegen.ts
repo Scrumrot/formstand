@@ -598,8 +598,7 @@ const plainLeaf = (
     case "date":
       return [
         ...todo,
-        `${ind(level)}{/* TODO: date input — swap in a date picker; TextField binds plain text */}`,
-        `${ind(level)}<TextField form={form} ${attr} ${jsxAttr("label", label)} />`,
+        `${ind(level)}<DateField form={form} ${attr} ${jsxAttr("label", label)} />`,
       ];
     case "number":
       return [
@@ -652,9 +651,10 @@ const plainBackend = (visual: VisualOptions): Backend => {
   header: (usage, arrays) => {
     const formstandImports = [
       ...(usage.boolean ? ["CheckboxField"] : []),
+      ...(usage.date ? ["DateField"] : []),
       ...(usage.number ? ["NumberField"] : []),
       ...(usage.enum ? ["SelectField"] : []),
-      ...(usage.string || usage.date ? ["TextField"] : []),
+      ...(usage.string ? ["TextField"] : []),
       ...(arrays.length > 0 ? ["useFieldArray"] : []),
       "useForm",
       "useIsSubmitting",
@@ -794,10 +794,10 @@ const boundFieldProps = (usage: KindUsage): readonly string[] =>
     : [];
 
 // Both kit backends emit identical Bound* elements per leaf kind; they
-// differ only in the date-picker TODO wording and which component binds a
-// boolean (MUI renders a Switch, shadcn a Checkbox).
+// differ only in which component binds a boolean (MUI renders a Switch,
+// shadcn a Checkbox).
 const boundLeaf =
-  (dateTodo: string, booleanField: string): Backend["leaf"] =>
+  (booleanField: string): Backend["leaf"] =>
   (spec, attr, label, level) => {
     const todo = todoComment(spec, level);
     switch (spec.kind) {
@@ -809,8 +809,7 @@ const boundLeaf =
       case "date":
         return [
           ...todo,
-          `${ind(level)}{/* TODO: ${dateTodo} */}`,
-          `${ind(level)}<BoundTextField form={form} ${attr} ${jsxAttr("label", label)} />`,
+          `${ind(level)}<BoundDateField form={form} ${attr} ${jsxAttr("label", label)} />`,
         ];
       case "number":
         return [
@@ -899,6 +898,25 @@ export const muiAdapterSection = (usage: KindUsage, exp = ""): string => {
     "  onBlur: field.onBlur,",
     "});",
   ];
+  const dateAdapter = [
+    "",
+    `${exp}const muiDateFieldProps = <T extends Date | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
+    '  type: "date" as const,',
+    "  name: field.path,",
+    "  value: dateToInputText(field.value),",
+    "  error: fieldError(field) !== undefined,",
+    "  helperText: fieldError(field),",
+    "  // A date input always shows placeholder chrome; keep the label floated.",
+    "  slotProps: { inputLabel: { shrink: true } },",
+    "  onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {",
+    "    const parsed = parseDateText(e.target.value);",
+    '    field.setValue((parsed.kind === "date" ? parsed.value : field.emptyValue) as T);',
+    "  },",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
   const switchAdapter = [
     "",
     `${exp}const muiSwitchProps = <T extends boolean | null | undefined>(`,
@@ -913,8 +931,9 @@ export const muiAdapterSection = (usage: KindUsage, exp = ""): string => {
   return [
     "// ---- formstand → MUI adapter ----------------------------------------------",
     ...(needsError ? withExportPrefix(FIELD_ERROR_HELPER, exp) : []),
-    ...(usage.string || usage.date ? textAdapter : []),
+    ...(usage.string ? textAdapter : []),
     ...(usage.number ? numberAdapter : []),
+    ...(usage.date ? dateAdapter : []),
     ...(usage.enum ? selectAdapter : []),
     ...(usage.boolean ? switchAdapter : []),
   ].join("\n");
@@ -934,6 +953,13 @@ const muiBoundComponents = (usage: KindUsage): string => {
     "const BoundNumberField = ({ form, path, label }: BoundFieldProps) => {",
     "  const field = useField<number | null | undefined>(form, path);",
     "  return <TextField fullWidth label={label} {...muiNumberFieldProps(field)} />;",
+    "};",
+  ];
+  const date = [
+    "",
+    "const BoundDateField = ({ form, path, label }: BoundFieldProps) => {",
+    "  const field = useField<Date | null | undefined>(form, path);",
+    "  return <TextField fullWidth label={label} {...muiDateFieldProps(field)} />;",
     "};",
   ];
   const select = [
@@ -970,17 +996,15 @@ const muiBoundComponents = (usage: KindUsage): string => {
   ];
   return [
     ...propsType,
-    ...(usage.string || usage.date ? text : []),
+    ...(usage.string ? text : []),
     ...(usage.number ? number : []),
+    ...(usage.date ? date : []),
     ...(usage.enum ? select : []),
     ...(usage.boolean ? switchField : []),
   ].join("\n");
 };
 
-const muiLeaf = boundLeaf(
-  "date input — consider @mui/x-date-pickers; this binds plain text",
-  "BoundSwitchField",
-);
+const muiLeaf = boundLeaf("BoundSwitchField");
 
 // Typography renders section headings: any addressable object field at any
 // depth needs it (array sections are covered by the arrays.length check).
@@ -1077,6 +1101,7 @@ const muiBackend = (visual: VisualOptions): Backend => {
     ];
     const formstandValueImports = [
       ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
+      ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
       ...(hasLeaf ? ["useField"] : []),
       ...(arrays.length > 0 ? ["useFieldArray"] : []),
       "useForm",
@@ -1228,6 +1253,22 @@ export const shadcnAdapterSection = (usage: KindUsage, exp = ""): string => {
     "  },",
     "});",
   ];
+  const dateAdapter = [
+    "",
+    `${exp}const shadcnDateInputProps = <T extends Date | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
+    '  type: "date" as const,',
+    "  name: field.path,",
+    "  value: dateToInputText(field.value),",
+    '  "aria-invalid": ariaInvalid(field),',
+    "  onChange: (e: ChangeEvent<HTMLInputElement>) => {",
+    "    const parsed = parseDateText(e.target.value);",
+    '    field.setValue((parsed.kind === "date" ? parsed.value : field.emptyValue) as T);',
+    "  },",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
   const checkboxAdapter = [
     "",
     `${exp}const shadcnCheckboxProps = <T extends boolean | null | undefined>(`,
@@ -1244,8 +1285,9 @@ export const shadcnAdapterSection = (usage: KindUsage, exp = ""): string => {
   return [
     "// ---- formstand → shadcn/ui adapter -----------------------------------------",
     ...(hasLeaf ? withExportPrefix(errorHelper, exp) : []),
-    ...(usage.string || usage.date ? textAdapter : []),
+    ...(usage.string ? textAdapter : []),
     ...(usage.number ? numberAdapter : []),
+    ...(usage.date ? dateAdapter : []),
     ...(usage.enum ? selectAdapter : []),
     ...(usage.boolean ? checkboxAdapter : []),
   ].join("\n");
@@ -1274,6 +1316,19 @@ const shadcnBoundComponents = (usage: KindUsage): string => {
     '    <div className="grid gap-2">',
     "      <Label htmlFor={path}>{label}</Label>",
     "      <Input id={path} {...shadcnNumberInputProps(field)} />",
+    "      <FieldError field={field} />",
+    "    </div>",
+    "  );",
+    "};",
+  ];
+  const date = [
+    "",
+    "const BoundDateField = ({ form, path, label }: BoundFieldProps) => {",
+    "  const field = useField<Date | null | undefined>(form, path);",
+    "  return (",
+    '    <div className="grid gap-2">',
+    "      <Label htmlFor={path}>{label}</Label>",
+    "      <Input id={path} {...shadcnDateInputProps(field)} />",
     "      <FieldError field={field} />",
     "    </div>",
     "  );",
@@ -1329,17 +1384,15 @@ const shadcnBoundComponents = (usage: KindUsage): string => {
   ];
   return [
     ...propsType,
-    ...(usage.string || usage.date ? text : []),
+    ...(usage.string ? text : []),
     ...(usage.number ? number : []),
+    ...(usage.date ? date : []),
     ...(usage.enum ? select : []),
     ...(usage.boolean ? checkbox : []),
   ].join("\n");
 };
 
-const shadcnLeaf = boundLeaf(
-  "date input — consider shadcn's Calendar-in-Popover pattern; this binds plain text",
-  "BoundCheckboxField",
-);
+const shadcnLeaf = boundLeaf("BoundCheckboxField");
 
 const shadcnBackend = (visual: VisualOptions): Backend => {
   const cols = visual.columns;
@@ -1375,6 +1428,7 @@ const shadcnBackend = (visual: VisualOptions): Backend => {
     const hasLeaf = hasLeafUsage(usage);
     const formstandValueImports = [
       ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
+      ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
       ...(hasLeaf ? ["useField"] : []),
       ...(arrays.length > 0 ? ["useFieldArray"] : []),
       "useForm",

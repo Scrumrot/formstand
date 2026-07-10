@@ -18,6 +18,15 @@ export type NumberInputProps = Readonly<{
   onBlur: () => void;
 }>;
 
+export type DateInputProps = Readonly<{
+  type: "date";
+  name: string;
+  value: string;
+  "aria-invalid": true | undefined;
+  onChange: (e: ChangeEvent<HTMLInputElement>) => void;
+  onBlur: () => void;
+}>;
+
 export type CheckboxProps = Readonly<{
   type: "checkbox";
   name: string;
@@ -97,6 +106,59 @@ export const numberInputProps = <T extends number | null | undefined>(
     const parsed = parseNumberText(e.target.value);
     field.setValue(
       (parsed.kind === "number" ? parsed.value : field.emptyValue) as T,
+    );
+  },
+  onBlur: field.onBlur,
+});
+
+// Canonical display text for a Date field value — the local calendar date
+// as "yyyy-MM-dd" (what <input type="date"> speaks). Local parts, NOT
+// toISOString(): a date picked as June 1 must not render as May 31 for
+// users west of UTC. Invalid Dates count as empty. Shared with DateField.
+export const dateToInputText = (value: Date | null | undefined): string => {
+  if (value === undefined || value === null || Number.isNaN(value.getTime())) {
+    return "";
+  }
+  const pad = (part: number): string => String(part).padStart(2, "0");
+  return `${String(value.getFullYear()).padStart(4, "0")}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+};
+
+export type ParsedDateText =
+  | Readonly<{ kind: "empty" }>
+  | Readonly<{ kind: "date"; value: Date }>
+  // Not "yyyy-MM-dd", or parts that roll over (2026-02-31).
+  | Readonly<{ kind: "invalid" }>;
+
+// The single rule for turning "yyyy-MM-dd" into a Date field value: LOCAL
+// midnight — a calendar date, not a UTC instant (new Date("2026-06-01")
+// would be UTC midnight and read back as May 31 west of Greenwich).
+// Shared with DateField.
+export const parseDateText = (text: string): ParsedDateText => {
+  if (text.trim() === "") return { kind: "empty" };
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (match === null) return { kind: "invalid" };
+  const [, year, month, day] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  // The parts must survive the Date constructor — rollovers are invalid,
+  // not silently the 3rd of next month.
+  return date.getFullYear() === Number(year) &&
+    date.getMonth() === Number(month) - 1 &&
+    date.getDate() === Number(day)
+    ? { kind: "date", value: date }
+    : { kind: "invalid" };
+};
+
+export const dateInputProps = <T extends Date | null | undefined>(
+  field: UseFieldReturn<T>,
+): DateInputProps => ({
+  type: "date",
+  name: field.path,
+  value: dateToInputText(field.value),
+  "aria-invalid": ariaInvalid(field),
+  onChange: (e) => {
+    const parsed = parseDateText(e.target.value);
+    field.setValue(
+      (parsed.kind === "date" ? parsed.value : field.emptyValue) as T,
     );
   },
   onBlur: field.onBlur,

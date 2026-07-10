@@ -1,6 +1,6 @@
 # Bound components
 
-This page covers the four bound input components (`TextField`, `NumberField`, `CheckboxField`, `SelectField`), the accessibility wiring they ship with, the prop builders for custom markup, `NumberField`'s partial-entry behavior, and how cleared inputs decide between `null` and `undefined`.
+This page covers the five bound input components (`TextField`, `NumberField`, `DateField`, `CheckboxField`, `SelectField`), the accessibility wiring they ship with, the prop builders for custom markup, `NumberField`'s partial-entry behavior, and how cleared inputs decide between `null` and `undefined`.
 
 ## The four components
 
@@ -28,6 +28,7 @@ Props:
 | --- | --- |
 | `TextField` | `form`, `path`, `label?`, `placeholder?`, `type?` (`"text" \| "password" \| "email" \| "url" \| "tel"`), `autoComplete?`, `ref?` |
 | `NumberField` | `form`, `path`, `label?`, `placeholder?`, `ref?` |
+| `DateField` | `form`, `path`, `label?`, `min?`, `max?`, `ref?` |
 | `CheckboxField` | `form`, `path`, `label?`, `ref?` |
 | `SelectField<T>` | `form`, `path`, `label?`, `options` (`{ value: T; label: ReactNode }[]`), `placeholder?`, `ref?` |
 
@@ -66,6 +67,10 @@ const name = useField(form, "name");
 Each builder spreads `name`, the controlled `value`/`checked`, `aria-invalid`, `onChange`, and `onBlur` (which marks the field touched and triggers mode-appropriate validation). Error display, labels, and `aria-describedby` are yours to render.
 
 `numberInputProps` is a *stateless* `<input type="number">` binding — you get the native stepper and `step` attribute, at the cost of the intermediate-entry behavior described next.
+
+## `DateField` and calendar-date semantics
+
+`DateField` renders `<input type="date">` bound to a `Date`-typed field. Display and parsing go through the exported `dateToInputText` / `parseDateText` rules, which treat the value as a **local calendar date**: the input's `"yyyy-MM-dd"` maps to local midnight, never through `toISOString()` — a date picked as June 1 must not render as May 31 for users west of UTC. Clearing writes the field's `emptyValue` (`null` for `z.date().nullable()`), rollover text like `2026-02-31` is rejected rather than silently becoming March 3, and `dateInputProps` is exported for custom markup and UI-kit adapters. For picker widgets, bind MUI X's `DatePicker` or shadcn's `Calendar` with a small adapter that reuses these same two functions.
 
 ## `NumberField` and partial entries
 
