@@ -4,6 +4,10 @@
 
 ### Docs & examples (no package changes)
 
+- The theme is one preference across the docs site and the playground:
+  the playground stores its light/dark choice under VitePress's own
+  localStorage key (same origin), so flipping either surface's toggle
+  follows you to the other.
 - The demo body caps at a readable 760px measure; legitimately wide demos
   (Perf's grid, the Schema builder, the Invoice table) opt out via an
   explicit WIDE_DEMOS set.

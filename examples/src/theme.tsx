@@ -12,11 +12,17 @@ import {
 
 export type ThemeMode = "dark" | "light";
 
-const STORAGE_KEY = "fs-theme";
+// VitePress's own storage key: the docs site and the playground share an
+// origin, so using the same key makes the theme ONE preference across both
+// surfaces — flip it on either side and the other follows, no sync code.
+// VitePress also stores "auto" (follow the OS); we treat that like unset.
+const STORAGE_KEY = "vitepress-theme-appearance";
+const LEGACY_KEY = "fs-theme";
 
 const storedMode = (): ThemeMode | null => {
   try {
-    const value = localStorage.getItem(STORAGE_KEY);
+    const value =
+      localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY);
     return value === "light" || value === "dark" ? value : null;
   } catch {
     return null;
