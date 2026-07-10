@@ -17,6 +17,16 @@ export type NamedField = Readonly<{
   spec: FieldSpec;
 }>;
 
+// One branch of a discriminated union at a field position: `tag` is the
+// literal discriminant value ("card"), `label` its title-cased form, and
+// `fields` the branch's fields EXCLUDING the discriminant key (that binds
+// with a plain field; the branch fields bind with useVariantField).
+export type UnionVariant = Readonly<{
+  tag: string;
+  label: string;
+  fields: readonly NamedField[];
+}>;
+
 export type FieldSpec =
   | (SharedSpecProps & Readonly<{ kind: "string" }>)
   | (SharedSpecProps & Readonly<{ kind: "number" }>)
@@ -25,7 +35,13 @@ export type FieldSpec =
   | (SharedSpecProps & Readonly<{ kind: "enum"; options: readonly string[] }>)
   | (SharedSpecProps &
       Readonly<{ kind: "object"; fields: readonly NamedField[] }>)
-  | (SharedSpecProps & Readonly<{ kind: "array"; item: FieldSpec }>);
+  | (SharedSpecProps & Readonly<{ kind: "array"; item: FieldSpec }>)
+  | (SharedSpecProps &
+      Readonly<{
+        kind: "union";
+        discriminant: string;
+        variants: readonly UnionVariant[];
+      }>);
 
 // "firstName" / "first_name" / "first-name" / "APIKey" → "First Name" etc.
 // (One splitting rule for the whole CLI — see ./casing.)

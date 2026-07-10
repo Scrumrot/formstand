@@ -106,7 +106,10 @@ type SectionPlan = Readonly<{
   key: string;
   componentName: string; // AddressSection (deduped)
   label: string;
-  spec: ObjectSpec | Extract<FieldSpec, Readonly<{ kind: "array" }>>;
+  spec:
+    | ObjectSpec
+    | Extract<FieldSpec, Readonly<{ kind: "array" }>>
+    | Extract<FieldSpec, Readonly<{ kind: "union" }>>;
 }>;
 
 type Plan = Readonly<{
@@ -117,7 +120,17 @@ type Plan = Readonly<{
 }>;
 
 const isScalar = (spec: FieldSpec): boolean =>
-  spec.kind !== "object" && spec.kind !== "array";
+  spec.kind !== "object" && spec.kind !== "array" && spec.kind !== "union";
+
+// Whether the subtree holds a discriminated-union field at any addressable
+// object depth — gates the bound Field/VariantField hook exports.
+const specHasUnion = (spec: FieldSpec): boolean =>
+  spec.kind === "union" ||
+  (spec.kind === "object" &&
+    spec.fields.some(
+      (field) => !isUnaddressable(field.name) && specHasUnion(field.spec),
+    )) ||
+  (spec.kind === "array" && specHasUnion(spec.item));
 
 // Whether the subtree holds an addressable array at any object depth. The
 // walk does not need to cross array boundaries: an array inside an array is
@@ -142,6 +155,8 @@ const collectLeaves = (
       case "object":
         return collectLeaves(field.spec.fields, at);
       case "array":
+      // A union renders inline in its section file, not as a leaf field.
+      case "union":
         return [];
       default:
         return [{ segments: at, field }];
@@ -180,7 +195,9 @@ const buildPlan = (root: ObjectSpec, naming: Naming): Plan => {
     .filter(
       (field) =>
         !isUnaddressable(field.name) &&
-        (field.spec.kind === "object" || field.spec.kind === "array"),
+        (field.spec.kind === "object" ||
+          field.spec.kind === "array" ||
+          field.spec.kind === "union"),
     )
     .map(
       (field): SectionPlan => ({
@@ -869,9 +886,15 @@ const hooksFile = (
   const hasArrays = root.fields.some(
     (field) => !isUnaddressable(field.name) && specHasArray(field.spec),
   );
-  const hasFields = plan.fields.length > 0 || hasArrays;
+  // A union renders a discriminant (useField) + variant fields
+  // (useVariantField), so both bound hooks join the module's API.
+  const hasUnions = root.fields.some(
+    (field) => !isUnaddressable(field.name) && specHasUnion(field.spec),
+  );
+  const hasFields = plan.fields.length > 0 || hasArrays || hasUnions;
   const hooks = [
     ...(hasFields ? [naming.hook("Field")] : []),
+    ...(hasUnions ? [naming.hook("VariantField")] : []),
     ...(hasArrays ? [naming.hook("FieldArray")] : []),
     ...(plan.sections.length > 0
       ? [naming.hook("IsDirty"), naming.hook("IsValid")]
@@ -1382,6 +1405,12 @@ const objectSectionFile = (
               ]
             : [`${indent}<${entry.stem}Rows />`];
         }
+        case "union":
+          // A union nested inside an object section: only top-level unions
+          // get a generated section; deeper ones are left to extract by hand.
+          return [
+            `${indent}{/* TODO: discriminated union ${commentText(q(at.join(".")))} — only top-level unions are generated; bind the discriminant with ${naming.hook("Field")} and its variant fields with ${naming.hook("VariantField")} */}`,
+          ];
         default: {
           const planned = own(at);
           return planned === undefined
@@ -1689,6 +1718,154 @@ const indexFile = (naming: Naming): ModuleFile => ({
   ].join("\n"),
 });
 
+// A top-level discriminated union → its own section file: the discriminant
+// binds with the bound useXField (a common key), each variant-only field
+// with useXVariantField (deduped by name), and the JSX switches variant
+// blocks on the discriminant's live value. Nested unions stay TODO comments.
+type UnionSectionBinding = Readonly<{
+  name: string;
+  label: string;
+  spec: FieldSpec;
+  varName: string;
+}>;
+
+const unionSectionFile = (
+  ui: ModuleUi,
+  visual: VisualOptions,
+  naming: Naming,
+  section: SectionPlan,
+): ModuleFile => {
+  const spec = section.spec as Extract<FieldSpec, Readonly<{ kind: "union" }>>;
+  const propsType = `${section.componentName}Props`;
+  const hookName = `use${section.componentName}`;
+  const path = section.key;
+  const discriminantVar = camelIdent(spec.discriminant);
+  const discriminantPath = `${path}.${spec.discriminant}`;
+
+  const bindings = spec.variants
+    .flatMap((variant) => variant.fields)
+    .filter((field) => !isUnaddressable(field.name) && isScalar(field.spec))
+    .reduce<
+      Readonly<{
+        used: ReadonlySet<string>;
+        seen: ReadonlySet<string>;
+        list: readonly UnionSectionBinding[];
+      }>
+    >(
+      (acc, field) => {
+        if (acc.seen.has(field.name)) return acc;
+        const base =
+          camelIdent(field.name).length === 0 ? "value" : camelIdent(field.name);
+        const varName = `${base}${identifierSuffix(base, acc.used)}`;
+        return {
+          used: new Set([...acc.used, varName]),
+          seen: new Set([...acc.seen, field.name]),
+          list: [
+            ...acc.list,
+            { name: field.name, label: field.label, spec: field.spec, varName },
+          ],
+        };
+      },
+      { used: new Set<string>([discriminantVar]), seen: new Set<string>(), list: [] },
+    ).list;
+  const bindingByName = new Map(bindings.map((binding) => [binding.name, binding]));
+
+  const discriminantSpec: FieldSpec = {
+    kind: "enum",
+    options: spec.variants.map((variant) => variant.tag),
+    optional: false,
+    nullable: false,
+  };
+
+  const children = [
+    ...leafControl(
+      ui,
+      discriminantSpec,
+      discriminantVar,
+      jsxText(section.label),
+      `{${discriminantVar}.path}`,
+      "      ",
+    ),
+    ...spec.variants.flatMap((variant) => [
+      `      {${discriminantVar}.value === ${q(variant.tag)} && (`,
+      "        <>",
+      ...variant.fields.flatMap((field): readonly string[] => {
+        if (isUnaddressable(field.name)) {
+          return [
+            `          {/* TODO: field ${commentText(q(field.name))} skipped — "." in a key is not path-addressable (see formstand docs) */}`,
+          ];
+        }
+        const binding = bindingByName.get(field.name);
+        return binding === undefined
+          ? [
+              `          {/* TODO: nested ${field.spec.kind} ${commentText(q(`${path}.${field.name}`))} inside a union variant — extract it by hand */}`,
+            ]
+          : leafControl(
+              ui,
+              field.spec,
+              binding.varName,
+              jsxText(field.label),
+              `{${binding.varName}.path}`,
+              "          ",
+            );
+      }),
+      "        </>",
+      "      )}",
+    ]),
+  ];
+
+  const leafSpecs = [discriminantSpec, ...bindings.map((binding) => binding.spec)];
+  const imports = mergeImports([
+    ...objectSectionImports(ui, visual),
+    ...leafSpecs.flatMap((leaf) => leafImports(ui, leaf)),
+  ]);
+
+  const hookImports = [
+    naming.hook("Field"),
+    ...(bindings.length > 0 ? [naming.hook("VariantField")] : []),
+    naming.hook("IsDirty"),
+    naming.hook("IsValid"),
+  ];
+
+  return {
+    path: `sections/${section.componentName}.tsx`,
+    content: [
+      HEADER,
+      ...imports,
+      "import {",
+      ...hookImports.map((name) => `  ${name},`),
+      `} from "../hooks";`,
+      "",
+      `export type ${propsType} = Readonly<{ heading?: string }>;`,
+      "",
+      "// The section hook is the path-scoped flags: dirty/valid for this",
+      "// union subtree only, as boolean-only subscriptions.",
+      `export const ${hookName} = () => ({`,
+      `  dirty: ${naming.hook("IsDirty")}(${q(path)}),`,
+      `  valid: ${naming.hook("IsValid")}(${q(path)}),`,
+      "});",
+      "",
+      `export const ${section.componentName} = ({`,
+      `  heading = ${q(section.label)},`,
+      `}: ${propsType}) => {`,
+      `  const { dirty, valid } = ${hookName}();`,
+      "  // The discriminant binds with the plain field hook (a common key);",
+      "  // its live value chooses which variant block renders. Every variant",
+      "  // field hook is called unconditionally (React's rules).",
+      `  const ${discriminantVar} = ${naming.hook("Field")}(${q(discriminantPath)});`,
+      ...bindings.map(
+        (binding) =>
+          `  const ${binding.varName} = ${naming.hook("VariantField")}(${q(path)}, ${q(binding.name)});`,
+      ),
+      "  return (",
+      ...objectShell(ui, visual, children),
+      "  );",
+      "};",
+      "",
+    ].join("\n"),
+  };
+};
+
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
@@ -1712,7 +1889,9 @@ export const emitModuleForm = (
     ...plan.sections.map((section) =>
       section.spec.kind === "object"
         ? objectSectionFile(ui, visual, naming, section, plan)
-        : arraySectionFile(ui, visual, naming, section),
+        : section.spec.kind === "array"
+          ? arraySectionFile(ui, visual, naming, section)
+          : unionSectionFile(ui, visual, naming, section),
     ),
     formFile(ui, naming, plan),
     indexFile(naming),

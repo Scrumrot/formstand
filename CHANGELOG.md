@@ -39,6 +39,14 @@
 
 ### formstand-cli
 
+- Discriminated unions (`z.discriminatedUnion`) at a field position: the
+  generator emits a discriminant select plus per-variant conditional
+  blocks, binding variant fields through the library's `useVariantField`
+  (single-file) or bound `use{Name}VariantField` (module layout) — fully
+  typed, no casts. All six emit paths (plain/mui/shadcn × single-file/
+  module) typecheck against the real helper. Initial values pick the
+  first variant; the schema round-trips. Nested-in-section unions,
+  unions in array rows, and non-scalar variant fields keep a TODO.
 - Nested-array row extraction (`--layout module`): an array inside a
   section object, or an array inside an array row, now generates its own
   Row/Rows component pair with a bound `useFieldArray` on the template

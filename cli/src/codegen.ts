@@ -172,6 +172,20 @@ export const emitInitialValues = (spec: FieldSpec, level = 0): string => {
     }
     case "array":
       return "[]";
+    // A union starts as its first variant, concretely shaped: the
+    // discriminant set to that variant's tag, its fields blank.
+    case "union": {
+      const first = spec.variants[0];
+      if (first === undefined) return "{}";
+      const lines = [
+        `${ind(level + 1)}${propKey(spec.discriminant)}: ${q(first.tag)},`,
+        ...first.fields.map(
+          (field) =>
+            `${ind(level + 1)}${propKey(field.name)}: ${emitInitialValues(field.spec, level + 1)},`,
+        ),
+      ];
+      return `{\n${lines.join("\n")}\n${ind(level)}}`;
+    }
     default:
       return blankLeaf(spec).expr;
   }
@@ -186,6 +200,14 @@ export const blankNeedsCast = (spec: FieldSpec): boolean => {
       return spec.fields.some((field) => blankNeedsCast(field.spec));
     case "array":
       return false;
+    // The blank draft materializes the first variant only, so its fields
+    // decide the cast (the discriminant is a plain string literal).
+    case "union": {
+      const first = spec.variants[0];
+      return (
+        first !== undefined && first.fields.some((f) => blankNeedsCast(f.spec))
+      );
+    }
     default:
       return !blankLeaf(spec).satisfiesInput;
   }
@@ -221,6 +243,22 @@ const zodExpr = (spec: FieldSpec, level: number): string => {
           ? "z.object({})"
           : `z.object({\n${fields.join("\n")}\n${ind(level)}})`;
       }
+      // Reconstruct the discriminant literal into each branch object.
+      case "union": {
+        const variants = spec.variants.map((variant) => {
+          const fields = [
+            `${ind(level + 2)}${propKey(spec.discriminant)}: z.literal(${q(variant.tag)}),`,
+            ...variant.fields.flatMap((field) => [
+              ...(field.spec.todo !== undefined
+                ? [`${ind(level + 2)}// TODO: ${field.spec.todo}`]
+                : []),
+              `${ind(level + 2)}${propKey(field.name)}: ${zodExpr(field.spec, level + 2)},`,
+            ]),
+          ];
+          return `${ind(level + 1)}z.object({\n${fields.join("\n")}\n${ind(level + 1)}}),`;
+        });
+        return `z.discriminatedUnion(${q(spec.discriminant)}, [\n${variants.join("\n")}\n${ind(level)}])`;
+      }
     }
   })();
   const withNullable = spec.nullable ? `${base}.nullable()` : base;
@@ -245,6 +283,9 @@ export type KindUsage = Readonly<{
   boolean: boolean;
   date: boolean;
   enum: boolean;
+  // A discriminated-union field is present: gates the useField/useVariantField
+  // imports the union rendering needs.
+  union: boolean;
 }>;
 
 const NO_USAGE: KindUsage = {
@@ -253,6 +294,7 @@ const NO_USAGE: KindUsage = {
   boolean: false,
   date: false,
   enum: false,
+  union: false,
 };
 
 const mergeUsage = (a: KindUsage, b: KindUsage): KindUsage => ({
@@ -261,7 +303,23 @@ const mergeUsage = (a: KindUsage, b: KindUsage): KindUsage => ({
   boolean: a.boolean || b.boolean,
   date: a.date || b.date,
   enum: a.enum || b.enum,
+  union: a.union || b.union,
 });
+
+// The kinds a union's controls render: the discriminant is a select (enum),
+// plus every variant field's kind. Shared with collectUsage so a union pulls
+// in the right leaf builders/components even with no sibling of that kind.
+const unionKindUsage = (
+  spec: Extract<FieldSpec, Readonly<{ kind: "union" }>>,
+): KindUsage =>
+  spec.variants.reduce<KindUsage>(
+    (acc, variant) =>
+      variant.fields.reduce<KindUsage>(
+        (inner, field) => mergeUsage(inner, collectUsage(field.spec)),
+        acc,
+      ),
+    { ...NO_USAGE, union: true, enum: true },
+  );
 
 export const collectUsage = (spec: FieldSpec): KindUsage => {
   switch (spec.kind) {
@@ -272,6 +330,8 @@ export const collectUsage = (spec: FieldSpec): KindUsage => {
       );
     case "array":
       return collectUsage(spec.item);
+    case "union":
+      return unionKindUsage(spec);
     default:
       return { ...NO_USAGE, [spec.kind]: true };
   }
@@ -355,6 +415,158 @@ const collectArrays = (root: ObjectSpec): readonly ArrayEntry[] =>
     },
     { used: new Set<string>(), entries: [] },
   ).entries;
+
+// ---------------------------------------------------------------------------
+// Discriminated unions (single-file backends)
+// ---------------------------------------------------------------------------
+
+export type UnionSpec = Extract<FieldSpec, Readonly<{ kind: "union" }>>;
+
+// A discriminated union at a STATIC object path. The single-file backends
+// can't render its variant fields with the path-typed <TextField form
+// path=.../> components (variant paths fall outside FieldPath), so the union
+// hoists its bindings to the component body: a plain useField for the
+// discriminant (a common key) and one useVariantField per variant-only field
+// (deduped by name — useVariantField keys on the field, unioning the types),
+// and the JSX just references those variables.
+type UnionFieldBinding = Readonly<{
+  name: string;
+  label: string;
+  spec: FieldSpec;
+  varName: string;
+}>;
+
+export type UnionEntry = Readonly<{
+  path: string; // "payment"
+  discriminant: string; // "method"
+  discriminantPath: string; // "payment.method"
+  discriminantVar: string; // "paymentMethod"
+  tags: readonly string[];
+  // Scalar variant fields, one binding each (deduped by name).
+  bindings: readonly UnionFieldBinding[];
+  bindingByName: ReadonlyMap<string, UnionFieldBinding>;
+  variants: readonly UnionSpec["variants"][number][];
+}>;
+
+const isScalarSpec = (spec: FieldSpec): boolean =>
+  spec.kind !== "object" && spec.kind !== "array" && spec.kind !== "union";
+
+type RawUnionEntry = Readonly<{ segments: readonly string[]; spec: UnionSpec }>;
+
+// Unions at static object paths (not inside array rows, not nested inside
+// another union's variant). Each variant field is walked only one level; a
+// container variant field stays a TODO at render time.
+const collectRawUnions = (
+  spec: FieldSpec,
+  segments: readonly string[],
+): readonly RawUnionEntry[] => {
+  switch (spec.kind) {
+    case "object":
+      return spec.fields
+        .filter((field) => !isUnaddressable(field.name))
+        .flatMap((field) =>
+          collectRawUnions(field.spec, [...segments, field.name]),
+        );
+    case "union":
+      return [{ segments, spec }];
+    default:
+      return [];
+  }
+};
+
+const unionEntry = (
+  raw: RawUnionEntry,
+  seed: ReadonlySet<string>,
+): Readonly<{ entry: UnionEntry; used: ReadonlySet<string> }> => {
+  const path = raw.segments.join(".");
+  const discriminantVar = camelJoin([...raw.segments, raw.spec.discriminant]);
+  // Distinct field names across the variants each get one binding, deduped
+  // against the discriminant var and every array/union identifier already
+  // claimed in this component.
+  const initial: Readonly<{
+    used: ReadonlySet<string>;
+    bindings: readonly UnionFieldBinding[];
+    seen: ReadonlySet<string>;
+  }> = {
+    used: new Set([...seed, discriminantVar]),
+    bindings: [],
+    seen: new Set<string>(),
+  };
+  const collected = raw.spec.variants
+    .flatMap((variant) => variant.fields)
+    .filter((field) => isScalarSpec(field.spec))
+    .reduce((acc, field) => {
+      if (acc.seen.has(field.name)) return acc;
+      const base = camelJoin([...raw.segments, field.name]);
+      const varName = `${base}${identifierSuffix(base, acc.used)}`;
+      return {
+        used: new Set([...acc.used, varName]),
+        bindings: [...acc.bindings, { ...field, varName }],
+        seen: new Set([...acc.seen, field.name]),
+      };
+    }, initial);
+  return {
+    used: collected.used,
+    entry: {
+      path,
+      discriminant: raw.spec.discriminant,
+      discriminantPath: `${path}.${raw.spec.discriminant}`,
+      discriminantVar,
+      tags: raw.spec.variants.map((variant) => variant.tag),
+      bindings: collected.bindings,
+      bindingByName: new Map(
+        collected.bindings.map((binding) => [binding.name, binding]),
+      ),
+      variants: [...raw.spec.variants],
+    },
+  };
+};
+
+const collectUnions = (
+  root: ObjectSpec,
+  seed: ReadonlySet<string>,
+): readonly UnionEntry[] =>
+  collectRawUnions(root, []).reduce<
+    Readonly<{ used: ReadonlySet<string>; entries: readonly UnionEntry[] }>
+  >(
+    (acc, raw) => {
+      const { entry, used } = unionEntry(raw, acc.used);
+      return { used, entries: [...acc.entries, entry] };
+    },
+    { used: new Set(seed), entries: [] },
+  ).entries;
+
+// The discriminant + variant hook declarations for the component body.
+const unionHooks = (
+  unions: readonly UnionEntry[],
+  level: number,
+): readonly string[] =>
+  unions.flatMap((entry) => [
+    `${ind(level)}const ${entry.discriminantVar} = useField(form, ${q(entry.discriminantPath)});`,
+    ...entry.bindings.map(
+      (binding) =>
+        `${ind(level)}const ${binding.varName} = useVariantField(form, ${q(entry.path)}, ${q(binding.name)});`,
+    ),
+  ]);
+
+// The KindUsage of union CONTROLS only (discriminant select + variant field
+// kinds), ignoring non-union siblings — so the plain backend imports exactly
+// the prop builders its union rendering calls.
+export const collectUnionUsage = (spec: FieldSpec): KindUsage => {
+  switch (spec.kind) {
+    case "object":
+      return spec.fields.reduce(
+        (acc, field) => mergeUsage(acc, collectUnionUsage(field.spec)),
+        NO_USAGE,
+      );
+    case "array":
+      return collectUnionUsage(spec.item);
+    case "union":
+      return unionKindUsage(spec);
+    default:
+      return NO_USAGE;
+  }
+};
 
 // A path prefix under construction. For dynamic prefixes (inside array rows)
 // `text` is already template-escaped — apart from the deliberate ${index}
@@ -452,6 +664,15 @@ type Backend = Readonly<{
     label: string,
     level: number,
   ) => readonly string[];
+  // One control rendered from an already-bound field VARIABLE (a useField or
+  // useVariantField result hoisted to the component body) — how the
+  // discriminant select and each variant field of a union render.
+  variantLeaf: (
+    spec: FieldSpec,
+    fieldVar: string,
+    label: string,
+    level: number,
+  ) => readonly string[];
   // Wrapper around a nested object's fields.
   objectSection: (
     label: string,
@@ -471,12 +692,51 @@ type Backend = Readonly<{
   formClose: readonly string[];
 }>;
 
+// The discriminant select plus one conditional block per variant, all
+// referencing hooks the component body already declared (see unionHooks).
+const unionLines = (
+  backend: Backend,
+  entry: UnionEntry,
+  label: string,
+  level: number,
+): readonly string[] => {
+  const discriminantSpec: FieldSpec = {
+    kind: "enum",
+    options: entry.tags,
+    optional: false,
+    nullable: false,
+  };
+  return [
+    ...backend.variantLeaf(discriminantSpec, entry.discriminantVar, label, level),
+    ...entry.variants.flatMap((variant) => [
+      `${ind(level)}{${entry.discriminantVar}.value === ${q(variant.tag)} && (`,
+      `${ind(level + 1)}<>`,
+      ...variant.fields.flatMap((field): readonly string[] => {
+        const binding = entry.bindingByName.get(field.name);
+        return binding === undefined
+          ? [
+              `${ind(level + 2)}{/* TODO: nested ${field.spec.kind} ${commentText(q(`${entry.path}.${field.name}`))} inside a union variant — extract it by hand */}`,
+            ]
+          : backend.variantLeaf(
+              field.spec,
+              binding.varName,
+              field.label,
+              level + 2,
+            );
+      }),
+      `${ind(level + 1)}</>`,
+      `${ind(level)})}`,
+    ]),
+  ];
+};
+
 const fieldLines = (
   backend: Backend,
   fields: readonly NamedField[],
   prefix: PathPrefix,
   level: number,
   arrays: ReadonlyMap<string, ArrayEntry>,
+  unions: ReadonlyMap<string, UnionEntry>,
 ): readonly string[] =>
   fields.flatMap((field): readonly string[] => {
     if (isUnaddressable(field.name)) {
@@ -497,6 +757,7 @@ const fieldLines = (
               extendPrefix(prefix, field.name),
               level + 1,
               arrays,
+              unions,
             ),
           ),
         ];
@@ -509,7 +770,22 @@ const fieldLines = (
         const entry = arrays.get(prefix.text + field.name);
         return entry === undefined
           ? []
-          : arraySectionLines(backend, entry, level, arrays);
+          : arraySectionLines(backend, entry, level, arrays, unions);
+      }
+      case "union": {
+        // Unions inside an array row bind dynamic paths useVariantField can't
+        // express; they stay a TODO (collectUnions skips them too).
+        const entry = prefix.dynamic
+          ? undefined
+          : unions.get(prefix.text + field.name);
+        return entry === undefined
+          ? [
+              `${ind(level)}{/* TODO: discriminated union ${commentText(q(prefix.text + field.name))} inside an array row is not supported; extract it by hand */}`,
+            ]
+          : [
+              ...todoComment(field.spec, level),
+              ...unionLines(backend, entry, field.label, level),
+            ];
       }
       default:
         return backend.leaf(
@@ -526,6 +802,7 @@ const arraySectionLines = (
   entry: ArrayEntry,
   level: number,
   arrays: ReadonlyMap<string, ArrayEntry>,
+  unions: ReadonlyMap<string, UnionEntry>,
 ): readonly string[] => {
   const rowPrefix: PathPrefix = {
     dynamic: true,
@@ -533,7 +810,7 @@ const arraySectionLines = (
   };
   const rowBody: readonly string[] =
     entry.item.kind === "object"
-      ? fieldLines(backend, entry.item.fields, rowPrefix, level + 3, arrays)
+      ? fieldLines(backend, entry.item.fields, rowPrefix, level + 3, arrays, unions)
       : backend.leaf(entry.item, pathAttr(rowPrefix, ""), entry.label, level + 3);
   return backend.arraySection(entry, level, rowBody);
 };
@@ -548,6 +825,18 @@ const emitForm = (
   const arrayMap: ReadonlyMap<string, ArrayEntry> = new Map(
     arrays.map((entry) => [entry.path, entry]),
   );
+  // Union hook variables must not collide with array hook/type identifiers.
+  const arrayIdents = new Set(
+    arrays.flatMap((entry) => [
+      entry.hookName,
+      entry.itemTypeName,
+      entry.emptyItemName,
+    ]),
+  );
+  const unions = collectUnions(root, arrayIdents);
+  const unionMap: ReadonlyMap<string, UnionEntry> = new Map(
+    unions.map((entry) => [entry.path, entry]),
+  );
   return [
     "// Generated by formstand-cli — edit freely, this file is yours.",
     ...backend.header(usage, arrays, root),
@@ -561,6 +850,7 @@ const emitForm = (
     `  const form = useForm(${schemaImport.name}, { initialValues, mode: "onBlur" });`,
     "  const submitting = useIsSubmitting(form);",
     ...(arrays.length > 0 ? [arrayHooks(arrays, 1)] : []),
+    ...(unions.length > 0 ? unionHooks(unions, 1) : []),
     "",
     "  return (",
     ...backend.formOpen,
@@ -570,6 +860,7 @@ const emitForm = (
       { dynamic: false, text: "" },
       backend.bodyLevel,
       arrayMap,
+      unionMap,
     ),
     ...backend.formClose,
     "  );",
@@ -628,7 +919,73 @@ const plainLeaf = (
       ];
     case "object":
     case "array":
+    case "union":
       return [`${ind(level)}{/* unreachable: containers render elsewhere */}`];
+  }
+};
+
+// The plain prop-builder name per scalar kind.
+const PLAIN_BUILDER: Readonly<Record<string, string>> = {
+  string: "textInputProps",
+  number: "numberInputProps",
+  date: "dateInputProps",
+  boolean: "checkboxProps",
+  enum: "selectProps",
+};
+
+// A control rendered from a bound field variable, using the raw prop
+// builders — the discriminant select and every variant field of a union.
+const plainVariantLeaf = (
+  spec: FieldSpec,
+  fieldVar: string,
+  label: string,
+  level: number,
+): readonly string[] => {
+  const error = [
+    `${ind(level + 1)}{${fieldVar}.error?.[0] !== undefined ? (`,
+    `${ind(level + 2)}<p role="alert">{${fieldVar}.error?.[0]}</p>`,
+    `${ind(level + 1)}) : null}`,
+  ];
+  switch (spec.kind) {
+    case "boolean":
+      return [
+        `${ind(level)}<div className="zf-field">`,
+        `${ind(level + 1)}<label className="zf-label">`,
+        `${ind(level + 2)}<input {...checkboxProps(${fieldVar})} /> ${jsxText(label)}`,
+        `${ind(level + 1)}</label>`,
+        ...error,
+        `${ind(level)}</div>`,
+      ];
+    case "enum":
+      return [
+        `${ind(level)}<div className="zf-field">`,
+        `${ind(level + 1)}<label className="zf-label">${jsxText(label)}</label>`,
+        `${ind(level + 1)}<select {...selectProps(${fieldVar})}>`,
+        `${ind(level + 2)}<option value="">{"Select…"}</option>`,
+        ...spec.options.map(
+          (option) =>
+            `${ind(level + 2)}<option value=${jsxText(option)}>${jsxText(labelFromName(option))}</option>`,
+        ),
+        `${ind(level + 1)}</select>`,
+        ...error,
+        `${ind(level)}</div>`,
+      ];
+    case "string":
+    case "number":
+    case "date":
+      return [
+        `${ind(level)}<div className="zf-field">`,
+        `${ind(level + 1)}<label className="zf-label">${jsxText(label)}</label>`,
+        `${ind(level + 1)}<input {...${PLAIN_BUILDER[spec.kind]}(${fieldVar})} />`,
+        ...error,
+        `${ind(level)}</div>`,
+      ];
+    case "object":
+    case "array":
+    case "union":
+      return [
+        `${ind(level)}{/* unreachable: containers never bind as a variant field */}`,
+      ];
   }
 };
 
@@ -648,14 +1005,28 @@ const plainBackend = (visual: VisualOptions): Backend => {
       : "";
 
   return {
-  header: (usage, arrays) => {
+  header: (usage, arrays, root) => {
+    const unionUsage = collectUnionUsage(root);
+    // The prop builders the union controls call (discriminant select +
+    // variant field kinds), imported only when a union renders.
+    const builderImports = usage.union
+      ? [
+          ...(unionUsage.string ? ["textInputProps"] : []),
+          ...(unionUsage.number ? ["numberInputProps"] : []),
+          ...(unionUsage.date ? ["dateInputProps"] : []),
+          ...(unionUsage.boolean ? ["checkboxProps"] : []),
+          ...(unionUsage.enum ? ["selectProps"] : []),
+        ]
+      : [];
     const formstandImports = [
       ...(usage.boolean ? ["CheckboxField"] : []),
       ...(usage.date ? ["DateField"] : []),
       ...(usage.number ? ["NumberField"] : []),
       ...(usage.enum ? ["SelectField"] : []),
       ...(usage.string ? ["TextField"] : []),
+      ...builderImports,
       ...(arrays.length > 0 ? ["useFieldArray"] : []),
+      ...(usage.union ? ["useField", "useVariantField"] : []),
       "useForm",
       "useIsSubmitting",
     ];
@@ -668,6 +1039,7 @@ const plainBackend = (visual: VisualOptions): Backend => {
   },
   preamble: () => [],
   leaf: plainLeaf,
+  variantLeaf: plainVariantLeaf,
   objectSection: (label, level, body) =>
     visual.sections === "collapsible"
       ? [
@@ -833,11 +1205,123 @@ const boundLeaf =
         ];
       case "object":
       case "array":
+      case "union":
         return [
           `${ind(level)}{/* unreachable: containers render elsewhere */}`,
         ];
     }
   };
+
+// A control rendered from a bound field variable, using the in-file MUI
+// adapter builders — the discriminant select and each variant field of a
+// union (the path-typed Bound* components can't reach variant paths).
+const muiVariantLeaf = (
+  spec: FieldSpec,
+  fieldVar: string,
+  label: string,
+  level: number,
+): readonly string[] => {
+  switch (spec.kind) {
+    case "boolean":
+      return [
+        `${ind(level)}<FormControlLabel`,
+        `${ind(level + 1)}${jsxAttr("label", label)}`,
+        `${ind(level + 1)}control={<Switch {...muiSwitchProps(${fieldVar})} />}`,
+        `${ind(level)}/>`,
+      ];
+    case "enum":
+      return [
+        `${ind(level)}<TextField select fullWidth ${jsxAttr("label", label)} {...muiSelectProps(${fieldVar})}>`,
+        ...spec.options.map(
+          (option) =>
+            `${ind(level + 1)}<MenuItem value=${jsxText(option)}>${jsxText(labelFromName(option))}</MenuItem>`,
+        ),
+        `${ind(level)}</TextField>`,
+      ];
+    case "number":
+      return [
+        `${ind(level)}<TextField fullWidth ${jsxAttr("label", label)} {...muiNumberFieldProps(${fieldVar})} />`,
+      ];
+    case "date":
+      return [
+        `${ind(level)}<TextField fullWidth ${jsxAttr("label", label)} {...muiDateFieldProps(${fieldVar})} />`,
+      ];
+    case "string":
+      return [
+        `${ind(level)}<TextField fullWidth ${jsxAttr("label", label)} {...muiTextFieldProps(${fieldVar})} />`,
+      ];
+    case "object":
+    case "array":
+    case "union":
+      return [
+        `${ind(level)}{/* unreachable: containers never bind as a variant field */}`,
+      ];
+  }
+};
+
+// The shadcn twin: renders from a bound field variable via the in-file
+// shadcn adapter builders, keyed off the field's own path for its ids.
+const shadcnVariantLeaf = (
+  spec: FieldSpec,
+  fieldVar: string,
+  label: string,
+  level: number,
+): readonly string[] => {
+  const id = `{${fieldVar}.path}`;
+  switch (spec.kind) {
+    case "boolean":
+      return [
+        `${ind(level)}<div className="grid gap-2">`,
+        `${ind(level + 1)}<div className="flex items-center gap-2">`,
+        `${ind(level + 2)}<Checkbox id=${id} {...shadcnCheckboxProps(${fieldVar})} />`,
+        `${ind(level + 2)}<Label htmlFor=${id}>${jsxText(label)}</Label>`,
+        `${ind(level + 1)}</div>`,
+        `${ind(level + 1)}<FieldError field={${fieldVar}} />`,
+        `${ind(level)}</div>`,
+      ];
+    case "enum":
+      return [
+        `${ind(level)}<div className="grid gap-2">`,
+        `${ind(level + 1)}<Label htmlFor=${id}>${jsxText(label)}</Label>`,
+        `${ind(level + 1)}<Select {...shadcnSelectProps(${fieldVar})}>`,
+        `${ind(level + 2)}<SelectTrigger id=${id} className="w-full" aria-invalid={ariaInvalid(${fieldVar})}>`,
+        `${ind(level + 3)}<SelectValue placeholder=${jsxText(`Select ${label.toLowerCase()}`)} />`,
+        `${ind(level + 2)}</SelectTrigger>`,
+        `${ind(level + 2)}<SelectContent>`,
+        ...spec.options.map(
+          (option) =>
+            `${ind(level + 3)}<SelectItem value=${jsxText(option)}>${jsxText(labelFromName(option))}</SelectItem>`,
+        ),
+        `${ind(level + 2)}</SelectContent>`,
+        `${ind(level + 1)}</Select>`,
+        `${ind(level + 1)}<FieldError field={${fieldVar}} />`,
+        `${ind(level)}</div>`,
+      ];
+    case "string":
+    case "number":
+    case "date": {
+      const builder =
+        spec.kind === "number"
+          ? "shadcnNumberInputProps"
+          : spec.kind === "date"
+            ? "shadcnDateInputProps"
+            : "shadcnTextInputProps";
+      return [
+        `${ind(level)}<div className="grid gap-2">`,
+        `${ind(level + 1)}<Label htmlFor=${id}>${jsxText(label)}</Label>`,
+        `${ind(level + 1)}<Input id=${id} {...${builder}(${fieldVar})} />`,
+        `${ind(level + 1)}<FieldError field={${fieldVar}} />`,
+        `${ind(level)}</div>`,
+      ];
+    }
+    case "object":
+    case "array":
+    case "union":
+      return [
+        `${ind(level)}{/* unreachable: containers never bind as a variant field */}`,
+      ];
+  }
+};
 
 // ---------------------------------------------------------------------------
 // MUI backend (@mui/material v9)
@@ -1103,6 +1587,7 @@ const muiBackend = (visual: VisualOptions): Backend => {
       ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
       ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
       ...(hasLeaf ? ["useField"] : []),
+      ...(usage.union ? ["useVariantField"] : []),
       ...(arrays.length > 0 ? ["useFieldArray"] : []),
       "useForm",
       "useIsSubmitting",
@@ -1128,6 +1613,7 @@ const muiBackend = (visual: VisualOptions): Backend => {
     "",
   ],
   leaf: muiLeaf,
+  variantLeaf: muiVariantLeaf,
   objectSection: (label, level, body) => [
     ...sectionOpen(label, level),
     ...body,
@@ -1430,6 +1916,7 @@ const shadcnBackend = (visual: VisualOptions): Backend => {
       ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
       ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
       ...(hasLeaf ? ["useField"] : []),
+      ...(usage.union ? ["useVariantField"] : []),
       ...(arrays.length > 0 ? ["useFieldArray"] : []),
       "useForm",
       "useIsSubmitting",
@@ -1473,6 +1960,7 @@ const shadcnBackend = (visual: VisualOptions): Backend => {
     "",
   ],
   leaf: shadcnLeaf,
+  variantLeaf: shadcnVariantLeaf,
   objectSection: (label, level, body) => [
     ...sectionOpen(label, level),
     ...body,

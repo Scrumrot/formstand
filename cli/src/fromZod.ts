@@ -1,4 +1,9 @@
-import { type FieldSpec, type NamedField, labelFromName } from "./ir";
+import {
+  type FieldSpec,
+  type NamedField,
+  type UnionVariant,
+  labelFromName,
+} from "./ir";
 
 // Walks a *runtime* zod v4 schema into the IR.
 //
@@ -20,6 +25,7 @@ type ZodDefLike = Readonly<{
   options?: unknown;
   values?: unknown;
   in?: unknown;
+  discriminator?: unknown;
 }>;
 
 const defOf = (schema: unknown): ZodDefLike | null => {
@@ -53,6 +59,57 @@ const enumFromUnion = (options: unknown): readonly string[] | null => {
   });
   return literals.every((values): values is readonly string[] => values !== null)
     ? literals.flat()
+    : null;
+};
+
+// The single string value of a ZodLiteral, or null (non-literal, non-string,
+// or a multi-value literal — none of which name a discriminant branch).
+const literalTag = (schema: unknown): string | null => {
+  const def = defOf(schema);
+  if (def === null || def.type !== "literal") return null;
+  const values = stringValues(def.values);
+  if (values === null || values.length !== 1) return null;
+  return values[0] ?? null;
+};
+
+// A z.discriminatedUnion at a FIELD position → the union spec. zod v4 tags
+// the def as type "union" but also carries `discriminator` (the key string)
+// and `options` (the object branches). Detection requires a string
+// discriminant AND every branch to be an object whose discriminant key is a
+// single-value string literal; anything else returns null so the caller
+// falls through to the enum/string handling.
+const discriminatedUnionFrom = (
+  def: ZodDefLike,
+  flags: Flags,
+  depth: number,
+  seen: ReadonlySet<unknown>,
+): FieldSpec | null => {
+  const discriminator = def.discriminator;
+  if (typeof discriminator !== "string") return null;
+  if (!Array.isArray(def.options)) return null;
+  const variants = def.options.map((option): UnionVariant | null => {
+    const optDef = defOf(option);
+    if (optDef === null || optDef.type !== "object") return null;
+    const shape = optDef.shape;
+    if (typeof shape !== "object" || shape === null) return null;
+    const record = shape as Readonly<Record<string, unknown>>;
+    const tag = literalTag(record[discriminator]);
+    if (tag === null) return null;
+    // The discriminant binds as a plain (common) field; the branch's OTHER
+    // keys are the variant-specific fields useVariantField reaches.
+    const fields = Object.entries(record)
+      .filter(([name]) => name !== discriminator)
+      .map(
+        ([name, sub]): NamedField => ({
+          name,
+          label: labelFromName(name),
+          spec: walk(sub, { optional: false, nullable: false }, depth, seen),
+        }),
+      );
+    return { tag, label: labelFromName(tag), fields };
+  });
+  return variants.every((v): v is UnionVariant => v !== null)
+    ? { kind: "union", discriminant: discriminator, variants, ...flags }
     : null;
 };
 
@@ -154,6 +211,13 @@ const walk = (
     case "prefault":
       return walk(def.innerType, { ...flags, optional: true }, depth, nextSeen);
     case "union": {
+      const discriminated = discriminatedUnionFrom(
+        def,
+        flags,
+        depth - 1,
+        nextSeen,
+      );
+      if (discriminated !== null) return discriminated;
       const options = enumFromUnion(def.options);
       return options !== null
         ? { kind: "enum", options, ...flags }
