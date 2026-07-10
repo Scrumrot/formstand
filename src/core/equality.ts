@@ -20,9 +20,15 @@ export const valuesEqual = (a: unknown, b: unknown): boolean => {
   if (isPlainObject(a) && isPlainObject(b)) {
     const aKeys = Object.keys(a);
     const bKeys = Object.keys(b);
+    // hasOwn matters: equal counts don't imply equal key SETS. Without it,
+    // { realname: undefined } vs { nickname: "Ann" } passes (1 === 1, and
+    // a.realname === missing b.realname === undefined) without b's real key
+    // ever being inspected — dirty tracking would read a real change as
+    // clean. With hasOwn plus the length check the key sets must match, so
+    // the compare is also symmetric.
     return (
       aKeys.length === bKeys.length &&
-      aKeys.every((k) => valuesEqual(a[k], b[k]))
+      aKeys.every((k) => Object.hasOwn(b, k) && valuesEqual(a[k], b[k]))
     );
   }
   return false;

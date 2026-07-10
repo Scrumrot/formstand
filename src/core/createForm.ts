@@ -925,7 +925,14 @@ export const createForm = <TSchema extends z.ZodType>(
           });
         }
         const merged = stale ? result.errors : store.getState().errors;
-        onInvalid?.(merged);
+        try {
+          onInvalid?.(merged);
+        } catch (error) {
+          // Same contract as a throwing onValid below: a failing caller
+          // handler resolves as { kind: "error" }, never a rejection out of
+          // a DOM event handler.
+          return { kind: "error", error };
+        }
         return { kind: "invalid", errors: merged };
       }
 
@@ -1277,9 +1284,13 @@ export const createForm = <TSchema extends z.ZodType>(
           // In-flight state is owned by live passes, never by snapshots: a
           // snapshotted flag has no pass left to clear it (the pass that set
           // it cleared its ORIGINAL entry when it settled), so restoring one
-          // would stick it forever.
+          // would stick it forever. isSubmitting follows the same rule — a
+          // mid-submit snapshot restored later must not disable submit
+          // buttons forever, so it reflects the LIVE submit count instead of
+          // the snapshotted flag (a live pass's finally still resets it).
           isValidating: emptyBools,
           isValidatingForm: false,
+          isSubmitting: inFlight.count > 0,
         };
       }),
   }) as Form<TSchema>;

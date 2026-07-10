@@ -57,10 +57,9 @@ const EMPTY_ITEMS: readonly never[] = [];
 // Derive a stable id per item by reconciling the live items against the
 // previous render's items. Ids follow items by identity/value, so reorders,
 // resets, and mutations that bypass this hook all keep keys glued to their
-// rows — not just length-preserving appends/truncations. A positional
-// fallback hands a vanished item's id to a still-unmatched one, so editing a
-// field (which produces a fresh item reference) keeps its row instead of
-// remounting it.
+// rows — not just length-preserving appends/truncations. A same-index
+// fallback keeps an edited row's id (editing produces a fresh item
+// reference at the same position) without remounting it.
 const reconcileIds = (prev: IdState, nextItems: readonly unknown[]): IdState => {
   if (prev.items === nextItems) return prev;
   if (
@@ -88,38 +87,34 @@ const reconcileIds = (prev: IdState, nextItems: readonly unknown[]): IdState => 
     return prevIndex === undefined ? null : (prev.ids[prevIndex] ?? null);
   });
 
-  // Whatever prev ids remain belong to items that vanished; feed them to the
-  // still-unmatched items in order, in-place edits before fresh mints.
-  const leftover = [...buckets.values()]
-    .flat()
-    .sort((a, b) => a - b)
-    .map((i) => prev.ids[i])
-    .filter((id): id is string => id !== undefined);
+  // Second pass: an unmatched item reuses its SAME-INDEX leftover id (an
+  // in-place edit keeps its row); any other leftover id belongs to a row
+  // that is genuinely gone. Handing those out positionally would let a
+  // remove-then-push in one batch key the new row with the deleted row's
+  // id — a React reorder that resurrects the dead row's DOM state — so
+  // they die and new items mint fresh ids instead. (Trade-off: an edit
+  // that also MOVES in the same write remounts; value-identity matching
+  // above already covers pure moves.)
+  const leftoverAt = new Map(
+    [...buckets.values()].flat().flatMap((i) => {
+      const id = prev.ids[i];
+      return id === undefined ? [] : ([[i, id]] as const);
+    }),
+  );
+  const reused = matchedIds.map((id, i) => id ?? leftoverAt.get(i) ?? null);
 
-  // Running 1-based count of unmatched slots up to each position, so every
-  // unmatched item maps straight to its leftover id (or a freshly minted one)
-  // without rebuilding the ids array per element.
-  const ordinals = matchedIds.reduce<number[]>((acc, id) => {
-    const count = acc.length === 0 ? 0 : (acc[acc.length - 1] ?? 0);
-    acc.push(id === null ? count + 1 : count);
-    return acc;
+  // Running 1-based mint count up to each position, so fresh ids number
+  // consecutively without rebuilding the ids array per element.
+  const mintCounts = reused.reduce<readonly number[]>((acc, id) => {
+    const count = acc[acc.length - 1] ?? 0;
+    return [...acc, id === null ? count + 1 : count];
   }, []);
-  const unmatched =
-    ordinals.length === 0 ? 0 : (ordinals[ordinals.length - 1] ?? 0);
-  const ids = matchedIds.map((id, i) => {
-    if (id !== null) return id;
-    const ordinal = ordinals[i] ?? 0;
-    return (
-      leftover[ordinal - 1] ??
-      `__zfa_${prev.counter + (ordinal - leftover.length)}`
-    );
-  });
+  const minted = mintCounts[mintCounts.length - 1] ?? 0;
+  const ids = reused.map(
+    (id, i) => id ?? `__zfa_${prev.counter + (mintCounts[i] ?? 0)}`,
+  );
 
-  return {
-    items: nextItems,
-    ids,
-    counter: prev.counter + Math.max(0, unmatched - leftover.length),
-  };
+  return { items: nextItems, ids, counter: prev.counter + minted };
 };
 
 // The element type at an array-valued path. FieldValue re-adds `| undefined`

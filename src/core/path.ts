@@ -1,3 +1,5 @@
+import { isPlainObject } from "./equality";
+
 export type PathSegment = string | number;
 
 // Segment keys containing "." are not addressable (paths are split on dots);
@@ -29,7 +31,12 @@ const readSegment = (obj: unknown, segment: PathSegment): unknown => {
   if (Array.isArray(obj)) {
     return typeof segment === "number" ? obj[segment] : undefined;
   }
-  return isPlainRecord(obj) ? obj[String(segment)] : undefined;
+  // Own properties only: a runtime-built path like "lookup.constructor" on a
+  // z.record must read as absent, not leak Object.prototype members as field
+  // values.
+  return isPlainRecord(obj) && Object.hasOwn(obj, String(segment))
+    ? obj[String(segment)]
+    : undefined;
 };
 
 export const getAtPath = (obj: unknown, path: string): unknown =>
@@ -111,6 +118,16 @@ const writeSegments = (
   // z.record keyed by a large numeric id is writable — the array-index cap
   // only applies where an array actually exists or would be created.
   if (isPlainRecord(obj)) {
+    // Spreading is only safe for PLAIN objects: spreading a Date/Map/Set or
+    // class instance keeps own enumerable props but drops the prototype (and
+    // for Map/Set, every entry) — the original would be silently destroyed.
+    // Refuse, like the other unwritable shapes above.
+    if (!isPlainObject(obj)) {
+      console.warn(
+        `[formstand] cannot write key "${String(head)}" through a non-plain object (Date/Map/Set/class instance); value left unchanged.`,
+      );
+      return obj;
+    }
     const key = String(head);
     return { ...obj, [key]: writeSegments(obj[key], rest, value) };
   }

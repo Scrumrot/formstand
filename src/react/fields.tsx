@@ -265,7 +265,13 @@ export const SelectField = <T extends string, F extends FieldFormApi>({
   // null included: a nullable enum's "not chosen yet" must render the empty
   // option, or the browser shows the first real option while state stays null.
   const field = useField<T | null | undefined>(form, path);
+  // A nullable field must be clearable BACK to null through the UI, so its
+  // empty option stays visible after a choice and stays selectable —
+  // selectProps writes null for it. Everywhere else the empty option is
+  // only a placeholder: visible while nothing is chosen, never selectable.
+  const clearable = field.emptyValue === null;
   const showEmptyOption =
+    clearable ||
     field.value === undefined ||
     field.value === null ||
     placeholder !== undefined;
@@ -283,7 +289,7 @@ export const SelectField = <T extends string, F extends FieldFormApi>({
         aria-describedby={hasError(field.error) ? errorId : undefined}
       >
         {showEmptyOption ? (
-          <option value="" disabled>
+          <option value="" disabled={!clearable}>
             {placeholder ?? ""}
           </option>
         ) : null}
