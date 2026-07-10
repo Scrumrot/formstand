@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### formstand-cli
+
+- Custom templates (`--template <file>` or `template:` in the config): a
+  `defineTemplate({ name, imports, leaf })` module overrides the per-kind
+  field rendering for a UI kit formstand doesn't ship (Mantine, Chakra,
+  in-house), inheriting the generated form's scaffold — sections, arrays,
+  discriminated unions, submit. Each leaf renderer gets a context of
+  JS-expression strings (`bind`, `field`, `label`, `options`), and the same
+  renderer works both in the generated wrapper component and inside union
+  variant blocks. Unlisted kinds fall back to plain. `--layout single`
+  only for now; overrides `--ui`.
+
+
 ## 0.9.0 — 2026-07-10
 
 ### Fixed

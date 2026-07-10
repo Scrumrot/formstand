@@ -51,6 +51,7 @@ Without `--out`, both files print to stdout separated by `// --- file: ...` head
 | `--schema-out <file>` | type mode: where the generated zod schema goes (default `<schemaName>.ts` next to `--out`) |
 | `--config <file>` | config file (default: `formstand.config.{ts,mts,js,mjs}` in the working directory) holding project defaults for `ui`/`layout`/`sections`/`columns`; explicit flags win |
 | `--watch` | regenerate whenever the input file changes (requires `--out`) |
+| `--template <file>` | a custom template module (`defineTemplate`) for a UI kit formstand doesn't ship — overrides the per-kind field rendering, inheriting the plain form scaffold; `--layout single` only, overrides `--ui` |
 | `--force` | overwrite existing output files |
 
 ## What is generated
@@ -104,6 +105,39 @@ export default defineConfig({
 ```
 
 `defineConfig` is an identity function with types — completion and typo-checking in the config file. Pair it with `--watch` for schema-first development: edit the schema, the module regenerates.
+
+## Custom templates
+
+For a UI kit formstand doesn't ship built in — Mantine, Chakra, an in-house design system — a **template** overrides the per-kind field rendering while inheriting the generated form's scaffold (sections, arrays, discriminated unions, submit). A UI kit differs in its field components, not the form skeleton.
+
+```ts
+// mantine.template.ts
+import { defineTemplate } from "formstand-cli";
+
+export default defineTemplate({
+  name: "mantine",
+  imports: [{ from: "@mantine/core", names: ["TextInput", "NumberInput", "Select"] }],
+  leaf: {
+    string: ({ label, bind }) => `<TextInput label={${label}} {...${bind}} />`,
+    number: ({ label, bind }) => `<NumberInput label={${label}} {...${bind}} />`,
+    enum: ({ label, bind, options }) => `<Select label={${label}} data={${options}} {...${bind}} />`,
+    // string / number / boolean / date / enum — unlisted kinds fall back to plain
+  },
+});
+```
+
+```bash
+formstand-gen src/profileSchema.ts --template ./mantine.template.ts --out src/ProfileForm.tsx
+```
+
+Each `leaf` renderer receives a context whose fields are **JS-expression strings** to splice into your control's JSX:
+
+- `bind` — the formstand prop-builder spread (`textInputProps(field)` etc.), carrying `name`/`value`/`onChange`/`onBlur`/`aria-invalid`. Spread it: `{...${bind}}`.
+- `field` — the bound `useField` result variable; reference `.error` / `.value` for custom error display.
+- `label` — the field label as an expression: write `label={${label}}`.
+- `options` — enum only: a `string[]` expression (`data={${options}}`).
+
+Unlisted kinds fall back to the plain output, so a template can override only the kinds its kit changes. `--template` overrides `--ui` and currently supports `--layout single` (module support is planned). Set a project default with `template: "./mantine.template.ts"` in `formstand.config.ts`.
 
 ## Supported schema surface
 

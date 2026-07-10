@@ -13,6 +13,9 @@ export type FormstandConfig = Readonly<{
   layout?: Layout;
   sections?: VisualOptions["sections"];
   columns?: VisualOptions["columns"];
+  // Path to a custom template module (see defineTemplate), resolved relative
+  // to the config file. A --template flag overrides it.
+  template?: string;
 }>;
 
 // Identity with types — `export default defineConfig({ ui: "mui" })` gets

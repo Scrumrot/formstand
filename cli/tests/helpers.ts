@@ -22,6 +22,13 @@ export const muiStubPaths: Readonly<Record<string, readonly string[]>> = {
   "@mui/material": [posix(path.join(testsDir, "stubs", "mui-material.d.ts"))],
 };
 
+// Maps "@mantine/core" onto the hand-written structural stub, so a custom
+// template targeting Mantine is typechecked (not just parsed) without the real
+// package installed.
+export const mantineStubPaths: Readonly<Record<string, readonly string[]>> = {
+  "@mantine/core": [posix(path.join(testsDir, "stubs", "mantine-core.d.ts"))],
+};
+
 // The shadcn stub declares ambient "@/components/ui/*" modules, so it joins
 // the program as an extra root file instead of a paths mapping.
 export const shadcnStubFile = path.join(testsDir, "stubs", "shadcn-ui.d.ts");

@@ -14,5 +14,12 @@ export { emitModuleForm, joinModuleFiles } from "./moduleLayout";
 export type { EmitModuleOptions, ModuleFile } from "./moduleLayout";
 export { labelFromName } from "./ir";
 export { defineConfig } from "./config";
+export { defineTemplate } from "./template";
+export type {
+  Template,
+  TemplateLeafContext,
+  TemplateLeafKind,
+  TemplateImport,
+} from "./template";
 export type { FormstandConfig } from "./config";
 export type { FieldSpec, NamedField, SharedSpecProps } from "./ir";

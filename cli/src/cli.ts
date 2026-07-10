@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { createJiti } from "jiti";
 import { camelCase, isReservedWord, pascalCase } from "./casing";
 import { type FormstandConfig, type Layout, type Ui } from "./config";
+import { type Template, isTemplate } from "./template";
 import {
   type EmitFormOptions,
   type VisualOptions,
@@ -12,6 +13,7 @@ import {
   emitMuiForm,
   emitPlainForm,
   emitShadcnForm,
+  emitTemplateForm,
   emitZodSchema,
   unaddressableFieldPaths,
 } from "./codegen";
@@ -55,6 +57,10 @@ Options:
   --out <file>        write the component here instead of stdout
   --schema-out <file> (type mode) where to write the generated zod schema
                       (default: <schemaName>.ts next to --out)
+  --template <file>   custom template module (default-export defineTemplate)
+                      for a UI kit formstand doesn't ship — overrides the
+                      per-kind field rendering, inheriting the plain form
+                      scaffold. --layout single only. Overrides --ui.
   --config <file>     config file (default: formstand.config.{ts,mts,js,mjs}
                       in the working directory). Holds project defaults for
                       ui/layout/sections/columns; explicit flags win.
@@ -69,6 +75,7 @@ Examples:
   formstand-gen src/profileSchema.ts --ui shadcn --out src/ProfileForm.tsx
   formstand-gen src/profileSchema.ts --layout module --out src/ProfileForm
   formstand-gen src/profileSchema.ts --ui mui --sections panel --columns 2
+  formstand-gen src/profileSchema.ts --template ./mantine.template.ts --out src/ProfileForm.tsx
 `;
 
 const UI_VALUES: readonly Ui[] = ["plain", "mui", "shadcn"];
@@ -108,6 +115,7 @@ type CliOptions = Readonly<{
   out?: string;
   schemaOut?: string;
   config?: string;
+  template?: string;
   watch: boolean;
   force: boolean;
 }>;
@@ -127,6 +135,7 @@ export type ParsedCliOptions = Readonly<{
   out?: string;
   schemaOut?: string;
   config?: string;
+  template?: string;
   watch: boolean;
   force: boolean;
 }>;
@@ -148,6 +157,7 @@ type PartialOptions = Readonly<{
   out?: string;
   schemaOut?: string;
   config?: string;
+  template?: string;
   watch: boolean;
   force: boolean;
 }>;
@@ -163,6 +173,7 @@ const VALUE_FLAGS: Readonly<
     | "out"
     | "schemaOut"
     | "config"
+    | "template"
   >
 > = {
   "--export": "exportName",
@@ -173,6 +184,7 @@ const VALUE_FLAGS: Readonly<
   "--out": "out",
   "--schema-out": "schemaOut",
   "--config": "config",
+  "--template": "template",
 };
 
 const parseRest = (
@@ -276,13 +288,13 @@ const parseConfig = (raw: unknown, from: string): FormstandConfig => {
     throw new Error(`${from}: expected a default-exported config object`);
   }
   const record = raw as Readonly<Record<string, unknown>>;
-  const known = new Set(["ui", "layout", "sections", "columns"]);
+  const known = new Set(["ui", "layout", "sections", "columns", "template"]);
   Object.keys(record)
     .filter((key) => !known.has(key))
     .forEach((key) => {
       stderr(`note: ${from}: ignoring unknown config key "${key}"`);
     });
-  const { ui, layout, sections, columns } = record;
+  const { ui, layout, sections, columns, template } = record;
   if (ui !== undefined && (typeof ui !== "string" || !isUi(ui))) {
     throw new Error(`${from}: ui must be one of ${UI_VALUES.join(", ")}`);
   }
@@ -307,11 +319,20 @@ const parseConfig = (raw: unknown, from: string): FormstandConfig => {
   if (columns !== undefined && columnsValue === undefined) {
     throw new Error(`${from}: columns must be 1, 2, or 3`);
   }
+  if (template !== undefined && typeof template !== "string") {
+    throw new Error(`${from}: template must be a path string`);
+  }
   return {
     ...(ui !== undefined ? { ui: ui as Ui } : {}),
     ...(layout !== undefined ? { layout: layout as Layout } : {}),
     ...(sections !== undefined ? { sections: sections as Sections } : {}),
     ...(columnsValue !== undefined ? { columns: columnsValue } : {}),
+    // Config-relative so `template: "./x.ts"` resolves next to the config,
+    // not the cwd. An explicit --template (already cwd-absolute) wins in
+    // resolveOptions.
+    ...(typeof template === "string"
+      ? { template: path.resolve(path.dirname(from), template) }
+      : {}),
   };
 };
 
@@ -333,6 +354,22 @@ const loadConfig = async (explicit?: string): Promise<FormstandConfig> => {
 };
 
 // Flags win over config; config wins over built-in defaults.
+// Load and validate a custom template module (same jiti path as schemas).
+const loadTemplate = async (file: string): Promise<Template> => {
+  const abs = path.resolve(file);
+  if (!fs.existsSync(abs)) {
+    throw new Error(`template file not found: ${file}`);
+  }
+  const mod = await loadModule(abs, relToCwd(abs));
+  const candidate = mod["default"] ?? mod;
+  if (!isTemplate(candidate)) {
+    throw new Error(
+      `${relToCwd(abs)}: not a valid template — default-export defineTemplate({ name, leaf })`,
+    );
+  }
+  return candidate;
+};
+
 export const resolveOptions = (
   parsed: ParsedCliOptions,
   config: FormstandConfig,
@@ -342,6 +379,9 @@ export const resolveOptions = (
   layout: parsed.layout ?? config.layout ?? "single",
   sections: parsed.sections ?? config.sections ?? "flat",
   columns: parsed.columns ?? config.columns ?? 1,
+  ...(parsed.template ?? config.template
+    ? { template: parsed.template ?? config.template }
+    : {}),
 });
 
 const visualOf = (options: CliOptions): VisualOptions => ({
@@ -509,7 +549,12 @@ const pickSchemaExport = (
   };
 };
 
-const emitComponent = (ui: Ui, options: EmitFormOptions): string => {
+const emitComponent = (
+  ui: Ui,
+  options: EmitFormOptions,
+  template?: Template,
+): string => {
+  if (template !== undefined) return emitTemplateForm(template, options);
   switch (ui) {
     case "mui":
       return emitMuiForm(options);
@@ -553,7 +598,10 @@ const warnUnaddressable = (ir: FieldSpec): void => {
   });
 };
 
-const runZodMode = async (options: CliOptions): Promise<number> => {
+const runZodMode = async (
+  options: CliOptions,
+  template?: Template,
+): Promise<number> => {
   const inputAbs = path.resolve(options.input);
   const mod = await loadModule(inputAbs, options.input);
   const fallbackName = camelCase(path.basename(inputAbs).replace(/\..*$/, ""));
@@ -598,12 +646,11 @@ const runZodMode = async (options: CliOptions): Promise<number> => {
     );
     return 0;
   }
-  const code = emitComponent(options.ui, {
-    ir,
-    formName,
-    schemaImport,
-    visual: visualOf(options),
-  });
+  const code = emitComponent(
+    options.ui,
+    { ir, formName, schemaImport, visual: visualOf(options) },
+    template,
+  );
   if (options.out !== undefined) {
     const outAbs = path.resolve(options.out);
     assertWritable([outAbs], options.force);
@@ -615,7 +662,7 @@ const runZodMode = async (options: CliOptions): Promise<number> => {
   return 0;
 };
 
-const runTypeMode = (options: CliOptions): number => {
+const runTypeMode = (options: CliOptions, template?: Template): number => {
   // Pass the input as the user typed it so error messages echo it verbatim
   // (fromType resolves it internally).
   const { ir, typeName } = fromType(options.input, options.typeName);
@@ -656,12 +703,11 @@ const runTypeMode = (options: CliOptions): number => {
       from: moduleSpecifier(path.dirname(outAbs), schemaOutAbs),
       kind: "named",
     };
-    const code = emitComponent(options.ui, {
-      ir,
-      formName,
-      schemaImport,
-      visual: visualOf(options),
-    });
+    const code = emitComponent(
+      options.ui,
+      { ir, formName, schemaImport, visual: visualOf(options) },
+      template,
+    );
     // Check BOTH destinations before writing either.
     assertWritable([schemaOutAbs, outAbs], options.force);
     writeFile(schemaOutAbs, schemaSource);
@@ -678,12 +724,11 @@ const runTypeMode = (options: CliOptions): number => {
       from: moduleSpecifier(process.cwd(), schemaOutAbs),
       kind: "named",
     };
-    const code = emitComponent(options.ui, {
-      ir,
-      formName,
-      schemaImport,
-      visual: visualOf(options),
-    });
+    const code = emitComponent(
+      options.ui,
+      { ir, formName, schemaImport, visual: visualOf(options) },
+      template,
+    );
     assertWritable([schemaOutAbs], options.force);
     writeFile(schemaOutAbs, schemaSource);
     stderr(`wrote ${relToCwd(schemaOutAbs)}`);
@@ -695,12 +740,11 @@ const runTypeMode = (options: CliOptions): number => {
     from: `./${schemaName}`,
     kind: "named",
   };
-  const code = emitComponent(options.ui, {
-    ir,
-    formName,
-    schemaImport,
-    visual: visualOf(options),
-  });
+  const code = emitComponent(
+    options.ui,
+    { ir, formName, schemaImport, visual: visualOf(options) },
+    template,
+  );
   stdout(
     [
       `// --- file: ${schemaName}.ts`,
@@ -716,12 +760,15 @@ const runTypeMode = (options: CliOptions): number => {
 // overwrite the destinations they themselves wrote. Watching the parent
 // directory (filtered to the input's basename) survives editors that save
 // via rename, which would kill a watcher on the file itself.
-const runWatch = async (options: CliOptions): Promise<number> => {
+const runWatch = async (
+  options: CliOptions,
+  template?: Template,
+): Promise<number> => {
   if (options.out === undefined) {
     stderr("error: --watch requires --out (regenerating to stdout repeats forever)");
     return 1;
   }
-  const first = await run(options);
+  const first = await run(options, template);
   if (first !== 0) return first;
   const inputAbs = path.resolve(options.input);
   stderr(`watching ${relToCwd(inputAbs)} (ctrl+c to stop)`);
@@ -733,7 +780,7 @@ const runWatch = async (options: CliOptions): Promise<number> => {
       if (filename !== null && filename !== path.basename(inputAbs)) return;
       if (pending.timer !== undefined) clearTimeout(pending.timer);
       pending.timer = setTimeout(() => {
-        void run({ ...options, force: true }).then((code) => {
+        void run({ ...options, force: true }, template).then((code) => {
           stderr(
             code === 0
               ? `regenerated (${new Date().toLocaleTimeString()})`
@@ -745,14 +792,17 @@ const runWatch = async (options: CliOptions): Promise<number> => {
   });
 };
 
-const run = async (options: CliOptions): Promise<number> => {
+const run = async (
+  options: CliOptions,
+  template?: Template,
+): Promise<number> => {
   if (!fs.existsSync(path.resolve(options.input))) {
     stderr(`error: input file not found: ${options.input}`);
     return 1;
   }
   return options.typeName !== undefined
-    ? runTypeMode(options)
-    : runZodMode(options);
+    ? runTypeMode(options, template)
+    : runZodMode(options, template);
 };
 
 export const main = async (argv: readonly string[]): Promise<number> => {
@@ -769,7 +819,19 @@ export const main = async (argv: readonly string[]): Promise<number> => {
       try {
         const config = await loadConfig(parsed.options.config);
         const options = resolveOptions(parsed.options, config);
-        return options.watch ? await runWatch(options) : await run(options);
+        if (options.template !== undefined && options.layout === "module") {
+          stderr(
+            "error: custom templates support --layout single only (module support is planned)",
+          );
+          return 1;
+        }
+        const template =
+          options.template !== undefined
+            ? await loadTemplate(options.template)
+            : undefined;
+        return options.watch
+          ? await runWatch(options, template)
+          : await run(options, template);
       } catch (e) {
         stderr(`error: ${e instanceof Error ? e.message : String(e)}`);
         return 1;

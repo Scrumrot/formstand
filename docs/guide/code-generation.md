@@ -61,6 +61,7 @@ The type is expanded through the TypeScript compiler: primitives, `Date`, string
 | `--columns 1\|2\|3` | evenly spaced field columns inside each section (default `1`); nested sections span the full row |
 | `--config <file>` | config file (default `formstand.config.{ts,mts,js,mjs}` in the working directory) with project defaults for `ui`/`layout`/`sections`/`columns` via `defineConfig` — flags win |
 | `--watch` | regenerate whenever the input changes (requires `--out`) |
+| `--template <file>` | a custom template module (`defineTemplate`) for a UI kit formstand doesn't ship — overrides the per-kind field rendering, inheriting the plain form scaffold. `--layout single` only; overrides `--ui` |
 | `--name MyForm` | component name, default derived from the input |
 | `--out FILE` | write the component here instead of stdout (parent dirs created) |
 | `--schema-out FILE` | type mode: where the generated zod schema goes |

@@ -1,5 +1,11 @@
 import { pascalCase } from "./casing";
 import { type FieldSpec, type NamedField, labelFromName } from "./ir";
+import type {
+  Template,
+  TemplateImport,
+  TemplateLeafContext,
+  TemplateLeafKind,
+} from "./template";
 
 // Code emitters: zod schema source, initial values, and the three component
 // backends (plain HTML inputs bound via formstand's components; MUI v9 and
@@ -2138,3 +2144,285 @@ const shadcnBackend = (visual: VisualOptions): Backend => {
 
 export const emitShadcnForm = (options: EmitFormOptions): string =>
   emitForm(shadcnBackend(options.visual ?? DEFAULT_VISUAL), options);
+
+// ---------------------------------------------------------------------------
+// Custom template backend (leaf-override for an arbitrary UI kit)
+// ---------------------------------------------------------------------------
+
+// A template owns only per-kind field rendering; the engine owns the skeleton.
+// So the template backend extends the PLAIN scaffold (sections, arrays, form
+// chrome, initial values) and overrides just the header imports, the Bound*
+// wrapper preamble, the static leaf, and the union variant leaf. A kind the
+// template doesn't list falls back to plain's raw controls.
+
+// The useField<T> value type a Bound* wrapper binds, per scalar kind.
+const TEMPLATE_FIELD_TYPE: Readonly<Record<TemplateLeafKind, string>> = {
+  string: "string | null | undefined",
+  number: "number | null | undefined",
+  boolean: "boolean | null | undefined",
+  date: "Date | null | undefined",
+  enum: "string | null | undefined",
+};
+
+// The generated wrapper name per kind — also the element boundLeaf emits, so
+// the leaf and the preamble agree. boundLeaf's boolean element is parameterized
+// (below), the rest are fixed.
+const TEMPLATE_BOUND_COMPONENT: Readonly<Record<TemplateLeafKind, string>> = {
+  string: "BoundTextField",
+  number: "BoundNumberField",
+  date: "BoundDateField",
+  boolean: "BoundBooleanField",
+  enum: "BoundSelectField",
+};
+
+// Flatten a leaf renderer's output (a single string or an array of lines) to
+// lines, splitting any embedded newlines so each is indented in turn.
+const templateLeafLines = (
+  output: string | readonly string[],
+): readonly string[] =>
+  (typeof output === "string" ? [output] : output).flatMap((line) =>
+    line.split("\n"),
+  );
+
+// The default leaf for a kind the template DOESN'T override: plain's raw
+// controls (input/select bound through the formstand prop builders), driven
+// off the same pre-formatted LeafContext strings so the one function slots into
+// both the Bound wrapper (label/options are props) and the union variant
+// (label a quoted literal, options an array literal) paths unchanged. Enum
+// renders its options at runtime via `.map` — like the kit Bound selects — so
+// the `options` expression works whether it's a prop or a literal.
+const plainTemplateLeaf = (ctx: TemplateLeafContext): readonly string[] => {
+  const error = [
+    `  {${ctx.field}.error?.[0] !== undefined ? (`,
+    `    <p role="alert">{${ctx.field}.error?.[0]}</p>`,
+    `  ) : null}`,
+  ];
+  switch (ctx.kind) {
+    case "boolean":
+      return [
+        `<div className="zf-field">`,
+        `  <label className="zf-label">`,
+        `    <input {...${ctx.bind}} /> {${ctx.label}}`,
+        `  </label>`,
+        ...error,
+        `</div>`,
+      ];
+    case "enum":
+      return [
+        `<div className="zf-field">`,
+        `  <label className="zf-label">{${ctx.label}}</label>`,
+        `  <select {...${ctx.bind}}>`,
+        `    <option value="">{"Select…"}</option>`,
+        `    {${ctx.options}.map((option) => (`,
+        `      <option key={option} value={option}>`,
+        `        {option}`,
+        `      </option>`,
+        `    ))}`,
+        `  </select>`,
+        ...error,
+        `</div>`,
+      ];
+    default:
+      return [
+        `<div className="zf-field">`,
+        `  <label className="zf-label">{${ctx.label}}</label>`,
+        `  <input {...${ctx.bind}} />`,
+        ...error,
+        `</div>`,
+      ];
+  }
+};
+
+// The leaf body for a kind: the template's own renderer, or the plain
+// fallback — the ONE place the choice is made, so the wrapper and variant
+// paths render the same kind identically.
+const templateLeafBody = (
+  template: Template,
+  ctx: TemplateLeafContext,
+): readonly string[] => {
+  const render = template.leaf[ctx.kind];
+  return render === undefined
+    ? plainTemplateLeaf(ctx)
+    : templateLeafLines(render(ctx));
+};
+
+// One Bound<Kind>Field wrapper: binds useField at `path`, then renders the
+// kind's leaf body with a context whose label (and enum options) are the
+// wrapper's own props.
+const templateBoundComponent = (
+  template: Template,
+  kind: TemplateLeafKind,
+): readonly string[] => {
+  const ctx: TemplateLeafContext = {
+    kind,
+    field: "field",
+    bind: `${PLAIN_BUILDER[kind]}(field)`,
+    label: "label",
+    options: kind === "enum" ? "options" : "",
+  };
+  const signature =
+    kind === "enum"
+      ? [
+          `const ${TEMPLATE_BOUND_COMPONENT[kind]} = ({`,
+          "  form,",
+          "  path,",
+          "  label,",
+          "  options,",
+          "}: BoundFieldProps & Readonly<{ options: readonly string[] }>) => {",
+        ]
+      : [
+          `const ${TEMPLATE_BOUND_COMPONENT[kind]} = ({ form, path, label }: BoundFieldProps) => {`,
+        ];
+  return [
+    "",
+    ...signature,
+    `  const field = useField<${TEMPLATE_FIELD_TYPE[kind]}>(form, path);`,
+    "  return (",
+    ...templateLeafBody(template, ctx).map((line) => `    ${line}`),
+    "  );",
+    "};",
+  ];
+};
+
+// The wrapper components, one per kind that renders as a STATIC leaf (gated on
+// static-leaf usage like the kit backends' Bound components — a union-only kind
+// renders from a hoisted hook and needs no wrapper).
+const templateBoundComponents = (
+  template: Template,
+  staticUsage: KindUsage,
+): string =>
+  [
+    ...boundFieldProps(staticUsage),
+    ...(staticUsage.string ? templateBoundComponent(template, "string") : []),
+    ...(staticUsage.number ? templateBoundComponent(template, "number") : []),
+    ...(staticUsage.date ? templateBoundComponent(template, "date") : []),
+    ...(staticUsage.enum ? templateBoundComponent(template, "enum") : []),
+    ...(staticUsage.boolean ? templateBoundComponent(template, "boolean") : []),
+  ].join("\n");
+
+// A variant control (the discriminant select or a union variant field):
+// renders the SAME leaf body as the wrapper, but from the already-hoisted
+// field VARIABLE, with the label as a quoted literal and enum options as an
+// array literal — the pre-formatted strings are what let one leaf function
+// serve both contexts.
+const templateVariantLeaf =
+  (template: Template): Backend["variantLeaf"] =>
+  (spec, fieldVar, label, level) => {
+    if (
+      spec.kind === "object" ||
+      spec.kind === "array" ||
+      spec.kind === "union"
+    ) {
+      return [
+        `${ind(level)}{/* unreachable: containers never bind as a variant field */}`,
+      ];
+    }
+    const ctx: TemplateLeafContext = {
+      kind: spec.kind,
+      field: fieldVar,
+      bind: `${PLAIN_BUILDER[spec.kind]}(${fieldVar})`,
+      label: q(label),
+      options:
+        spec.kind === "enum" ? `[${spec.options.map(q).join(", ")}]` : "",
+    };
+    return templateLeafBody(template, ctx).map(
+      (line) => `${ind(level)}${line}`,
+    );
+  };
+
+// Merge the template's import lines by module specifier, deduping names and
+// keeping first-seen order — `type Foo` names pass through verbatim.
+const mergeTemplateImports = (
+  imports: readonly TemplateImport[],
+): readonly TemplateImport[] =>
+  imports.reduce<readonly TemplateImport[]>((acc, line) => {
+    const names = line.names.filter(
+      (name, i) => line.names.indexOf(name) === i,
+    );
+    const existing = acc.find((entry) => entry.from === line.from);
+    return existing === undefined
+      ? [...acc, { from: line.from, names }]
+      : acc.map((entry) =>
+          entry.from === line.from
+            ? {
+                from: entry.from,
+                names: [
+                  ...entry.names,
+                  ...names.filter((name) => !entry.names.includes(name)),
+                ],
+              }
+            : entry,
+        );
+  }, []);
+
+const templateImportLines = (
+  imports: readonly TemplateImport[],
+): readonly string[] =>
+  mergeTemplateImports(imports).flatMap((line) =>
+    line.names.length === 0
+      ? []
+      : [`import { ${line.names.join(", ")} } from ${q(line.from)};`],
+  );
+
+// The template backend: plain's scaffold with the leaf rendering replaced by
+// the template's controls — wrapped in Bound* components for static fields,
+// inlined from hoisted hooks for union variants — and unlisted kinds falling
+// back to plain's raw controls.
+const templateBackend = (
+  template: Template,
+  visual: VisualOptions,
+): Backend => {
+  const plain = plainBackend(visual);
+  return {
+    ...plain,
+    header: (usage, arrays, root) => {
+      const staticUsage = collectStaticUsage(root);
+      const hasStaticLeaf = hasLeafUsage(staticUsage);
+      // Every rendered kind — a static wrapper OR a union control — binds
+      // through the plain prop builder, so the builder imports track TOTAL
+      // usage (not just the union-control usage the plain backend gates on).
+      const builderImports = [
+        ...(usage.string ? ["textInputProps"] : []),
+        ...(usage.number ? ["numberInputProps"] : []),
+        ...(usage.date ? ["dateInputProps"] : []),
+        ...(usage.boolean ? ["checkboxProps"] : []),
+        ...(usage.enum ? ["selectProps"] : []),
+      ];
+      const formstandValueImports = [
+        ...builderImports,
+        ...(arrays.length > 0 ? ["useFieldArray"] : []),
+        // useField backs both the Bound wrappers and the union discriminant/
+        // common-field hooks.
+        ...(hasStaticLeaf || usage.union ? ["useField"] : []),
+        ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
+        "useForm",
+        "useIsSubmitting",
+      ];
+      // FieldFormApi is referenced only by BoundFieldProps (the wrappers).
+      const formstandTypeImports = hasStaticLeaf ? ["FieldFormApi"] : [];
+      return [
+        `import { z } from "zod";`,
+        ...templateImportLines(template.imports ?? []),
+        "import {",
+        ...formstandValueImports.map((name) => `  ${name},`),
+        ...formstandTypeImports.map((name) => `  type ${name},`),
+        `} from "formstand";`,
+      ];
+    },
+    preamble: (_usage, staticUsage) => [
+      templateBoundComponents(template, staticUsage),
+      "",
+    ],
+    leaf: boundLeaf("BoundBooleanField"),
+    variantLeaf: templateVariantLeaf(template),
+  };
+};
+
+export const emitTemplateForm = (
+  template: Template,
+  options: EmitFormOptions,
+): string =>
+  emitForm(
+    templateBackend(template, options.visual ?? DEFAULT_VISUAL),
+    options,
+  );
