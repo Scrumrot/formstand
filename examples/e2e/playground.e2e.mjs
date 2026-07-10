@@ -52,6 +52,7 @@ try {
   const phone = await browser.newPage({
     viewport: { width: 390, height: 844 },
     colorScheme: "dark",
+    reducedMotion: "reduce",
   });
   const pageErrors = [];
   phone.on("pageerror", (e) => pageErrors.push(String(e)));
@@ -119,8 +120,9 @@ try {
     () => getComputedStyle(document.body).backgroundColor,
   );
   await phone.getByRole("button", { name: "switch to light theme" }).click();
-  // body backgrounds transition over 0.2s — let it settle before reading.
-  await phone.waitForTimeout(350);
+  // reduced motion → the background is final at once; a tick covers the
+  // React commit.
+  await phone.waitForTimeout(50);
   const lightBg = await phone.evaluate(
     () => getComputedStyle(document.body).backgroundColor,
   );
@@ -138,6 +140,7 @@ try {
   const desktop = await browser.newPage({
     viewport: { width: 1440, height: 900 },
     colorScheme: "dark",
+    reducedMotion: "reduce",
   });
   desktop.on("pageerror", (e) => pageErrors.push(String(e)));
 
