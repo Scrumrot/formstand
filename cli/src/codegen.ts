@@ -422,13 +422,35 @@ const collectArrays = (root: ObjectSpec): readonly ArrayEntry[] =>
 
 export type UnionSpec = Extract<FieldSpec, Readonly<{ kind: "union" }>>;
 
+// The variant field names present in EVERY variant — the union's COMMON keys
+// (the discriminant is already absent from variant.fields). The library's
+// VariantKeys<V> = Exclude<AllKeys, keyof V> excludes these, so useVariantField
+// REJECTS a common key (it resolves to `never`); a common field must bind with
+// plain useField on the typed union path instead. A single-variant union makes
+// every field common (one member ⇒ all keys shared ⇒ no variant keys).
+export const unionCommonFieldNames = (spec: UnionSpec): ReadonlySet<string> => {
+  const [first, ...rest] = spec.variants;
+  if (first === undefined) return new Set();
+  return new Set(
+    first.fields
+      .map((field) => field.name)
+      .filter((name) =>
+        rest.every((variant) => variant.fields.some((f) => f.name === name)),
+      ),
+  );
+};
+
 // A discriminated union at a STATIC object path. The single-file backends
 // can't render its variant fields with the path-typed <TextField form
 // path=.../> components (variant paths fall outside FieldPath), so the union
 // hoists its bindings to the component body: a plain useField for the
-// discriminant (a common key) and one useVariantField per variant-only field
-// (deduped by name — useVariantField keys on the field, unioning the types),
-// and the JSX just references those variables.
+// discriminant and each COMMON field (common keys, addressable through
+// FieldPath), and one useVariantField per variant-ONLY field (deduped by name
+// — useVariantField keys on the field, unioning the types). The JSX renders
+// the discriminant + common fields once (outside the variant blocks, since
+// they exist in every variant) and the variant-only fields inside the matching
+// block; every control renders from its bound variable via the raw prop
+// builders.
 type UnionFieldBinding = Readonly<{
   name: string;
   label: string;
@@ -442,9 +464,13 @@ export type UnionEntry = Readonly<{
   discriminantPath: string; // "payment.method"
   discriminantVar: string; // "paymentMethod"
   tags: readonly string[];
-  // Scalar variant fields, one binding each (deduped by name).
+  // Scalar fields present in every variant → useField on `path.name` (deduped).
+  commonBindings: readonly UnionFieldBinding[];
+  // Scalar variant-ONLY fields → useVariantField, one binding each (deduped).
   bindings: readonly UnionFieldBinding[];
   bindingByName: ReadonlyMap<string, UnionFieldBinding>;
+  // Names bound as common (skipped inside the per-variant blocks).
+  commonBindingNames: ReadonlySet<string>;
   variants: readonly UnionSpec["variants"][number][];
 }>;
 
@@ -480,15 +506,19 @@ const unionEntry = (
 ): Readonly<{ entry: UnionEntry; used: ReadonlySet<string> }> => {
   const path = raw.segments.join(".");
   const discriminantVar = camelJoin([...raw.segments, raw.spec.discriminant]);
-  // Distinct field names across the variants each get one binding, deduped
-  // against the discriminant var and every array/union identifier already
-  // claimed in this component.
+  const commonNames = unionCommonFieldNames(raw.spec);
+  // Distinct scalar field names across the variants each get one binding,
+  // deduped against the discriminant var and every array/union identifier
+  // already claimed in this component, then split by whether the name is a
+  // common key (useField) or variant-only (useVariantField).
   const initial: Readonly<{
     used: ReadonlySet<string>;
+    commonBindings: readonly UnionFieldBinding[];
     bindings: readonly UnionFieldBinding[];
     seen: ReadonlySet<string>;
   }> = {
     used: new Set([...seed, discriminantVar]),
+    commonBindings: [],
     bindings: [],
     seen: new Set<string>(),
   };
@@ -499,9 +529,14 @@ const unionEntry = (
       if (acc.seen.has(field.name)) return acc;
       const base = camelJoin([...raw.segments, field.name]);
       const varName = `${base}${identifierSuffix(base, acc.used)}`;
+      const binding = { ...field, varName };
+      const isCommon = commonNames.has(field.name);
       return {
         used: new Set([...acc.used, varName]),
-        bindings: [...acc.bindings, { ...field, varName }],
+        commonBindings: isCommon
+          ? [...acc.commonBindings, binding]
+          : acc.commonBindings,
+        bindings: isCommon ? acc.bindings : [...acc.bindings, binding],
         seen: new Set([...acc.seen, field.name]),
       };
     }, initial);
@@ -513,9 +548,13 @@ const unionEntry = (
       discriminantPath: `${path}.${raw.spec.discriminant}`,
       discriminantVar,
       tags: raw.spec.variants.map((variant) => variant.tag),
+      commonBindings: collected.commonBindings,
       bindings: collected.bindings,
       bindingByName: new Map(
         collected.bindings.map((binding) => [binding.name, binding]),
+      ),
+      commonBindingNames: new Set(
+        collected.commonBindings.map((binding) => binding.name),
       ),
       variants: [...raw.spec.variants],
     },
@@ -543,6 +582,10 @@ const unionHooks = (
 ): readonly string[] =>
   unions.flatMap((entry) => [
     `${ind(level)}const ${entry.discriminantVar} = useField(form, ${q(entry.discriminantPath)});`,
+    ...entry.commonBindings.map(
+      (binding) =>
+        `${ind(level)}const ${binding.varName} = useField(form, ${q(`${entry.path}.${binding.name}`)});`,
+    ),
     ...entry.bindings.map(
       (binding) =>
         `${ind(level)}const ${binding.varName} = useVariantField(form, ${q(entry.path)}, ${q(binding.name)});`,
@@ -565,6 +608,52 @@ export const collectUnionUsage = (spec: FieldSpec): KindUsage => {
       return unionKindUsage(spec);
     default:
       return NO_USAGE;
+  }
+};
+
+// Usage over the STATIC-leaf surface only: unions are OPAQUE (their
+// discriminant, common, and variant fields all render from hoisted hooks via
+// the raw prop builders, never via the leaf COMPONENTS), so they contribute
+// nothing. Gates the leaf-component imports (TextField/SelectField/… and the
+// kit Bound* components); the prop-builder and useField/useVariantField
+// imports stay on total usage / collectUnionUsage, since union rendering does
+// call them. Fixes leaf components imported-but-unused for a union-only kind.
+export const collectStaticUsage = (spec: FieldSpec): KindUsage => {
+  switch (spec.kind) {
+    case "object":
+      return spec.fields.reduce(
+        (acc, field) => mergeUsage(acc, collectStaticUsage(field.spec)),
+        NO_USAGE,
+      );
+    case "array":
+      return collectStaticUsage(spec.item);
+    case "union":
+      return NO_USAGE;
+    default:
+      return { ...NO_USAGE, [spec.kind]: true };
+  }
+};
+
+// Whether any union in the tree has a variant-ONLY scalar field — the sole
+// source of a useVariantField call. Common fields (present in every variant,
+// including every field of a single-variant union) bind with useField, so a
+// union without variant-only fields needs no useVariantField import.
+export const hasVariantFieldUsage = (spec: FieldSpec): boolean => {
+  switch (spec.kind) {
+    case "object":
+      return spec.fields.some((field) => hasVariantFieldUsage(field.spec));
+    case "array":
+      return hasVariantFieldUsage(spec.item);
+    case "union": {
+      const common = unionCommonFieldNames(spec);
+      return spec.variants.some((variant) =>
+        variant.fields.some(
+          (field) => isScalarSpec(field.spec) && !common.has(field.name),
+        ),
+      );
+    }
+    default:
+      return false;
   }
 };
 
@@ -655,8 +744,9 @@ type Backend = Readonly<{
     arrays: readonly ArrayEntry[],
     root: ObjectSpec,
   ) => readonly string[];
-  // Module-level sections between the array decls and the component.
-  preamble: (usage: KindUsage) => readonly string[];
+  // Module-level sections between the array decls and the component. Gets
+  // total usage (adapters/builders) and static-leaf usage (Bound* components).
+  preamble: (usage: KindUsage, staticUsage: KindUsage) => readonly string[];
   // One bound control (or a todo fallback) for a scalar field.
   leaf: (
     spec: FieldSpec,
@@ -708,10 +798,17 @@ const unionLines = (
   };
   return [
     ...backend.variantLeaf(discriminantSpec, entry.discriminantVar, label, level),
+    // Common fields exist in every variant, so they render once, outside the
+    // per-variant blocks — bound with useField (useVariantField rejects them).
+    ...entry.commonBindings.flatMap((binding) =>
+      backend.variantLeaf(binding.spec, binding.varName, binding.label, level),
+    ),
     ...entry.variants.flatMap((variant) => [
       `${ind(level)}{${entry.discriminantVar}.value === ${q(variant.tag)} && (`,
       `${ind(level + 1)}<>`,
       ...variant.fields.flatMap((field): readonly string[] => {
+        // Common fields already rendered above; only variant-only fields here.
+        if (entry.commonBindingNames.has(field.name)) return [];
         const binding = entry.bindingByName.get(field.name);
         return binding === undefined
           ? [
@@ -821,6 +918,7 @@ const emitForm = (
 ): string => {
   const root = assertObjectRoot(ir);
   const usage = collectUsage(root);
+  const staticUsage = collectStaticUsage(root);
   const arrays = collectArrays(root);
   const arrayMap: ReadonlyMap<string, ArrayEntry> = new Map(
     arrays.map((entry) => [entry.path, entry]),
@@ -845,7 +943,7 @@ const emitForm = (
     valuesTypeAndInitials(root, schemaImport.name),
     arrayItemDecls(arrays),
     "",
-    ...backend.preamble(usage),
+    ...backend.preamble(usage, staticUsage),
     `export const ${formName} = () => {`,
     `  const form = useForm(${schemaImport.name}, { initialValues, mode: "onBlur" });`,
     "  const submitting = useIsSubmitting(form);",
@@ -1007,8 +1105,12 @@ const plainBackend = (visual: VisualOptions): Backend => {
   return {
   header: (usage, arrays, root) => {
     const unionUsage = collectUnionUsage(root);
+    // Leaf COMPONENTS are gated on static-leaf usage only: a union renders its
+    // controls from hoisted hooks via the raw prop builders, never via these
+    // components, so a union-only kind must not pull the component in.
+    const staticUsage = collectStaticUsage(root);
     // The prop builders the union controls call (discriminant select +
-    // variant field kinds), imported only when a union renders.
+    // common/variant field kinds), imported only when a union renders.
     const builderImports = usage.union
       ? [
           ...(unionUsage.string ? ["textInputProps"] : []),
@@ -1019,14 +1121,15 @@ const plainBackend = (visual: VisualOptions): Backend => {
         ]
       : [];
     const formstandImports = [
-      ...(usage.boolean ? ["CheckboxField"] : []),
-      ...(usage.date ? ["DateField"] : []),
-      ...(usage.number ? ["NumberField"] : []),
-      ...(usage.enum ? ["SelectField"] : []),
-      ...(usage.string ? ["TextField"] : []),
+      ...(staticUsage.boolean ? ["CheckboxField"] : []),
+      ...(staticUsage.date ? ["DateField"] : []),
+      ...(staticUsage.number ? ["NumberField"] : []),
+      ...(staticUsage.enum ? ["SelectField"] : []),
+      ...(staticUsage.string ? ["TextField"] : []),
       ...builderImports,
       ...(arrays.length > 0 ? ["useFieldArray"] : []),
-      ...(usage.union ? ["useField", "useVariantField"] : []),
+      ...(usage.union ? ["useField"] : []),
+      ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
       "useForm",
       "useIsSubmitting",
     ];
@@ -1564,6 +1667,10 @@ const muiBackend = (visual: VisualOptions): Backend => {
   return {
   header: (usage, arrays, root) => {
     const hasLeaf = hasLeafUsage(usage);
+    // Static-leaf usage gates the Bound* components (and their FieldFormApi
+    // type): union controls render raw MUI elements from hoisted hooks, so a
+    // union-only kind needs no Bound* wrapper.
+    const hasStaticLeaf = hasLeafUsage(collectStaticUsage(root));
     const hasSection = arrays.length > 0 || anyAddressableObjectField(root);
     const muiImports = [
       ...(hasSection && visual.sections === "collapsible"
@@ -1587,13 +1694,15 @@ const muiBackend = (visual: VisualOptions): Backend => {
       ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
       ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
       ...(hasLeaf ? ["useField"] : []),
-      ...(usage.union ? ["useVariantField"] : []),
+      ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
       ...(arrays.length > 0 ? ["useFieldArray"] : []),
       "useForm",
       "useIsSubmitting",
     ];
     const formstandTypeImports = [
-      ...(hasLeaf ? ["FieldFormApi", "UseFieldReturn"] : []),
+      // FieldFormApi is referenced only by the Bound* components' props type.
+      ...(hasStaticLeaf ? ["FieldFormApi"] : []),
+      ...(hasLeaf ? ["UseFieldReturn"] : []),
     ];
     return [
       `import type { ChangeEvent } from "react";`,
@@ -1607,9 +1716,9 @@ const muiBackend = (visual: VisualOptions): Backend => {
       `import { z } from "zod";`,
     ];
   },
-  preamble: (usage) => [
+  preamble: (usage, staticUsage) => [
     muiAdapterSection(usage),
-    muiBoundComponents(usage),
+    muiBoundComponents(staticUsage),
     "",
   ],
   leaf: muiLeaf,
@@ -1910,19 +2019,24 @@ const shadcnBackend = (visual: VisualOptions): Backend => {
       : [`${ind(level)}</fieldset>`];
 
   return {
-  header: (usage, arrays) => {
+  header: (usage, arrays, root) => {
     const hasLeaf = hasLeafUsage(usage);
+    // Static-leaf usage gates the Bound* components (and FieldFormApi): union
+    // controls render raw shadcn elements from hoisted hooks.
+    const hasStaticLeaf = hasLeafUsage(collectStaticUsage(root));
     const formstandValueImports = [
       ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
       ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
       ...(hasLeaf ? ["useField"] : []),
-      ...(usage.union ? ["useVariantField"] : []),
+      ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
       ...(arrays.length > 0 ? ["useFieldArray"] : []),
       "useForm",
       "useIsSubmitting",
     ];
     const formstandTypeImports = [
-      ...(hasLeaf ? ["FieldFormApi", "UseFieldReturn"] : []),
+      // FieldFormApi is referenced only by the Bound* components' props type.
+      ...(hasStaticLeaf ? ["FieldFormApi"] : []),
+      ...(hasLeaf ? ["UseFieldReturn"] : []),
     ];
     return [
       ...(usage.string || usage.date || usage.number
@@ -1954,9 +2068,9 @@ const shadcnBackend = (visual: VisualOptions): Backend => {
       `import { z } from "zod";`,
     ];
   },
-  preamble: (usage) => [
+  preamble: (usage, staticUsage) => [
     shadcnAdapterSection(usage),
-    shadcnBoundComponents(usage),
+    shadcnBoundComponents(staticUsage),
     "",
   ],
   leaf: shadcnLeaf,

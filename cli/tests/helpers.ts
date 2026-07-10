@@ -58,6 +58,7 @@ const formatDiagnostic = (d: ts.Diagnostic): string => {
 export const typecheckDiagnostics = (
   files: readonly string[],
   extraPaths: Readonly<Record<string, readonly string[]>> = {},
+  extraOptions: Readonly<Pick<ts.CompilerOptions, "noUnusedLocals">> = {},
 ): readonly string[] => {
   const program = ts.createProgram([...files], {
     target: ts.ScriptTarget.ES2022,
@@ -68,6 +69,7 @@ export const typecheckDiagnostics = (
     skipLibCheck: true,
     noEmit: true,
     esModuleInterop: true,
+    ...extraOptions,
     paths: Object.fromEntries(
       Object.entries({
         formstand: [posix(path.join(repoRoot, "src", "index.ts"))],

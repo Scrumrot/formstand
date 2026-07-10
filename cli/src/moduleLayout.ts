@@ -15,6 +15,7 @@ import {
   collectUsage,
   commentText,
   emitInitialValues,
+  hasVariantFieldUsage,
   identifierSuffix,
   isUnaddressable,
   jsxText,
@@ -22,6 +23,7 @@ import {
   q,
   shadcnAdapterSection,
   templateEscape,
+  unionCommonFieldNames,
 } from "./codegen";
 import { type FieldSpec, type NamedField, labelFromName } from "./ir";
 
@@ -886,15 +888,20 @@ const hooksFile = (
   const hasArrays = root.fields.some(
     (field) => !isUnaddressable(field.name) && specHasArray(field.spec),
   );
-  // A union renders a discriminant (useField) + variant fields
-  // (useVariantField), so both bound hooks join the module's API.
+  // A union renders a discriminant + common fields (useField) and its
+  // variant-only fields (useVariantField), so useField joins the API for any
+  // union, but useVariantField only when a variant-only field exists (a union
+  // of only common keys — e.g. a single-variant union — never emits one).
   const hasUnions = root.fields.some(
     (field) => !isUnaddressable(field.name) && specHasUnion(field.spec),
+  );
+  const hasVariantFields = root.fields.some(
+    (field) => !isUnaddressable(field.name) && hasVariantFieldUsage(field.spec),
   );
   const hasFields = plan.fields.length > 0 || hasArrays || hasUnions;
   const hooks = [
     ...(hasFields ? [naming.hook("Field")] : []),
-    ...(hasUnions ? [naming.hook("VariantField")] : []),
+    ...(hasVariantFields ? [naming.hook("VariantField")] : []),
     ...(hasArrays ? [naming.hook("FieldArray")] : []),
     ...(plan.sections.length > 0
       ? [naming.hook("IsDirty"), naming.hook("IsValid")]
@@ -1546,8 +1553,18 @@ const arraySectionFile = (
     return { field, varName: name };
   });
 
+  // A discriminated-union item can't be bound at a dynamic array-row path
+  // (useVariantField needs a static union path), so it emits no leaf control,
+  // no scalar row binding, and no union-only builder import — just a TODO,
+  // mirroring the single-file backend's unreachable-container handling.
+  const scalarItem = isScalar(spec.item);
+
   const rowSpecs =
-    spec.item.kind === "object" ? itemLeaves.map((f) => f.spec) : [spec.item];
+    spec.item.kind === "object"
+      ? itemLeaves.map((f) => f.spec)
+      : scalarItem
+        ? [spec.item]
+        : [];
 
   const dynamicId = (name: string | undefined): string =>
     name === undefined
@@ -1560,9 +1577,11 @@ const arraySectionFile = (
           ({ field, varName }) =>
             `  const ${varName} = ${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}.${templateEscape(field.name)}\`);`,
         )
-      : [
-          `  const field = ${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}\`);`,
-        ];
+      : scalarItem
+        ? [
+            `  const field = ${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}\`);`,
+          ]
+        : [];
 
   const rowBody =
     spec.item.kind === "object"
@@ -1579,14 +1598,18 @@ const arraySectionFile = (
           ),
           ...itemExtras,
         ]
-      : leafControl(
-          ui,
-          spec.item,
-          "field",
-          jsxText(section.label),
-          dynamicId(undefined),
-          "      ",
-        );
+      : scalarItem
+        ? leafControl(
+            ui,
+            spec.item,
+            "field",
+            jsxText(section.label),
+            dynamicId(undefined),
+            "      ",
+          )
+        : [
+            `      {/* TODO: array item is a discriminated union — bind its fields by hand with ${naming.hook("VariantField")} (dynamic array-row paths aren't generated) */}`,
+          ];
 
   const imports = mergeImports([
     ...rowSpecs.flatMap((s) => leafImports(ui, s)),
@@ -1597,13 +1620,22 @@ const arraySectionFile = (
     ...nestedParts.flatMap((part) => part.imports),
   ]);
 
+  // useXField is only imported when a row actually binds a field: an
+  // object/scalar item binds one, but a discriminated-union item binds
+  // nothing (its row is a TODO), so importing it would be an unused import
+  // that breaks a consumer's noUnusedLocals.
+  const usesField = [
+    ...rowBindings,
+    ...nestedParts.flatMap((part) => part.lines),
+  ].some((line) => line.includes(`${naming.hook("Field")}(`));
+
   return {
     path: `sections/${section.componentName}.tsx`,
     content: [
       HEADER,
       ...imports,
       "import {",
-      `  ${naming.hook("Field")},`,
+      ...(usesField ? [`  ${naming.hook("Field")},`] : []),
       `  ${naming.hook("FieldArray")},`,
       `  ${naming.hook("IsDirty")},`,
       `  ${naming.hook("IsValid")},`,
@@ -1741,15 +1773,20 @@ const unionSectionFile = (
   const path = section.key;
   const discriminantVar = camelIdent(spec.discriminant);
   const discriminantPath = `${path}.${spec.discriminant}`;
+  const commonNames = unionCommonFieldNames(spec);
 
-  const bindings = spec.variants
+  // Scalar variant fields, deduped by name, split into common keys (bound with
+  // the plain useXField on `path.name`, since useXVariantField rejects them)
+  // and variant-only keys (useXVariantField).
+  const partitioned = spec.variants
     .flatMap((variant) => variant.fields)
     .filter((field) => !isUnaddressable(field.name) && isScalar(field.spec))
     .reduce<
       Readonly<{
         used: ReadonlySet<string>;
         seen: ReadonlySet<string>;
-        list: readonly UnionSectionBinding[];
+        common: readonly UnionSectionBinding[];
+        variant: readonly UnionSectionBinding[];
       }>
     >(
       (acc, field) => {
@@ -1757,17 +1794,30 @@ const unionSectionFile = (
         const base =
           camelIdent(field.name).length === 0 ? "value" : camelIdent(field.name);
         const varName = `${base}${identifierSuffix(base, acc.used)}`;
+        const binding = {
+          name: field.name,
+          label: field.label,
+          spec: field.spec,
+          varName,
+        };
+        const isCommon = commonNames.has(field.name);
         return {
           used: new Set([...acc.used, varName]),
           seen: new Set([...acc.seen, field.name]),
-          list: [
-            ...acc.list,
-            { name: field.name, label: field.label, spec: field.spec, varName },
-          ],
+          common: isCommon ? [...acc.common, binding] : acc.common,
+          variant: isCommon ? acc.variant : [...acc.variant, binding],
         };
       },
-      { used: new Set<string>([discriminantVar]), seen: new Set<string>(), list: [] },
-    ).list;
+      {
+        used: new Set<string>([discriminantVar]),
+        seen: new Set<string>(),
+        common: [],
+        variant: [],
+      },
+    );
+  const commonBindings = partitioned.common;
+  const bindings = partitioned.variant;
+  const commonBindingNames = new Set(commonBindings.map((b) => b.name));
   const bindingByName = new Map(bindings.map((binding) => [binding.name, binding]));
 
   const discriminantSpec: FieldSpec = {
@@ -1786,6 +1836,17 @@ const unionSectionFile = (
       `{${discriminantVar}.path}`,
       "      ",
     ),
+    // Common fields exist in every variant → render once, outside the blocks.
+    ...commonBindings.flatMap((binding) =>
+      leafControl(
+        ui,
+        binding.spec,
+        binding.varName,
+        jsxText(binding.label),
+        `{${binding.varName}.path}`,
+        "      ",
+      ),
+    ),
     ...spec.variants.flatMap((variant) => [
       `      {${discriminantVar}.value === ${q(variant.tag)} && (`,
       "        <>",
@@ -1795,6 +1856,8 @@ const unionSectionFile = (
             `          {/* TODO: field ${commentText(q(field.name))} skipped — "." in a key is not path-addressable (see formstand docs) */}`,
           ];
         }
+        // Common fields already rendered above; only variant-only fields here.
+        if (commonBindingNames.has(field.name)) return [];
         const binding = bindingByName.get(field.name);
         return binding === undefined
           ? [
@@ -1814,7 +1877,11 @@ const unionSectionFile = (
     ]),
   ];
 
-  const leafSpecs = [discriminantSpec, ...bindings.map((binding) => binding.spec)];
+  const leafSpecs = [
+    discriminantSpec,
+    ...commonBindings.map((binding) => binding.spec),
+    ...bindings.map((binding) => binding.spec),
+  ];
   const imports = mergeImports([
     ...objectSectionImports(ui, visual),
     ...leafSpecs.flatMap((leaf) => leafImports(ui, leaf)),
@@ -1849,10 +1916,15 @@ const unionSectionFile = (
       `  heading = ${q(section.label)},`,
       `}: ${propsType}) => {`,
       `  const { dirty, valid } = ${hookName}();`,
-      "  // The discriminant binds with the plain field hook (a common key);",
-      "  // its live value chooses which variant block renders. Every variant",
-      "  // field hook is called unconditionally (React's rules).",
+      "  // The discriminant and common fields bind with the plain field hook",
+      "  // (common keys); the discriminant's live value chooses which variant",
+      "  // block renders. Every variant field hook is called unconditionally",
+      "  // (React's rules).",
       `  const ${discriminantVar} = ${naming.hook("Field")}(${q(discriminantPath)});`,
+      ...commonBindings.map(
+        (binding) =>
+          `  const ${binding.varName} = ${naming.hook("Field")}(${q(`${path}.${binding.name}`)});`,
+      ),
       ...bindings.map(
         (binding) =>
           `  const ${binding.varName} = ${naming.hook("VariantField")}(${q(path)}, ${q(binding.name)});`,
