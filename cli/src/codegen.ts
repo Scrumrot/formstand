@@ -44,7 +44,14 @@ export const ind = (level: number): string => "  ".repeat(level);
 // ---------------------------------------------------------------------------
 
 // JS string literal (also the payload of JSX expression containers).
-export const q = (value: string): string => JSON.stringify(value);
+// JSON.stringify leaves U+2028/U+2029 raw — legal JSON, but a syntax error
+// inside string literals for pre-ES2019 parsers of the GENERATED file (and
+// CodeQL's js/bad-code-sanitization); escape them so emitted source is
+// plain ASCII-safe line-wise.
+export const q = (value: string): string =>
+  JSON.stringify(value)
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
 
 const IDENT_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 // "__proto__" must be a COMPUTED key: in an object literal both `__proto__:`

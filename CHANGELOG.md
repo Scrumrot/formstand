@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### formstand-cli
+
+- Emitted string literals escape U+2028/U+2029 (JSON.stringify leaves the
+  JS line separators raw — a syntax error for pre-ES2019 parsers of the
+  GENERATED file, and CodeQL's js/bad-code-sanitization).
+
+### CI (no package changes)
+
+- Workflows declare least-privilege GITHUB_TOKEN permissions (CodeQL:
+  actions/missing-workflow-permissions).
+
 ### Docs & examples (no package changes)
 
 - ROADMAP.md: a living plan for the library and the CLI — the 0.9/cli-0.6

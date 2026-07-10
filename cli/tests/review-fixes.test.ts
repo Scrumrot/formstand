@@ -73,6 +73,33 @@ describe("identifier safety", () => {
   });
 });
 
+describe("emitted string literals", () => {
+  it("escapes U+2028/U+2029 so generated files parse everywhere", () => {
+    // JSON.stringify leaves these raw; inside a string literal they are
+    // line terminators to pre-ES2019 parsers of the GENERATED file
+    // (CodeQL js/bad-code-sanitization).
+    const schema = z.object({ note: z.string() });
+    const ir = fromZod(schema);
+    const withSeparator = emitPlainForm({
+      ir: {
+        ...ir,
+        kind: "object",
+        fields: [
+          {
+            name: "note",
+            label: `before after`,
+            spec: { kind: "string", optional: false, nullable: false },
+          },
+        ],
+      },
+      formName: "NoteForm",
+      schemaImport: { name: "s", from: "./s", kind: "named" },
+    });
+    expect(withSeparator).not.toContain(" ");
+    expect(withSeparator).toContain("\\u2028");
+  });
+});
+
 describe("boolean-only mui module adapter", () => {
   it("imports ChangeEvent (the Switch adapter uses it) and typechecks", () => {
     const schema = z.object({ isAdmin: z.boolean(), remote: z.boolean() });
