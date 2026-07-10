@@ -32,6 +32,12 @@ export type {
 } from "./core/validation";
 export { shouldValidateOn } from "./core/mode";
 export type { ValidationMode, ValidationTrigger } from "./core/mode";
+export { persistForm } from "./core/persist";
+export type {
+  PersistStorage,
+  PersistOptions,
+  PersistHandle,
+} from "./core/persist";
 
 export { useForm } from "./react/useForm";
 export { createFormContext } from "./react/FormContext";

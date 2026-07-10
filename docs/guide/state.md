@@ -100,6 +100,25 @@ form.updateState((state) => ({
 
 The patch type omits `errors` — it's derived; patch `schemaErrors`/`serverErrors` instead and the merged map is recomputed. Note `updateState` is a raw patch: unlike `setValue`, it does not run the [server-error release contract](./errors#when-a-server-error-is-released) for you.
 
+## Persistence
+
+The autosave recipe, promoted to a helper: `persistForm(form, { key })` watches the values, debounce-writes them as JSON, and re-applies a found draft on the next visit.
+
+```ts
+const drafts = persistForm(form, {
+  key: "profile-draft",
+  debounceMs: 300,          // default
+  apply: "adopt",           // default: the draft becomes the new baseline (form reads clean)
+});
+
+// after a successful submit:
+drafts.clear();             // also cancels any pending write
+// on unmount:
+drafts.dispose();
+```
+
+`apply: "restore"` loads the draft as *edits* (dirty vs the original initial values) instead of rebasing; `apply: "manual"` never auto-applies — call the returned `restore()` yourself. Storage defaults to `localStorage` and is structural, so `sessionStorage` or any `{ getItem, setItem, removeItem }` works. Every storage touch is guarded (private-mode failures just skip persistence), corrupt drafts return `false` from `restore()` instead of throwing, and — same caveat as the recipe — drafts round-trip through JSON, so they're for JSON-safe values (a `Date` comes back as a string). In SSR apps, call it inside an effect: see [SSR & Next.js](./ssr).
+
 ## Redux DevTools
 
 The store is zustand underneath, so the Redux DevTools extension works with one option:

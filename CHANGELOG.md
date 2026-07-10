@@ -4,6 +4,11 @@
 
 ### formstand
 
+- `persistForm(form, { key })`: the autosave recipe as a first-class
+  helper — debounced JSON drafts to any `{ getItem, setItem, removeItem }`
+  storage, draft auto-apply on start (`adopt` rebases clean, `restore`
+  loads dirty, `manual` waits for you), `clear()` that also cancels
+  pending writes, and guarded storage access throughout.
 - Redux DevTools: `createForm(schema, { devtools: "checkout" })` connects
   the form's store to the extension via zustand's middleware — every write
   named, inspectable, and time-travelable. Off by default and inert
