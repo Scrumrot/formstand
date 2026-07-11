@@ -959,10 +959,18 @@ const arraySectionLines = (
     dynamic: true,
     text: `${templateEscape(entry.path)}.\${index}.`,
   };
+  // A scalar item binds one control per row; an object item lays its fields
+  // out inline. A non-scalar item (an array-of-arrays, or an array of tuples/
+  // unions) can't bind at the row's dynamic path — it needs its own extracted
+  // component, so it's a TODO rather than an empty "unreachable" row.
   const rowBody: readonly string[] =
     entry.item.kind === "object"
       ? fieldLines(backend, entry.item.fields, rowPrefix, level + 3, arrays, unions)
-      : backend.leaf(entry.item, pathAttr(rowPrefix, ""), entry.label, level + 3);
+      : isScalarSpec(entry.item)
+        ? backend.leaf(entry.item, pathAttr(rowPrefix, ""), entry.label, level + 3)
+        : [
+            `${ind(level + 3)}{/* TODO: ${entry.item.kind} array-item in ${commentText(q(entry.path))} rows — extract a row component with its own useFieldArray */}`,
+          ];
   return backend.arraySection(entry, level, rowBody);
 };
 

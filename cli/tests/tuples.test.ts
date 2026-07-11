@@ -99,6 +99,21 @@ describe("tuples — single-file rendering", () => {
     expect(c).toContain('path={"mix.0"}');
     expect(c).toContain("TODO: tuple element 1 (object)");
   });
+
+  // An array whose item is itself non-scalar (an array or a tuple) can't bind
+  // at the row's dynamic path — it used to emit an empty "unreachable" row.
+  it("array-of-array and array-of-tuple rows are a TODO, not an empty row", () => {
+    const c = emitPlain(
+      z.object({
+        matrix: z.array(z.array(z.string())),
+        points: z.array(z.tuple([z.number(), z.number()])),
+      }),
+      "GridForm",
+    );
+    expect(c).not.toContain("unreachable: containers render elsewhere");
+    expect(c).toContain('TODO: array array-item in "matrix" rows');
+    expect(c).toContain('TODO: tuple array-item in "points" rows');
+  });
 });
 
 describe("tuples — module layout", () => {

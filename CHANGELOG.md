@@ -4,6 +4,13 @@
 
 ### formstand-cli
 
+#### Fixed
+
+- An array whose item is itself non-scalar (an array-of-arrays, or an array of
+  tuples/unions) no longer emits an empty `{/* unreachable */}` row in the
+  single-file layout — it now emits a clear TODO to extract a row component,
+  matching the documented nested-array behavior.
+
 #### Added
 
 - **Tuple support** (`z.tuple([...])` and `[A, B]` in type mode). Tuples were
