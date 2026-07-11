@@ -89,4 +89,23 @@ describe("useField with debounceMs option", () => {
     });
     expect(refineCalls).toEqual(["ta"]);
   });
+
+  it("clears a pending debounce timer on unmount (no late validation)", () => {
+    const { result, unmount } = renderHook(() => {
+      const form = useForm(asyncSchema, {
+        initialValues: { username: "ok" },
+        mode: "onChange",
+      });
+      return { u: useField(form, "username", { debounceMs: 50 }) };
+    });
+
+    act(() => {
+      result.current.u.setValue("taken");
+    });
+    // Unmount with the timer still pending: the cleanup clears it, so the
+    // trailing validation never runs after the component is gone.
+    unmount();
+    vi.advanceTimersByTime(200);
+    expect(refineCalls).toEqual([]);
+  });
 });

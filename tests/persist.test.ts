@@ -221,3 +221,65 @@ describe("persistForm", () => {
     expect(setItem).not.toHaveBeenCalled();
   });
 });
+
+// defaultStorage() is the fallback when no `storage` option is passed: it
+// resolves globalThis.localStorage lazily and degrades to null (a no-op
+// persist handle) when the environment lacks it or forbids access — SSR and
+// privacy-mode safety. Exercised here because the default path skips the
+// injected stub the tests above use.
+describe("persistForm default storage fallback", () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const restore = () => {
+    if (original !== undefined) {
+      Object.defineProperty(globalThis, "localStorage", original);
+    } else {
+      delete (globalThis as { localStorage?: unknown }).localStorage;
+    }
+  };
+  afterEach(() => {
+    restore();
+    vi.unstubAllGlobals();
+  });
+
+  it("degrades to a no-op when localStorage is undefined (e.g. SSR)", () => {
+    vi.stubGlobal("localStorage", undefined);
+    const form = makeForm();
+    expect(() => {
+      const handle = persistForm(form, { key: KEY, debounceMs: 300 });
+      form.setValue("title", "hello");
+      vi.advanceTimersByTime(300);
+      handle.clear();
+      handle.dispose();
+    }).not.toThrow();
+  });
+
+  it("degrades to a no-op when localStorage access throws (privacy mode)", () => {
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      get() {
+        throw new Error("SecurityError: localStorage is not available");
+      },
+    });
+    const form = makeForm();
+    expect(() => {
+      const handle = persistForm(form, { key: KEY, debounceMs: 300 });
+      form.setValue("title", "hi");
+      vi.advanceTimersByTime(300);
+      handle.dispose();
+    }).not.toThrow();
+  });
+
+  it("writes to the real localStorage when it is present", () => {
+    // jsdom provides a working localStorage: the default path resolves and
+    // uses it, no injected stub.
+    globalThis.localStorage.removeItem(KEY);
+    const form = makeForm();
+    const handle = persistForm(form, { key: KEY, debounceMs: 300 });
+    form.setValue("title", "persisted");
+    vi.advanceTimersByTime(300);
+    expect(globalThis.localStorage.getItem(KEY)).toContain("persisted");
+    handle.clear();
+    handle.dispose();
+    globalThis.localStorage.removeItem(KEY);
+  });
+});
