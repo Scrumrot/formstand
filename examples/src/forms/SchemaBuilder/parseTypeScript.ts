@@ -56,9 +56,10 @@ const withFlags = (
   nullable: boolean,
 ): FieldSpec => ({ ...spec, optional, nullable });
 
-// Kinds base() constructs — every FieldSpec kind except "union" (paste-TS
-// does not detect discriminated unions).
-type BaseKind = Exclude<FieldSpec["kind"], "union">;
+// Kinds base() constructs — every FieldSpec kind except "union" and "tuple"
+// (paste-TS detects neither: discriminated unions and tuple types both
+// degrade to a string field).
+type BaseKind = Exclude<FieldSpec["kind"], "union" | "tuple">;
 
 const KEYWORD_SPECS: Readonly<Record<string, BaseKind>> = {
   string: "string",

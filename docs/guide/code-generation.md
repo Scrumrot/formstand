@@ -73,7 +73,8 @@ Without `--out`, the code streams to stdout (pipe it wherever); notes and warnin
 
 The generator never emits silently broken code. Anything outside the supported subset degrades **loudly**:
 
-- **Unsupported zod kinds** (unions of objects, records, maps, tuples…) and **unsupported type shapes** (generics, tuples, callable types) become a text field with a `// TODO` comment naming what was skipped.
+- **Unsupported zod kinds** (unions of objects, records, maps…) and **unsupported type shapes** (generics, callable types) become a text field with a `// TODO` comment naming what was skipped.
+- **Tuples** (`z.tuple([...])` / `[A, B]`) generate fixed positional controls at static numeric-index paths (`coord.0`, `coord.1`); a non-scalar element or a variadic rest degrades to a TODO at that position.
 - **Recursive schemas** (zod's getter idiom) are cut off at a depth limit with a TODO, not a stack overflow.
 - **Field names containing `.`** aren't path-addressable in formstand — the field is kept in the schema and `initialValues` but its binding is replaced by a TODO comment, with a warning on stderr.
 - **Hostile names** (quotes, backticks, braces) are escaped per context; generated output is typechecked against the real library in the CLI's own CI.

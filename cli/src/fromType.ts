@@ -124,9 +124,17 @@ const walkType = (
   }
   if (isDateType(type)) return { kind: "date", ...flags };
   // Tuples are not isArrayType; without this check they would fall through to
-  // the object branch and leak Array.prototype members as fields.
+  // the object branch and leak Array.prototype members as fields. Each element
+  // becomes a positional FieldSpec (bound at a static numeric-index path).
   if (checker.isTupleType(type)) {
-    return fallback(flags, "tuple — not supported; defaulted to string");
+    const elements = checker.getTypeArguments(type as ts.TypeReference);
+    return {
+      kind: "tuple",
+      elements: elements.map((element) =>
+        walkType(checker, element, NO_FLAGS, depth - 1),
+      ),
+      ...flags,
+    };
   }
   if (isArrayReference(checker, type)) {
     const element = checker.getTypeArguments(type as ts.TypeReference)[0];

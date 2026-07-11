@@ -22,6 +22,7 @@ import { profileSchema } from "./fixtures/profileSchema";
 import { hostileSchema } from "./fixtures/hostileSchema";
 import { collidingSchema } from "./fixtures/collidingSchema";
 import { leafFreeSchema } from "./fixtures/leafFreeSchema";
+import { tupleSchema } from "./fixtures/tupleSchema";
 
 type Emitter = (options: EmitFormOptions) => string;
 
@@ -66,6 +67,7 @@ const fixturesFor = (
   hostile: Readonly<{ file: string; code: string }>;
   colliding: Readonly<{ file: string; code: string }>;
   leafFree: Readonly<{ file: string; code: string }>;
+  tuple: Readonly<{ file: string; code: string }>;
   panel: Readonly<{ file: string; code: string }>;
   collapsible: Readonly<{ file: string; code: string }>;
   files: readonly string[];
@@ -75,6 +77,7 @@ const fixturesFor = (
   const hostile = generate(emit, hostileSchema, "hostileSchema", "HostileForm", dir);
   const colliding = generate(emit, collidingSchema, "collidingSchema", "CollidingForm", dir);
   const leafFree = generate(emit, leafFreeSchema, "leafFreeSchema", "LeafFreeForm", dir);
+  const tuple = generate(emit, tupleSchema, "tupleSchema", "TupleForm", dir);
   // The visual axes ride in the same program: panel + 2 columns and
   // collapsible + 3 columns cover every non-default wrapper and grid.
   const panel = generate(emit, profileSchema, "profileSchema", "PanelForm", dir, {
@@ -95,6 +98,7 @@ const fixturesFor = (
     hostile,
     colliding,
     leafFree,
+    tuple,
     panel,
     collapsible,
     files: [
@@ -102,6 +106,7 @@ const fixturesFor = (
       hostile.file,
       colliding.file,
       leafFree.file,
+      tuple.file,
       panel.file,
       collapsible.file,
     ],

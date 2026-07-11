@@ -142,12 +142,12 @@ Unlisted kinds fall back to the plain output, so a template can override only th
 
 ## Supported schema surface
 
-`string`, `number`/`int`, `boolean`, `date`, `enum`, unions of string literals, `object`, `array`, with `.optional()` / `.nullable()` / `.default()` / `.pipe()` unwrapped. Anything else falls back to a string field with a `// TODO:` comment so the file still compiles. `date` fields emit a real `DateField` (plain) or date-input binding (mui / shadcn) — no TODO (requires formstand ≥ 0.9). Arrays nested inside array rows: the **module layout** (`--layout module`) extracts a parented row component with its own `useFieldArray` for the first level of nesting; deeper levels — and the single-file layout — emit a TODO to extract the row component by hand.
+`string`, `number`/`int`, `boolean`, `date`, `enum`, unions of string literals, `object`, `array`, `tuple`, with `.optional()` / `.nullable()` / `.default()` / `.pipe()` unwrapped. Anything else falls back to a string field with a `// TODO:` comment so the file still compiles. `date` fields emit a real `DateField` (plain) or date-input binding (mui / shadcn) — no TODO (requires formstand ≥ 0.9). `tuple` fields (`z.tuple([...])` / `[A, B]`) render fixed positional controls bound at static numeric-index paths (`coord.0`, `coord.1`) in both layouts; a non-scalar tuple element degrades to a TODO. Arrays nested inside array rows: the **module layout** (`--layout module`) extracts a parented row component with its own `useFieldArray` for the first level of nesting; deeper levels — and the single-file layout — emit a TODO to extract the row component by hand.
 
 Known limitations:
 
 - **Dots in keys**: formstand paths split on `.`, so a field named `"a.b"` is not path-addressable. The key is kept in the zod schema and `initialValues`, but no control is bound — a `{/* TODO: field "a.b" skipped ... */}` comment marks the spot and the CLI prints a warning.
-- **Tuples** (type mode): `[string, number]` degrades to a string field with a `// TODO: tuple — not supported` comment. Methods and callable types are skipped / degraded the same way.
+- **Tuple elements** that aren't scalar (an object/array/union/nested tuple at a tuple position), and a tuple's **variadic rest** (`z.tuple([...], rest)`), degrade to a `// TODO` at that position — the fixed scalar positions still generate. **Methods and callable types** are skipped / degraded to a string field the same way.
 
 ## Programmatic API
 

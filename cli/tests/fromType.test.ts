@@ -22,7 +22,7 @@ describe("fromType", () => {
     );
   });
 
-  it("degrades tuples, skips methods, and never leaks Array.prototype", () => {
+  it("reads tuples element-wise, skips methods, and never leaks Array.prototype", () => {
     const { ir } = fromType(tupleFixture, "WithTuple");
     if (ir.kind !== "object") throw new Error("expected object root");
     // "greet" is a method — not a form field at all.
@@ -32,9 +32,10 @@ describe("fromType", () => {
       "callables",
     ]);
 
+    // [string, number] is a tuple of two positional element specs.
     const pair = ir.fields.find((field) => field.name === "pair");
-    expect(pair?.spec.kind).toBe("string");
-    expect(pair?.spec.todo).toContain("tuple — not supported");
+    if (pair?.spec.kind !== "tuple") throw new Error("expected tuple");
+    expect(pair.spec.elements.map((el) => el.kind)).toEqual(["string", "number"]);
 
     // The element type is itself callable → the whole element is a todo.
     const callables = ir.fields.find((field) => field.name === "callables");
@@ -43,7 +44,8 @@ describe("fromType", () => {
     expect(callables.spec.item.todo).toContain("callable type");
 
     // The reproduced breakage: tuple fields used to walk into the object
-    // branch and emit Array.prototype members as form fields.
+    // branch and emit Array.prototype members as form fields. Walking the
+    // element types (getTypeArguments), not the properties, keeps them out.
     const flat = JSON.stringify(ir);
     expect(flat).not.toContain('"push"');
     expect(flat).not.toContain('"concat"');

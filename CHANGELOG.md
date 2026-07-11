@@ -2,7 +2,25 @@
 
 ## Unreleased
 
+### formstand-cli
+
+#### Added
+
+- **Tuple support** (`z.tuple([...])` and `[A, B]` in type mode). Tuples were
+  degrading to a single string field with a TODO; they now generate fixed
+  positional controls, each bound at a static numeric-index path (`coord.0`,
+  `coord.1`), in both the single-file and module layouts and all three UIs.
+  Scalar elements render a real control; a non-scalar element (object / array /
+  union / nested tuple) or a variadic rest degrades to a TODO at just that
+  position, so the fixed scalar positions still generate. Generated output is
+  typechecked against the real library across all backends.
+
 ### Docs & examples (no package changes)
+
+- Corrected the CLI README / code-generation guide, which claimed several
+  already-resolved limitations: `date` fields have emitted real `DateField` /
+  date-input bindings since 0.9 (not a text-input TODO), and the module layout
+  extracts one real nested-array row level (not a blanket TODO).
 
 - Schema builder: **paste a zod schema**. An **Import code…** modal takes a
   TypeScript type _or_ a `z.object(...)` schema — by paste or by picking a

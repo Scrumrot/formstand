@@ -36,6 +36,11 @@ export type FieldSpec =
   | (SharedSpecProps &
       Readonly<{ kind: "object"; fields: readonly NamedField[] }>)
   | (SharedSpecProps & Readonly<{ kind: "array"; item: FieldSpec }>)
+  // A fixed-arity, heterogeneous positional list (z.tuple / [A, B]). Each
+  // element binds at a static numeric-index path (`coord.0`, `coord.1`),
+  // unlike an array's variable-length dynamic rows.
+  | (SharedSpecProps &
+      Readonly<{ kind: "tuple"; elements: readonly FieldSpec[] }>)
   | (SharedSpecProps &
       Readonly<{
         kind: "union";

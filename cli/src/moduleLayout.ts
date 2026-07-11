@@ -111,6 +111,7 @@ type SectionPlan = Readonly<{
   spec:
     | ObjectSpec
     | Extract<FieldSpec, Readonly<{ kind: "array" }>>
+    | Extract<FieldSpec, Readonly<{ kind: "tuple" }>>
     | Extract<FieldSpec, Readonly<{ kind: "union" }>>;
 }>;
 
@@ -122,7 +123,10 @@ type Plan = Readonly<{
 }>;
 
 const isScalar = (spec: FieldSpec): boolean =>
-  spec.kind !== "object" && spec.kind !== "array" && spec.kind !== "union";
+  spec.kind !== "object" &&
+  spec.kind !== "array" &&
+  spec.kind !== "tuple" &&
+  spec.kind !== "union";
 
 // Whether the subtree holds a discriminated-union field at any addressable
 // object depth — gates the bound Field/VariantField hook exports.
@@ -159,6 +163,9 @@ const collectLeaves = (
       case "array":
       // A union renders inline in its section file, not as a leaf field.
       case "union":
+      // A tuple renders inline in its own section file (positional leaves),
+      // not as a single leaf field.
+      case "tuple":
         return [];
       default:
         return [{ segments: at, field }];
@@ -199,6 +206,7 @@ const buildPlan = (root: ObjectSpec, naming: Naming): Plan => {
         !isUnaddressable(field.name) &&
         (field.spec.kind === "object" ||
           field.spec.kind === "array" ||
+          field.spec.kind === "tuple" ||
           field.spec.kind === "union"),
     )
     .map(
@@ -1418,6 +1426,12 @@ const objectSectionFile = (
           return [
             `${indent}{/* TODO: discriminated union ${commentText(q(at.join(".")))} — only top-level unions are generated; bind the discriminant with ${naming.hook("Field")} and its variant fields with ${naming.hook("VariantField")} */}`,
           ];
+        case "tuple":
+          // Only a top-level tuple gets a generated section; a nested one is
+          // left to bind by hand at its positional paths.
+          return [
+            `${indent}{/* TODO: tuple ${commentText(q(at.join(".")))} — only a top-level tuple is generated; bind its elements by hand with ${naming.hook("Field")} at .0, .1, ... */}`,
+          ];
         default: {
           const planned = own(at);
           return planned === undefined
@@ -1479,6 +1493,83 @@ const objectSectionFile = (
       `  const { dirty, valid } = ${hookName}();`,
       "  return (",
       ...objectShell(ui, visual, body(spec.fields, [section.key], "      ")),
+      "  );",
+      "};",
+      "",
+    ].join("\n"),
+  };
+};
+
+// A tuple compiles to a section whose body is fixed positional leaves, each
+// bound at a STATIC numeric-index path (coord.0, coord.1) — no useFieldArray,
+// no add/remove, the arity is fixed. Non-scalar elements degrade to a TODO.
+const tupleSectionFile = (
+  ui: ModuleUi,
+  visual: VisualOptions,
+  naming: Naming,
+  section: SectionPlan,
+): ModuleFile => {
+  const spec = section.spec as Extract<FieldSpec, Readonly<{ kind: "tuple" }>>;
+  const propsType = `${section.componentName}Props`;
+  const hookName = `use${section.componentName}`;
+
+  const used = new Set<string>(["dirty", "valid", "heading"]);
+  const elements = spec.elements.map((element, index) => {
+    const base = `element${index}`;
+    const varName = `${base}${identifierSuffix(base, used)}`;
+    used.add(varName);
+    return { element, index, varName, scalar: isScalar(element) };
+  });
+  const scalarElements = elements.filter((e) => e.scalar);
+
+  const bindings = scalarElements.map(
+    ({ varName, index }) =>
+      `  const ${varName} = ${naming.hook("Field")}(${q(`${section.key}.${index}`)});`,
+  );
+
+  const bodyLines = elements.flatMap(({ element, index, varName, scalar }) =>
+    scalar
+      ? leafControl(
+          ui,
+          element,
+          varName,
+          jsxText(`${section.label} ${index + 1}`),
+          `{${q(`${section.key}.${index}`)}}`,
+          "      ",
+        )
+      : [
+          `      {/* TODO: tuple element ${index} (${element.kind}) at ${commentText(q(`${section.key}.${index}`))} isn't scalar — bind it by hand */}`,
+        ],
+  );
+
+  return {
+    path: `sections/${section.componentName}.tsx`,
+    content: [
+      HEADER,
+      ...mergeImports([
+        ...objectSectionImports(ui, visual),
+        ...scalarElements.flatMap((e) => leafImports(ui, e.element)),
+      ]),
+      scalarElements.length > 0
+        ? `import { ${naming.hook("Field")}, ${naming.hook("IsDirty")}, ${naming.hook("IsValid")} } from "../hooks";`
+        : `import { ${naming.hook("IsDirty")}, ${naming.hook("IsValid")} } from "../hooks";`,
+      "",
+      `export type ${propsType} = Readonly<{ heading?: string }>;`,
+      "",
+      "// The section hook is the path-scoped flags: dirty/valid for this",
+      "// subtree only, as boolean-only subscriptions.",
+      `export const ${hookName} = () => ({`,
+      `  dirty: ${naming.hook("IsDirty")}(${q(section.key)}),`,
+      `  valid: ${naming.hook("IsValid")}(${q(section.key)}),`,
+      "});",
+      "",
+      `export const ${section.componentName} = ({`,
+      `  heading = ${q(section.label)},`,
+      `}: ${propsType}) => {`,
+      `  const { dirty, valid } = ${hookName}();`,
+      ...bindings,
+      "  return (",
+      ...objectShell(ui, visual, bodyLines),
       "  );",
       "};",
       "",
@@ -1963,7 +2054,9 @@ export const emitModuleForm = (
         ? objectSectionFile(ui, visual, naming, section, plan)
         : section.spec.kind === "array"
           ? arraySectionFile(ui, visual, naming, section)
-          : unionSectionFile(ui, visual, naming, section),
+          : section.spec.kind === "tuple"
+            ? tupleSectionFile(ui, visual, naming, section)
+            : unionSectionFile(ui, visual, naming, section),
     ),
     formFile(ui, naming, plan),
     indexFile(naming),

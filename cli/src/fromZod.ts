@@ -26,6 +26,10 @@ type ZodDefLike = Readonly<{
   values?: unknown;
   in?: unknown;
   discriminator?: unknown;
+  // z.tuple: the fixed positional element schemas, plus an optional variadic
+  // rest schema (which we don't generate).
+  items?: unknown;
+  rest?: unknown;
 }>;
 
 const defOf = (schema: unknown): ZodDefLike | null => {
@@ -202,6 +206,22 @@ const walk = (
         ),
         ...flags,
       };
+    case "tuple": {
+      if (!Array.isArray(def.items)) {
+        return fallback(flags, `unsupported zod type "tuple"; defaulted to string`);
+      }
+      const elements = def.items.map((item) =>
+        walk(item, { optional: false, nullable: false }, depth - 1, nextSeen),
+      );
+      // A variadic rest (z.tuple([...], z.string())) isn't a fixed shape; keep
+      // the fixed head and flag the dropped rest. zod v4 leaves `rest` null
+      // (not undefined) when there is none.
+      const restTodo =
+        def.rest !== undefined && def.rest !== null
+          ? { todo: "tuple rest element is not generated; bind it by hand" }
+          : {};
+      return { kind: "tuple", elements, ...flags, ...restTodo };
+    }
     case "optional":
       return walk(def.innerType, { ...flags, optional: true }, depth, nextSeen);
     case "nullable":

@@ -178,6 +178,10 @@ export const emitInitialValues = (spec: FieldSpec, level = 0): string => {
     }
     case "array":
       return "[]";
+    // A tuple is fixed-arity: materialize every position's blank so each
+    // element is addressable at its static index.
+    case "tuple":
+      return `[${spec.elements.map((el) => emitInitialValues(el, level)).join(", ")}]`;
     // A union starts as its first variant, concretely shaped: the
     // discriminant set to that variant's tag, its fields blank.
     case "union": {
@@ -206,6 +210,10 @@ export const blankNeedsCast = (spec: FieldSpec): boolean => {
       return spec.fields.some((field) => blankNeedsCast(field.spec));
     case "array":
       return false;
+    // A tuple materializes every element's blank, so any element that can't
+    // start legal (a required number/date/enum) forces the cast.
+    case "tuple":
+      return spec.elements.some((el) => blankNeedsCast(el));
     // The blank draft materializes the first variant only, so its fields
     // decide the cast (the discriminant is a plain string literal).
     case "union": {
@@ -238,6 +246,8 @@ const zodExpr = (spec: FieldSpec, level: number): string => {
         return `z.enum([${spec.options.map(q).join(", ")}])`;
       case "array":
         return `z.array(${zodExpr(spec.item, level)})`;
+      case "tuple":
+        return `z.tuple([${spec.elements.map((el) => zodExpr(el, level)).join(", ")}])`;
       case "object": {
         const fields = spec.fields.flatMap((field) => [
           ...(field.spec.todo !== undefined
@@ -336,6 +346,12 @@ export const collectUsage = (spec: FieldSpec): KindUsage => {
       );
     case "array":
       return collectUsage(spec.item);
+    // Non-scalar elements render as TODOs, not controls, so they pull in no
+    // builders — only scalar elements count toward usage.
+    case "tuple":
+      return spec.elements
+        .filter(isScalarSpec)
+        .reduce((acc, el) => mergeUsage(acc, collectUsage(el)), NO_USAGE);
     case "union":
       return unionKindUsage(spec);
     default:
@@ -481,7 +497,10 @@ export type UnionEntry = Readonly<{
 }>;
 
 const isScalarSpec = (spec: FieldSpec): boolean =>
-  spec.kind !== "object" && spec.kind !== "array" && spec.kind !== "union";
+  spec.kind !== "object" &&
+  spec.kind !== "array" &&
+  spec.kind !== "union" &&
+  spec.kind !== "tuple";
 
 type RawUnionEntry = Readonly<{ segments: readonly string[]; spec: UnionSpec }>;
 
@@ -633,6 +652,12 @@ export const collectStaticUsage = (spec: FieldSpec): KindUsage => {
       );
     case "array":
       return collectStaticUsage(spec.item);
+    // Only the SCALAR elements render a static leaf; non-scalar elements are
+    // TODOs, so they contribute no leaf-component import.
+    case "tuple":
+      return spec.elements
+        .filter(isScalarSpec)
+        .reduce((acc, el) => mergeUsage(acc, collectStaticUsage(el)), NO_USAGE);
     case "union":
       return NO_USAGE;
     default:
@@ -890,6 +915,29 @@ const fieldLines = (
               ...unionLines(backend, entry, field.label, level),
             ];
       }
+      case "tuple": {
+        // Fixed positions bind at static numeric indices (coord.0, coord.1) —
+        // no useFieldArray, no add/remove. Scalar elements render a control;
+        // a non-scalar element (object/array/union/nested tuple) is a TODO.
+        const elemPrefix = extendPrefix(prefix, field.name);
+        const elements = field.spec.elements;
+        const body = elements.flatMap((element, i): readonly string[] =>
+          isScalarSpec(element)
+            ? backend.leaf(
+                element,
+                pathAttr(elemPrefix, String(i)),
+                `${field.label} ${i + 1}`,
+                level + 1,
+              )
+            : [
+                `${ind(level + 1)}{/* TODO: tuple element ${i} (${element.kind}) at ${commentText(q(elemPrefix.text + i))} isn't scalar — bind it by hand */}`,
+              ],
+        );
+        return [
+          ...todoComment(field.spec, level),
+          ...backend.objectSection(field.label, level, body),
+        ];
+      }
       default:
         return backend.leaf(
           field.spec,
@@ -1023,6 +1071,7 @@ const plainLeaf = (
       ];
     case "object":
     case "array":
+    case "tuple":
     case "union":
       return [`${ind(level)}{/* unreachable: containers render elsewhere */}`];
   }
@@ -1086,6 +1135,7 @@ const plainVariantLeaf = (
       ];
     case "object":
     case "array":
+    case "tuple":
     case "union":
       return [
         `${ind(level)}{/* unreachable: containers never bind as a variant field */}`,
@@ -1314,6 +1364,7 @@ const boundLeaf =
         ];
       case "object":
       case "array":
+      case "tuple":
       case "union":
         return [
           `${ind(level)}{/* unreachable: containers render elsewhere */}`,
@@ -1361,6 +1412,7 @@ const muiVariantLeaf = (
       ];
     case "object":
     case "array":
+    case "tuple":
     case "union":
       return [
         `${ind(level)}{/* unreachable: containers never bind as a variant field */}`,
@@ -1425,6 +1477,7 @@ const shadcnVariantLeaf = (
     }
     case "object":
     case "array":
+    case "tuple":
     case "union":
       return [
         `${ind(level)}{/* unreachable: containers never bind as a variant field */}`,
@@ -2311,6 +2364,7 @@ const templateVariantLeaf =
     if (
       spec.kind === "object" ||
       spec.kind === "array" ||
+      spec.kind === "tuple" ||
       spec.kind === "union"
     ) {
       return [
