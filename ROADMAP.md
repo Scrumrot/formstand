@@ -27,6 +27,12 @@ See the [CHANGELOG](./CHANGELOG.md) for detail.
 - **Playground/docs**: Playwright e2e job (built-bundle, in CI) + render
   checks, SSR/Next.js guide, the Schema builder's paste-a-TypeScript-type
   mode.
+- **Custom templates** (cli 0.6.1) — `defineTemplate` / `--template` override
+  the per-kind field rendering for UI kits we don't ship.
+- **Emitters published for reuse** (cli 0.6.2) — the browser-safe
+  `formstand-cli/codegen` subpath: `fromZod`, every emitter, module layout,
+  `defineTemplate`, naming helpers, all pure and Node-free. The playground now
+  dogfoods it instead of importing `cli/src` relatively.
 - **Self-review fixes**: ten findings (validateFields sync/async divergence,
   optional-union type inversion, three union-emitter compile bugs, devtools
   in prod, date year/time edges, frozen parsePath cache) — all with
@@ -34,16 +40,6 @@ See the [CHANGELOG](./CHANGELOG.md) for detail.
 
 ## Now
 
-- **Custom templates for the CLI.** The escape hatch for UI kits we'll never
-  ship (Mantine, Chakra, in-house design systems): a template directory that
-  overrides the emitters' leaf/section/adapter snippets per kind. Sequenced
-  after config-file support (now shipped) — templates wanted a config home.
-- **Publish the emitters for reuse.** The playground imports `cli/src`
-  relatively — fine inside the repo, unavailable to anyone else. Either a
-  browser-safe subpath export from `formstand-cli` or a small
-  `formstand-codegen` package (`ir`, `fromZod`, emitters — everything
-  that's already pure). The paste-TS parser proved the browser path works;
-  packaging it is the natural next step.
 - **Schema builder: paste-zod mode.** A tab that evaluates a pasted
   `z.object(...)` source (the user's own code in their own tab, bundled zod)
   and feeds the same IR → emitters path. Complements the shipped
