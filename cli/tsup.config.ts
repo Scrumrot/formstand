@@ -7,10 +7,14 @@ export default defineConfig({
   entry: {
     cli: "src/cli.ts",
     index: "src/index.ts",
+    "codegen-api": "src/codegen-api.ts",
   },
   format: ["esm"],
   dts: {
-    entry: { index: "src/index.ts" },
+    entry: {
+      index: "src/index.ts",
+      "codegen-api": "src/codegen-api.ts",
+    },
   },
   target: "node18",
   platform: "node",

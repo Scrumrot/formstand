@@ -1,25 +1,16 @@
-// Programmatic API for formstand-cli.
-export { fromZod, isZodSchema } from "./fromZod";
+// Programmatic API for formstand-cli (the main entry).
+//
+// This re-exports the entire browser-safe codegen surface (see ./codegen-api,
+// also published as the `formstand-cli/codegen` subpath) and ADDS the parts
+// that need Node / the TypeScript compiler: fromType (parse a TS
+// type/interface) and defineConfig (the config file's typed identity). Import
+// from `formstand-cli/codegen` for a browser-safe build with no
+// TypeScript-compiler dependency.
+
+export * from "./codegen-api";
+
 export { fromType } from "./fromType";
 export type { FromTypeResult } from "./fromType";
-export {
-  emitInitialValues,
-  emitZodSchema,
-  emitPlainForm,
-  emitMuiForm,
-  emitShadcnForm,
-} from "./codegen";
-export type { SchemaImport, EmitFormOptions } from "./codegen";
-export { emitModuleForm, joinModuleFiles } from "./moduleLayout";
-export type { EmitModuleOptions, ModuleFile } from "./moduleLayout";
-export { labelFromName } from "./ir";
+
 export { defineConfig } from "./config";
-export { defineTemplate } from "./template";
-export type {
-  Template,
-  TemplateLeafContext,
-  TemplateLeafKind,
-  TemplateImport,
-} from "./template";
 export type { FormstandConfig } from "./config";
-export type { FieldSpec, NamedField, SharedSpecProps } from "./ir";

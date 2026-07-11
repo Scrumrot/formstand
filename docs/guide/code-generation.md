@@ -81,8 +81,18 @@ The generator never emits silently broken code. Anything outside the supported s
 
 ## Programmatic API
 
-Everything the binary does is importable — `fromZod`, `fromType`, and the emitters — if you want to build your own tooling on the same IR:
+Everything the binary does is importable, over two entry points.
+
+`formstand-cli/codegen` is the **browser-safe** surface: every step downstream of the IR — `fromZod`, the emitters, `emitZodSchema`, `defineTemplate`, `labelFromName` — is a pure string builder with no `fs`/`path` and no TypeScript compiler, so it bundles for the browser. The [Schema builder](https://scrumrot.github.io/formstand/examples/#/schema-builder) generates forms client-side through exactly this subpath:
 
 ```ts
-import { fromZod, emitPlainForm } from "formstand-cli";
+import { fromZod, emitPlainForm } from "formstand-cli/codegen";
+
+const code = emitPlainForm({
+  ir: fromZod(profileSchema),
+  formName: "ProfileForm",
+  schemaImport: { name: "profileSchema", from: "./profileSchema", kind: "named" },
+});
 ```
+
+The main `formstand-cli` entry re-exports all of that and adds the parts that need Node — `fromType` (parse a TypeScript type/interface via the compiler) and `defineConfig`. Import from `formstand-cli/codegen` for a browser build; the main entry pulls the TypeScript compiler and won't bundle for the browser.

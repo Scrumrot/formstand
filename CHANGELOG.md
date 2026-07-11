@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### formstand-cli
+
+#### Added
+
+- Browser-safe programmatic API via the new `formstand-cli/codegen` subpath.
+  Everything downstream of the IR — `fromZod`, every emitter
+  (`emitPlainForm` / `emitMuiForm` / `emitShadcnForm` / `emitTemplateForm` /
+  `emitModuleForm`, `emitZodSchema` / `emitInitialValues`), `joinModuleFiles`,
+  `defineTemplate`, `labelFromName` and the casing helpers — is a pure string
+  builder with no `fs`/`path` and no TypeScript compiler, so it bundles for the
+  browser (the docs Schema-builder generates forms client-side through it). The
+  main `formstand-cli` entry still re-exports all of it and adds the
+  Node-oriented `fromType` / `defineConfig`.
+
 ## formstand-cli 0.6.1 — 2026-07-10
 
 ### Added

@@ -150,8 +150,12 @@ Known limitations:
 
 ## Programmatic API
 
+The generator is exposed as two entry points.
+
+**`formstand-cli/codegen`** — the browser-safe surface. Everything downstream of the IR is a pure string builder (no `fs`/`path`, no TypeScript compiler), so this subpath runs anywhere — a browser, a build script, your own tool. The pipeline is `zod schema → fromZod → FieldSpec IR → emitters`; build a `FieldSpec` by hand or from `fromZod`, then run any emitter:
+
 ```ts
-import { fromZod, fromType, emitPlainForm, emitMuiForm, emitShadcnForm, emitZodSchema } from "formstand-cli";
+import { fromZod, emitPlainForm, emitModuleForm, emitZodSchema } from "formstand-cli/codegen";
 
 const ir = fromZod(profileSchema);
 const code = emitPlainForm({
@@ -161,9 +165,18 @@ const code = emitPlainForm({
 });
 ```
 
-## Roadmap
+This is exactly how the docs' [Schema builder](https://scrumrot.github.io/formstand/examples/#/schema-builder) generates forms client-side. Exports: `fromZod` / `isZodSchema`, `emitPlainForm` / `emitMuiForm` / `emitShadcnForm` / `emitTemplateForm` / `emitModuleForm`, `emitZodSchema` / `emitInitialValues`, `joinModuleFiles`, `defineTemplate`, `labelFromName` and the casing helpers, and the `FieldSpec` / `EmitFormOptions` / `VisualOptions` types.
 
-- Date pickers for `date` fields (MUI X; shadcn Calendar-in-Popover).
-- Custom templates.
+**`formstand-cli`** (the main entry) re-exports all of the above **and** adds the parts that need Node / the TypeScript compiler:
+
+```ts
+import { fromType, defineConfig } from "formstand-cli";
+
+const { ir, typeName } = fromType("./types.ts", "Profile"); // parses TS via the compiler
+```
+
+Import from `formstand-cli/codegen` for a browser bundle — the main entry pulls the TypeScript compiler through `fromType` and won't bundle for the browser.
+
+## License
 
 MIT

@@ -27,6 +27,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./codegen": {
+      "types": "./dist/codegen-api.d.ts",
+      "default": "./dist/codegen-api.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

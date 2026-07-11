@@ -3,24 +3,20 @@
 // REAL emitters straight from cli/src — same code that runs on npx, not a
 // port. The builder form's values map directly onto FieldSpec, skipping the
 // CLI's zod/TS parsing frontends entirely.
-import { camelCase } from "../../../../cli/src/casing";
 import {
   type EmitFormOptions,
+  type FieldSpec,
+  type ModuleFile,
+  type NamedField,
   type VisualOptions,
+  camelCase,
+  emitModuleForm,
   emitMuiForm,
   emitPlainForm,
   emitShadcnForm,
   emitZodSchema,
-} from "../../../../cli/src/codegen";
-import {
-  type FieldSpec,
-  type NamedField,
   labelFromName,
-} from "../../../../cli/src/ir";
-import {
-  type ModuleFile,
-  emitModuleForm,
-} from "../../../../cli/src/moduleLayout";
+} from "../../../../cli/src/codegen-api";
 import { type BuilderValues, parseEnumOptions } from "./builderSchema";
 
 export type { ModuleFile };

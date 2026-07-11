@@ -1,5 +1,8 @@
-import type { FieldSpec, NamedField } from "../../../../cli/src/ir";
-import { labelFromName } from "../../../../cli/src/ir";
+import {
+  type FieldSpec,
+  type NamedField,
+  labelFromName,
+} from "../../../../cli/src/codegen-api";
 
 // A focused parser for the TS-interface subset the CLI's type mode supports —
 // enough to paste an interface and generate a form, WITHOUT pulling the
