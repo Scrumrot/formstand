@@ -2,9 +2,9 @@
 
 ## Unreleased
 
-### formstand-cli
+## formstand-cli 0.6.2 — 2026-07-10
 
-#### Added
+### Added
 
 - Browser-safe programmatic API via the new `formstand-cli/codegen` subpath.
   Everything downstream of the IR — `fromZod`, every emitter
