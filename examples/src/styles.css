@@ -514,6 +514,39 @@ button.secondary.active {
   border-color: var(--fs-accent);
   box-shadow: 0 0 0 3px var(--fs-accent-soft);
 }
+/* Import modal — paste or pick a file, in either dialect. */
+.import-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--backdrop);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 8vh 16px 16px;
+  overflow-y: auto;
+}
+.import-dialog {
+  width: min(640px, 100%);
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.import-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.import-filename {
+  font-size: 12px;
+  color: var(--text-muted);
+}
 .builder-output {
   margin-top: 24px;
   border-top: 1px solid var(--border);

@@ -21,7 +21,9 @@ import {
   initialBuilderValues,
 } from "./builderSchema";
 import { generateFiles, generateFilesFromIr, type ModuleFile } from "./generate";
+import { ImportModal, type ImportLang } from "./ImportModal";
 import { parseTypeScript } from "./parseTypeScript";
+import { parseZod } from "./parseZod";
 import { makeZip } from "./zip";
 
 // formstand-gen, running in the browser: this form's values ARE the CLI's
@@ -337,7 +339,8 @@ const GeneratedOutput = ({ files: generated, formName, error }: GeneratedOutputP
   );
 };
 
-// A worked example so paste mode generates something on first switch.
+// Worked examples so the import modal (and paste mode) generate something on
+// first open — one per dialect, the same Contact shape either way.
 const SAMPLE_TS = `interface Contact {
   fullName: string;
   email: string;
@@ -351,6 +354,33 @@ const SAMPLE_TS = `interface Contact {
   };
   tags: string[];
 }`;
+
+const SAMPLE_ZOD = `const contactSchema = z.object({
+  fullName: z.string(),
+  email: z.string(),
+  age: z.number().optional(),
+  role: z.enum(["admin", "editor", "viewer"]),
+  newsletter: z.boolean(),
+  address: z.object({
+    street: z.string(),
+    city: z.string(),
+    postalCode: z.string().optional(),
+  }),
+  tags: z.array(z.string()),
+})`;
+
+const SAMPLE_FOR: Readonly<Record<ImportLang, string>> = {
+  ts: SAMPLE_TS,
+  zod: SAMPLE_ZOD,
+};
+
+const LANG_LABEL: Readonly<Record<ImportLang, string>> = {
+  ts: "TypeScript type",
+  zod: "Zod schema",
+};
+
+const parseFor = (lang: ImportLang, source: string) =>
+  lang === "ts" ? parseTypeScript(source) : parseZod(source);
 
 type InputMode = "build" | "paste";
 
@@ -369,12 +399,15 @@ export const SchemaBuilder = () => {
   const sectionRows = useFieldArray(form, "sections");
 
   const [mode, setMode] = useState<InputMode>("build");
-  const [tsSource, setTsSource] = useState(SAMPLE_TS);
+  const [pasteLang, setPasteLang] = useState<ImportLang>("ts");
+  const [pasteSource, setPasteSource] = useState(SAMPLE_TS);
+  const [importOpen, setImportOpen] = useState(false);
   const values = useFormSelector(form, (state) => state.values);
 
   // One emit path, two IR sources. Build mode reads the field rows; paste
-  // mode parses the TS into IR (both feed the REAL emitters). The option
-  // axes (ui/layout/sections/columns) come from the form in either mode.
+  // mode parses the imported source (a TS type or a zod schema) into IR —
+  // both feed the REAL emitters. The option axes (ui/layout/sections/columns)
+  // come from the form in either mode.
   const output = useMemo(() => {
     if (mode === "build") {
       const parsed = builderSchema.safeParse(values);
@@ -390,7 +423,7 @@ export const SchemaBuilder = () => {
             error: "Fix the highlighted fields above and the files will regenerate.",
           };
     }
-    const parsed = parseTypeScript(tsSource);
+    const parsed = parseFor(pasteLang, pasteSource);
     if (!parsed.ok) {
       return { files: null, formName: values.formName, error: parsed.error };
     }
@@ -404,7 +437,7 @@ export const SchemaBuilder = () => {
       formName: parsed.formName,
       error: undefined,
     };
-  }, [mode, values, tsSource]);
+  }, [mode, values, pasteLang, pasteSource]);
 
   return (
     <div>
@@ -431,9 +464,9 @@ export const SchemaBuilder = () => {
           type="button"
           role="tab"
           aria-selected={mode === "paste"}
-          onClick={() => setMode("paste")}
+          onClick={() => setImportOpen(true)}
         >
-          Paste a TypeScript type
+          Import code…
         </button>
       </div>
 
@@ -480,21 +513,41 @@ export const SchemaBuilder = () => {
 
       {mode === "paste" ? (
         <div className="field" style={{ marginTop: 16 }}>
-          <label>
-            TypeScript type or interface (the component name comes from it)
-          </label>
+          <div className="row" style={{ alignItems: "center", gap: 12 }}>
+            <label style={{ flex: 1, margin: 0 }}>
+              {LANG_LABEL[pasteLang]} — the component name comes from it, edit
+              below to regenerate
+            </label>
+            <button
+              className="secondary"
+              type="button"
+              onClick={() => setImportOpen(true)}
+            >
+              Import again…
+            </button>
+          </div>
           <textarea
             className="builder-ts-input"
             spellCheck={false}
             rows={14}
-            value={tsSource}
-            onChange={(e) => setTsSource(e.target.value)}
+            value={pasteSource}
+            onChange={(e) => setPasteSource(e.target.value)}
           />
           <span className="subtitle-text" style={{ color: "#8b94a7", fontSize: 12 }}>
-            Supports string / number / boolean / Date, arrays, nested objects,
-            string-literal unions, and optional / nullable. Anything else
-            becomes a text field with a TODO — same as{" "}
-            <code>formstand-gen --type</code>.
+            {pasteLang === "ts" ? (
+              <>
+                Supports string / number / boolean / Date, arrays, nested
+                objects, string-literal unions, and optional / nullable.
+                Anything else becomes a text field with a TODO — same as{" "}
+                <code>formstand-gen --type</code>.
+              </>
+            ) : (
+              <>
+                Evaluated in your browser with the bundled zod, then walked by
+                the real <code>fromZod</code> — the same IR{" "}
+                <code>npx formstand-gen schema.ts</code> builds.
+              </>
+            )}
           </span>
         </div>
       ) : null}
@@ -550,6 +603,21 @@ export const SchemaBuilder = () => {
         formName={output.formName}
         {...(output.error !== undefined ? { error: output.error } : {})}
       />
+
+      {importOpen ? (
+        <ImportModal
+          initialLang={pasteLang}
+          initialSource={mode === "paste" ? pasteSource : SAMPLE_FOR[pasteLang]}
+          samples={SAMPLE_FOR}
+          onClose={() => setImportOpen(false)}
+          onImport={(lang, source) => {
+            setPasteLang(lang);
+            setPasteSource(source);
+            setMode("paste");
+            setImportOpen(false);
+          }}
+        />
+      ) : null}
     </div>
   );
 };

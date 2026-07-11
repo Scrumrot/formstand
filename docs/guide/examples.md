@@ -240,6 +240,13 @@ output is exactly what `npx formstand-gen` writes to disk. Every playground
 tab is directly linkable the same way: `examples/#/<tab-name>` in
 kebab-case.
 
+Already have a schema? **Import code…** opens a modal that takes a
+**TypeScript type** or a **zod schema** — paste it, or pick a `.ts` file —
+and generates the form from it. A pasted type is read by the same
+compiler-free parser the CLI's `--type` mode uses; a pasted `z.object(...)`
+is evaluated in your browser against the bundled zod and walked by the real
+`fromZod`, so both land on the identical IR → emitters path as build mode.
+
 ## Running locally
 
 ```bash

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Docs & examples (no package changes)
+
+- Schema builder: **paste a zod schema**. An **Import code…** modal takes a
+  TypeScript type _or_ a `z.object(...)` schema — by paste or by picking a
+  `.ts` file — and generates the form from it. The zod source is evaluated in
+  the browser against the bundled zod (the REPL trust model: your own code, in
+  your own tab, nothing fetched or sent) and walked by the real `fromZod`, so
+  it shares the paste-a-type mode's exact IR → emitters path. Switching the
+  dialect swaps in a worked sample while the field is untouched.
+
 ## formstand-cli 0.6.2 — 2026-07-10
 
 ### Added
