@@ -77,7 +77,9 @@ The generator never emits silently broken code. Anything outside the supported s
 - **Recursive schemas** (zod's getter idiom) are cut off at a depth limit with a TODO, not a stack overflow.
 - **Field names containing `.`** aren't path-addressable in formstand — the field is kept in the schema and `initialValues` but its binding is replaced by a TODO comment, with a warning on stderr.
 - **Hostile names** (quotes, backticks, braces) are escaped per context; generated output is typechecked against the real library in the CLI's own CI.
-- **`Date` fields** bind as text inputs with a TODO — pair with the date picker of your choice.
+- **Arrays nested inside array rows** extract one real row component (its own `useFieldArray`) in the module layout; deeper nesting, and the single-file layout, leave a TODO to extract the row by hand.
+
+**`Date` fields** are fully supported (formstand ≥ 0.9): plain output emits `<DateField>`, and the mui / shadcn adapters bind a native date input through `dateToInputText` / `parseDateText`.
 
 ## Programmatic API
 

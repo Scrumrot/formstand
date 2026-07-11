@@ -9,6 +9,7 @@ npm install --save-dev formstand-cli
 ## Requirements
 
 - **formstand >= 0.3.0** for `--ui mui` and `--ui shadcn` output (the inlined adapters use `UseFieldReturn`, `numberToInputText`, and `parseNumberText`); plain output works on 0.2.0. Generated `useFieldArray` hooks get typed items on **formstand >= 0.5** (inferred from the schema through the path); on 0.4 they compile with untyped items.
+- **formstand >= 0.9** for `date` fields: plain output emits `<DateField>` and the mui/shadcn adapters use `dateToInputText` / `parseDateText`, all shipped in 0.9. On older formstand, avoid `z.date()` in the schema (or replace the emitted date bindings by hand).
 - **zod v4** in your project. The CLI walks your schema structurally (duck-typed by design — no `instanceof` against a bundled copy), so it does not ship zod itself: the schema module and the generated code both use the zod your project supplies.
 
 ## Two modes
@@ -81,7 +82,7 @@ ProfileForm/
   index.ts         the folder's public API
 ```
 
-`--out` names the folder (created if missing; every destination is checked before anything is written). Without `--out`, all files stream to stdout with `// --- file:` headers. Array sections bind their row fields inline with template paths; `Date` fields bind as text through a cast with a TODO. Works with **all three uis** — `mui` and `shadcn` modules get a shared `adapter.ts(x)` exporting the generic prop builders instead of inlining them per file. Requires **formstand ≥ 0.7** (`createFormHooks`).
+`--out` names the folder (created if missing; every destination is checked before anything is written). Without `--out`, all files stream to stdout with `// --- file:` headers. Array sections bind their row fields inline with template paths; `date` fields get real `DateField` / date-input bindings (formstand ≥ 0.9). Works with **all three uis** — `mui` and `shadcn` modules get a shared `adapter.ts(x)` exporting the generic prop builders instead of inlining them per file. Requires **formstand ≥ 0.7** (`createFormHooks`).
 
 ```bash
 formstand-gen src/profileSchema.ts --layout module --out src/ProfileForm
@@ -141,7 +142,7 @@ Unlisted kinds fall back to the plain output, so a template can override only th
 
 ## Supported schema surface
 
-`string`, `number`/`int`, `boolean`, `date`, `enum`, unions of string literals, `object`, `array`, with `.optional()` / `.nullable()` / `.default()` / `.pipe()` unwrapped. Anything else falls back to a string field with a `// TODO:` comment so the file still compiles. `date` fields render a text input with a `// TODO: date input` marker. Arrays nested inside array rows are emitted as TODO comments (extract a row component for those).
+`string`, `number`/`int`, `boolean`, `date`, `enum`, unions of string literals, `object`, `array`, with `.optional()` / `.nullable()` / `.default()` / `.pipe()` unwrapped. Anything else falls back to a string field with a `// TODO:` comment so the file still compiles. `date` fields emit a real `DateField` (plain) or date-input binding (mui / shadcn) — no TODO (requires formstand ≥ 0.9). Arrays nested inside array rows: the **module layout** (`--layout module`) extracts a parented row component with its own `useFieldArray` for the first level of nesting; deeper levels — and the single-file layout — emit a TODO to extract the row component by hand.
 
 Known limitations:
 
