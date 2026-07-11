@@ -78,7 +78,7 @@ The generator never emits silently broken code. Anything outside the supported s
 - **Recursive schemas** (zod's getter idiom) are cut off with a TODO, not a stack overflow: the walkers carry a seen-set (a self-referential schema is caught directly) plus a depth budget (`--max-depth`, default 10) as the backstop for getters that mint a fresh schema each access. So the IR is always finite.
 - **Field names containing `.`** aren't path-addressable in formstand — the field is kept in the schema and `initialValues` but its binding is replaced by a TODO comment, with a warning on stderr.
 - **Hostile names** (quotes, backticks, braces) are escaped per context; generated output is typechecked against the real library in the CLI's own CI.
-- **Arrays nested inside array rows** extract one real row component (its own `useFieldArray`) in the module layout; deeper nesting, and the single-file layout, leave a TODO to extract the row by hand.
+- **Arrays nested inside array rows** extract a real `useFieldArray`-owning row component at every level, recursively, in the module layout (bounded by `--max-depth`) — each enclosing row's index threads down as a `p0`, `p1`, … prop. A non-array shape inside a row (nested object/union/tuple) stays a TODO; the single-file layout leaves nested arrays as a TODO (use `--layout module`).
 
 **`Date` fields** are fully supported (formstand ≥ 0.9): plain output emits `<DateField>`, and the mui / shadcn adapters bind a native date input through `dateToInputText` / `parseDateText`.
 

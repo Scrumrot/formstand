@@ -6,6 +6,15 @@
 
 #### Added
 
+- **Recursive nested-array extraction** in the module layout. An array nested
+  inside an array row used to generate one level of `Row`/`Rows` components and
+  a TODO beyond that. It now recurses to arbitrary depth (bounded by
+  `--max-depth`): `teams[] › members[] › phones[]` generates a full component
+  tree, threading each enclosing row's index down as a `p0`, `p1`, … prop.
+  Array-of-arrays sections extract an inner row component too. A non-array
+  shape inside a row (nested object / union / tuple) still degrades to a TODO.
+  Every generated tree is typechecked against the real library. (The
+  single-file layout still TODOs nested arrays.)
 - `--max-depth <n>` flag (and a `maxDepth` argument on `fromZod` / `fromType`)
   for the schema/type nesting budget — the number of levels the walkers
   descend before a level degrades to a string + TODO. The default rose from 6

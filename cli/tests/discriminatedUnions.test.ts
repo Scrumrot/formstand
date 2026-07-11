@@ -371,7 +371,7 @@ describe("bug C2: an array of discriminated unions (module layout)", () => {
       path.join(dir, "sections", "MethodsSection.tsx"),
       "utf8",
     );
-    expect(section).toContain("array item is a discriminated union");
+    expect(section).toContain("array item is a union");
     expect(section).not.toContain("textInputProps");
     // No scalar row binding is emitted for the union item.
     expect(section).not.toContain("`methods.${index}`");

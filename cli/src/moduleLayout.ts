@@ -1041,7 +1041,12 @@ type NestedArrayEntry = Readonly<{
   templateBase: string;
   commentBase: string;
   itemTypeExpr: string;
-  parented: boolean; // inside an array row: components thread parentIndex
+  // The ancestor row-index prop names threaded into this array's Row/Rows
+  // (p0, p1, ... — one per enclosing array row). Empty for an array under an
+  // object section (a static path); [p0] one level inside an array row; [p0,
+  // p1] two levels in, and so on. Every bound path interpolates these plus
+  // the Row's own `index`.
+  holes: readonly string[];
 }>;
 
 type RawNestedArray = Readonly<{
@@ -1102,7 +1107,7 @@ const objectNestedEntries = (
               (expr, segment) => `NonNullable<${expr}[${q(segment)}]>`,
               naming.valuesType,
             )}[number]`,
-            parented: false,
+            holes: [],
           },
         ],
       };
@@ -1111,7 +1116,8 @@ const objectNestedEntries = (
   ).entries;
 
 // Parent-indexed entries for arrays directly inside an array section's row
-// items: every bound path carries two numeric holes.
+// items: the first hole (p0) is the enclosing section row's index, so every
+// bound path opens with two numeric holes and deeper levels recurse from here.
 const arrayNestedEntries = (
   naming: Naming,
   sectionKey: string,
@@ -1133,7 +1139,7 @@ const arrayNestedEntries = (
       (acc, { field, item }) => {
         const base = `${sectionStem}${pascalCase(field.name)}`;
         const stem = `${base}${identifierSuffix(base, acc.used)}`;
-        const templateBase = `${templateEscape(sectionKey)}.\${parentIndex}.${templateEscape(field.name)}`;
+        const templateBase = `${templateEscape(sectionKey)}.\${p0}.${templateEscape(field.name)}`;
         return {
           used: new Set([...acc.used, stem]),
           entries: [
@@ -1145,9 +1151,9 @@ const arrayNestedEntries = (
               item,
               listArg: `\`${templateBase}\``,
               templateBase,
-              commentBase: `${sectionKey}.$\{parentIndex}.${field.name}`,
+              commentBase: `${sectionKey}.$\{p0}.${field.name}`,
               itemTypeExpr: `NonNullable<NonNullable<${naming.valuesType}[${q(sectionKey)}]>[number][${q(field.name)}]>[number]`,
-              parented: true,
+              holes: ["p0"],
             },
           ],
         };
@@ -1193,15 +1199,24 @@ const nestedListShell = (
   }
 };
 
-// The Row/Rows pair one nested array compiles to, mirroring the top-level
-// array section's row idiom: the Row binds template paths (two numeric
-// holes when the parent is itself an array row), the Rows component runs
-// the bound field-array hook and owns add/remove.
+// The Row/Rows pair a nested array compiles to — and, recursively, a pair for
+// every array nested inside its item, to arbitrary depth. Each level threads
+// the enclosing rows' indices as props (p0, p1, ...); a bound path carries one
+// hole per enclosing array plus the Row's own `index`. `used` dedupes
+// component stems across the whole tree. The IR is finite (--max-depth), so
+// the recursion always terminates. Non-array, non-scalar shapes inside a row
+// (nested objects, unions, tuples) stay TODO comments.
+type NestedParts = Readonly<{
+  lines: readonly string[];
+  imports: readonly ImportLine[];
+}>;
+
 const nestedArrayComponents = (
   ui: ModuleUi,
   naming: Naming,
   entry: NestedArrayEntry,
-): Readonly<{ lines: readonly string[]; imports: readonly ImportLine[] }> => {
+  used: Set<string>,
+): NestedParts => {
   const rowName = `${entry.stem}Row`;
   const rowsName = `${entry.stem}Rows`;
   const emptyName = `empty${entry.stem}Item`;
@@ -1209,135 +1224,212 @@ const nestedArrayComponents = (
   const wrap = nestedListShell(ui, entry.label);
   const scalarItem = isScalar(entry.item);
 
-  const itemLeaves =
-    entry.item.kind === "object"
-      ? entry.item.fields.filter(
-          (field) => !isUnaddressable(field.name) && isScalar(field.spec),
-        )
-      : [];
-  // Only one extraction level is generated per array: anything non-scalar
-  // inside THIS row's item stays a TODO comment.
-  const itemTodos =
-    entry.item.kind === "object"
-      ? entry.item.fields.flatMap((field) => {
-          if (isUnaddressable(field.name)) {
-            return [
-              `      {/* TODO: field ${commentText(q(field.name))} skipped — "." in a key is not path-addressable (see formstand docs) */}`,
-            ];
-          }
-          return isScalar(field.spec)
-            ? []
-            : [
-                `      {/* TODO: nested ${field.spec.kind} ${commentText(q(`${entry.commentBase}.$\{index}.${field.name}`))} — one extraction level is generated per array; extract the next level by hand */}`,
-              ];
-        })
-      : [];
+  // This row's own index becomes the next hole for arrays extracted from it.
+  const rowIndexHole = `p${entry.holes.length}`;
 
-  const used = new Set<string>([
-    ...(entry.parented ? ["parentIndex"] : []),
-    "index",
-    "onRemove",
-    "field",
-    "rows",
-  ]);
-  const rowVars = itemLeaves.map((field) => {
-    // camelIdent, not camelCase: these become const bindings, and a field
-    // named "new"/"delete" would otherwise emit a reserved-word declaration.
-    const base =
-      camelIdent(field.name).length === 0 ? "value" : camelIdent(field.name);
-    const name = `${base}${identifierSuffix(base, used)}`;
-    used.add(name);
-    return { field, varName: name };
-  });
+  // The entry for an array extracted from this row (one deeper hole), claiming
+  // a unique stem. fieldName undefined => the item itself is an array.
+  const childEntry = (
+    fieldName: string | undefined,
+    label: string,
+    item: FieldSpec,
+    elemTypeExpr: string,
+  ): NestedArrayEntry => {
+    const baseStem =
+      fieldName === undefined
+        ? `${entry.stem}Item`
+        : `${entry.stem}${pascalCase(fieldName)}`;
+    const stem = `${baseStem}${identifierSuffix(baseStem, used)}`;
+    used.add(stem);
+    const tail = fieldName === undefined ? "" : `.${templateEscape(fieldName)}`;
+    const commentTail = fieldName === undefined ? "" : `.${fieldName}`;
+    const templateBase = `${entry.templateBase}.\${${rowIndexHole}}${tail}`;
+    return {
+      key: fieldName ?? "",
+      stem,
+      label,
+      item,
+      listArg: `\`${templateBase}\``,
+      templateBase,
+      commentBase: `${entry.commentBase}.$\{${rowIndexHole}}${commentTail}`,
+      itemTypeExpr: elemTypeExpr,
+      holes: [...entry.holes, rowIndexHole],
+    };
+  };
 
-  const rowSpecs =
-    entry.item.kind === "object"
-      ? itemLeaves.map((f) => f.spec)
-      : scalarItem
-        ? [entry.item]
-        : [];
+  // <ChildRows p0={p0} ... pN={index} /> — this row's ancestors plus its index.
+  const childRef = (child: NestedArrayEntry): string =>
+    `      <${child.stem}Rows ${[
+      ...entry.holes.map((h) => `${h}={${h}}`),
+      `${rowIndexHole}={index}`,
+    ].join(" ")} />`;
 
   const dynamicId = (name: string | undefined): string =>
     name === undefined
       ? `{\`${entry.templateBase}.\${index}\`}`
       : `{\`${entry.templateBase}.\${index}.${templateEscape(name)}\`}`;
 
-  const rowBindings =
+  // Per-field pieces of an object item: a scalar leaf (with its binding and
+  // import spec), an extracted <ChildRows /> (recursed), or a TODO.
+  type Piece = Readonly<{
+    body: readonly string[];
+    binding?: string;
+    spec?: FieldSpec;
+    part?: NestedParts;
+  }>;
+  const rowVarUsed = new Set<string>([
+    ...entry.holes,
+    "index",
+    "onRemove",
+    "field",
+    "rows",
+  ]);
+  const leafVar = (name: string): string => {
+    // camelIdent, not camelCase: a field named "new"/"delete" would otherwise
+    // emit a reserved-word const declaration.
+    const base = camelIdent(name).length === 0 ? "value" : camelIdent(name);
+    const varName = `${base}${identifierSuffix(base, rowVarUsed)}`;
+    rowVarUsed.add(varName);
+    return varName;
+  };
+  const objectPieces: readonly Piece[] =
     entry.item.kind === "object"
-      ? rowVars.map(
-          ({ field, varName }) =>
-            `  const ${varName} = ${naming.hook("Field")}(\`${entry.templateBase}.\${index}.${templateEscape(field.name)}\`);`,
-        )
-      : scalarItem
-        ? [
-            `  const field = ${naming.hook("Field")}(\`${entry.templateBase}.\${index}\`);`,
-          ]
-        : [];
+      ? entry.item.fields.map((field): Piece => {
+          if (isUnaddressable(field.name)) {
+            return {
+              body: [
+                `      {/* TODO: field ${commentText(q(field.name))} skipped — "." in a key is not path-addressable (see formstand docs) */}`,
+              ],
+            };
+          }
+          if (isScalar(field.spec)) {
+            const varName = leafVar(field.name);
+            return {
+              body: leafControl(
+                ui,
+                field.spec,
+                varName,
+                jsxText(field.label),
+                dynamicId(field.name),
+                "      ",
+              ),
+              binding: `  const ${varName} = ${naming.hook("Field")}(\`${entry.templateBase}.\${index}.${templateEscape(field.name)}\`);`,
+              spec: field.spec,
+            };
+          }
+          if (field.spec.kind === "array") {
+            const child = childEntry(
+              field.name,
+              field.label,
+              field.spec.item,
+              `NonNullable<(${entry.itemTypeExpr})[${q(field.name)}]>[number]`,
+            );
+            return {
+              body: [childRef(child)],
+              part: nestedArrayComponents(ui, naming, child, used),
+            };
+          }
+          return {
+            body: [
+              `      {/* TODO: nested ${field.spec.kind} ${commentText(q(`${entry.commentBase}.$\{index}.${field.name}`))} — bind it by hand */}`,
+            ],
+          };
+        })
+      : [];
 
-  const rowBody =
+  // The row's bindings, body, leaf import-specs, and recursed child parts,
+  // by item kind: object (its fields), scalar (one leaf), array-of-arrays
+  // (recurse the inner array), or tuple/union (a TODO).
+  const parts: Readonly<{
+    bindings: readonly string[];
+    body: readonly string[];
+    specs: readonly FieldSpec[];
+    children: readonly NestedParts[];
+  }> =
     entry.item.kind === "object"
-      ? [
-          ...rowVars.flatMap(({ field, varName }) =>
-            leafControl(
+      ? {
+          bindings: objectPieces.flatMap((p) => (p.binding ? [p.binding] : [])),
+          body: objectPieces.flatMap((p) => p.body),
+          specs: objectPieces.flatMap((p) => (p.spec ? [p.spec] : [])),
+          children: objectPieces.flatMap((p) => (p.part ? [p.part] : [])),
+        }
+      : scalarItem
+        ? {
+            bindings: [
+              `  const field = ${naming.hook("Field")}(\`${entry.templateBase}.\${index}\`);`,
+            ],
+            body: leafControl(
               ui,
-              field.spec,
-              varName,
-              jsxText(field.label),
-              dynamicId(field.name),
+              entry.item,
+              "field",
+              jsxText(entry.label),
+              dynamicId(undefined),
               "      ",
             ),
-          ),
-          ...itemTodos,
-        ]
-      : scalarItem
-        ? leafControl(
-            ui,
-            entry.item,
-            "field",
-            jsxText(entry.label),
-            dynamicId(undefined),
-            "      ",
-          )
-        : [
-            // An array-of-arrays item: the inner array is already one level
-            // deeper than this extraction.
-            `      {/* TODO: nested array ${commentText(q(`${entry.commentBase}.$\{index}`))} — one extraction level is generated per array; extract the next level by hand */}`,
-          ];
+            specs: [entry.item],
+            children: [],
+          }
+        : entry.item.kind === "array"
+          ? ((): typeof parts => {
+              const child = childEntry(
+                undefined,
+                entry.label,
+                entry.item.item,
+                `NonNullable<${entry.itemTypeExpr}>[number]`,
+              );
+              return {
+                bindings: [],
+                body: [childRef(child)],
+                specs: [],
+                children: [nestedArrayComponents(ui, naming, child, used)],
+              };
+            })()
+          : {
+              bindings: [],
+              body: [
+                `      {/* TODO: array item is a ${entry.item.kind} in ${commentText(q(entry.commentBase))} rows — bind it by hand */}`,
+              ],
+              specs: [],
+              children: [],
+            };
+
+  const holeParams = entry.holes.map((h) => `  ${h},`);
+  const holeTypes = entry.holes.map((h) => `${h}: number`);
 
   const lines = [
+    // Children are declared before the Row that references them.
+    ...parts.children.flatMap((part) => [...part.lines, ""]),
     blankNeedsCast(entry.item)
       ? `const ${emptyName} = ${emitInitialValues(entry.item, 0)} as unknown as ${entry.itemTypeExpr};`
       : `const ${emptyName}: ${entry.itemTypeExpr} = ${emitInitialValues(entry.item, 0)};`,
     "",
     `const ${rowName} = ({`,
-    ...(entry.parented ? ["  parentIndex,"] : []),
+    ...holeParams,
     "  index,",
     "  onRemove,",
-    entry.parented
-      ? "}: Readonly<{ parentIndex: number; index: number; onRemove: () => void }>) => {"
-      : "}: Readonly<{ index: number; onRemove: () => void }>) => {",
-    ...rowBindings,
+    `}: Readonly<{ ${[...holeTypes, "index: number", "onRemove: () => void"].join("; ")} }>) => {`,
+    ...parts.bindings,
     "  return (",
     ...shell.rowOpen,
-    ...rowBody,
+    ...parts.body,
     ...shell.rowClose("onRemove"),
     "  );",
     "};",
     "",
-    ...(entry.parented
-      ? [
+    ...(entry.holes.length === 0
+      ? [`const ${rowsName} = () => {`]
+      : [
           `const ${rowsName} = ({`,
-          "  parentIndex,",
-          "}: Readonly<{ parentIndex: number }>) => {",
-        ]
-      : [`const ${rowsName} = () => {`]),
+          ...holeParams,
+          `}: Readonly<{ ${holeTypes.join("; ")} }>) => {`,
+        ]),
     `  const rows = ${naming.hook("FieldArray")}(${entry.listArg});`,
     "  return (",
     ...wrap.open,
     "      {rows.fields.map((row, index) => (",
     `        <${rowName}`,
     "          key={row.id}",
-    ...(entry.parented ? ["          parentIndex={parentIndex}"] : []),
+    ...entry.holes.map((h) => `          ${h}={${h}}`),
     "          index={index}",
     "          onRemove={() => rows.remove(index)}",
     "        />",
@@ -1355,9 +1447,10 @@ const nestedArrayComponents = (
   return {
     lines,
     imports: [
-      ...rowSpecs.flatMap((s) => leafImports(ui, s)),
+      ...parts.specs.flatMap((s) => leafImports(ui, s)),
       ...shell.imports,
       ...wrap.imports,
+      ...parts.children.flatMap((part) => part.imports),
     ],
   };
 };
@@ -1382,8 +1475,11 @@ const objectSectionFile = (
     collectNestedArrays(spec.fields, [section.key]),
   );
   const nestedByKey = new Map(nested.map((entry) => [entry.key, entry]));
+  // One shared stem registry so recursively-extracted child components never
+  // collide with each other or with the top-level entries.
+  const nestedUsed = new Set<string>(nested.map((entry) => entry.stem));
   const nestedParts = nested.map((entry) =>
-    nestedArrayComponents(ui, naming, entry),
+    nestedArrayComponents(ui, naming, entry, nestedUsed),
   );
 
   const body = (
@@ -1607,9 +1703,40 @@ const arraySectionFile = (
     spec.item.kind === "object" ? spec.item.fields : [],
   );
   const nestedByKey = new Map(nested.map((entry) => [entry.key, entry]));
+  const nestedUsed = new Set<string>(nested.map((entry) => entry.stem));
   const nestedParts = nested.map((entry) =>
-    nestedArrayComponents(ui, naming, entry),
+    nestedArrayComponents(ui, naming, entry, nestedUsed),
   );
+
+  // An array whose row item is ITSELF an array (an array-of-arrays section):
+  // the inner array extracts to its own recursive Row/Rows pair, threaded the
+  // section row's index as p0. (Object-item nested arrays are handled above.)
+  const arrayItemEntry: NestedArrayEntry | undefined =
+    spec.item.kind === "array"
+      ? ((): NestedArrayEntry => {
+          const base = `${sectionStem}Item`;
+          const stem = `${base}${identifierSuffix(base, nestedUsed)}`;
+          nestedUsed.add(stem);
+          const templateBase = `${templateEscape(section.key)}.\${p0}`;
+          return {
+            key: "",
+            stem,
+            label: section.label,
+            item: spec.item.item,
+            listArg: `\`${templateBase}\``,
+            templateBase,
+            commentBase: `${section.key}.$\{p0}`,
+            itemTypeExpr: `NonNullable<NonNullable<${naming.valuesType}[${q(section.key)}]>[number]>[number]`,
+            holes: ["p0"],
+          };
+        })()
+      : undefined;
+  const allNestedParts = [
+    ...nestedParts,
+    ...(arrayItemEntry === undefined
+      ? []
+      : [nestedArrayComponents(ui, naming, arrayItemEntry, nestedUsed)]),
+  ];
 
   const itemExtras =
     spec.item.kind === "object"
@@ -1623,7 +1750,7 @@ const arraySectionFile = (
             const entry = nestedByKey.get(field.name);
             return entry === undefined
               ? []
-              : [`      <${entry.stem}Rows parentIndex={index} />`];
+              : [`      <${entry.stem}Rows p0={index} />`];
           }
           return isScalar(field.spec)
             ? []
@@ -1698,9 +1825,14 @@ const arraySectionFile = (
             dynamicId(undefined),
             "      ",
           )
-        : [
-            `      {/* TODO: array item is a discriminated union — bind its fields by hand with ${naming.hook("VariantField")} (dynamic array-row paths aren't generated) */}`,
-          ];
+        : arrayItemEntry !== undefined
+          ? [`      <${arrayItemEntry.stem}Rows p0={index} />`]
+          : [
+              // A discriminated-union or tuple item can't bind at a dynamic
+              // array-row path (useVariantField needs a static union path), so
+              // it emits just a TODO.
+              `      {/* TODO: array item is a ${spec.item.kind} — bind its fields by hand with ${naming.hook("VariantField")} (dynamic array-row paths aren't generated) */}`,
+            ];
 
   const imports = mergeImports([
     ...rowSpecs.flatMap((s) => leafImports(ui, s)),
@@ -1708,7 +1840,7 @@ const arraySectionFile = (
     // The outer wrapper is objectShell, so panel/collapsible chrome pulls
     // its own components in.
     ...objectSectionImports(ui, visual),
-    ...nestedParts.flatMap((part) => part.imports),
+    ...allNestedParts.flatMap((part) => part.imports),
   ]);
 
   // useXField is only imported when a row actually binds a field: an
@@ -1717,7 +1849,7 @@ const arraySectionFile = (
   // that breaks a consumer's noUnusedLocals.
   const usesField = [
     ...rowBindings,
-    ...nestedParts.flatMap((part) => part.lines),
+    ...allNestedParts.flatMap((part) => part.lines),
   ].some((line) => line.includes(`${naming.hook("Field")}(`));
 
   return {
@@ -1748,7 +1880,7 @@ const arraySectionFile = (
         ? `const ${emptyName} = ${emitInitialValues(spec.item, 0)} as unknown as NonNullable<${naming.valuesType}[${q(section.key)}]>[number];`
         : `const ${emptyName}: NonNullable<${naming.valuesType}[${q(section.key)}]>[number] = ${emitInitialValues(spec.item, 0)};`,
       "",
-      ...nestedParts.flatMap((part) => [...part.lines, ""]),
+      ...allNestedParts.flatMap((part) => [...part.lines, ""]),
       `const ${rowName} = ({`,
       "  index,",
       "  onRemove,",
