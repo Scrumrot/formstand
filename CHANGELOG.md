@@ -4,6 +4,15 @@
 
 ### formstand-cli
 
+#### Added
+
+- `--max-depth <n>` flag (and a `maxDepth` argument on `fromZod` / `fromType`)
+  for the schema/type nesting budget — the number of levels the walkers
+  descend before a level degrades to a string + TODO. The default rose from 6
+  to **10**, so deeper schemas generate fully. Recursion is still caught
+  directly by a seen-set (a self-referential schema → TODO), with the depth
+  budget as the backstop for getter-minted schemas; the IR is always finite.
+
 #### Fixed
 
 - An array whose item is itself non-scalar (an array-of-arrays, or an array of

@@ -117,9 +117,11 @@ const discriminatedUnionFrom = (
     : null;
 };
 
-// Matches fromType's MAX_DEPTH; also the backstop for recursion the seen-set
-// misses (getters that build a fresh schema object on every access).
-const MAX_DEPTH = 6;
+// The default nesting budget (fromType shares it). Also the backstop for
+// recursion the seen-set misses (getters that build a fresh schema object on
+// every access) — the walk always terminates even for a truly cyclic schema.
+// Overridable via fromZod's maxDepth argument (the CLI's --max-depth).
+export const DEFAULT_MAX_DEPTH = 10;
 
 const fieldsFromShape = (
   shape: unknown,
@@ -270,5 +272,8 @@ const walk = (
   }
 };
 
-export const fromZod = (schema: unknown): FieldSpec =>
-  walk(schema, { optional: false, nullable: false }, MAX_DEPTH, new Set());
+export const fromZod = (
+  schema: unknown,
+  maxDepth: number = DEFAULT_MAX_DEPTH,
+): FieldSpec =>
+  walk(schema, { optional: false, nullable: false }, maxDepth, new Set());

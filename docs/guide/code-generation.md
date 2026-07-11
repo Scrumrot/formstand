@@ -75,7 +75,7 @@ The generator never emits silently broken code. Anything outside the supported s
 
 - **Unsupported zod kinds** (unions of objects, records, maps…) and **unsupported type shapes** (generics, callable types) become a text field with a `// TODO` comment naming what was skipped.
 - **Tuples** (`z.tuple([...])` / `[A, B]`) generate fixed positional controls at static numeric-index paths (`coord.0`, `coord.1`); a non-scalar element or a variadic rest degrades to a TODO at that position.
-- **Recursive schemas** (zod's getter idiom) are cut off at a depth limit with a TODO, not a stack overflow.
+- **Recursive schemas** (zod's getter idiom) are cut off with a TODO, not a stack overflow: the walkers carry a seen-set (a self-referential schema is caught directly) plus a depth budget (`--max-depth`, default 10) as the backstop for getters that mint a fresh schema each access. So the IR is always finite.
 - **Field names containing `.`** aren't path-addressable in formstand — the field is kept in the schema and `initialValues` but its binding is replaced by a TODO comment, with a warning on stderr.
 - **Hostile names** (quotes, backticks, braces) are escaped per context; generated output is typechecked against the real library in the CLI's own CI.
 - **Arrays nested inside array rows** extract one real row component (its own `useFieldArray`) in the module layout; deeper nesting, and the single-file layout, leave a TODO to extract the row by hand.

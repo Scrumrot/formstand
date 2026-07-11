@@ -47,6 +47,7 @@ Without `--out`, both files print to stdout separated by `// --- file: ...` head
 | `--layout single\|module` | `single` (default): one file. `module`: a feature-module folder — see below |
 | `--sections flat\|panel\|collapsible` | section chrome: `flat` headings (default), bordered `panel`s, or `collapsible` sections (`<details>`; MUI `Accordion`) |
 | `--columns 1\|2\|3` | evenly spaced field columns inside each section (default `1`); nested sections span the full row |
+| `--max-depth <n>` | schema/type nesting budget before a level degrades to a string + TODO (default `10`); also the recursion backstop and the bound on nested-array row extraction |
 | `--name <MyForm>` | component name (default derived from the schema/type name) |
 | `--out <file>` | write the component here instead of stdout |
 | `--schema-out <file>` | type mode: where the generated zod schema goes (default `<schemaName>.ts` next to `--out`) |

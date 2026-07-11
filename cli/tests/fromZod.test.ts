@@ -184,4 +184,16 @@ describe("fromZod", () => {
       "nesting depth limit reached",
     );
   });
+
+  it("honors an explicit maxDepth argument", () => {
+    const nested = (depth: number): z.ZodType =>
+      depth === 0 ? z.string() : z.object({ next: nested(depth - 1) });
+    // The default (10) walks a 5-deep schema fully; a tight budget cuts it.
+    expect(JSON.stringify(fromZod(nested(5)))).not.toContain(
+      "nesting depth limit reached",
+    );
+    expect(JSON.stringify(fromZod(nested(5), 3))).toContain(
+      "nesting depth limit reached",
+    );
+  });
 });

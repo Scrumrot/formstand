@@ -53,6 +53,9 @@ Options:
                       panels, or expandable sections
   --columns <1|2|3>   evenly spaced field columns inside each section
                       (default: 1); multi-row content spans the full row
+  --max-depth <n>     schema/type nesting budget before a level degrades to a
+                      string + TODO (default: 10; also bounds nested-array
+                      row extraction)
   --name <MyForm>     component name (default: derived from the schema/type)
   --out <file>        write the component here instead of stdout
   --schema-out <file> (type mode) where to write the generated zod schema
@@ -116,6 +119,7 @@ type CliOptions = Readonly<{
   schemaOut?: string;
   config?: string;
   template?: string;
+  maxDepth?: number;
   watch: boolean;
   force: boolean;
 }>;
@@ -136,6 +140,7 @@ export type ParsedCliOptions = Readonly<{
   schemaOut?: string;
   config?: string;
   template?: string;
+  maxDepth?: number;
   watch: boolean;
   force: boolean;
 }>;
@@ -158,6 +163,7 @@ type PartialOptions = Readonly<{
   schemaOut?: string;
   config?: string;
   template?: string;
+  maxDepth?: number;
   watch: boolean;
   force: boolean;
 }>;
@@ -226,6 +232,22 @@ const parseRest = (
       };
     }
     return parseRest(after, { ...acc, columns });
+  }
+  if (head === "--max-depth") {
+    const [value, ...after] = rest;
+    if (value === undefined) {
+      return { kind: "error", message: `missing value for ${head}` };
+    }
+    // A positive integer: the schema/type nesting budget the walkers spend
+    // before a level degrades to a string + TODO (the recursion backstop).
+    const maxDepth = /^[1-9][0-9]*$/.test(value) ? Number(value) : undefined;
+    if (maxDepth === undefined) {
+      return {
+        kind: "error",
+        message: `--max-depth must be a positive integer, got "${value}"`,
+      };
+    }
+    return parseRest(after, { ...acc, maxDepth });
   }
   const key = VALUE_FLAGS[head];
   if (key !== undefined) {
@@ -615,7 +637,7 @@ const runZodMode = async (
     stderr(`error: ${pick.message}`);
     return 1;
   }
-  const ir: FieldSpec = fromZod(pick.schema);
+  const ir: FieldSpec = fromZod(pick.schema, options.maxDepth);
   warnUnaddressable(ir);
   const formName = options.name ?? deriveFormName(pick.exportName);
   const fromDir =
@@ -665,7 +687,11 @@ const runZodMode = async (
 const runTypeMode = (options: CliOptions, template?: Template): number => {
   // Pass the input as the user typed it so error messages echo it verbatim
   // (fromType resolves it internally).
-  const { ir, typeName } = fromType(options.input, options.typeName);
+  const { ir, typeName } = fromType(
+    options.input,
+    options.typeName,
+    options.maxDepth,
+  );
   warnUnaddressable(ir);
   const schemaName = `${camelCase(typeName)}Schema`;
   const formName = options.name ?? deriveFormName(typeName);

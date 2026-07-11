@@ -15,7 +15,8 @@ export type FromTypeResult = Readonly<{
 type Flags = Readonly<{ optional: boolean; nullable: boolean }>;
 
 const NO_FLAGS: Flags = { optional: false, nullable: false };
-const MAX_DEPTH = 6;
+// Shared default with fromZod; overridable via fromType's maxDepth argument.
+const DEFAULT_MAX_DEPTH = 10;
 
 const fallback = (flags: Flags, todo: string): FieldSpec => ({
   kind: "string",
@@ -194,6 +195,7 @@ const pickSymbol = (
 export const fromType = (
   filePath: string,
   typeName?: string,
+  maxDepth: number = DEFAULT_MAX_DEPTH,
 ): FromTypeResult => {
   const absPath = path.resolve(filePath);
   const program = ts.createProgram([absPath], {
@@ -221,7 +223,7 @@ export const fromType = (
       : symbol;
   const type = checker.getDeclaredTypeOfSymbol(resolved);
   return {
-    ir: walkType(checker, type, NO_FLAGS, MAX_DEPTH),
+    ir: walkType(checker, type, NO_FLAGS, maxDepth),
     typeName: symbol.getName(),
   };
 };
