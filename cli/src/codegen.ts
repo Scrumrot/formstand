@@ -690,13 +690,38 @@ export const hasVariantFieldUsage = (spec: FieldSpec): boolean => {
 
 // A path prefix under construction. For dynamic prefixes (inside array rows)
 // `text` is already template-escaped — apart from the deliberate ${index}
-// hole — because it ends up inside a backtick template. Static prefixes stay
-// raw and are JSON-escaped as one piece at the end.
-type PathPrefix = Readonly<{ dynamic: boolean; text: string }>;
+// hole for the current row and ${p0}, ${p1}, ... holes for enclosing rows —
+// because it ends up inside a backtick template. Static prefixes stay raw and
+// are JSON-escaped as one piece at the end.
+//
+// `holes` (dynamic only) is the ordered list of ENCLOSING row-index prop names
+// in scope (p0, p1, ...); the current row's own index is the literal `index`.
+// `valueTypeExpr` (dynamic only) is the TS type of the value at this path — a
+// nested array extracted from here types its empty item as
+// `NonNullable<${valueTypeExpr}["field"]>[number]`.
+type PathPrefix = Readonly<{
+  dynamic: boolean;
+  text: string;
+  holes: readonly string[];
+  valueTypeExpr: string;
+}>;
+
+const staticPrefix: PathPrefix = {
+  dynamic: false,
+  text: "",
+  holes: [],
+  valueTypeExpr: "",
+};
 
 const extendPrefix = (prefix: PathPrefix, name: string): PathPrefix => ({
   dynamic: prefix.dynamic,
   text: `${prefix.text}${prefix.dynamic ? templateEscape(name) : name}.`,
+  holes: prefix.holes,
+  // Descending into a nested object within a row narrows the value type, so a
+  // nested array under it still types its item correctly.
+  valueTypeExpr: prefix.dynamic
+    ? `NonNullable<${prefix.valueTypeExpr}[${q(name)}]>`
+    : "",
 });
 
 const pathAttr = (prefix: PathPrefix, name: string): string => {
@@ -858,6 +883,17 @@ const unionLines = (
   ];
 };
 
+// The mutable side-channel for single-file nested-array extraction: as
+// fieldLines walks array rows, each nested array it meets appends a child
+// `{Stem}Rows` component (its lines) here and returns a `<{Stem}Rows .../>`
+// reference; `used` dedupes identifiers against each other and the top-level
+// array names. The components are emitted before the main component.
+type NestedCtx = Readonly<{
+  components: string[][];
+  used: Set<string>;
+  schemaName: string;
+}>;
+
 const fieldLines = (
   backend: Backend,
   fields: readonly NamedField[],
@@ -865,6 +901,7 @@ const fieldLines = (
   level: number,
   arrays: ReadonlyMap<string, ArrayEntry>,
   unions: ReadonlyMap<string, UnionEntry>,
+  ctx: NestedCtx,
 ): readonly string[] =>
   fields.flatMap((field): readonly string[] => {
     if (isUnaddressable(field.name)) {
@@ -886,19 +923,21 @@ const fieldLines = (
               level + 1,
               arrays,
               unions,
+              ctx,
             ),
           ),
         ];
       case "array": {
         if (prefix.dynamic) {
-          return [
-            `${ind(level)}{/* TODO: nested array ${commentText(q(prefix.text + field.name))} inside an array row — extract a row component with its own useFieldArray */}`,
-          ];
+          // A nested array inside an array row: extract a child Rows component
+          // (its own useFieldArray on the parent-indexed path) and reference
+          // it here, instead of a TODO.
+          return emitNestedRows(backend, prefix, field, level, arrays, unions, ctx);
         }
         const entry = arrays.get(prefix.text + field.name);
         return entry === undefined
           ? []
-          : arraySectionLines(backend, entry, level, arrays, unions);
+          : arraySectionLines(backend, entry, level, arrays, unions, ctx);
       }
       case "union": {
         // Unions inside an array row bind dynamic paths useVariantField can't
@@ -954,24 +993,112 @@ const arraySectionLines = (
   level: number,
   arrays: ReadonlyMap<string, ArrayEntry>,
   unions: ReadonlyMap<string, UnionEntry>,
+  ctx: NestedCtx,
 ): readonly string[] => {
   const rowPrefix: PathPrefix = {
     dynamic: true,
     text: `${templateEscape(entry.path)}.\${index}.`,
+    holes: [],
+    valueTypeExpr: entry.itemTypeExpr,
   };
   // A scalar item binds one control per row; an object item lays its fields
-  // out inline. A non-scalar item (an array-of-arrays, or an array of tuples/
-  // unions) can't bind at the row's dynamic path — it needs its own extracted
-  // component, so it's a TODO rather than an empty "unreachable" row.
+  // out inline (nested arrays among them extract into child components). A
+  // non-scalar item (an array-of-arrays, or an array of tuples/unions) can't
+  // bind at the row's dynamic path — a TODO rather than an empty row.
   const rowBody: readonly string[] =
     entry.item.kind === "object"
-      ? fieldLines(backend, entry.item.fields, rowPrefix, level + 3, arrays, unions)
+      ? fieldLines(backend, entry.item.fields, rowPrefix, level + 3, arrays, unions, ctx)
       : isScalarSpec(entry.item)
         ? backend.leaf(entry.item, pathAttr(rowPrefix, ""), entry.label, level + 3)
         : [
             `${ind(level + 3)}{/* TODO: ${entry.item.kind} array-item in ${commentText(q(entry.path))} rows — extract a row component with its own useFieldArray */}`,
           ];
   return backend.arraySection(entry, level, rowBody);
+};
+
+// A nested array inside an array row compiles to a child `{Stem}Rows`
+// component: it takes `form` plus the enclosing rows' indices as props
+// (p0, p1, ...), runs its own useFieldArray on the parent-indexed path, and
+// renders rows through the same backend.arraySection + fieldLines as a
+// top-level array (so leaves render per-backend and deeper nesting recurses).
+// The component is appended to ctx.components; this returns the reference.
+const emitNestedRows = (
+  backend: Backend,
+  prefix: PathPrefix,
+  field: NamedField,
+  level: number,
+  arrays: ReadonlyMap<string, ArrayEntry>,
+  unions: ReadonlyMap<string, UnionEntry>,
+  ctx: NestedCtx,
+): readonly string[] => {
+  const item = (field.spec as Extract<FieldSpec, { kind: "array" }>).item;
+  // The enclosing row's own `index` becomes the next hole (pN) for this child.
+  const nextHole = `p${prefix.holes.length}`;
+  const listTemplate =
+    prefix.text.replaceAll("${index}", `\${${nextHole}}`) +
+    templateEscape(field.name);
+  // Field segments (holes stripped) name the component and hook.
+  const segments = listTemplate
+    .replace(/\$\{[^}]+\}/g, "")
+    .split(".")
+    .filter((segment) => segment.length > 0);
+  const base = pascalJoin(segments);
+  const suffix = identifierSuffix(base, ctx.used);
+  const stem = `${base}${suffix}`;
+  ctx.used.add(stem);
+  const compName = `${stem}Rows`;
+  const hookName = `${camelJoin(segments)}${suffix}Array`;
+  const emptyName = `empty${stem}Item`;
+  const itemTypeExpr = `NonNullable<${prefix.valueTypeExpr}[${q(field.name)}]>[number]`;
+
+  const childHoles = [...prefix.holes, nextHole];
+  const childPrefix: PathPrefix = {
+    dynamic: true,
+    text: `${listTemplate}.\${index}.`,
+    holes: childHoles,
+    valueTypeExpr: itemTypeExpr,
+  };
+  const rowBody =
+    item.kind === "object"
+      ? fieldLines(backend, item.fields, childPrefix, 5, arrays, unions, ctx)
+      : isScalarSpec(item)
+        ? backend.leaf(item, pathAttr(childPrefix, ""), field.label, 5)
+        : [
+            `${ind(5)}{/* TODO: ${item.kind} array-item in ${commentText(q(listTemplate))} rows — extract it by hand */}`,
+          ];
+
+  const synthEntry: ArrayEntry = {
+    path: listTemplate,
+    label: field.label,
+    item,
+    hookName,
+    itemTypeName: `${stem}Item`,
+    emptyItemName: emptyName,
+    itemTypeExpr,
+  };
+  const component = [
+    blankNeedsCast(item)
+      ? `const ${emptyName} = ${emitInitialValues(item, 0)} as unknown as ${itemTypeExpr};`
+      : `const ${emptyName}: ${itemTypeExpr} = ${emitInitialValues(item, 0)};`,
+    "",
+    `const ${compName} = ({`,
+    "  form,",
+    ...childHoles.map((hole) => `  ${hole},`),
+    `}: Readonly<{ ${["form: Form<typeof " + ctx.schemaName + ">", ...childHoles.map((hole) => `${hole}: number`)].join("; ")} }>) => {`,
+    `  const ${hookName} = useFieldArray(form, \`${listTemplate}\`);`,
+    "  return (",
+    ...backend.arraySection(synthEntry, 2, rowBody),
+    "  );",
+    "};",
+  ];
+  ctx.components.push(component);
+
+  const refAttrs = [
+    "form={form}",
+    ...prefix.holes.map((hole) => `${hole}={${hole}}`),
+    `${nextHole}={index}`,
+  ].join(" ");
+  return [`${ind(level)}<${compName} ${refAttrs} />`];
 };
 
 const emitForm = (
@@ -997,15 +1124,42 @@ const emitForm = (
   const unionMap: ReadonlyMap<string, UnionEntry> = new Map(
     unions.map((entry) => [entry.path, entry]),
   );
+  // Render the body first: nested-array child components are collected into
+  // `nested.components` as a side effect, and must be emitted (before the main
+  // component) and their `Form` import added.
+  const nested: NestedCtx = {
+    components: [],
+    used: new Set([...arrayIdents, formName]),
+    schemaName: schemaImport.name,
+  };
+  const bodyLines = fieldLines(
+    backend,
+    root.fields,
+    staticPrefix,
+    backend.bodyLevel,
+    arrayMap,
+    unionMap,
+    nested,
+  );
+  const nestedComponentLines = nested.components.flatMap((lines) => [
+    ...lines,
+    "",
+  ]);
   return [
     "// Generated by formstand-cli — edit freely, this file is yours.",
     ...backend.header(usage, arrays, root),
+    // Child Rows components take a typed `form` prop (the main component passes
+    // its own down); the top-level component gets `form` from useForm.
+    ...(nested.components.length > 0
+      ? [`import type { Form } from "formstand";`]
+      : []),
     schemaImportLine(schemaImport),
     "",
     valuesTypeAndInitials(root, schemaImport.name),
     arrayItemDecls(arrays),
     "",
     ...backend.preamble(usage, staticUsage),
+    ...nestedComponentLines,
     `export const ${formName} = () => {`,
     `  const form = useForm(${schemaImport.name}, { initialValues, mode: "onBlur" });`,
     "  const submitting = useIsSubmitting(form);",
@@ -1014,14 +1168,7 @@ const emitForm = (
     "",
     "  return (",
     ...backend.formOpen,
-    ...fieldLines(
-      backend,
-      root.fields,
-      { dynamic: false, text: "" },
-      backend.bodyLevel,
-      arrayMap,
-      unionMap,
-    ),
+    ...bodyLines,
     ...backend.formClose,
     "  );",
     "};",

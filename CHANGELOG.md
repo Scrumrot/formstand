@@ -6,15 +6,17 @@
 
 #### Added
 
-- **Recursive nested-array extraction** in the module layout. An array nested
-  inside an array row used to generate one level of `Row`/`Rows` components and
-  a TODO beyond that. It now recurses to arbitrary depth (bounded by
-  `--max-depth`): `teams[] › members[] › phones[]` generates a full component
-  tree, threading each enclosing row's index down as a `p0`, `p1`, … prop.
-  Array-of-arrays sections extract an inner row component too. A non-array
-  shape inside a row (nested object / union / tuple) still degrades to a TODO.
-  Every generated tree is typechecked against the real library. (The
-  single-file layout still TODOs nested arrays.)
+- **Recursive nested-array extraction in both layouts.** An array nested
+  inside an array row used to generate one level (module) or a TODO
+  (single-file). It now recurses to arbitrary depth (bounded by `--max-depth`)
+  in **both** layouts: `teams[] › members[] › phones[]` generates a full
+  component tree, threading each enclosing row's index down as a `p0`, `p1`, …
+  prop. In `--layout module` each level is a `Row`/`Rows` pair; in single-file
+  each is a child `{Stem}Rows` component with a typed `form` prop, emitted
+  above the main component. Array-of-arrays sections extract an inner row
+  component too (module). A non-array shape inside a row (nested object /
+  union / tuple) still degrades to a TODO. Every generated tree is typechecked
+  against the real library across all three UIs.
 - `--max-depth <n>` flag (and a `maxDepth` argument on `fromZod` / `fromType`)
   for the schema/type nesting budget — the number of levels the walkers
   descend before a level degrades to a string + TODO. The default rose from 6
