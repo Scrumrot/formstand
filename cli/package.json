@@ -1,6 +1,6 @@
 {
   "name": "formstand-cli",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "description": "Generate formstand form components from a zod schema or TypeScript type",
   "license": "MIT",
   "author": "Tim Frank <timfrankdev@gmail.com>",

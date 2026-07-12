@@ -2,10 +2,18 @@
 
 ## Unreleased
 
-### formstand-cli
+## formstand-cli 0.7.0 — 2026-07-12
 
-#### Added
+### Added
 
+- **Tuple support** (`z.tuple([...])` and `[A, B]` in type mode). Tuples were
+  degrading to a single string field with a TODO; they now generate fixed
+  positional controls, each bound at a static numeric-index path (`coord.0`,
+  `coord.1`), in both the single-file and module layouts and all three UIs.
+  Scalar elements render a real control; a non-scalar element (object / array /
+  union / nested tuple) or a variadic rest degrades to a TODO at just that
+  position, so the fixed scalar positions still generate. Generated output is
+  typechecked against the real library across all backends.
 - **Recursive nested-array extraction in both layouts.** An array nested
   inside an array row used to generate one level (module) or a TODO
   (single-file). It now recurses to arbitrary depth (bounded by `--max-depth`)
@@ -24,23 +32,12 @@
   directly by a seen-set (a self-referential schema → TODO), with the depth
   budget as the backstop for getter-minted schemas; the IR is always finite.
 
-#### Fixed
+### Fixed
 
 - An array whose item is itself non-scalar (an array-of-arrays, or an array of
   tuples/unions) no longer emits an empty `{/* unreachable */}` row in the
   single-file layout — it now emits a clear TODO to extract a row component,
   matching the documented nested-array behavior.
-
-#### Added
-
-- **Tuple support** (`z.tuple([...])` and `[A, B]` in type mode). Tuples were
-  degrading to a single string field with a TODO; they now generate fixed
-  positional controls, each bound at a static numeric-index path (`coord.0`,
-  `coord.1`), in both the single-file and module layouts and all three UIs.
-  Scalar elements render a real control; a non-scalar element (object / array /
-  union / nested tuple) or a variadic rest degrades to a TODO at just that
-  position, so the fixed scalar positions still generate. Generated output is
-  typechecked against the real library across all backends.
 
 ### Docs & examples (no package changes)
 
@@ -48,7 +45,6 @@
   already-resolved limitations: `date` fields have emitted real `DateField` /
   date-input bindings since 0.9 (not a text-input TODO), and the module layout
   extracts one real nested-array row level (not a blanket TODO).
-
 - Schema builder: **paste a zod schema**. An **Import code…** modal takes a
   TypeScript type _or_ a `z.object(...)` schema — by paste or by picking a
   `.ts` file — and generates the form from it. The zod source is evaluated in
