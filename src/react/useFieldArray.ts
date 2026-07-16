@@ -22,6 +22,10 @@ type ReadonlyStore<T> = Pick<
 // Method (shorthand) syntax on purpose: method parameters are checked
 // bivariantly, so a Form<TSchema> — whose array ops take the narrower
 // FieldPath<...> instead of string — still satisfies this API.
+// NOTE for custom implementations: exact row-id tracking for ops on
+// Object.is-equal rows is a createForm feature (its ops record their index
+// mappings internally) — a hand-rolled implementation of these methods gets
+// value-based id reconciliation only.
 export type FieldArrayFormApi = Readonly<{
   store: ReadonlyStore<FormState<unknown>>;
   arrayPush(path: string, item: unknown): void;
@@ -195,7 +199,10 @@ const mappedIdState = (
 type SharedIdEntry = { state: IdState };
 type StoreIdEntries = { byPath: Map<string, SharedIdEntry>; seq: number };
 
-const MAX_ID_PATHS = 256;
+// Generous like path.ts's PARSE_CACHE_MAX: eviction of a MOUNTED array's
+// entry remints every row id (a full remount), so the cap is a backstop
+// against unbounded dynamic-path churn, never a working-set limit.
+const MAX_ID_PATHS = 4096;
 const sharedIdEntries = new WeakMap<object, StoreIdEntries>();
 
 const sharedIdEntry = (store: object, path: string): SharedIdEntry => {
@@ -231,21 +238,23 @@ const sharedIdEntry = (store: object, path: string): SharedIdEntry => {
   return created;
 };
 
-// Walk the op log from the last-seen items TOWARD the live items, applying
-// each consecutive record's exact mapping. The walk may stop short (a
-// non-op write broke the chain, a truncated log, a misaligned record) —
-// it returns the FURTHEST state reached, never discarding exact op
-// progress: the caller value-reconciles only the remaining hop, so an op
-// followed by a setValue in the same batch still replays the op exactly.
-const replayOps = (
+// Walk EVERY record in order, applying its exact mapping. A gap before a
+// record (a chain-breaking write between ops — though the core now clears
+// records at such writes, so gaps are rare) bridges by value to the
+// record's `from` first, so an op keeps its exactness no matter which side
+// of a whole-array write it fell on. The final hop to the live items — when
+// the last record didn't land there — reconciles by value too.
+const walkOps = (
   start: IdState,
   items: readonly unknown[],
   ops: readonly ArrayOpRecord[],
-): IdState =>
-  ops.reduce<IdState>((acc, op) => {
-    if (acc.items === items || op.from !== acc.items) return acc;
-    return mappedIdState(acc, op.mapping, op.to) ?? acc;
+): IdState => {
+  const walked = ops.reduce<IdState>((acc, op) => {
+    const base = acc.items === op.from ? acc : reconcileIds(acc, op.from);
+    return mappedIdState(base, op.mapping, op.to) ?? base;
   }, start);
+  return walked.items === items ? walked : reconcileIds(walked, items);
+};
 
 const deriveIds = (
   store: object,
@@ -254,17 +263,14 @@ const deriveIds = (
 ): IdState => {
   const entry = sharedIdEntry(store, path);
   if (entry.state.items === items) return entry.state;
-  const walked = replayOps(entry.state, items, arrayOpsFor(store, path));
-  const next =
-    walked.items === items
-      ? walked
-      : (() => {
-          // Re-anchoring through value reconciliation makes every logged
-          // record permanently unreachable (future ops chain from the live
-          // reference) — drop them so they stop pinning old arrays' rows.
-          clearArrayOps(store, path);
-          return reconcileIds(walked, items);
-        })();
+  const ops = arrayOpsFor(store, path);
+  // The walk consumes every record, so the log is spent bookkeeping
+  // afterwards — clear it, which also keeps ring composition from ever
+  // merging a record a consumer is still anchored at. (The one residual:
+  // a render discarded between clear and commit re-derives the final hop
+  // by value — sound ids, possibly reminted where reuse was possible.)
+  if (ops.length > 0) clearArrayOps(store, path);
+  const next = walkOps(entry.state, items, ops);
   entry.state = next;
   return next;
 };

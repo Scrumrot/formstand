@@ -409,7 +409,7 @@ Note `submit` still proceeds when the schema is valid even if server errors are 
 
 ## Field arrays with nested arrays
 
-Both work — `arrayPush("users.0.tags", tag)` mutates the inner array; outer reorders correctly re-key meta for all nested paths. `useFieldArray`'s stable IDs reset when the hook's path changes (so an inner field array inside a reordered outer item gets fresh IDs).
+Both work — `arrayPush("users.0.tags", tag)` mutates the inner array; outer reorders correctly re-key meta for all nested paths. Inner row ids live per `(form, path)` and reconcile by value when the outer index re-seats a different item at the path — pass a `key` from the outer `fields` so each row's whole subtree moves with its item.
 
 ## Optimistic UI
 

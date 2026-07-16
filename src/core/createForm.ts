@@ -11,7 +11,7 @@ import {
   removeAt,
   swapIndices,
 } from "./array";
-import { recordArrayOp } from "./arrayOpLog";
+import { clearArrayOpsUnder, recordArrayOp } from "./arrayOpLog";
 import { isFieldDirty, isPlainObject, valuesEqual } from "./equality";
 import type { FieldPath, FieldValue } from "./fieldPath";
 import type { ValidationMode } from "./mode";
@@ -976,17 +976,24 @@ export const createForm = <TSchema extends z.ZodType>(
     }
     const arr: readonly unknown[] = Array.isArray(current) ? current : [];
     const next = nextArray(arr);
+    const written = setAtPath(store.getState().values, path, next);
+    // The op rebuilds every ancestor's array (spine copy) and re-seats its
+    // rows' descendant arrays under new indices — those paths' records no
+    // longer describe the arrays now living there. The op's OWN path keeps
+    // its records: earlier same-batch ops still chain.
+    clearArrayOpsUnder(store, path, true);
     // Record BEFORE the write, from the exact references the write uses:
     // zustand notifies subscribers synchronously inside setState, so a
     // reentrant same-path write would otherwise interleave the log order
     // AND make a post-setState getState() read pair this op's mapping with
     // a `to` spanning two writes — a corrupt record that can replay to
     // wrong row ids. The mapping is the inverted IndexMapper — the same
-    // mapper that re-keys errors/touched below, one source of truth. An op
-    // on an absent slot (push into an undefined array) is not recorded:
-    // there is no prior array reference to chain from, and value
-    // reconciliation mints the first ids anyway.
-    if (Array.isArray(current)) {
+    // mapper that re-keys errors/touched below, one source of truth.
+    // Guards: an op on an absent slot (push into an undefined array) has no
+    // prior reference to chain from, and a write setAtPath REFUSES (huge
+    // index, non-plain ancestor) must not log a transition the store never
+    // performed — value reconciliation covers both.
+    if (Array.isArray(current) && getAtPath(written, path) === next) {
       recordArrayOp(store, path, {
         from: current,
         to: next,
@@ -996,7 +1003,7 @@ export const createForm = <TSchema extends z.ZodType>(
     store.setState((state) => {
       return {
         ...state,
-        values: setAtPath(state.values, path, next),
+        values: written,
         ...errorChannels(state, {
           schemaErrors: reKeyByArrayPath(state.schemaErrors, path, mapper),
           // Server entries on rows follow their rows through the index
@@ -1188,15 +1195,22 @@ export const createForm = <TSchema extends z.ZodType>(
         }
       });
     },
-    setValue: (path: string, value: unknown) =>
+    setValue: (path: string, value: unknown) => {
+      // A value write outside the array ops breaks every op chain whose
+      // array it could rebuild — drop those records at the source so a
+      // stale (or recurring, e.g. reset-restored) array reference can never
+      // falsely chain against them.
+      clearArrayOpsUnder(store, path);
       store.setState((state) => ({
         ...state,
         values: setAtPath(state.values, path, value),
         ...errorChannels(state, {
           serverErrors: releaseSpine(state.serverErrors, path),
         }),
-      })),
-    setValues: (next) =>
+      }));
+    },
+    setValues: (next) => {
+      clearArrayOpsUnder(store, "");
       store.setState((state) => ({
         ...state,
         values: next,
@@ -1207,7 +1221,8 @@ export const createForm = <TSchema extends z.ZodType>(
             next,
           ),
         }),
-      })),
+      }));
+    },
     setTouched: (path: string, touched: boolean = true) =>
       store.setState((state) => ({
         ...state,
@@ -1253,7 +1268,8 @@ export const createForm = <TSchema extends z.ZodType>(
           }),
         };
       }),
-    updateState: (updater) =>
+    updateState: (updater) => {
+      const valuesBefore = store.getState().values;
       store.setState((state) => {
         const patch: Partial<FormState<Values>> = updater(state);
         if (Object.keys(patch).length === 0) return state;
@@ -1276,12 +1292,18 @@ export const createForm = <TSchema extends z.ZodType>(
             serverErrors: next.serverErrors,
           }),
         };
-      }),
+      });
+      // A values patch is a chain-breaking write like setValues.
+      if (store.getState().values !== valuesBefore) {
+        clearArrayOpsUnder(store, "");
+      }
+    },
     adoptValues: (values) => {
       // Rebasing values invalidates any in-flight async validation (the
       // values-reference guard drops its write), so the per-path ownership
       // tokens can be released too rather than growing without bound.
       sequences.clear();
+      clearArrayOpsUnder(store, "");
       store.setState((state) => ({
         ...state,
         values,
@@ -1299,6 +1321,10 @@ export const createForm = <TSchema extends z.ZodType>(
     },
     reset: (nextInitial, resetOptions) => {
       sequences.clear();
+      // reset can restore the exact initialValues REFERENCE, so stale
+      // records must go before an old array reference recurs and falsely
+      // chains against them.
+      clearArrayOpsUnder(store, "");
       store.setState((state) => {
         // Merge only when both sides are plain records; a partial for an
         // array/scalar-rooted schema replaces wholesale (spreading an array
@@ -1350,6 +1376,11 @@ export const createForm = <TSchema extends z.ZodType>(
         console.warn(
           `[formstand] resetField("${path}"): path has no initial value (e.g. an appended array row); value left unchanged, field state cleared.`,
         );
+      }
+      if (initialSlot.exists) {
+        // A restored initial slice can carry array references the op log
+        // has already seen (chain-breaking write, like setValue).
+        clearArrayOpsUnder(store, path);
       }
       store.setState((state) => ({
         ...state,
@@ -1442,7 +1473,10 @@ export const createForm = <TSchema extends z.ZodType>(
       return dirtyPathsOf(state.values, state.initialValues, "");
     },
     snapshot: () => store.getState(),
-    restore: (snap) =>
+    restore: (snap) => {
+      // A snapshot restores PRIOR array references — exactly the recurring
+      // references stale op records could falsely chain against.
+      clearArrayOpsUnder(store, "");
       store.setState(() => {
         // Snapshots can come from persistence or hand construction: default
         // missing channels (pre-channel shapes) and re-derive the merged map
@@ -1470,6 +1504,7 @@ export const createForm = <TSchema extends z.ZodType>(
           isValidatingForm: false,
           isSubmitting: inFlight.count > 0,
         };
-      }),
+      });
+    },
   }) as Form<TSchema>;
 };

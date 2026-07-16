@@ -177,6 +177,82 @@ describe("partial op replay (chain broken mid-batch)", () => {
   });
 });
 
+describe("chain-breaking writes and the op log", () => {
+  // Regression (2026-07 convergence review, A#1): reset() restores the
+  // exact initialValues REFERENCE, so a recurring array reference could
+  // falsely chain against a stale record from before the reset. The core
+  // now clears a path's records on chain-breaking writes.
+  it("ops around a reset() do not mis-key duplicate-free or duplicate rows", () => {
+    const initialTags = ["a", "b"];
+    const { result } = renderHook(() => {
+      const form = useForm(schema, { initialValues: { tags: initialTags } });
+      return { form, tags: useFieldArray(form, "tags") };
+    });
+    const [id0] = result.current.tags.fields.map((f) => f.id);
+
+    act(() => {
+      result.current.form.arrayRemove("tags", 0); // ["b"]
+      result.current.form.reset(); // back to the SAME ["a","b"] reference
+      result.current.form.arrayRemove("tags", 1); // ["a"]
+    });
+
+    expect(result.current.tags.items).toEqual(["a"]);
+    // The surviving row is original row 0 and must keep row 0's id — the
+    // stale pre-reset record must not resurrect row b's id.
+    expect(result.current.tags.fields[0]?.id).toBe(id0);
+  });
+
+  // Regression (2026-07 convergence review, altitude #1): a chain break
+  // BEFORE an op (the mirror of the op-then-setValue case) used to lose the
+  // op's exactness entirely. The walk now bridges the gap by value and
+  // applies the op exactly.
+  it("setValue followed by an op in one batch still replays the op exactly", () => {
+    const { result } = renderHook(() => {
+      const form = useForm(schema, { initialValues: { tags: ["", ""] } });
+      return { form, tags: useFieldArray(form, "tags") };
+    });
+    const [id0, id1] = result.current.tags.fields.map((f) => f.id);
+
+    act(() => {
+      // Fresh-but-equal whole-array write, then the op — one batch.
+      result.current.form.setValue("tags", ["", ""]);
+      result.current.form.arrayRemove("tags", 0);
+    });
+
+    expect(result.current.tags.items).toEqual([""]);
+    expect(result.current.tags.fields[0]?.id).toBe(id1);
+    expect(id0).not.toBe(id1);
+  });
+
+  // Regression (2026-07 convergence review, A#3): ring composition must not
+  // consume the record the consumer is anchored at. Records are cleared
+  // once walked, so a prior op + render followed by a 16-op batch replays
+  // fully.
+  it("a rendered op followed by a 16-op batch stays exactly replayable", () => {
+    const initialTags = Array.from({ length: 18 }, () => "");
+    const { result } = renderHook(() => {
+      const form = useForm(schema, { initialValues: { tags: initialTags } });
+      return { form, tags: useFieldArray(form, "tags") };
+    });
+    const idsAtStart = result.current.tags.fields.map((f) => f.id);
+    const lastId = idsAtStart[17];
+
+    act(() => {
+      result.current.tags.remove(0); // walked + cleared on this render
+    });
+    expect(result.current.tags.fields[0]?.id).toBe(idsAtStart[1]);
+
+    act(() => {
+      Array.from({ length: 16 }).forEach(() => {
+        result.current.tags.remove(0);
+      });
+    });
+
+    expect(result.current.tags.items).toEqual([""]);
+    expect(result.current.tags.fields[0]?.id).toBe(lastId);
+  });
+});
+
 describe("sibling useFieldArray hooks on the same path", () => {
   it("agree on ids after a hook-issued remove of equal rows", () => {
     const { result } = renderHook(() => {

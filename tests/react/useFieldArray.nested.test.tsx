@@ -74,7 +74,7 @@ describe("nested useFieldArray", () => {
     ).toBeUndefined();
   });
 
-  it("re-initializes inner field-array IDs when path changes", () => {
+  it("inner ids are per path: distinct across paths, retained on switch-back", () => {
     const { result, rerender } = renderHook(
       ({ pathIndex }: { pathIndex: number }) => {
         const form = useForm(schema, { initialValues: initial });
@@ -91,8 +91,16 @@ describe("nested useFieldArray", () => {
 
     rerender({ pathIndex: 1 });
 
+    // A different path has its own id space (per-path prefix) — no overlap.
     const albumOneIds = result.current.tracks.fields.map((f) => f.id);
     expect(albumOneIds).toHaveLength(1);
     expect(albumZeroIds).not.toContain(albumOneIds[0]);
+
+    // Ids belong to the (form, path) entry, not the hook instance:
+    // switching back resumes the original path's ids.
+    rerender({ pathIndex: 0 });
+    expect(result.current.tracks.fields.map((f) => f.id)).toEqual(
+      albumZeroIds,
+    );
   });
 });

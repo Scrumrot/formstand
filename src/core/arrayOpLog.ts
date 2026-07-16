@@ -43,6 +43,21 @@ const composeOps = (
 
 const logs = new WeakMap<object, Map<string, readonly ArrayOpRecord[]>>();
 
+// Cap a path's record count, composing the two oldest records when they are
+// consecutive (lossless) and dropping the dead head otherwise. The slice
+// work only happens on overflow — the common case appends untouched.
+const boundOps = (
+  ops: readonly ArrayOpRecord[],
+): readonly ArrayOpRecord[] => {
+  const [head, second] = ops;
+  if (ops.length <= OP_LOG_LIMIT || head === undefined || second === undefined) {
+    return ops;
+  }
+  return head.to === second.from
+    ? [composeOps(head, second), ...ops.slice(2)]
+    : ops.slice(1);
+};
+
 export const recordArrayOp = (
   store: object,
   path: string,
@@ -51,14 +66,7 @@ export const recordArrayOp = (
   const existing = logs.get(store);
   const byPath = existing ?? new Map<string, readonly ArrayOpRecord[]>();
   if (existing === undefined) logs.set(store, byPath);
-  const appended = [...(byPath.get(path) ?? []), record];
-  const [head, second, ...rest] = appended;
-  const bounded =
-    appended.length <= OP_LOG_LIMIT || head === undefined || second === undefined
-      ? appended
-      : head.to === second.from
-        ? [composeOps(head, second), ...rest]
-        : [second, ...rest];
+  const bounded = boundOps([...(byPath.get(path) ?? []), record]);
   byPath.delete(path);
   byPath.set(path, bounded);
   if (byPath.size > MAX_LOG_PATHS) {
@@ -72,10 +80,36 @@ export const arrayOpsFor = (
   path: string,
 ): readonly ArrayOpRecord[] => logs.get(store)?.get(path) ?? [];
 
-// Drop a path's records. Called when id derivation re-anchors through value
-// reconciliation (a whole-array write broke the reference chain): from that
-// moment no existing record can ever chain again, so keeping them only pins
-// the row objects of the arrays they snapshot.
+// Drop a path's records — called by the consumer after a walk consumed them
+// (the log is per-batch bookkeeping, spent once derived).
 export const clearArrayOps = (store: object, path: string): void => {
   logs.get(store)?.delete(path);
+};
+
+// Drop the records of the written path and its DESCENDANTS — the paths
+// where a value write can reintroduce a previously-seen array reference
+// (the caller supplies the subtree's values; reset/restore reinstate stored
+// ones; an array op re-seats existing descendant arrays under new indices),
+// which stale records could falsely chain against. Ancestor paths are
+// deliberately KEPT: setAtPath always builds fresh spine arrays, so an
+// ancestor reference can never recur — and an ancestor's earlier records
+// are real history the id walk still replays, bridging the gap this write
+// created. "" (whole-values writes) clears all. `keepSelf` is for
+// applyArrayOp itself: the op's own path is exactly what it is about to
+// record, and its earlier same-batch records still chain.
+export const clearArrayOpsUnder = (
+  store: object,
+  path: string,
+  keepSelf = false,
+): void => {
+  const byPath = logs.get(store);
+  if (byPath === undefined) return;
+  if (path === "") {
+    byPath.clear();
+    return;
+  }
+  const related = [...byPath.keys()].filter(
+    (p) => (p === path && !keepSelf) || p.startsWith(`${path}.`),
+  );
+  related.forEach((p) => byPath.delete(p));
 };

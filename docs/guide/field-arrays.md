@@ -91,7 +91,7 @@ const AlbumRow = ({ form, index }: { form: Form<typeof schema>; index: number })
 };
 ```
 
-Both directions work: `form.arrayPush("albums.0.tracks", track)` mutates the inner array, and reordering the outer `albums` array correctly re-keys metadata for all nested paths. Because the inner hook's path contains the outer index, its ids reset when the album moves — pass a `key` from the outer `fields` so the whole row subtree moves with its album.
+Both directions work: `form.arrayPush("albums.0.tracks", track)` mutates the inner array, and reordering the outer `albums` array correctly re-keys metadata for all nested paths. Note that inner ids belong to the *path* (`albums.0.tracks`), not to a particular album — after an outer reorder the path hosts a different album's tracks and ids reconcile by value against them. Pass a `key` from the outer `fields` so each album's whole row subtree (inner hook included) moves with its album instead of being re-derived at a new index.
 
 ## Array-level errors
 
