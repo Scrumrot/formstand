@@ -39,6 +39,30 @@ describe("sync validate() on an async schema", () => {
     expect(form.getState().errors["username"]).toEqual(["taken"]);
   });
 
+  it("a latched full-form scope does not divert skip paths — they still settle synchronously", async () => {
+    const schema = z.object({
+      items: z.array(z.object({ name: z.string() })),
+      username: z.string().refine(async (v) => v !== "taken", {
+        message: "taken",
+      }),
+    });
+    const form = createForm(schema, {
+      initialValues: { items: [], username: "ok" },
+    });
+    // Latch the full-form scope.
+    const first = form.validate();
+    expect(first.kind).toBe("pending");
+    if (first.kind !== "pending") throw new Error();
+    await first.promise;
+    // An out-of-range path addresses no slot — no parse happens, so the
+    // latched "" must not turn this into a pending async pass.
+    expect(form.validateField("items.0.name").kind).toBe("valid");
+    expect(form.validateFields(["items.0.name"]).kind).toBe("valid");
+    // A sync subschema elsewhere in the same latched form also stays sync.
+    form.setValue("items", [{ name: "x" }]);
+    expect(form.validateFields(["items.0.name"]).kind).toBe("valid");
+  });
+
   it("latches the async requirement: later sync calls skip the doomed parse", async () => {
     const syncRuns: string[] = [];
     const latchSchema = z.object({

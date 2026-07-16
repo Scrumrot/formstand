@@ -145,19 +145,21 @@ const mappedIdState = (
         Object.is(liveItems[i], prev.items[src]),
   );
   if (!aligned) return null;
-  // Mint numbering mirrors reconcileIds (counter + running 1-based count),
-  // so op-minted and reconcile-minted ids can never collide.
-  const mintCounts = mapping.reduce<readonly number[]>((acc, src) => {
-    const count = acc[acc.length - 1] ?? 0;
-    return [...acc, src === -1 ? count + 1 : count];
-  }, []);
-  const minted = mintCounts[mintCounts.length - 1] ?? 0;
+  // Positions minting fresh ids, numbered 1-based in order — mirroring
+  // reconcileIds (counter + 1-based mint count), so op-minted and
+  // reconcile-minted ids can never collide. (In practice an op mapping
+  // mints at most one row — push/insert — but the numbering stays general.)
+  const mintNumber = new Map(
+    mapping
+      .flatMap((src, i) => (src === -1 ? [i] : []))
+      .map((position, k) => [position, k + 1] as const),
+  );
   const ids = mapping.map((src, i) =>
     src === -1
-      ? `__zfa_${prev.counter + (mintCounts[i] ?? 0)}`
+      ? `__zfa_${prev.counter + (mintNumber.get(i) ?? 0)}`
       : (prev.ids[src] as string),
   );
-  return { items: liveItems, ids, counter: prev.counter + minted };
+  return { items: liveItems, ids, counter: prev.counter + mintNumber.size };
 };
 
 // The element type at an array-valued path. FieldValue re-adds `| undefined`

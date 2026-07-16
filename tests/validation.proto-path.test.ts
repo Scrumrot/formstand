@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { createForm } from "../src/core/createForm";
 import { flattenIssues } from "../src/core/validation";
 
 // Regression (2026-07 review #4): reading `acc["__proto__"]` off a plain
@@ -36,5 +37,19 @@ describe("flattenIssues with a __proto__ issue path", () => {
     expect(flattenIssues(result.error.issues)["__proto__"]).toEqual([
       "bad key",
     ]);
+  });
+});
+
+// Same hardening class in the channel merge: `schema[k] === undefined` for
+// k === "__proto__" reads Object.prototype (never undefined), which silently
+// dropped the server entry from the merged errors map.
+describe("server errors keyed at __proto__", () => {
+  it("survive the channel merge into state.errors", () => {
+    const form = createForm(z.object({ name: z.string() }), {
+      initialValues: { name: "x" },
+    });
+    form.setError("__proto__" as never, ["bad key"]);
+    expect(Object.hasOwn(form.getState().errors, "__proto__")).toBe(true);
+    expect(form.getState().errors["__proto__"]).toEqual(["bad key"]);
   });
 });

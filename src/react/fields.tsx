@@ -35,17 +35,18 @@ export type FieldRef<T> =
   | Readonly<{ current: T | null }>
   | null;
 
-// role="alert" announces the message to assistive tech when it appears; the
-// id lets the input point at it via aria-describedby.
-const ErrorText = ({
-  id,
-  error,
-}: Readonly<{ id: string; error: readonly string[] | undefined }>) =>
-  hasFieldError(error) ? (
-    <span className="zf-error" id={id} role="alert">
-      {error?.[0]}
-    </span>
-  ) : null;
+// The chrome every bound field renders: wrapper, optional label, the
+// control, and the error line. `wrapLabel` puts the control INSIDE the
+// label (the checkbox layout: box, then text) instead of after a preceding
+// sibling label. One component so an a11y change lands everywhere at once.
+type FieldShellProps = Readonly<{
+  id: string;
+  errorId: string;
+  label: ReactNode | undefined;
+  error: readonly string[] | undefined;
+  wrapLabel?: boolean;
+  children: ReactNode;
+}>;
 
 // Shared id wiring for every bound field: a stable control id, the error
 // line's id derived from it, and the aria-describedby value — set only
@@ -63,18 +64,17 @@ const useFieldA11y = (
   };
 };
 
-// The chrome every bound field renders: wrapper, optional label, the
-// control, and the error line. `wrapLabel` puts the control INSIDE the
-// label (the checkbox layout: box, then text) instead of after a preceding
-// sibling label. One component so an a11y change lands everywhere at once.
-type FieldShellProps = Readonly<{
-  id: string;
-  errorId: string;
-  label: ReactNode | undefined;
-  error: readonly string[] | undefined;
-  wrapLabel?: boolean;
-  children: ReactNode;
-}>;
+// role="alert" announces the message to assistive tech when it appears; the
+// id lets the input point at it via aria-describedby.
+const ErrorText = ({
+  id,
+  error,
+}: Readonly<{ id: string; error: readonly string[] | undefined }>) =>
+  hasFieldError(error) ? (
+    <span className="zf-error" id={id} role="alert">
+      {error?.[0]}
+    </span>
+  ) : null;
 
 const FieldShell = ({
   id,
@@ -360,20 +360,22 @@ export const SelectField = <T extends string, F extends FieldFormApi>({
   // option, or the browser shows the first real option while state stays null.
   const field = useField<T | null | undefined>(form, path);
   const a11y = useFieldA11y(field.error);
+  const select = selectProps(field);
   // A nullable field must be clearable BACK to null through the UI, so its
   // empty option stays visible after a choice and stays selectable —
   // selectProps writes null for it. Everywhere else the empty option is
   // only a placeholder: visible while nothing is chosen, never selectable.
-  // "" counts as "nothing chosen" too: selectProps renders undefined, null,
-  // AND "" all as value="", so each needs a matching option or the browser
-  // displays the first real option while the form holds something else.
+  // The value condition derives from selectProps' own coercion (undefined,
+  // null, and "" all render as value ""), so any blank the select displays
+  // has a matching option by construction. When the options list supplies
+  // its OWN ""-valued entry, that explicit option IS the blank state —
+  // rendering the implicit one too would duplicate the value, and the
+  // browser would select the first (unlabelled) match instead.
   const clearable = field.emptyValue === null;
+  const hasExplicitEmptyOption = options.some((opt) => opt.value === "");
   const showEmptyOption =
-    clearable ||
-    field.value === undefined ||
-    field.value === null ||
-    field.value === ("" as T) ||
-    placeholder !== undefined;
+    !hasExplicitEmptyOption &&
+    (clearable || select.value === "" || placeholder !== undefined);
   return (
     <FieldShell
       id={a11y.id}
@@ -384,7 +386,7 @@ export const SelectField = <T extends string, F extends FieldFormApi>({
       <select
         id={a11y.id}
         ref={ref}
-        {...selectProps(field)}
+        {...select}
         aria-describedby={a11y.describedBy}
       >
         {showEmptyOption ? (

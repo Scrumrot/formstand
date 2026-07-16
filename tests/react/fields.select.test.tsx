@@ -130,6 +130,37 @@ describe("SelectField with an empty-string value", () => {
   });
 });
 
+describe("SelectField with an explicit ''-valued option", () => {
+  const explicitEmptySchema = z.object({
+    plan: z.string(),
+  });
+
+  const ExplicitEmptyHarness = () => {
+    const form = useForm(explicitEmptySchema, { initialValues: { plan: "" } });
+    return (
+      <SelectField
+        form={form}
+        path="plan"
+        label="Plan"
+        options={[
+          { value: "", label: "None" },
+          { value: "basic", label: "Basic" },
+        ]}
+      />
+    );
+  };
+
+  it("suppresses the implicit blank option so the labelled '' entry shows", () => {
+    render(<ExplicitEmptyHarness />);
+    const select = screen.getByLabelText("Plan") as HTMLSelectElement;
+    expect(select.value).toBe("");
+    // No duplicate value="" — the author's labelled option is the blank state.
+    expect(select.options).toHaveLength(2);
+    expect(select.options[0]?.text).toBe("None");
+    expect(select.options[0]?.disabled).toBe(false);
+  });
+});
+
 describe("SelectField with a null (nullable) value", () => {
   const NullableHarness = () => {
     const form = useForm(nullableSchema, { initialValues: { plan: null } });

@@ -107,11 +107,13 @@ export {
   selectProps,
   // The number/date text rules the built-in bindings use — exported so
   // adapters for other UI kits (MUI, etc.) can share them instead of
-  // re-deriving.
+  // re-deriving. hasFieldError is the matching "does this field show an
+  // error" predicate.
   numberToInputText,
   parseNumberText,
   dateToInputText,
   parseDateText,
+  hasFieldError,
 } from "./react/inputProps";
 export type {
   TextInputProps,

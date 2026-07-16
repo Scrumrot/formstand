@@ -38,9 +38,15 @@
   (reachable via `ctx.addIssue` in a `superRefine`): the accumulator read now
   checks own keys instead of walking the prototype chain (2026-07
   self-review #4).
-- `SelectField` renders its empty option when the field value is `""`, not
-  just `undefined`/`null` — an empty-string value no longer displays as the
-  first real option while the form holds `""`.
+- `SelectField` renders its empty option whenever the bound `<select>`
+  displays `""` (the condition now derives from `selectProps`' own value
+  coercion, covering `undefined`, `null`, AND `""`) — an empty-string value
+  no longer displays as the first real option while the form holds `""`.
+  An options list that supplies its own `""`-valued entry wins: the
+  implicit blank option is suppressed so the explicit labelled one shows.
+- `setError`/server errors keyed at `"__proto__"` are no longer silently
+  dropped from the merged `errors` map (`mergeErrorChannels` now checks own
+  keys, the same hardening `flattenIssues` got).
 
 ### Performance
 
@@ -48,7 +54,13 @@
   `validateField` / `validateFields` pass discovers a scope needs async
   parsing, later calls skip the doomed sync parse and go straight to the
   async pass (previously every keystroke on an async schema paid a full sync
-  parse that always threw) (2026-07 self-review #5).
+  parse that always threw) (2026-07 self-review #5). One nuance: after the
+  latch, a value that fails an EARLIER sync check in the same scope also
+  returns `pending` (settling via the promise) where it previously settled
+  `invalid` synchronously — callers on async schemas must handle `pending`
+  regardless, since valid values always produced it. Paths that address no
+  slot (out-of-range indices) never consult the latch and still settle
+  synchronously.
 
 ### Internals
 
