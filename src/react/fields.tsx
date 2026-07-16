@@ -341,9 +341,11 @@ export type SelectFieldProps<
   path: PathsOf<F>;
   label?: ReactNode;
   options: readonly SelectFieldOption<T>[];
-  // Shown as a disabled first option while the field value is undefined, so
-  // the select stays controlled and the blank state is visible instead of
-  // silently displaying the first option.
+  // Shown as a disabled first option while the field has no value, so the
+  // select stays controlled and the blank state is visible instead of
+  // silently displaying the first option. Ignored when `options` itself
+  // contains a ""-valued entry — that explicit, labelled option IS the
+  // blank state and renders instead.
   placeholder?: string;
   ref?: FieldRef<HTMLSelectElement>;
 }>;

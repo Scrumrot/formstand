@@ -126,7 +126,7 @@ The builders use it consistently: `numberInputProps` and `NumberField` write `em
 
 ## `SelectField` placeholder and null handling
 
-A native `<select>` with a value that matches no option silently *displays* the first option while your state says otherwise. `SelectField` stays controlled by rendering an empty `<option value="">` whenever the field value is `undefined` or `null` (or whenever you pass `placeholder`), showing your `placeholder` text if given. For a **nullable** field the empty option is also selectable and stays visible after a choice — picking it clears the field back to `null` (the `emptyValue` round-trip); everywhere else it is a disabled placeholder:
+A native `<select>` with a value that matches no option silently *displays* the first option while your state says otherwise. `SelectField` stays controlled by rendering an empty `<option value="">` whenever the bound `<select>` displays `""` — which covers `undefined`, `null`, AND `""` field values (the condition derives from `selectProps`' own value coercion) — or whenever you pass `placeholder`, showing your `placeholder` text if given. For a **nullable** field the empty option is also selectable and stays visible after a choice — picking it clears the field back to `null` (the `emptyValue` round-trip); everywhere else it is a disabled placeholder. One override: if your `options` list itself contains a `""`-valued entry, that explicit, labelled option **is** the blank state — the implicit option (and the `placeholder`) are suppressed so the browser can't pair the value with an unlabelled duplicate:
 
 ```tsx
 <SelectField

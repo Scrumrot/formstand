@@ -190,6 +190,7 @@ The rules the built-in bindings follow are exported alongside them, so adapters 
 | `numberToInputText` | `(value: number \| null \| undefined) => string` | canonical display text for a numeric field value (`""` for empty/`null`/`NaN`) |
 | `parseNumberText` | `(text: string) => ParsedNumberText` | classifies user-typed text: `{ kind: "number", value }` for a finite number, `{ kind: "empty" }` for whitespace-only, `{ kind: "invalid" }` for partial entries (`-`, `1.`, `1e`) and `Infinity` |
 | `emptyValueForSchema` | `(schema: z.ZodType) => null \| undefined` | the empty representation a field's schema accepts — `null` when nullable (and not optional), `undefined` otherwise; the schema-introspection rule behind [`useField().emptyValue`](#usefieldreturntvalue) |
+| `hasFieldError` | `(error: readonly string[] \| undefined) => boolean` | THE predicate for "does this field currently show an error" — what the built-in bindings use for `aria-invalid` and error rendering, so an adapter's notion of "showing an error" can't drift from the library's |
 
 ### `focusFirstError(errors, root?)`
 

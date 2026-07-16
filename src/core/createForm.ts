@@ -563,14 +563,12 @@ export const createForm = <TSchema extends z.ZodType>(
     // pass. Skip scopes parse nothing and contribute no latch key — a
     // latched full-form "" must not divert a batch whose parses are all
     // sync subschemas (or nothing at all).
-    const anyLatched =
-      asyncScopes.size > 0 &&
-      (allViaSubschema
-        ? scopes.some(
-            ({ path, scope }) =>
-              scope.kind === "parse" && asyncScopes.has(path),
-          )
-        : asyncScopes.has(""));
+    const anyLatched = allViaSubschema
+      ? scopes.some(
+          ({ path, scope }) =>
+            scope.kind === "parse" && asyncScopes.has(path),
+        )
+      : asyncScopes.has("");
     if (anyLatched) {
       return { kind: "pending", promise: validateFieldsAsync(paths) };
     }
@@ -592,13 +590,7 @@ export const createForm = <TSchema extends z.ZodType>(
         );
         store.setState((state) => ({
           ...state,
-          ...errorChannels(state, {
-            schemaErrors: reuseErrorRefs(
-              mergeScopedErrors(state.schemaErrors, merged, paths),
-              state.schemaErrors,
-            ),
-            serverErrors: omitScope(state.serverErrors, paths),
-          }),
+          ...commitScopedErrors(state, merged, paths),
         }));
         return settledFields(merged);
       }
@@ -608,15 +600,7 @@ export const createForm = <TSchema extends z.ZodType>(
       const requestedErrors = pickScope(fullErrors, paths);
       store.setState((state) => ({
         ...state,
-        ...errorChannels(state, {
-          schemaErrors: reuseErrorRefs(
-            mergeScopedErrors(state.schemaErrors, requestedErrors, paths),
-            state.schemaErrors,
-          ),
-          // A validation explicitly targeting these paths supersedes any
-          // server verdict on them.
-          serverErrors: omitScope(state.serverErrors, paths),
-        }),
+        ...commitScopedErrors(state, requestedErrors, paths),
       }));
       return settledFields(requestedErrors);
     } catch (e) {
@@ -741,12 +725,26 @@ export const createForm = <TSchema extends z.ZodType>(
   ): SettledFieldsValidationResult =>
     settledFields(result.kind === "invalid" ? result.errors : emptyErrors);
 
-  // How a field validation's scoped errors land in state. validateField("")
-  // is a whole-form pass, so it lands like validate() (server channel
-  // untouched). A real field path also releases the server entries in its
-  // scope — a validation explicitly targeting them supersedes the server
-  // verdict. Shared by the sync and async passes so their commit semantics
-  // cannot diverge.
+  // The commit rule for any scoped validation: replace the schema-error
+  // slice under `paths` and release the server verdicts there — a
+  // validation explicitly targeting a scope supersedes the server's word on
+  // it. Shared by the singular and plural, sync and async passes so the
+  // supersede rule lives exactly once.
+  const commitScopedErrors = (
+    state: FormState<Values>,
+    scoped: ErrorMap,
+    paths: readonly string[],
+  ): ErrorChannels =>
+    errorChannels(state, {
+      schemaErrors: reuseErrorRefs(
+        mergeScopedErrors(state.schemaErrors, scoped, paths),
+        state.schemaErrors,
+      ),
+      serverErrors: omitScope(state.serverErrors, paths),
+    });
+
+  // How ONE field validation's scoped errors land. validateField("") is a
+  // whole-form pass, so it lands like validate() (server channel untouched).
   const commitFieldErrors = (
     state: FormState<Values>,
     scoped: ErrorMap,
@@ -754,40 +752,35 @@ export const createForm = <TSchema extends z.ZodType>(
   ): ErrorChannels =>
     path === ""
       ? commitFullPass(state, scoped)
-      : errorChannels(state, {
-          schemaErrors: reuseErrorRefs(
-            mergeScopedErrors(state.schemaErrors, scoped, [path]),
-            state.schemaErrors,
-          ),
-          serverErrors: omitScope(state.serverErrors, [path]),
-        });
+      : commitScopedErrors(state, scoped, [path]);
 
   const validateField = (path: string): FieldValidationResult => {
     warnMissingSchemaPath("validateField", path);
     const scope = fieldScopeFor(path, store.getState().values);
-    // A skip scope parses nothing, so it can never require async parsing:
-    // settle synchronously (committing empty errors for the path, as
-    // always) WITHOUT consulting the latch — the full-form "" key being
-    // latched must not divert a zero-parse call to the async machinery.
-    if (scope.kind === "skip") {
-      store.setState((state) => ({
-        ...state,
-        ...commitFieldErrors(state, emptyErrors, path),
-      }));
-      return fieldResult(emptyErrors);
-    }
-    // The latch key mirrors what this parse would actually run: the path
-    // for a subschema parse, the full form ("") for a bailed extraction.
-    const latchKey = scope.viaSubschema ? path : "";
-    if (asyncScopes.has(latchKey)) {
+    // Only PARSE scopes consult the latch — a skip scope parses nothing, so
+    // it can never require async parsing and settles synchronously (below)
+    // even while the full-form "" key is latched. The latch key mirrors
+    // what the parse would run: the path for a subschema parse, the full
+    // form ("") for a bailed extraction.
+    if (
+      scope.kind === "parse" &&
+      asyncScopes.has(scope.viaSubschema ? path : "")
+    ) {
       return { kind: "pending", promise: validateFieldAsync(path) };
     }
     try {
-      const scoped = scopeSettledResult(
-        validateSyncLatched(latchKey, scope.schema, scope.value),
-        path,
-        scope.viaSubschema,
-      );
+      const scoped =
+        scope.kind === "skip"
+          ? emptyErrors
+          : scopeSettledResult(
+              validateSyncLatched(
+                scope.viaSubschema ? path : "",
+                scope.schema,
+                scope.value,
+              ),
+              path,
+              scope.viaSubschema,
+            );
       store.setState((state) => ({
         ...state,
         ...commitFieldErrors(state, scoped, path),
@@ -898,21 +891,11 @@ export const createForm = <TSchema extends z.ZodType>(
 
     store.setState((state) => ({
       ...state,
-      ...errorChannels(state, {
-        schemaErrors: reuseErrorRefs(
-          mergeScopedErrors(
-            state.schemaErrors,
-            // stillCurrent is a filter of paths, so equal lengths mean the
-            // already-computed full scope applies verbatim.
-            stillCurrent.length === paths.length
-              ? requestedErrors
-              : pickScope(fullErrors, stillCurrent),
-            stillCurrent,
-          ),
-          state.schemaErrors,
-        ),
-        serverErrors: omitScope(state.serverErrors, stillCurrent),
-      }),
+      ...commitScopedErrors(
+        state,
+        pickScope(fullErrors, stillCurrent),
+        stillCurrent,
+      ),
       isValidating: stillCurrent.reduce(
         (acc, p) => omitKey(acc, p),
         state.isValidating,

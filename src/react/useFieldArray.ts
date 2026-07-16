@@ -55,6 +55,20 @@ const EMPTY_ID_STATE: IdState = { items: [], ids: [], counter: 0 };
 // run would defeat useShallow and re-render on every store change.
 const EMPTY_ITEMS: readonly never[] = [];
 
+// 1-based mint numbers for the positions needing a fresh id, in order.
+// BOTH id-derivation paths (value reconciliation in reconcileIds and the
+// exact op mappings in mappedIdState) number their mints through this one
+// helper, so the collision-free scheme — counter + consecutive 1-based
+// counts, counter advanced by the map's size — cannot diverge between them.
+const mintNumbers = (
+  needsMint: readonly boolean[],
+): ReadonlyMap<number, number> =>
+  new Map(
+    needsMint
+      .flatMap((mint, i) => (mint ? [i] : []))
+      .map((position, k) => [position, k + 1] as const),
+  );
+
 // Derive a stable id per item by reconciling the live items against the
 // previous render's items. Ids follow items by identity/value, so reorders,
 // resets, and mutations that bypass this hook all keep keys glued to their
@@ -107,18 +121,12 @@ const reconcileIds = (prev: IdState, nextItems: readonly unknown[]): IdState => 
   );
   const reused = matchedIds.map((id, i) => id ?? leftoverAt.get(i) ?? null);
 
-  // Running 1-based mint count up to each position, so fresh ids number
-  // consecutively without rebuilding the ids array per element.
-  const mintCounts = reused.reduce<readonly number[]>((acc, id) => {
-    const count = acc[acc.length - 1] ?? 0;
-    return [...acc, id === null ? count + 1 : count];
-  }, []);
-  const minted = mintCounts[mintCounts.length - 1] ?? 0;
+  const mints = mintNumbers(reused.map((id) => id === null));
   const ids = reused.map(
-    (id, i) => id ?? `__zfa_${prev.counter + (mintCounts[i] ?? 0)}`,
+    (id, i) => id ?? `__zfa_${prev.counter + (mints.get(i) ?? 0)}`,
   );
 
-  return { items: nextItems, ids, counter: prev.counter + minted };
+  return { items: nextItems, ids, counter: prev.counter + mints.size };
 };
 
 // Identity-index array [0, 1, ..., len-1]: the base the per-op mappings
@@ -145,21 +153,15 @@ const mappedIdState = (
         Object.is(liveItems[i], prev.items[src]),
   );
   if (!aligned) return null;
-  // Positions minting fresh ids, numbered 1-based in order — mirroring
-  // reconcileIds (counter + 1-based mint count), so op-minted and
-  // reconcile-minted ids can never collide. (In practice an op mapping
-  // mints at most one row — push/insert — but the numbering stays general.)
-  const mintNumber = new Map(
-    mapping
-      .flatMap((src, i) => (src === -1 ? [i] : []))
-      .map((position, k) => [position, k + 1] as const),
-  );
+  // (In practice an op mapping mints at most one row — push/insert — but
+  // the numbering stays general via the shared scheme.)
+  const mints = mintNumbers(mapping.map((src) => src === -1));
   const ids = mapping.map((src, i) =>
     src === -1
-      ? `__zfa_${prev.counter + (mintNumber.get(i) ?? 0)}`
+      ? `__zfa_${prev.counter + (mints.get(i) ?? 0)}`
       : (prev.ids[src] as string),
   );
-  return { items: liveItems, ids, counter: prev.counter + mintNumber.size };
+  return { items: liveItems, ids, counter: prev.counter + mints.size };
 };
 
 // The element type at an array-valued path. FieldValue re-adds `| undefined`
