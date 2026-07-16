@@ -59,12 +59,12 @@ const STEP_FIELDS = [
 ] as const;
 
 const next = async () => {
-  const ok = await form.validateFields(STEP_FIELDS[step]);
-  if (ok) setStep((s) => s + 1);
+  const result = await form.validateFieldsAsync(STEP_FIELDS[step]);
+  if (result.kind === "valid") setStep((s) => s + 1);
 };
 ```
 
-`validateFields` returns `boolean` for sync schemas and a `Promise<boolean>` when async refines are involved — `await` covers both.
+For a known-sync schema, `form.validateFields(STEP_FIELDS[step]).kind === "valid"` settles synchronously; on an async schema `validateFields` returns `{ kind: "pending", promise }` instead, so the always-async variant above is the simplest gate that covers both.
 
 ## Optimistic update with rollback
 

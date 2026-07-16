@@ -70,11 +70,11 @@ describe("validateField prefix scope", () => {
       });
     const syncForm = blank();
     const sync = syncForm.validateFields(["a.b"]);
-    const syncBool = typeof sync === "boolean" ? sync : await sync;
+    const syncSettled = sync.kind === "pending" ? await sync.promise : sync;
     const asyncForm = blank();
-    const asyncBool = await asyncForm.validateFieldsAsync(["a.b"]);
-    expect(syncBool).toBe(true);
-    expect(asyncBool).toBe(true);
+    const asyncSettled = await asyncForm.validateFieldsAsync(["a.b"]);
+    expect(syncSettled.kind).toBe("valid");
+    expect(asyncSettled.kind).toBe("valid");
     expect(syncForm.getState().errors["a.b"]).toBeUndefined();
     expect(asyncForm.getState().errors["a.b"]).toBeUndefined();
   });
@@ -82,10 +82,10 @@ describe("validateField prefix scope", () => {
   it("still validates a field when its ancestor is present", () => {
     const schema = z.object({ a: z.object({ b: z.string().min(1) }) });
     const form = createForm(schema, { initialValues: { a: { b: "" } } });
-    expect(form.validateFields(["a.b"])).toBe(false);
+    expect(form.validateFields(["a.b"]).kind).toBe("invalid");
     expect(form.getState().errors["a.b"]).toBeDefined();
     form.setValue("a.b", "ok");
-    expect(form.validateFields(["a.b"])).toBe(true);
+    expect(form.validateFields(["a.b"]).kind).toBe("valid");
     expect(form.getState().errors["a.b"]).toBeUndefined();
   });
 });

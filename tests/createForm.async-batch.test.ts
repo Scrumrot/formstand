@@ -14,21 +14,24 @@ const asyncSchema = z.object({
 });
 
 describe("form.validateFieldsAsync", () => {
-  it("returns true when all listed paths pass async validation", async () => {
+  it("settles valid when all listed paths pass async validation", async () => {
     const form = createForm(asyncSchema, {
       initialValues: { username: "ok", email: "t@t.com" },
     });
-    const ok = await form.validateFieldsAsync(["username", "email"]);
-    expect(ok).toBe(true);
+    const result = await form.validateFieldsAsync(["username", "email"]);
+    expect(result).toEqual({ kind: "valid" });
     expect(form.getState().errors).toEqual({});
   });
 
-  it("returns false and writes errors for failing listed paths only", async () => {
+  it("settles invalid with the scoped errors for failing listed paths only", async () => {
     const form = createForm(asyncSchema, {
       initialValues: { username: "taken", email: "bad" },
     });
-    const ok = await form.validateFieldsAsync(["username", "email"]);
-    expect(ok).toBe(false);
+    const result = await form.validateFieldsAsync(["username", "email"]);
+    expect(result.kind).toBe("invalid");
+    if (result.kind === "invalid") {
+      expect(result.errors["username"]).toEqual(["taken"]);
+    }
     expect(form.getState().errors["username"]).toEqual(["taken"]);
     expect(form.getState().errors["email"]).toBeDefined();
   });

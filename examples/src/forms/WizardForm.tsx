@@ -43,8 +43,8 @@ export const WizardForm = () => {
 
   const handleNext = () => {
     // Sync schema, so validateFields settles synchronously; an async schema
-    // would hand back the Promise<boolean> instead.
-    if (form.validateFields(STEP_PATHS[step]) === true) {
+    // would return { kind: "pending", promise } instead — check the kind.
+    if (form.validateFields(STEP_PATHS[step]).kind === "valid") {
       setStep((s) => (s + 1) as 0 | 1 | 2);
     }
   };

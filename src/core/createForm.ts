@@ -17,7 +17,9 @@ import { getAtPath, setAtPath, slotAtPath } from "./path";
 import type { BoolMap, ErrorMap, FormState } from "./types";
 import {
   type FieldValidationResult,
+  type FieldsValidationResult,
   type SettledFieldValidationResult,
+  type SettledFieldsValidationResult,
   type SettledValidationResult,
   type ValidationResult,
   fieldSchemaAtPath,
@@ -180,18 +182,20 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
   ) => FieldSnapshot<FieldValue<z.input<TSchema>, P>>;
   validate: () => ValidationResult<z.output<TSchema>>;
   validateField: (path: ErrorPath<z.input<TSchema>>) => FieldValidationResult;
-  // Returns a Promise (the async pass, already started) when the schema needs
-  // async parsing — mirroring the "pending" result of validate/validateField.
+  // Mirrors validateField's discriminated result — "pending" (carrying the
+  // already-started async pass's promise) when the schema needs async
+  // parsing. A bare boolean | Promise<boolean> union would let a truthy
+  // in-flight Promise silently pass `if (form.validateFields(...))` gates.
   validateFields: (
     paths: readonly FieldPath<z.input<TSchema>>[],
-  ) => boolean | Promise<boolean>;
+  ) => FieldsValidationResult;
   validateAsync: () => Promise<ValidationResult<z.output<TSchema>>>;
   validateFieldAsync: (
     path: ErrorPath<z.input<TSchema>>,
   ) => Promise<FieldValidationResult>;
   validateFieldsAsync: (
     paths: readonly FieldPath<z.input<TSchema>>[],
-  ) => Promise<boolean>;
+  ) => Promise<SettledFieldsValidationResult>;
   submit: (
     onValid: SubmitHandler<TSchema>,
     onInvalid?: InvalidSubmitHandler,
@@ -498,8 +502,11 @@ export const createForm = <TSchema extends z.ZodType>(
     });
 
   const validate = (): ValidationResult<z.output<TSchema>> => {
+    if (asyncScopes.has("")) {
+      return { kind: "pending", promise: validateAsyncOnForm() };
+    }
     try {
-      const result = validateSync(schema, store.getState().values);
+      const result = validateSyncLatched("", schema, store.getState().values);
       store.setState((state) => ({
         ...state,
         ...commitFullPass(
@@ -518,38 +525,49 @@ export const createForm = <TSchema extends z.ZodType>(
 
   const validateFields = (
     paths: readonly string[],
-  ): boolean | Promise<boolean> => {
-    if (paths.length === 0) return true;
+  ): FieldsValidationResult => {
+    if (paths.length === 0) return { kind: "valid" };
     // A "" path means whole-form scope (only reachable past the FieldPath
     // type, e.g. runtime-built path lists): delegate to the full pass so
     // manual errors are preserved, mirroring validateField("").
     if (paths.some((p) => p === "")) {
       const result = validate();
       return result.kind === "pending"
-        ? result.promise.then((r) => r.kind === "valid")
-        : result.kind === "valid";
+        ? {
+            kind: "pending",
+            promise: result.promise.then((r) =>
+              settledFields(r.kind === "invalid" ? r.errors : emptyErrors),
+            ),
+          }
+        : settledFields(result.kind === "invalid" ? result.errors : emptyErrors);
+    }
+    const values = store.getState().values;
+    // Fast path: when every requested path extracts a subschema, parse
+    // just those slots instead of the whole form (a wizard step on a
+    // 200-field schema stops paying for the other 190 fields per click).
+    // This matches the full parse EXACTLY because extraction bailing is
+    // what guards cross-field rules: fieldSchemaAtPath returns null when
+    // any traversed level carries refinements or wrappers, so an
+    // ancestor refine that could key errors into these paths forces the
+    // full parse below.
+    const scopes = paths.map((path) => ({
+      path,
+      scope: fieldScopeFor(path, values),
+    }));
+    const allViaSubschema = scopes.every(
+      ({ scope }) =>
+        scope.kind === "skip" ||
+        (scope.kind === "parse" && scope.viaSubschema),
+    );
+    // Scopes already latched as async-requiring skip the doomed sync parse.
+    const latchKeys = allViaSubschema
+      ? scopes.map(({ path, scope }) => scopeAsyncKey(path, scope))
+      : [""];
+    if (latchKeys.some((k) => asyncScopes.has(k))) {
+      return { kind: "pending", promise: validateFieldsAsync(paths) };
     }
     try {
-      const values = store.getState().values;
-      // Fast path: when every requested path extracts a subschema, parse
-      // just those slots instead of the whole form (a wizard step on a
-      // 200-field schema stops paying for the other 190 fields per click).
-      // This matches the full parse EXACTLY because extraction bailing is
-      // what guards cross-field rules: fieldSchemaAtPath returns null when
-      // any traversed level carries refinements or wrappers, so an
-      // ancestor refine that could key errors into these paths forces the
-      // full parse below.
-      const scopes = paths.map((path) => ({
-        path,
-        scope: fieldScopeFor(path, values),
-      }));
-      if (
-        scopes.every(
-          ({ scope }) =>
-            scope.kind === "skip" ||
-            (scope.kind === "parse" && scope.viaSubschema),
-        )
-      ) {
+      if (allViaSubschema) {
         const merged = scopes.reduce<ErrorMap>(
           (acc, { path, scope }) =>
             scope.kind === "skip"
@@ -557,7 +575,7 @@ export const createForm = <TSchema extends z.ZodType>(
               : {
                   ...acc,
                   ...scopeSettledResult(
-                    validateSync(scope.schema, scope.value),
+                    validateSyncLatched(path, scope.schema, scope.value),
                     path,
                     true,
                   ),
@@ -574,9 +592,9 @@ export const createForm = <TSchema extends z.ZodType>(
             serverErrors: omitScope(state.serverErrors, paths),
           }),
         }));
-        return Object.values(merged).flat().length === 0;
+        return settledFields(merged);
       }
-      const result = validateSync(schema, values);
+      const result = validateSyncLatched("", schema, values);
       const fullErrors =
         result.kind === "invalid" ? result.errors : emptyErrors;
       store.setState((state) => ({
@@ -595,9 +613,11 @@ export const createForm = <TSchema extends z.ZodType>(
           serverErrors: omitScope(state.serverErrors, paths),
         }),
       }));
-      return Object.keys(fullErrors).every((k) => !inScopeOfAny(k, paths));
+      return settledFields(pickScope(fullErrors, paths));
     } catch (e) {
-      if (isAsyncRequiredError(e)) return validateFieldsAsync(paths);
+      if (isAsyncRequiredError(e)) {
+        return { kind: "pending", promise: validateFieldsAsync(paths) };
+      }
       throw e;
     }
   };
@@ -618,6 +638,34 @@ export const createForm = <TSchema extends z.ZodType>(
         value: unknown;
         viaSubschema: boolean;
       }>;
+
+  // Scopes whose sync parse has hit an async refinement. The schema is fixed
+  // for the form's lifetime, so once a scope requires async parsing it always
+  // will — remember it and go straight to the async pass instead of paying a
+  // doomed sync parse per validation (per keystroke in onChange mode). Keyed
+  // like the parses themselves: "" for full-form, the path for subschema
+  // parses. A sanctioned mutable-ref cache, like subschemaCache below.
+  const asyncScopes = new Set<string>();
+
+  // Which latch key a field scope's sync parse belongs to: subschema parses
+  // are per-path; a bailed extraction parses the full form.
+  const scopeAsyncKey = (path: string, scope: FieldScope): string =>
+    scope.kind === "parse" && scope.viaSubschema ? path : "";
+
+  // validateSync, latching the scope when its parse turns out to need async
+  // — the caller still routes the rethrown error to the async pass.
+  const validateSyncLatched = <S extends z.ZodType>(
+    key: string,
+    scopeSchema: S,
+    value: z.input<S>,
+  ): SettledValidationResult<z.output<S>> => {
+    try {
+      return validateSync(scopeSchema, value);
+    } catch (e) {
+      if (isAsyncRequiredError(e)) asyncScopes.add(key);
+      throw e;
+    }
+  };
 
   // The subschema for a path is a pure function of the form's fixed schema —
   // cache it so per-keystroke validation doesn't re-walk the schema.
@@ -656,18 +704,6 @@ export const createForm = <TSchema extends z.ZodType>(
       : { kind: "skip" };
   };
 
-  const scopedFieldErrors = (path: string): ErrorMap => {
-    const values = store.getState().values;
-    const scope = fieldScopeFor(path, values);
-    return scope.kind === "skip"
-      ? emptyErrors
-      : scopeSettledResult(
-          validateSync(scope.schema, scope.value),
-          path,
-          scope.viaSubschema,
-        );
-  };
-
   const scopedFieldErrorsAsync = async (
     path: string,
     values: Values,
@@ -687,6 +723,17 @@ export const createForm = <TSchema extends z.ZodType>(
     return messages.length === 0
       ? { kind: "valid" }
       : { kind: "invalid", errors: messages };
+  };
+
+  // The plural counterpart: reports the scoped error MAP (entries under the
+  // requested paths) rather than one field's flat message list.
+  const settledFields = (scoped: ErrorMap): SettledFieldsValidationResult => {
+    const errors = Object.fromEntries(
+      Object.entries(scoped).filter(([, messages]) => messages.length > 0),
+    );
+    return Object.keys(errors).length === 0
+      ? { kind: "valid" }
+      : { kind: "invalid", errors };
   };
 
   // How a field validation's scoped errors land in state. validateField("")
@@ -712,8 +759,23 @@ export const createForm = <TSchema extends z.ZodType>(
 
   const validateField = (path: string): FieldValidationResult => {
     warnMissingSchemaPath("validateField", path);
+    const scope = fieldScopeFor(path, store.getState().values);
+    if (asyncScopes.has(scopeAsyncKey(path, scope))) {
+      return { kind: "pending", promise: validateFieldAsync(path) };
+    }
     try {
-      const scoped = scopedFieldErrors(path);
+      const scoped =
+        scope.kind === "skip"
+          ? emptyErrors
+          : scopeSettledResult(
+              validateSyncLatched(
+                scopeAsyncKey(path, scope),
+                scope.schema,
+                scope.value,
+              ),
+              path,
+              scope.viaSubschema,
+            );
       store.setState((state) => ({
         ...state,
         ...commitFieldErrors(state, scoped, path),
@@ -784,12 +846,14 @@ export const createForm = <TSchema extends z.ZodType>(
 
   const validateFieldsAsync = async (
     paths: readonly string[],
-  ): Promise<boolean> => {
-    if (paths.length === 0) return true;
+  ): Promise<SettledFieldsValidationResult> => {
+    if (paths.length === 0) return { kind: "valid" };
     // Whole-form scope: same delegation as validateFields (see above).
     if (paths.some((p) => p === "")) {
       const result = await validateAsyncOnForm();
-      return result.kind === "valid";
+      return settledFields(
+        result.kind === "invalid" ? result.errors : emptyErrors,
+      );
     }
     const passes = new Map(paths.map((p) => [p, claimPass(p)]));
     const valuesAtStart = store.getState().values;
@@ -803,9 +867,7 @@ export const createForm = <TSchema extends z.ZodType>(
 
     const result = await validateAsync(schema, valuesAtStart);
     const fullErrors = result.kind === "invalid" ? result.errors : emptyErrors;
-    const requestedValid = Object.keys(fullErrors).every(
-      (k) => !inScopeOfAny(k, paths),
-    );
+    const requested = settledFields(pickScope(fullErrors, paths));
 
     const live = store.getState();
     const stillCurrent = paths.filter(
@@ -821,7 +883,7 @@ export const createForm = <TSchema extends z.ZodType>(
           ),
         }));
       }
-      return requestedValid;
+      return requested;
     }
 
     store.setState((state) => ({
@@ -843,7 +905,7 @@ export const createForm = <TSchema extends z.ZodType>(
       ),
     }));
 
-    return requestedValid;
+    return requested;
   };
 
   const validateFieldAsync = async (
@@ -1254,14 +1316,26 @@ export const createForm = <TSchema extends z.ZodType>(
         };
       });
     },
-    resetField: (path: string) =>
+    resetField: (path: string) => {
+      // slotAtPath, not getAtPath: a path with no counterpart slot in
+      // initialValues (an appended array row, a key never present) must not
+      // be "reset" by writing undefined into the values tree — that would
+      // leave a hole ([rowA, undefined]) that crashes row renders and fails
+      // the schema. The value stays as-is; the field state still clears.
+      const initialSlot = slotAtPath(
+        store.getState().initialValues,
+        path,
+      );
+      if (!initialSlot.exists) {
+        console.warn(
+          `[formstand] resetField("${path}"): path has no initial value (e.g. an appended array row); value left unchanged, field state cleared.`,
+        );
+      }
       store.setState((state) => ({
         ...state,
-        values: setAtPath(
-          state.values,
-          path,
-          getAtPath(state.initialValues, path),
-        ),
+        values: initialSlot.exists
+          ? setAtPath(state.values, path, initialSlot.value)
+          : state.values,
         // A runtime "" path scopes the whole form (the imperative surface is
         // string-typed even though FieldPath excludes ""). Server entries
         // follow the setValue release contract (releaseSpine).
@@ -1274,7 +1348,8 @@ export const createForm = <TSchema extends z.ZodType>(
           path === "" ? emptyBools : omitScope(state.touched, [path]),
         isValidating:
           path === "" ? emptyBools : omitScope(state.isValidating, [path]),
-      })),
+      }));
+    },
     validate,
     validateField,
     validateFields,

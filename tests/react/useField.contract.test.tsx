@@ -1,53 +1,19 @@
 import { act, renderHook } from "@testing-library/react";
 import { useMemo } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { useField } from "../../src/react/useField";
 import { useForm } from "../../src/react/useForm";
 
 const schema = z.object({ name: z.string() });
 
-// useField.triggerValidate wraps form.validateField in a try/catch: a form
-// whose SYNC validate throws zod's async-required signal escalates to async
-// validation; any other error propagates. formstand's own createForm handles
-// async-required internally (validateField returns a "pending" result rather
-// than throwing), so these two branches are only reachable through a custom
-// FieldFormApi — the documented extension point. A spread override pins the
-// contract.
+// useField.triggerValidate calls form.validateField directly — the
+// FieldFormApi contract is that validateField RETURNS a FieldValidationResult
+// ({ kind: "pending" } for async schemas, never a throw), matching what
+// formstand's own createForm does. A custom implementation that throws is
+// violating the contract, so the error propagates to the caller unswallowed.
 describe("useField custom-form validate contract", () => {
-  // zod's async-during-sync signal is matched by message (dual-package safe).
-  const asyncRequired = new Error(
-    "Encountered Promise during synchronous parse",
-  );
-
-  it("escalates a sync async-required error to validateFieldAsync", () => {
-    const validateFieldAsync = vi.fn(() => Promise.resolve(true));
-    const { result } = renderHook(() => {
-      const form = useForm(schema, {
-        initialValues: { name: "ok" },
-        mode: "onChange",
-      });
-      const custom = useMemo(
-        () =>
-          ({
-            ...form,
-            validateField: () => {
-              throw asyncRequired;
-            },
-            validateFieldAsync,
-          }) as unknown as typeof form,
-        [form],
-      );
-      return useField(custom, "name");
-    });
-
-    act(() => {
-      result.current.setValue("changed");
-    });
-    expect(validateFieldAsync).toHaveBeenCalledWith("name");
-  });
-
-  it("rethrows a non-async validation error", () => {
+  it("propagates a validation error from a custom form", () => {
     const boom = new Error("boom");
     const { result } = renderHook(() => {
       const form = useForm(schema, {

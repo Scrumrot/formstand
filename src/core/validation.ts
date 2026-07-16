@@ -27,6 +27,22 @@ export type FieldValidationResult =
       promise: Promise<SettledFieldValidationResult>;
     }>;
 
+// The plural (validateFields) mirrors the singular's discriminated shape
+// instead of returning boolean | Promise<boolean>: a returned Promise is
+// truthy, so the old union let `if (form.validateFields(paths))` silently
+// pass a gate the moment the schema gained an async refinement. `errors`
+// carries only the entries within the requested paths' scope.
+export type SettledFieldsValidationResult =
+  | Readonly<{ kind: "valid" }>
+  | Readonly<{ kind: "invalid"; errors: ErrorMap }>;
+
+export type FieldsValidationResult =
+  | SettledFieldsValidationResult
+  | Readonly<{
+      kind: "pending";
+      promise: Promise<SettledFieldsValidationResult>;
+    }>;
+
 const issuePathToFormPath = (path: readonly PropertyKey[]): string =>
   path
     .filter((segment): segment is string | number => typeof segment !== "symbol")
@@ -60,7 +76,13 @@ export const flattenIssues = (
     .flatMap((issue) => expandIssue(issue, []))
     .reduce<Record<string, readonly string[]>>((acc, { path, message }) => {
       // Union branches often repeat the same complaint; drop exact duplicates.
-      const existing = acc[path] ?? [];
+      // Own-key read: a plain `acc[path]` for an issue path of "__proto__"
+      // (reachable via ctx.addIssue in a superRefine) walks the prototype
+      // chain and returns Object.prototype, crashing `.includes` below. The
+      // spread write is safe as-is — a computed key always defines an own
+      // property.
+      const existing =
+        (Object.hasOwn(acc, path) ? acc[path] : undefined) ?? [];
       return existing.includes(message)
         ? acc
         : { ...acc, [path]: [...existing, message] };

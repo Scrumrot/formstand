@@ -318,10 +318,11 @@ export const MuiCheckoutWizard = () => {
           ? CONTACT_SHIPPING_PATHS
           : [...CONTACT_SHIPPING_PATHS, ...BILLING_PATHS]
         : PAYMENT_PATHS;
-    // validateFields settles synchronously for sync schemas; await also
-    // covers the Promise<boolean> an async schema would hand back.
-    const ok = await Promise.resolve(form.validateFields(paths));
-    if (ok) {
+    // validateFields settles synchronously for sync schemas; an async schema
+    // returns { kind: "pending", promise } — awaiting the promise covers both.
+    const result = form.validateFields(paths);
+    const settled = result.kind === "pending" ? await result.promise : result;
+    if (settled.kind === "valid") {
       setStep((s) => s + 1);
     } else {
       focusFirstError(form.getState().errors);

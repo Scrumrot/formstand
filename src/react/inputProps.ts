@@ -44,8 +44,16 @@ export type SelectProps = Readonly<{
   onBlur: () => void;
 }>;
 
-const ariaInvalid = (field: Readonly<{ error: readonly string[] | undefined }>): true | undefined =>
-  field.error !== undefined && field.error.length > 0 ? true : undefined;
+// THE predicate for "does this field currently show an error" — shared by
+// the aria-invalid mapping here and the field shells in fields.tsx, so the
+// notion of "showing an error" cannot drift between bindings.
+export const hasFieldError = (
+  error: readonly string[] | undefined,
+): boolean => error !== undefined && error.length > 0;
+
+const ariaInvalid = (
+  field: Readonly<{ error: readonly string[] | undefined }>,
+): true | undefined => (hasFieldError(field.error) ? true : undefined);
 
 // A cleared input writes back `field.emptyValue` — null when the schema says
 // the field is nullable (useField introspects the form's zod schema), so

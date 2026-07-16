@@ -27,14 +27,46 @@ describe("sync validate() on an async schema", () => {
     expect(form.getState().errors["username"]).toEqual(["taken"]);
   });
 
-  it("validateFields returns the async pass's promise", async () => {
+  it("validateFields returns pending carrying the async pass's promise", async () => {
     const form = createForm(asyncSchema, {
       initialValues: { username: "taken", name: "Tim" },
     });
     const result = form.validateFields(["username"]);
-    expect(result).toBeInstanceOf(Promise);
-    expect(await result).toBe(false);
+    expect(result.kind).toBe("pending");
+    if (result.kind !== "pending") throw new Error();
+    const settled = await result.promise;
+    expect(settled.kind).toBe("invalid");
     expect(form.getState().errors["username"]).toEqual(["taken"]);
+  });
+
+  it("latches the async requirement: later sync calls skip the doomed parse", async () => {
+    const syncRuns: string[] = [];
+    const latchSchema = z.object({
+      username: z
+        .string()
+        .refine((v) => {
+          syncRuns.push(v);
+          return true;
+        })
+        .refine(async (v) => v !== "taken", { message: "taken" }),
+    });
+    const form = createForm(latchSchema, {
+      initialValues: { username: "ok" },
+    });
+    // First call pays one doomed sync parse (running the sync refine) before
+    // routing async; the async parse runs the sync refine again.
+    const first = form.validateField("username");
+    expect(first.kind).toBe("pending");
+    if (first.kind !== "pending") throw new Error();
+    await first.promise;
+    expect(syncRuns).toHaveLength(2);
+    // Latched: the second call goes straight to the async pass — exactly one
+    // more sync-refine execution (inside safeParseAsync), not two.
+    const second = form.validateField("username");
+    expect(second.kind).toBe("pending");
+    if (second.kind !== "pending") throw new Error();
+    await second.promise;
+    expect(syncRuns).toHaveLength(3);
   });
 });
 

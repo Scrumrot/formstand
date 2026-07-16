@@ -13,7 +13,6 @@ import {
   type FieldValidationResult,
   emptyValueForSchema,
   fieldSchemaAtPath,
-  isAsyncRequiredError,
 } from "../core/validation";
 
 type ReadonlyStore<T> = Pick<
@@ -95,7 +94,7 @@ export function useField<TSchema extends z.ZodType>(
 // return UseFieldReturn<unknown>.
 export function useField<TValue = unknown>(
   form: FieldFormApi & { readonly schema?: undefined },
-  path: string | ((state: FormState<unknown>) => string),
+  path: FieldPathArg<unknown>,
   options?: UseFieldOptions,
 ): UseFieldReturn<TValue>;
 export function useField<
@@ -108,7 +107,7 @@ export function useField<
 ): UseFieldReturn<FieldValue<z.input<TSchema>, P>>;
 export function useField<TValue = unknown>(
   form: FieldFormApi,
-  pathArg: string | ((state: FormState<unknown>) => string),
+  pathArg: FieldPathArg<unknown>,
   options?: UseFieldOptions,
 ): UseFieldReturn<TValue> {
   const slice = useStore(
@@ -166,15 +165,11 @@ export function useField<TValue = unknown>(
       }, debounceMs);
       return;
     }
-    try {
-      form.validateField(path);
-    } catch (e) {
-      if (isAsyncRequiredError(e)) {
-        void form.validateFieldAsync(path);
-        return;
-      }
-      throw e;
-    }
+    // The core routes async schemas itself: validateField returns
+    // { kind: "pending" } having already started the async pass, which
+    // commits its errors and isValidating flags to the store — so the
+    // result needs no handling here.
+    form.validateField(path);
   }, [form, path, debounceMs]);
 
   const setValue = useCallback(

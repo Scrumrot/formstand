@@ -5,6 +5,7 @@ import type { FieldPath } from "../core/fieldPath";
 import {
   checkboxProps,
   dateInputProps,
+  hasFieldError,
   numberToInputText,
   parseNumberText,
   selectProps,
@@ -34,20 +35,73 @@ export type FieldRef<T> =
   | Readonly<{ current: T | null }>
   | null;
 
-const hasError = (error: readonly string[] | undefined): boolean =>
-  error !== undefined && error.length > 0;
-
 // role="alert" announces the message to assistive tech when it appears; the
 // id lets the input point at it via aria-describedby.
 const ErrorText = ({
   id,
   error,
 }: Readonly<{ id: string; error: readonly string[] | undefined }>) =>
-  hasError(error) ? (
+  hasFieldError(error) ? (
     <span className="zf-error" id={id} role="alert">
       {error?.[0]}
     </span>
   ) : null;
+
+// Shared id wiring for every bound field: a stable control id, the error
+// line's id derived from it, and the aria-describedby value — set only
+// while an error shows, so assistive tech is never pointed at a node that
+// isn't rendered.
+const useFieldA11y = (
+  error: readonly string[] | undefined,
+): Readonly<{ id: string; errorId: string; describedBy: string | undefined }> => {
+  const id = useId();
+  const errorId = `${id}-error`;
+  return {
+    id,
+    errorId,
+    describedBy: hasFieldError(error) ? errorId : undefined,
+  };
+};
+
+// The chrome every bound field renders: wrapper, optional label, the
+// control, and the error line. `wrapLabel` puts the control INSIDE the
+// label (the checkbox layout: box, then text) instead of after a preceding
+// sibling label. One component so an a11y change lands everywhere at once.
+type FieldShellProps = Readonly<{
+  id: string;
+  errorId: string;
+  label: ReactNode | undefined;
+  error: readonly string[] | undefined;
+  wrapLabel?: boolean;
+  children: ReactNode;
+}>;
+
+const FieldShell = ({
+  id,
+  errorId,
+  label,
+  error,
+  wrapLabel,
+  children,
+}: FieldShellProps) => (
+  <div className="zf-field">
+    {wrapLabel === true ? (
+      <label htmlFor={id} className="zf-label">
+        {children} {label}
+      </label>
+    ) : (
+      <>
+        {label !== undefined ? (
+          <label htmlFor={id} className="zf-label">
+            {label}
+          </label>
+        ) : null}
+        {children}
+      </>
+    )}
+    <ErrorText id={errorId} error={error} />
+  </div>
+);
 
 export type TextFieldProps<F extends FieldFormApi = FieldFormApi> = Readonly<{
   form: F;
@@ -68,27 +122,25 @@ export const TextField = <F extends FieldFormApi>({
   autoComplete,
   ref,
 }: TextFieldProps<F>) => {
-  const id = useId();
-  const errorId = `${id}-error`;
   const field = useField<string | null | undefined>(form, path);
+  const a11y = useFieldA11y(field.error);
   return (
-    <div className="zf-field">
-      {label !== undefined ? (
-        <label htmlFor={id} className="zf-label">
-          {label}
-        </label>
-      ) : null}
+    <FieldShell
+      id={a11y.id}
+      errorId={a11y.errorId}
+      label={label}
+      error={field.error}
+    >
       <input
-        id={id}
+        id={a11y.id}
         ref={ref}
         {...textInputProps(field)}
         type={type}
         placeholder={placeholder}
         autoComplete={autoComplete}
-        aria-describedby={hasError(field.error) ? errorId : undefined}
+        aria-describedby={a11y.describedBy}
       />
-      <ErrorText id={errorId} error={field.error} />
-    </div>
+    </FieldShell>
   );
 };
 
@@ -115,26 +167,24 @@ export const DateField = <F extends FieldFormApi>({
   max,
   ref,
 }: DateFieldProps<F>) => {
-  const id = useId();
-  const errorId = `${id}-error`;
   const field = useField<Date | null | undefined>(form, path);
+  const a11y = useFieldA11y(field.error);
   return (
-    <div className="zf-field">
-      {label !== undefined ? (
-        <label htmlFor={id} className="zf-label">
-          {label}
-        </label>
-      ) : null}
+    <FieldShell
+      id={a11y.id}
+      errorId={a11y.errorId}
+      label={label}
+      error={field.error}
+    >
       <input
-        id={id}
+        id={a11y.id}
         ref={ref}
         {...dateInputProps(field)}
         min={min}
         max={max}
-        aria-describedby={hasError(field.error) ? errorId : undefined}
+        aria-describedby={a11y.describedBy}
       />
-      <ErrorText id={errorId} error={field.error} />
-    </div>
+    </FieldShell>
   );
 };
 
@@ -186,7 +236,7 @@ const useNumberInput = (
     name: field.path,
     value: raw ?? numberToInputText(field.value),
     inputMode: "decimal",
-    "aria-invalid": hasError(field.error) ? true : undefined,
+    "aria-invalid": hasFieldError(field.error) ? true : undefined,
     onChange: (e) => {
       const text = e.target.value;
       const parsed = parseNumberText(text);
@@ -222,27 +272,25 @@ export const NumberField = <F extends FieldFormApi>({
   placeholder,
   ref,
 }: NumberFieldProps<F>) => {
-  const id = useId();
-  const errorId = `${id}-error`;
   const field = useField<number | null | undefined>(form, path);
   const binding = useNumberInput(field);
+  const a11y = useFieldA11y(field.error);
   return (
-    <div className="zf-field">
-      {label !== undefined ? (
-        <label htmlFor={id} className="zf-label">
-          {label}
-        </label>
-      ) : null}
+    <FieldShell
+      id={a11y.id}
+      errorId={a11y.errorId}
+      label={label}
+      error={field.error}
+    >
       <input
-        id={id}
+        id={a11y.id}
         ref={ref}
         type="text"
         {...binding}
         placeholder={placeholder}
-        aria-describedby={hasError(field.error) ? errorId : undefined}
+        aria-describedby={a11y.describedBy}
       />
-      <ErrorText id={errorId} error={field.error} />
-    </div>
+    </FieldShell>
   );
 };
 
@@ -260,22 +308,23 @@ export const CheckboxField = <F extends FieldFormApi>({
   label,
   ref,
 }: CheckboxFieldProps<F>) => {
-  const id = useId();
-  const errorId = `${id}-error`;
   const field = useField<boolean | null | undefined>(form, path);
+  const a11y = useFieldA11y(field.error);
   return (
-    <div className="zf-field">
-      <label htmlFor={id} className="zf-label">
-        <input
-          id={id}
-          ref={ref}
-          {...checkboxProps(field)}
-          aria-describedby={hasError(field.error) ? errorId : undefined}
-        />{" "}
-        {label}
-      </label>
-      <ErrorText id={errorId} error={field.error} />
-    </div>
+    <FieldShell
+      id={a11y.id}
+      errorId={a11y.errorId}
+      label={label}
+      error={field.error}
+      wrapLabel
+    >
+      <input
+        id={a11y.id}
+        ref={ref}
+        {...checkboxProps(field)}
+        aria-describedby={a11y.describedBy}
+      />
+    </FieldShell>
   );
 };
 
@@ -307,33 +356,36 @@ export const SelectField = <T extends string, F extends FieldFormApi>({
   placeholder,
   ref,
 }: SelectFieldProps<T, F>) => {
-  const id = useId();
-  const errorId = `${id}-error`;
   // null included: a nullable enum's "not chosen yet" must render the empty
   // option, or the browser shows the first real option while state stays null.
   const field = useField<T | null | undefined>(form, path);
+  const a11y = useFieldA11y(field.error);
   // A nullable field must be clearable BACK to null through the UI, so its
   // empty option stays visible after a choice and stays selectable —
   // selectProps writes null for it. Everywhere else the empty option is
   // only a placeholder: visible while nothing is chosen, never selectable.
+  // "" counts as "nothing chosen" too: selectProps renders undefined, null,
+  // AND "" all as value="", so each needs a matching option or the browser
+  // displays the first real option while the form holds something else.
   const clearable = field.emptyValue === null;
   const showEmptyOption =
     clearable ||
     field.value === undefined ||
     field.value === null ||
+    field.value === ("" as T) ||
     placeholder !== undefined;
   return (
-    <div className="zf-field">
-      {label !== undefined ? (
-        <label htmlFor={id} className="zf-label">
-          {label}
-        </label>
-      ) : null}
+    <FieldShell
+      id={a11y.id}
+      errorId={a11y.errorId}
+      label={label}
+      error={field.error}
+    >
       <select
-        id={id}
+        id={a11y.id}
         ref={ref}
         {...selectProps(field)}
-        aria-describedby={hasError(field.error) ? errorId : undefined}
+        aria-describedby={a11y.describedBy}
       >
         {showEmptyOption ? (
           <option value="" disabled={!clearable}>
@@ -349,7 +401,6 @@ export const SelectField = <T extends string, F extends FieldFormApi>({
           </option>
         ))}
       </select>
-      <ErrorText id={errorId} error={field.error} />
-    </div>
+    </FieldShell>
   );
 };

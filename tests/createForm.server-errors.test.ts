@@ -192,7 +192,7 @@ describe("manual (server) errors vs validation passes", () => {
     const form = makeForm();
     form.setError("username", ["taken"]);
     // "" is only reachable past the FieldPath type (runtime-built lists).
-    expect(form.validateFields(["" as never])).toBe(true);
+    expect(form.validateFields(["" as never]).kind).toBe("valid");
     expect(form.getState().errors["username"]).toEqual(["taken"]);
   });
 

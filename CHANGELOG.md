@@ -2,6 +2,64 @@
 
 ## Unreleased
 
+### Breaking
+
+- **`validateFields` / `validateFieldsAsync` return discriminated results
+  instead of booleans** (2026-07 self-review #1). `validateFields(paths)` now
+  returns `{ kind: "valid" }`, `{ kind: "invalid", errors }` (the error map
+  scoped to the requested paths), or `{ kind: "pending", promise }` on an
+  async schema — mirroring `validateField`. The old `boolean |
+  Promise<boolean>` union let a truthy in-flight `Promise` silently pass
+  `if (form.validateFields(...))` gates the moment a schema gained an async
+  refine. `validateFieldsAsync` resolves with the settled result instead of a
+  boolean. Migrate `if (ok)` to `if (result.kind === "valid")`.
+- **`FieldFormApi.validateField` must not throw the async-required signal**
+  — `useField` no longer catches it and escalates to `validateFieldAsync`.
+  The declared contract (return `{ kind: "pending", promise }`) has been the
+  library's own behavior since the async-routing rework; custom
+  implementations written against the old throwing style should return the
+  pending result instead.
+
+### Fixed
+
+- `resetField` on a path with no counterpart in `initialValues` (an appended
+  array row) no longer writes an explicit `undefined` into the values tree —
+  a hole that crashed row components and failed schema validation. The value
+  is left unchanged (with a console warning), and error/touched state under
+  the path still clears (2026-07 self-review #2).
+- `useFieldArray` ops on rows with equal values keep ids glued to the right
+  rows: `remove`/`insert`/`move`/`swap`/`push` issued through the hook now
+  commit their exact index mapping instead of re-deriving ids by value
+  matching, which could not tell `Object.is`-equal rows apart (`remove(0)` on
+  two blank rows handed the survivor the removed row's id, resurrecting the
+  wrong React subtree). Writes that bypass the hook still reconcile by value
+  as before (2026-07 self-review #3).
+- `flattenIssues` no longer crashes on an issue path of `"__proto__"`
+  (reachable via `ctx.addIssue` in a `superRefine`): the accumulator read now
+  checks own keys instead of walking the prototype chain (2026-07
+  self-review #4).
+- `SelectField` renders its empty option when the field value is `""`, not
+  just `undefined`/`null` — an empty-string value no longer displays as the
+  first real option while the form holds `""`.
+
+### Performance
+
+- Async-requiring scopes are latched: once a sync `validate` /
+  `validateField` / `validateFields` pass discovers a scope needs async
+  parsing, later calls skip the doomed sync parse and go straight to the
+  async pass (previously every keystroke on an async schema paid a full sync
+  parse that always threw) (2026-07 self-review #5).
+
+### Internals
+
+- The five bound field components share one `FieldShell` (label + control +
+  error line, with the checkbox's label-wrapping layout as a variant) and one
+  exported `hasFieldError` predicate — the a11y wiring (`useId`, `-error` id,
+  `aria-describedby`) now lives in a single place instead of five copies.
+  `hasFieldError` is exported for custom UI-kit adapters.
+- `FieldPathArg` is now actually used by the `useField` / `useFieldArray`
+  overloads it describes (it was exported dead).
+
 ## formstand-cli 0.7.0 — 2026-07-12
 
 ### Added

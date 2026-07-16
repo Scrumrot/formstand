@@ -9,21 +9,24 @@ const schema = z.object({
 });
 
 describe("form.validateFields", () => {
-  it("validates only the listed paths and returns true when all valid", () => {
+  it("validates only the listed paths and settles valid when all pass", () => {
     const form = createForm(schema, {
       initialValues: { name: "Tim", email: "t@t.com", age: -1 },
     });
-    const ok = form.validateFields(["name", "email"]);
-    expect(ok).toBe(true);
+    const result = form.validateFields(["name", "email"]);
+    expect(result).toEqual({ kind: "valid" });
     expect(form.getState().errors).toEqual({});
   });
 
-  it("returns false and writes errors for invalid listed paths only", () => {
+  it("settles invalid with the scoped error map for failing listed paths only", () => {
     const form = createForm(schema, {
       initialValues: { name: "x", email: "bad", age: -1 },
     });
-    const ok = form.validateFields(["name", "email"]);
-    expect(ok).toBe(false);
+    const result = form.validateFields(["name", "email"]);
+    expect(result.kind).toBe("invalid");
+    if (result.kind === "invalid") {
+      expect(Object.keys(result.errors).sort()).toEqual(["email", "name"]);
+    }
     expect(form.getState().errors["name"]).toBeDefined();
     expect(form.getState().errors["email"]).toBeDefined();
     expect(form.getState().errors["age"]).toBeUndefined();

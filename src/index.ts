@@ -29,6 +29,8 @@ export type {
   SettledValidationResult,
   FieldValidationResult,
   SettledFieldValidationResult,
+  FieldsValidationResult,
+  SettledFieldsValidationResult,
 } from "./core/validation";
 export { shouldValidateOn } from "./core/mode";
 export type { ValidationMode, ValidationTrigger } from "./core/mode";

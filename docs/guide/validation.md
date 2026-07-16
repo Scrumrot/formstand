@@ -43,12 +43,12 @@ const form = useForm(schema, { initialValues, validateOnMount: true });
 ```ts
 form.validate();               // whole form → ValidationResult
 form.validateField("email");   // one field (and its descendants) → FieldValidationResult
-form.validateFields(["email", "username"]); // several fields → boolean | Promise<boolean>
+form.validateFields(["email", "username"]); // several fields → FieldsValidationResult
 ```
 
 - `validate()` parses the whole form and replaces the schema-error channel wholesale. Returns `{ kind: "valid", data }` or `{ kind: "invalid", errors }`.
 - `validateField(path)` validates one field, writing and clearing errors for the path **and its descendants** (`validateField("address")` also settles `"address.city"`). Returns `{ kind: "valid" }` or `{ kind: "invalid", errors: string[] }`.
-- `validateFields(paths)` validates several paths in one pass and returns whether all of them are error-free.
+- `validateFields(paths)` validates several paths in one pass. Returns `{ kind: "valid" }` or `{ kind: "invalid", errors }`, where `errors` holds only the entries within the requested paths' scope.
 
 ### Pending results on async schemas
 
@@ -61,7 +61,7 @@ if (result.kind === "pending") {
 }
 ```
 
-`validate()` and `validateField()` return `{ kind: "pending", promise }`; `validateFields()` returns the `Promise<boolean>` itself. Check `result.kind` rather than assuming `valid`/`invalid` — or use the async variants directly when you know the schema is async.
+All three sync methods return `{ kind: "pending", promise }` in that case — never a bare truthy `Promise` that would slip through an `if (form.validateFields(...))` gate. Check `result.kind` rather than assuming `valid`/`invalid` — or use the async variants directly when you know the schema is async.
 
 Note the pending path is only taken when it must be: if the *field being validated* is itself sync, `validateField` settles synchronously even when other fields in the schema carry async refines (see field-scoped validation below).
 
@@ -70,7 +70,7 @@ Note the pending path is only taken when it must be: if the *field being validat
 ```ts
 await form.validateAsync();                    // whole form, supports async .refine
 await form.validateFieldAsync("username");     // one field
-await form.validateFieldsAsync(["a", "b"]);    // several → boolean
+await form.validateFieldsAsync(["a", "b"]);    // several → { kind: "valid" | "invalid" }
 ```
 
 `form.submit` uses async parsing internally, so async refines work transparently on submit:

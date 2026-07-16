@@ -101,6 +101,35 @@ describe("SelectField with duplicate option values", () => {
   });
 });
 
+describe("SelectField with an empty-string value", () => {
+  const emptyStringSchema = z.object({
+    plan: z.string(),
+  });
+
+  const EmptyStringHarness = () => {
+    const form = useForm(emptyStringSchema, { initialValues: { plan: "" } });
+    return (
+      <SelectField
+        form={form}
+        path="plan"
+        label="Plan"
+        options={[
+          { value: "basic", label: "Basic" },
+          { value: "pro", label: "Pro" },
+        ]}
+      />
+    );
+  };
+
+  it("renders the empty option: '' displays as blank, not as the first entry", () => {
+    render(<EmptyStringHarness />);
+    const select = screen.getByLabelText("Plan") as HTMLSelectElement;
+    expect(select.value).toBe("");
+    expect(select.options).toHaveLength(3);
+    expect(select.options[0]?.value).toBe("");
+  });
+});
+
 describe("SelectField with a null (nullable) value", () => {
   const NullableHarness = () => {
     const form = useForm(nullableSchema, { initialValues: { plan: null } });

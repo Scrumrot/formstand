@@ -97,12 +97,12 @@ describe("updateState no-op short-circuit", () => {
 });
 
 describe("validateFields empty short-circuit", () => {
-  it("returns true and does not touch errors when paths is empty", () => {
+  it("settles valid and does not touch errors when paths is empty", () => {
     const form = createForm(schema, { initialValues: { name: "x", age: 30 } });
     form.validate();
     const before = form.getState().errors;
-    const ok = form.validateFields([]);
-    expect(ok).toBe(true);
+    const result = form.validateFields([]);
+    expect(result).toEqual({ kind: "valid" });
     expect(form.getState().errors).toBe(before);
   });
 });
