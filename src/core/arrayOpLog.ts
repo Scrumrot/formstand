@@ -17,10 +17,29 @@ export type ArrayOpRecord = Readonly<{
   mapping: readonly number[];
 }>;
 
-// Bounded: a consumer more than OP_LOG_LIMIT ops behind (no render for 16
-// array ops) falls back to value reconciliation — correctness degrades to
-// the pre-log behavior, never breaks.
+// Bounded two ways, both loss-limited: a path's record COUNT is capped by
+// COMPOSING its two oldest records into one when consecutive (op mappings
+// compose, so an arbitrarily long run of consecutive ops stays fully
+// replayable in OP_LOG_LIMIT records; only a chain already broken by an
+// external write drops its dead head) — and a store accumulating more than
+// MAX_LOG_PATHS distinct array paths (dynamic row paths on a long-lived
+// singleton form) evicts its oldest path's records, degrading that path to
+// value reconciliation.
 const OP_LOG_LIMIT = 16;
+const MAX_LOG_PATHS = 256;
+
+// (second ∘ first): newIndex → the FIRST record's old index. A -1 anywhere
+// along the way stays -1 (the row was created inside the composed span).
+const composeOps = (
+  first: ArrayOpRecord,
+  second: ArrayOpRecord,
+): ArrayOpRecord => ({
+  from: first.from,
+  to: second.to,
+  mapping: second.mapping.map((mid) =>
+    mid === -1 ? -1 : (first.mapping[mid] ?? -1),
+  ),
+});
 
 const logs = new WeakMap<object, Map<string, readonly ArrayOpRecord[]>>();
 
@@ -29,13 +48,34 @@ export const recordArrayOp = (
   path: string,
   record: ArrayOpRecord,
 ): void => {
-  const byPath = logs.get(store) ?? new Map<string, readonly ArrayOpRecord[]>();
-  logs.set(store, byPath);
+  const existing = logs.get(store);
+  const byPath = existing ?? new Map<string, readonly ArrayOpRecord[]>();
+  if (existing === undefined) logs.set(store, byPath);
   const appended = [...(byPath.get(path) ?? []), record];
-  byPath.set(path, appended.slice(-OP_LOG_LIMIT));
+  const [head, second, ...rest] = appended;
+  const bounded =
+    appended.length <= OP_LOG_LIMIT || head === undefined || second === undefined
+      ? appended
+      : head.to === second.from
+        ? [composeOps(head, second), ...rest]
+        : [second, ...rest];
+  byPath.delete(path);
+  byPath.set(path, bounded);
+  if (byPath.size > MAX_LOG_PATHS) {
+    const oldest = byPath.keys().next().value;
+    if (oldest !== undefined) byPath.delete(oldest);
+  }
 };
 
 export const arrayOpsFor = (
   store: object,
   path: string,
 ): readonly ArrayOpRecord[] => logs.get(store)?.get(path) ?? [];
+
+// Drop a path's records. Called when id derivation re-anchors through value
+// reconciliation (a whole-array write broke the reference chain): from that
+// moment no existing record can ever chain again, so keeping them only pins
+// the row objects of the arrays they snapshot.
+export const clearArrayOps = (store: object, path: string): void => {
+  logs.get(store)?.delete(path);
+};

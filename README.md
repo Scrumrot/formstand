@@ -165,12 +165,13 @@ users.insert(i, item);
 users.error;   // array-level error (e.g. min(1))
 ```
 
-`fields` IDs are reconciled against item identity each render, so a row's `id`
-stays glued to its item across reorders, inserts, and removes — including
-mutations made outside this hook (`form.arrayMove`, `setValue`, `restore`, or a
-second `useFieldArray` on the same path). Editing a field keeps its row's `id`
-(the row updates instead of remounting); a genuinely new item gets a fresh `id`.
-IDs reset when the hook's `path` changes.
+`fields` IDs are shared per `(form, path)` — every hook on the same array sees
+the same ids. Array ops (hook-issued or imperative `form.arrayMove` etc.)
+record their exact index mapping and id derivation replays it, so even rows
+with equal values keep the right ids through ops; whole-array writes
+(`setValue`, `restore`) reconcile by item identity with a positional fallback,
+so editing a field keeps its row's `id` (the row updates instead of
+remounting). A genuinely new item gets a fresh `id`.
 
 ### `useFormSelector(form, selector)` / `useFormSelectorShallow(form, selector)`
 

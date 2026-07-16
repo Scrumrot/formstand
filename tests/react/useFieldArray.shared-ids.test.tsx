@@ -72,6 +72,111 @@ describe("row ids for imperative array ops on duplicate values", () => {
   });
 });
 
+describe("op replay survives chain-adjacent writes", () => {
+  // Regression (2026-07 review of f394ba4, #1): reconcileIds' equal-values
+  // early return kept a STALE items anchor, so a fresh-but-equal setValue
+  // (normalization pass, server refresh of unchanged data) silently broke
+  // the op chain and the next remove of duplicate rows mis-keyed again.
+  it("a fresh-but-equal whole-array write does not break the next op's replay", () => {
+    const { result } = renderHook(() => {
+      const form = useForm(schema, { initialValues: { tags: ["", ""] } });
+      return { form, tags: useFieldArray(form, "tags") };
+    });
+    const [id0, id1] = result.current.tags.fields.map((f) => f.id);
+
+    act(() => {
+      // Fresh array reference, Object.is-equal contents.
+      result.current.form.setValue("tags", ["", ""]);
+    });
+    expect(result.current.tags.fields.map((f) => f.id)).toEqual([id0, id1]);
+
+    act(() => {
+      result.current.tags.remove(0);
+    });
+    expect(result.current.tags.fields[0]?.id).toBe(id1);
+  });
+
+  // Regression (2026-07 review of f394ba4, #2): the op record's `to` was
+  // read from the store AFTER setState's synchronous subscriber
+  // notification, so a subscriber issuing another same-path op made the
+  // outer record span two writes — replaying to wrong ids on equal rows.
+  it("a subscriber-issued op during notification chains instead of corrupting the log", () => {
+    const { result } = renderHook(() => {
+      const form = useForm(schema, {
+        initialValues: { tags: ["", "", ""] },
+      });
+      return { form, tags: useFieldArray(form, "tags") };
+    });
+    const [id0, id1, id2] = result.current.tags.fields.map((f) => f.id);
+
+    act(() => {
+      const form = result.current.form;
+      const state = { fired: false };
+      const unsubscribe = form.store.subscribe(() => {
+        if (!state.fired) {
+          state.fired = true;
+          form.arraySwap("tags", 0, 1);
+        }
+      });
+      form.arrayRemove("tags", 0);
+      unsubscribe();
+    });
+
+    // remove(0) leaves [id1, id2]; the reentrant swap(0,1) → [id2, id1].
+    expect(result.current.tags.items).toEqual(["", ""]);
+    expect(result.current.tags.fields.map((f) => f.id)).toEqual([id2, id1]);
+    expect(id0).not.toBe(id1);
+  });
+});
+
+describe("partial op replay (chain broken mid-batch)", () => {
+  // Regression (2026-07 review of f394ba4, B#1): a null-on-incomplete replay
+  // threw away the op mappings it HAD walked, so an op followed by a non-op
+  // write in the same batch value-reconciled from scratch and handed the
+  // survivor the removed row's id. Replay now returns the furthest walked
+  // state and only the remaining hop reconciles by value.
+  it("remove(0) followed by a child setValue in one batch keeps the survivor's id", () => {
+    const { result } = renderHook(() => {
+      const form = useForm(schema, { initialValues: { tags: ["", ""] } });
+      return { form, tags: useFieldArray(form, "tags") };
+    });
+    const [id0, id1] = result.current.tags.fields.map((f) => f.id);
+
+    act(() => {
+      result.current.tags.remove(0);
+      // Child-path write rebuilds the array with no op record.
+      result.current.form.setValue("tags.0", "z");
+    });
+
+    expect(result.current.tags.items).toEqual(["z"]);
+    expect(result.current.tags.fields[0]?.id).toBe(id1);
+    expect(id0).not.toBe(id1);
+  });
+
+  // Regression (2026-07 review of f394ba4, B#3): the op log capped at 16
+  // records by DROPPING the oldest, truncating the chain for longer
+  // same-batch op runs. Consecutive records now COMPOSE instead, so an
+  // arbitrarily long run stays fully replayable.
+  it("a 17-op batch on duplicate rows still replays exactly", () => {
+    const initialTags = Array.from({ length: 18 }, () => "");
+    const { result } = renderHook(() => {
+      const form = useForm(schema, { initialValues: { tags: initialTags } });
+      return { form, tags: useFieldArray(form, "tags") };
+    });
+    const ids = result.current.tags.fields.map((f) => f.id);
+    const lastId = ids[17];
+
+    act(() => {
+      Array.from({ length: 17 }).forEach(() => {
+        result.current.tags.remove(0);
+      });
+    });
+
+    expect(result.current.tags.items).toEqual([""]);
+    expect(result.current.tags.fields[0]?.id).toBe(lastId);
+  });
+});
+
 describe("sibling useFieldArray hooks on the same path", () => {
   it("agree on ids after a hook-issued remove of equal rows", () => {
     const { result } = renderHook(() => {

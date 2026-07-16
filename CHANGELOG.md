@@ -36,8 +36,13 @@
   ops per render batch alike. All hook instances on the same path share one
   id state, so sibling `useFieldArray` hooks can never disagree on row ids.
   Whole-array writes that bypass the ops (`setValue`, `restore`) still
-  reconcile by value as before (2026-07 self-review #3, completed by the
-  deferred store-side follow-up).
+  reconcile by value as before, and replay keeps its exact progress when a
+  chain breaks mid-batch (an op followed by a `setValue` reconciles only the
+  remaining hop); consecutive log records compose when the ring fills, so
+  arbitrarily long op batches stay fully replayable. Exact replay applies to
+  forms created by `createForm`/`useForm` — schema-less custom
+  `FieldArrayFormApi` implementations reconcile by value (2026-07
+  self-review #3, completed by the deferred store-side follow-up).
 - `flattenIssues` no longer crashes on an issue path of `"__proto__"`
   (reachable via `ctx.addIssue` in a `superRefine`): the accumulator read now
   checks own keys instead of walking the prototype chain (2026-07

@@ -45,15 +45,15 @@ The path can also be a selector function, like `useField`'s — see [Typed paths
 
 ## Stable ids
 
-React keys must follow *items*, not indices — otherwise removing row 0 makes every row re-mount with its neighbor's state. `useFieldArray` derives a stable `id` per item by reconciling the live array against the previous render's array:
+React keys must follow *items*, not indices — otherwise removing row 0 makes every row re-mount with its neighbor's state. `useFieldArray` derives a stable `id` per item, and the id state is **shared per `(form, path)`** — every hook instance on the same array sees the same ids:
 
-- **Ids follow item identity.** A reorder, insert, or remove keeps each row's id glued to its item — including mutations made *outside* the hook (`form.arrayMove`, `setValue`, `restore`, or a second `useFieldArray` on the same path).
-- **Edited rows keep their id.** Editing a field produces a fresh item object (state is immutable), so identity matching alone would mint a new id and remount the row. A positional fallback hands a vanished item's id to a still-unmatched item, so in-place edits update the row instead of remounting it.
-- **Genuinely new items get fresh ids.** Ids never repeat within the hook's lifetime.
-- Ids **reset when the hook's `path` changes** — an inner field array inside a reordered outer item gets fresh ids.
+- **Array ops replay exactly.** `push`/`remove`/`insert`/`move`/`swap` — whether called on the hook or imperatively (`form.arrayMove`) — record their precise index mapping in the form, and id derivation replays it. Even rows with *equal values* keep the right ids through ops.
+- **Everything else reconciles by identity/value.** Whole-array writes (`setValue`, `restore`, resets) carry no mapping, so ids follow item identity, with a positional fallback so an in-place edit (a fresh item object at the same position) updates its row instead of remounting it.
+- **Genuinely new items get fresh ids.** Ids never repeat for a given form and path.
+- A hook whose dynamic `path` changes reads the target path's shared id state — two hooks pointed at the same array always agree.
 
-::: warning Primitive arrays with duplicate values are best-effort
-For an array of primitives (e.g. tags as plain strings), duplicate values are indistinguishable — `["a", "a"]` reordered is identical to itself. Duplicates are matched in order, which is correct for appends and removes, but a reorder among *equal* values can't be tracked. If rows carry focus or animation state, prefer objects (`{ id, label }`) over bare primitives.
+::: warning Duplicate values in whole-array writes are best-effort
+Array *ops* track duplicates exactly (see above). A whole-array write is the remaining ambiguity: after `setValue("tags", reordered)` the intent for `Object.is`-equal rows is unknowable (`["a", "a"]` reordered is identical to itself), so duplicates match in order. If rows carry focus or animation state AND you rewrite whole arrays, prefer objects (`{ id, label }`) over bare primitives. Exact op tracking is a `createForm`/`useForm` feature — a hand-rolled `FieldArrayFormApi` implementation reconciles by value only.
 :::
 
 ## Nested arrays

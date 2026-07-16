@@ -3,7 +3,11 @@ import type { z } from "zod";
 import type { StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand/react";
 import { useShallow } from "zustand/react/shallow";
-import { type ArrayOpRecord, arrayOpsFor } from "../core/arrayOpLog";
+import {
+  type ArrayOpRecord,
+  arrayOpsFor,
+  clearArrayOps,
+} from "../core/arrayOpLog";
 import type { Form } from "../core/createForm";
 import type { FieldPath, FieldValue } from "../core/fieldPath";
 import { getAtPath } from "../core/path";
@@ -88,7 +92,12 @@ const reconcileIds = (prev: IdState, nextItems: readonly unknown[]): IdState => 
     prev.items.length === nextItems.length &&
     prev.items.every((item, i) => Object.is(item, nextItems[i]))
   ) {
-    return prev;
+    // Same rows, fresh array reference (a normalization pass, a server
+    // refresh of unchanged data): the ids are unchanged but the anchor
+    // MUST move to the live reference — a later op's record chains from
+    // it, and a stale anchor would silently break replay back to value
+    // matching (the duplicate-row bug all over again).
+    return { ...prev, items: nextItems };
   }
 
   // Bucket prev positions by item so duplicate primitives match in order.
@@ -176,48 +185,67 @@ const mappedIdState = (
 // One id state per (form store, path), shared by EVERY hook instance on
 // that array so sibling hooks always agree on row ids. A sanctioned
 // mutable-ref cache (like the core's subschemaCache): the entry is derived
-// bookkeeping — a pure, convergent function of the last-seen items, the
-// live items, and the op log — so re-deriving after a discarded render
-// still starts from a state that was real. The WeakMap releases entries
-// with their store.
+// bookkeeping — each commit is a pure function of a REAL store state, so a
+// discarded render leaves a sound (if not identical) state behind: rows may
+// remint where reuse was possible (a cosmetic remount), but a surviving row
+// can never receive another row's id. Entries are access-ordered and capped
+// so a long-lived store with churning dynamic paths (rows.N.tags) can't
+// accumulate snapshots forever; the WeakMap releases the rest with the
+// store.
 type SharedIdEntry = { state: IdState };
+type StoreIdEntries = { byPath: Map<string, SharedIdEntry>; seq: number };
 
-const sharedIdEntries = new WeakMap<object, Map<string, SharedIdEntry>>();
-// Fresh prefix per entry so ids from different arrays (or a hook whose
-// dynamic path switches) can never collide as React keys.
-const entrySeq = { next: 1 };
+const MAX_ID_PATHS = 256;
+const sharedIdEntries = new WeakMap<object, StoreIdEntries>();
 
 const sharedIdEntry = (store: object, path: string): SharedIdEntry => {
-  const byPath =
-    sharedIdEntries.get(store) ?? new Map<string, SharedIdEntry>();
-  sharedIdEntries.set(store, byPath);
-  const existing = byPath.get(path);
-  if (existing !== undefined) return existing;
-  const prefix = `__zfa_${entrySeq.next}_`;
-  entrySeq.next += 1;
+  const existingStore = sharedIdEntries.get(store);
+  const forStore = existingStore ?? { byPath: new Map(), seq: 1 };
+  if (existingStore === undefined) sharedIdEntries.set(store, forStore);
+  const existing = forStore.byPath.get(path);
+  if (existing !== undefined) {
+    // Re-insert to refresh recency, so eviction takes the longest-unused
+    // path, not merely the oldest-created.
+    forStore.byPath.delete(path);
+    forStore.byPath.set(path, existing);
+    return existing;
+  }
+  // Prefix from a PER-STORE sequence (deterministic per form, unlike a
+  // module-global counter whose value depends on app-wide first-touch
+  // order), so ids from different arrays — or a hook whose dynamic path
+  // switches — can never collide as React keys.
   const created: SharedIdEntry = {
-    state: { items: EMPTY_ITEMS, ids: [], counter: 0, prefix },
+    state: {
+      items: EMPTY_ITEMS,
+      ids: [],
+      counter: 0,
+      prefix: `__zfa_${forStore.seq}_`,
+    },
   };
-  byPath.set(path, created);
+  forStore.seq += 1;
+  forStore.byPath.set(path, created);
+  if (forStore.byPath.size > MAX_ID_PATHS) {
+    const oldest = forStore.byPath.keys().next().value;
+    if (oldest !== undefined) forStore.byPath.delete(oldest);
+  }
   return created;
 };
 
-// Walk the op log from the last-seen items to the live items, applying each
-// consecutive record's exact mapping. Null when no unbroken chain reaches
-// the live array (log truncated, values rewritten outside the ops, or a
-// misaligned record) — the caller falls back to value reconciliation.
+// Walk the op log from the last-seen items TOWARD the live items, applying
+// each consecutive record's exact mapping. The walk may stop short (a
+// non-op write broke the chain, a truncated log, a misaligned record) —
+// it returns the FURTHEST state reached, never discarding exact op
+// progress: the caller value-reconciles only the remaining hop, so an op
+// followed by a setValue in the same batch still replays the op exactly.
 const replayOps = (
   start: IdState,
   items: readonly unknown[],
   ops: readonly ArrayOpRecord[],
-): IdState | null => {
-  const walked = ops.reduce<IdState | null>((acc, op) => {
-    if (acc === null || acc.items === items) return acc;
-    if (op.from !== acc.items) return acc;
-    return mappedIdState(acc, op.mapping, op.to);
+): IdState =>
+  ops.reduce<IdState>((acc, op) => {
+    if (acc.items === items || op.from !== acc.items) return acc;
+    return mappedIdState(acc, op.mapping, op.to) ?? acc;
   }, start);
-  return walked !== null && walked.items === items ? walked : null;
-};
 
 const deriveIds = (
   store: object,
@@ -226,9 +254,17 @@ const deriveIds = (
 ): IdState => {
   const entry = sharedIdEntry(store, path);
   if (entry.state.items === items) return entry.state;
+  const walked = replayOps(entry.state, items, arrayOpsFor(store, path));
   const next =
-    replayOps(entry.state, items, arrayOpsFor(store, path)) ??
-    reconcileIds(entry.state, items);
+    walked.items === items
+      ? walked
+      : (() => {
+          // Re-anchoring through value reconciliation makes every logged
+          // record permanently unreachable (future ops chain from the live
+          // reference) — drop them so they stop pinning old arrays' rows.
+          clearArrayOps(store, path);
+          return reconcileIds(walked, items);
+        })();
   entry.state = next;
   return next;
 };

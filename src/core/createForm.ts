@@ -3,14 +3,9 @@ import type { StoreApi } from "zustand/vanilla";
 import { createStore } from "zustand/vanilla";
 import { devtools } from "zustand/middleware";
 import {
-  type IdMapping,
   type IndexMapper,
-  idMapInsert,
-  idMapMove,
-  idMapPush,
-  idMapRemove,
-  idMapSwap,
   insertAt,
+  invertMapper,
   moveFromTo,
   reKeyByArrayPath,
   removeAt,
@@ -960,11 +955,6 @@ export const createForm = <TSchema extends z.ZodType>(
     path: string,
     nextArray: (current: readonly unknown[]) => readonly unknown[],
     mapper: IndexMapper,
-    // The op's exact new→old row mapping, recorded to the array-op log so
-    // useFieldArray keeps row ids glued to the right rows even when row
-    // VALUES are indistinguishable (Object.is-equal) — regardless of
-    // whether the op came through a hook or this imperative API.
-    idMapping: IdMapping,
     // Validated against the current length before anything mutates — a bad
     // index (arrayRemove(path, -1)) would otherwise corrupt both the array
     // and the re-keyed error/touched maps.
@@ -984,12 +974,29 @@ export const createForm = <TSchema extends z.ZodType>(
       );
       return;
     }
+    const arr: readonly unknown[] = Array.isArray(current) ? current : [];
+    const next = nextArray(arr);
+    // Record BEFORE the write, from the exact references the write uses:
+    // zustand notifies subscribers synchronously inside setState, so a
+    // reentrant same-path write would otherwise interleave the log order
+    // AND make a post-setState getState() read pair this op's mapping with
+    // a `to` spanning two writes — a corrupt record that can replay to
+    // wrong row ids. The mapping is the inverted IndexMapper — the same
+    // mapper that re-keys errors/touched below, one source of truth. An op
+    // on an absent slot (push into an undefined array) is not recorded:
+    // there is no prior array reference to chain from, and value
+    // reconciliation mints the first ids anyway.
+    if (Array.isArray(current)) {
+      recordArrayOp(store, path, {
+        from: current,
+        to: next,
+        mapping: invertMapper(mapper, current.length, next.length),
+      });
+    }
     store.setState((state) => {
-      const live = getAtPath(state.values, path);
-      const arr: readonly unknown[] = Array.isArray(live) ? live : [];
       return {
         ...state,
-        values: setAtPath(state.values, path, nextArray(arr)),
+        values: setAtPath(state.values, path, next),
         ...errorChannels(state, {
           schemaErrors: reKeyByArrayPath(state.schemaErrors, path, mapper),
           // Server entries on rows follow their rows through the index
@@ -1012,19 +1019,6 @@ export const createForm = <TSchema extends z.ZodType>(
         isValidating: omitScope(state.isValidating, [path]),
       };
     });
-    // Log the op for row-id derivation. An op on an absent slot (push into
-    // an undefined array) is skipped: there is no prior array reference to
-    // chain from, and value reconciliation mints the first ids anyway.
-    if (Array.isArray(current)) {
-      const next = getAtPath(store.getState().values, path);
-      if (Array.isArray(next)) {
-        recordArrayOp(store, path, {
-          from: current,
-          to: next,
-          mapping: idMapping(current.length),
-        });
-      }
-    }
   };
 
   const inFlight: { count: number; baseline: boolean } = {
@@ -1384,13 +1378,12 @@ export const createForm = <TSchema extends z.ZodType>(
     validateFieldsAsync,
     submit,
     arrayPush: (path: string, item: unknown) =>
-      applyArrayOp(path, (arr) => [...arr, item], identityMapper, idMapPush),
+      applyArrayOp(path, (arr) => [...arr, item], identityMapper),
     arrayRemove: (path: string, index: number) =>
       applyArrayOp(
         path,
         (arr) => [...arr.slice(0, index), ...arr.slice(index + 1)],
         removeAt(index),
-        idMapRemove(index),
         (len) => Number.isInteger(index) && index >= 0 && index < len,
       ),
     arrayInsert: (path: string, index: number, item: unknown) =>
@@ -1398,7 +1391,6 @@ export const createForm = <TSchema extends z.ZodType>(
         path,
         (arr) => [...arr.slice(0, index), item, ...arr.slice(index)],
         insertAt(index),
-        idMapInsert(index),
         (len) => Number.isInteger(index) && index >= 0 && index <= len,
       ),
     arrayMove: (path: string, from: number, to: number) =>
@@ -1409,7 +1401,6 @@ export const createForm = <TSchema extends z.ZodType>(
           return [...without.slice(0, to), arr[from], ...without.slice(to)];
         },
         moveFromTo(from, to),
-        idMapMove(from, to),
         (len) =>
           Number.isInteger(from) &&
           Number.isInteger(to) &&
@@ -1423,7 +1414,6 @@ export const createForm = <TSchema extends z.ZodType>(
         path,
         (arr) => arr.map((v, i) => (i === a ? arr[b] : i === b ? arr[a] : v)),
         swapIndices(a, b),
-        idMapSwap(a, b),
         (len) =>
           Number.isInteger(a) &&
           Number.isInteger(b) &&
