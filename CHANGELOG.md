@@ -27,13 +27,17 @@
   a hole that crashed row components and failed schema validation. The value
   is left unchanged (with a console warning), and error/touched state under
   the path still clears (2026-07 self-review #2).
-- `useFieldArray` ops on rows with equal values keep ids glued to the right
-  rows: `remove`/`insert`/`move`/`swap`/`push` issued through the hook now
-  commit their exact index mapping instead of re-deriving ids by value
-  matching, which could not tell `Object.is`-equal rows apart (`remove(0)` on
-  two blank rows handed the survivor the removed row's id, resurrecting the
-  wrong React subtree). Writes that bypass the hook still reconcile by value
-  as before (2026-07 self-review #3).
+- `useFieldArray` row ids stay glued to the right rows even when row values
+  are `Object.is`-equal (`remove(0)` on two blank rows handed the survivor
+  the removed row's id, resurrecting the wrong React subtree). The core now
+  records every array op's exact new→old index mapping in an internal
+  per-path op log, and id derivation replays that log — so the fix covers
+  hook-issued ops, IMPERATIVE ops (`form.arrayRemove(...)`), and multiple
+  ops per render batch alike. All hook instances on the same path share one
+  id state, so sibling `useFieldArray` hooks can never disagree on row ids.
+  Whole-array writes that bypass the ops (`setValue`, `restore`) still
+  reconcile by value as before (2026-07 self-review #3, completed by the
+  deferred store-side follow-up).
 - `flattenIssues` no longer crashes on an issue path of `"__proto__"`
   (reachable via `ctx.addIssue` in a `superRefine`): the accumulator read now
   checks own keys instead of walking the prototype chain (2026-07

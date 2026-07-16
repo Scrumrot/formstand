@@ -1,8 +1,9 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import type { z } from "zod";
 import type { StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand/react";
 import { useShallow } from "zustand/react/shallow";
+import { type ArrayOpRecord, arrayOpsFor } from "../core/arrayOpLog";
 import type { Form } from "../core/createForm";
 import type { FieldPath, FieldValue } from "../core/fieldPath";
 import { getAtPath } from "../core/path";
@@ -47,9 +48,11 @@ type IdState = Readonly<{
   items: readonly unknown[];
   ids: readonly string[];
   counter: number;
+  // Unique per (form, path) entry, so ids minted for different arrays (or
+  // for the same hook after a dynamic path switch) can never collide as
+  // React keys.
+  prefix: string;
 }>;
-
-const EMPTY_ID_STATE: IdState = { items: [], ids: [], counter: 0 };
 
 // Stable reference for "path holds no array yet" — a fresh [] per selector
 // run would defeat useShallow and re-render on every store change.
@@ -70,14 +73,15 @@ const mintNumbers = (
   );
 
 // Derive a stable id per item by reconciling the live items against the
-// previous render's items. Ids follow items by identity/value, so reorders,
-// resets, and mutations that bypass this hook all keep keys glued to their
-// rows — not just length-preserving appends/truncations. A same-index
-// fallback keeps an edited row's id (editing produces a fresh item
-// reference at the same position) without remounting it. This is the
-// FALLBACK path: ops issued through the hook commit their exact id
-// transform directly (see applyOpIds below), because value matching cannot
-// tell Object.is-equal rows apart.
+// last-seen items. Ids follow items by identity/value, so resets and
+// mutations that bypass the array ops (setValue of a whole array, restore)
+// keep keys glued to their rows — not just length-preserving appends/
+// truncations. A same-index fallback keeps an edited row's id (editing
+// produces a fresh item reference at the same position) without remounting
+// it. This is the FALLBACK path: array ops (hook-issued OR imperative)
+// replay their exact recorded mappings via the core's op log first (see
+// deriveIds), because value matching cannot tell Object.is-equal rows
+// apart.
 const reconcileIds = (prev: IdState, nextItems: readonly unknown[]): IdState => {
   if (prev.items === nextItems) return prev;
   if (
@@ -123,16 +127,16 @@ const reconcileIds = (prev: IdState, nextItems: readonly unknown[]): IdState => 
 
   const mints = mintNumbers(reused.map((id) => id === null));
   const ids = reused.map(
-    (id, i) => id ?? `__zfa_${prev.counter + (mints.get(i) ?? 0)}`,
+    (id, i) => id ?? `${prev.prefix}${prev.counter + (mints.get(i) ?? 0)}`,
   );
 
-  return { items: nextItems, ids, counter: prev.counter + mints.size };
+  return {
+    items: nextItems,
+    ids,
+    counter: prev.counter + mints.size,
+    prefix: prev.prefix,
+  };
 };
-
-// Identity-index array [0, 1, ..., len-1]: the base the per-op mappings
-// transform with the same slice logic as the core's array ops.
-const opIndices = (len: number): readonly number[] =>
-  Array.from({ length: len }, (_, i) => i);
 
 // Apply an exact index mapping to the id list: nextIds[i] =
 // prev.ids[mapping[i]], with -1 minting a fresh id (a new row). Returns null
@@ -158,10 +162,75 @@ const mappedIdState = (
   const mints = mintNumbers(mapping.map((src) => src === -1));
   const ids = mapping.map((src, i) =>
     src === -1
-      ? `__zfa_${prev.counter + (mints.get(i) ?? 0)}`
+      ? `${prev.prefix}${prev.counter + (mints.get(i) ?? 0)}`
       : (prev.ids[src] as string),
   );
-  return { items: liveItems, ids, counter: prev.counter + mints.size };
+  return {
+    items: liveItems,
+    ids,
+    counter: prev.counter + mints.size,
+    prefix: prev.prefix,
+  };
+};
+
+// One id state per (form store, path), shared by EVERY hook instance on
+// that array so sibling hooks always agree on row ids. A sanctioned
+// mutable-ref cache (like the core's subschemaCache): the entry is derived
+// bookkeeping — a pure, convergent function of the last-seen items, the
+// live items, and the op log — so re-deriving after a discarded render
+// still starts from a state that was real. The WeakMap releases entries
+// with their store.
+type SharedIdEntry = { state: IdState };
+
+const sharedIdEntries = new WeakMap<object, Map<string, SharedIdEntry>>();
+// Fresh prefix per entry so ids from different arrays (or a hook whose
+// dynamic path switches) can never collide as React keys.
+const entrySeq = { next: 1 };
+
+const sharedIdEntry = (store: object, path: string): SharedIdEntry => {
+  const byPath =
+    sharedIdEntries.get(store) ?? new Map<string, SharedIdEntry>();
+  sharedIdEntries.set(store, byPath);
+  const existing = byPath.get(path);
+  if (existing !== undefined) return existing;
+  const prefix = `__zfa_${entrySeq.next}_`;
+  entrySeq.next += 1;
+  const created: SharedIdEntry = {
+    state: { items: EMPTY_ITEMS, ids: [], counter: 0, prefix },
+  };
+  byPath.set(path, created);
+  return created;
+};
+
+// Walk the op log from the last-seen items to the live items, applying each
+// consecutive record's exact mapping. Null when no unbroken chain reaches
+// the live array (log truncated, values rewritten outside the ops, or a
+// misaligned record) — the caller falls back to value reconciliation.
+const replayOps = (
+  start: IdState,
+  items: readonly unknown[],
+  ops: readonly ArrayOpRecord[],
+): IdState | null => {
+  const walked = ops.reduce<IdState | null>((acc, op) => {
+    if (acc === null || acc.items === items) return acc;
+    if (op.from !== acc.items) return acc;
+    return mappedIdState(acc, op.mapping, op.to);
+  }, start);
+  return walked !== null && walked.items === items ? walked : null;
+};
+
+const deriveIds = (
+  store: object,
+  path: string,
+  items: readonly unknown[],
+): IdState => {
+  const entry = sharedIdEntry(store, path);
+  if (entry.state.items === items) return entry.state;
+  const next =
+    replayOps(entry.state, items, arrayOpsFor(store, path)) ??
+    reconcileIds(entry.state, items);
+  entry.state = next;
+  return next;
 };
 
 // The element type at an array-valued path. FieldValue re-adds `| undefined`
@@ -215,112 +284,40 @@ export function useFieldArray<TItem = unknown>(
   const items = slice.items;
   const error = slice.error;
 
-  // Reconcile ids against the live items every render, using the
-  // derived-state-from-props pattern (a render-phase setState, which React
-  // supports and immediately re-renders with) instead of mutating a ref during
-  // render — a discarded concurrent render must not advance id bookkeeping,
-  // and skipping the commit when ids look unchanged is unsound (a reorder
-  // after uncommitted in-place edits would then match against a stale items
-  // snapshot and glue ids to the wrong rows). The re-render is cheap: its
-  // reconcile early-exits on the same items reference. When the form or path
-  // changes, drop the previous array's ids but carry the counter forward so
-  // freshly minted ids never collide with old ones.
-  const [idEntry, setIdEntry] = useState<
-    Readonly<{ form: FieldArrayFormApi; path: string; state: IdState }>
-  >({ form, path, state: EMPTY_ID_STATE });
-  const base =
-    idEntry.form === form && idEntry.path === path
-      ? idEntry.state
-      : { ...EMPTY_ID_STATE, counter: idEntry.state.counter };
-  const nextIdState = reconcileIds(base, items);
-  if (
-    idEntry.form !== form ||
-    idEntry.path !== path ||
-    idEntry.state !== nextIdState
-  ) {
-    setIdEntry({ form, path, state: nextIdState });
-  }
-  const ids = nextIdState.ids;
+  // Ids derive from the shared per-(store, path) entry: the core's op log
+  // replays each array op's exact index mapping (hook-issued or imperative
+  // — both go through applyArrayOp, which records them), and value
+  // reconciliation covers everything else (setValue of a whole array,
+  // restore, resets). Deriving during render is safe because the entry is
+  // a convergent cache — every commit is a pure function of a real store
+  // state — and cheap because it early-exits on the same items reference.
+  // All hook instances on the same path read the same entry, so their ids
+  // can never disagree.
+  const ids = deriveIds(form.store, path, items).ids;
 
-  // Ops issued through the hook know EXACTLY how indices moved, so commit
-  // that transform to the id list right after the store write instead of
-  // re-deriving it from values: value matching cannot tell Object.is-equal
-  // rows apart — remove(0) on ["", ""] would hand the survivor the removed
-  // row's id and React would keep the wrong subtree (focus/local state).
-  // mappedIdState verifies the mapping against the live items and returns
-  // null when the store did something else (refused op, interleaved write),
-  // leaving the render-phase reconcile to handle it as before.
-  const applyOpIds = useCallback(
-    (mapping: (len: number) => readonly number[]) => {
-      const value = getAtPath(form.store.getState().values, path);
-      const liveItems: readonly unknown[] = Array.isArray(value)
-        ? value
-        : EMPTY_ITEMS;
-      setIdEntry((entry) => {
-        if (entry.form !== form || entry.path !== path) return entry;
-        // Same reference: the op was refused (bounds warn) or was a no-op.
-        if (entry.state.items === liveItems) return entry;
-        const next = mappedIdState(
-          entry.state,
-          mapping(entry.state.items.length),
-          liveItems,
-        );
-        return next === null ? entry : { form, path, state: next };
-      });
-    },
+  const push = useCallback(
+    (item: TItem) => form.arrayPush(path, item),
     [form, path],
   );
 
-  const push = useCallback(
-    (item: TItem) => {
-      form.arrayPush(path, item);
-      applyOpIds((len) => [...opIndices(len), -1]);
-    },
-    [form, path, applyOpIds],
-  );
-
   const remove = useCallback(
-    (index: number) => {
-      form.arrayRemove(path, index);
-      applyOpIds((len) => {
-        const idx = opIndices(len);
-        return [...idx.slice(0, index), ...idx.slice(index + 1)];
-      });
-    },
-    [form, path, applyOpIds],
+    (index: number) => form.arrayRemove(path, index),
+    [form, path],
   );
 
   const insert = useCallback(
-    (index: number, item: TItem) => {
-      form.arrayInsert(path, index, item);
-      applyOpIds((len) => {
-        const idx = opIndices(len);
-        return [...idx.slice(0, index), -1, ...idx.slice(index)];
-      });
-    },
-    [form, path, applyOpIds],
+    (index: number, item: TItem) => form.arrayInsert(path, index, item),
+    [form, path],
   );
 
   const move = useCallback(
-    (from: number, to: number) => {
-      form.arrayMove(path, from, to);
-      applyOpIds((len) => {
-        const idx = opIndices(len);
-        const without = [...idx.slice(0, from), ...idx.slice(from + 1)];
-        return [...without.slice(0, to), from, ...without.slice(to)];
-      });
-    },
-    [form, path, applyOpIds],
+    (from: number, to: number) => form.arrayMove(path, from, to),
+    [form, path],
   );
 
   const swap = useCallback(
-    (a: number, b: number) => {
-      form.arraySwap(path, a, b);
-      applyOpIds((len) =>
-        opIndices(len).map((i) => (i === a ? b : i === b ? a : i)),
-      );
-    },
-    [form, path, applyOpIds],
+    (a: number, b: number) => form.arraySwap(path, a, b),
+    [form, path],
   );
 
   const fields = useMemo<readonly FieldArrayEntry<TItem>[]>(

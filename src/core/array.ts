@@ -24,6 +24,44 @@ export const swapIndices =
   (n) =>
     n === a ? b : n === b ? a : n;
 
+// New-index → old-index mappings (the inverse view of the IndexMapper
+// factories above), materialized as arrays because their consumer — the row
+// id lists that follow array rows — walks positions. -1 marks a freshly
+// created row (it has no old index and mints a new id).
+const indices = (len: number): readonly number[] =>
+  Array.from({ length: len }, (_, i) => i);
+
+export type IdMapping = (length: number) => readonly number[];
+
+export const idMapPush: IdMapping = (len) => [...indices(len), -1];
+
+export const idMapRemove =
+  (index: number): IdMapping =>
+  (len) => {
+    const idx = indices(len);
+    return [...idx.slice(0, index), ...idx.slice(index + 1)];
+  };
+
+export const idMapInsert =
+  (index: number): IdMapping =>
+  (len) => {
+    const idx = indices(len);
+    return [...idx.slice(0, index), -1, ...idx.slice(index)];
+  };
+
+export const idMapMove =
+  (from: number, to: number): IdMapping =>
+  (len) => {
+    const idx = indices(len);
+    const without = [...idx.slice(0, from), ...idx.slice(from + 1)];
+    return [...without.slice(0, to), from, ...without.slice(to)];
+  };
+
+export const idMapSwap =
+  (a: number, b: number): IdMapping =>
+  (len) =>
+    indices(len).map((i) => (i === a ? b : i === b ? a : i));
+
 const indexAndTail = (
   rest: string,
 ): Readonly<{ index: number; tail: string }> | null => {
