@@ -291,19 +291,33 @@ export type ArrayItemOf<T> = [NonNullable<T>] extends [readonly (infer U)[]]
 // and return UseFieldArrayReturn<unknown> instead of inferring the item
 // type from the path. Schema-less FieldFormApi forms keep the explicit
 // TItem parameter (there is nothing to infer from).
+// The form is matched structurally (schema witness + typed store) instead
+// of as Form<TSchema, D>: every Form is assignable regardless of its
+// pathDepth, and keeping this overload at ONE type parameter preserves
+// explicit instantiation expressions (`typeof useFieldArray<Schema,
+// "tags">`) — TS applies explicit type args to every arity-compatible
+// overload, so a second parameter here would check "tags" against it.
 export function useFieldArray<TSchema extends z.ZodType>(
-  form: Form<TSchema>,
+  form: FieldArrayFormApi &
+    Readonly<{
+      schema: TSchema;
+      store: ReadonlyStore<FormState<z.input<TSchema>>>;
+    }>,
   pathSelector: (state: FormState<z.input<TSchema>>) => string,
 ): UseFieldArrayReturn<unknown>;
 export function useFieldArray<TItem = unknown>(
   form: FieldArrayFormApi & { readonly schema?: undefined },
   path: FieldPathArg<unknown>,
 ): UseFieldArrayReturn<TItem>;
+// D last with a default (P's constraint forward-references it), preserving
+// the arity of explicit instantiations like
+// `useFieldArray<typeof schema, "tags">`.
 export function useFieldArray<
   TSchema extends z.ZodType,
-  P extends FieldPath<z.input<TSchema>>,
+  P extends FieldPath<z.input<TSchema>, D>,
+  D extends number = 9,
 >(
-  form: Form<TSchema>,
+  form: Form<TSchema, D>,
   path: P,
 ): UseFieldArrayReturn<ArrayItemOf<FieldValue<z.input<TSchema>, P>>>;
 export function useFieldArray<TItem = unknown>(

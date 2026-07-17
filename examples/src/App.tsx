@@ -358,7 +358,7 @@ const BLURBS: Readonly<Record<TabKey, string>> = {
   genKitchenSink:
     "Every schema kind and wrapper the CLI supports in one form — tuple included — as untouched --layout module output.",
   genDeepNest:
-    "Eight levels of nesting, untouched single-file output: the branch past formstand's 7-segment FieldPath budget degrades to a // TODO, while the in-budget mixed branch binds real controls.",
+    "Nine levels of nesting, untouched single-file output: leaves exactly AT formstand's 9-segment FieldPath budget bind real controls, while the level past it degrades to a // TODO.",
   genArrayStress:
     "Three-level nested arrays (teams → members → phones) from the CLI's recursive row extraction, untouched module output.",
   cliCommand:

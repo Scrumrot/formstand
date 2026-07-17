@@ -20,6 +20,38 @@
   implementations written against the old throwing style should return the
   pending result instead.
 
+### Added
+
+- **`pathDepth` option on `createForm`/`useForm`** — a type-level-only,
+  per-form typed-path depth budget (in segments): `createForm(schema, {
+  initialValues, pathDepth: 12 })` widens the `FieldPath` union so deeper
+  paths bind with full inference, threading through every typed surface
+  (`Form<TSchema, D>`, `useField`/`useFieldArray`/`useVariantField`, the
+  flag/selector hooks, `createFormHooks`, `createFormContext<S, D>`, the
+  bound components' `PathsOf`). The runtime ignores it entirely — path APIs
+  always walked any depth — and D infers as a literal from the option.
+  Motivated by one global store backing many forms, whose leaves sit past
+  the default budget. Raising it is a deliberate TypeScript compile-cost
+  trade: the union grows with every extra level, and every path-taking call
+  in the editor pays for it. `D` must be a number literal; budgets up to 25
+  are supported. NOT breaking for existing code: `D` is appended LAST with a
+  default on every generic surface (the hooks' typed overloads
+  forward-reference it from the path parameter's constraint, and the
+  selector overloads stay at one type parameter), so existing references —
+  `Form<Schema>`, explicit instantiations like
+  `useFieldArray<typeof schema, "tags">`, `createFormHooks<S, "name">` —
+  keep compiling unchanged; type tests pin the arity.
+
+### Changed
+
+- **Default typed-path depth raised from 7 to 9 segments**
+  (`FieldPath<T, D = 9>`). Real-world stores kept hitting the 7-segment cap
+  (the CLI's nested-array output reaches 7 with just three array levels,
+  and one more object wrapper fell off the union). Measured typecheck cost
+  of the wider default across this repo (library + tests + examples) is
+  noise-level. `Form<Schema>` references keep compiling unchanged — the new
+  `D` parameter defaults to 9 everywhere.
+
 ### Fixed
 
 - `resetField` on a path with no counterpart in `initialValues` (an appended
@@ -83,10 +115,23 @@
 
 ## formstand-cli Unreleased
 
+### Changed
+
+- **The typed-path budget follows the library default, now 9 segments**
+  (`FORMSTAND_PATH_DEPTH` 7 → 9, tracking `FieldPath<T, D = 9>` in
+  src/core/fieldPath.ts). Bindings whose full path is 8 or 9 segments —
+  degraded to TODOs by the budget fix below — bind real controls again;
+  10+-segment paths keep the TODO + stderr warning. In-budget output is
+  byte-identical (the three-level nested-array snapshot is unchanged). The
+  library's new per-form `pathDepth` option can widen a form past 9; a
+  future `--path-depth` flag would pair with it (not implemented — bind
+  those paths by hand for now).
+
 ### Fixed
 
-- **Emitted bindings now respect formstand's typed `FieldPath` budget of 7
-  segments** (found by dogfooding: the DeepBoundaryForm playground demo). The
+- **Emitted bindings now respect formstand's typed `FieldPath` budget**
+  (7 segments when this fix landed; now 9 — see Changed above) (found by
+  dogfooding: the DeepBoundaryForm playground demo). The
   walkers happily emitted 9-segment paths (`l1.l2....l8.leaf`) that fail
   typecheck in every consumer (TS2820, `FieldPath<T, D = 7>` in
   `src/core/fieldPath.ts`). The emitters now count segments of the FULL bound

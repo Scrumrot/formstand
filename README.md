@@ -348,9 +348,12 @@ decided by the **existing container**: arrays take numeric segments as indices,
 plain objects take any segment as a string key — so a `z.record` keyed `"0"`
 reads and writes the record key instead of silently becoming an array. Only
 when the container doesn't exist yet does the segment type pick what's created
-(numeric → array, otherwise object). Two limitations: keys containing `.` are
-not addressable, and array writes beyond index 100 000 are refused (a typo'd
-index must not allocate gigabytes).
+(numeric → array, otherwise object). Three limitations: keys containing `.`
+are not addressable; array writes beyond index 100 000 are refused (a typo'd
+index must not allocate gigabytes); and the typed `FieldPath` union stops at
+9 segments by default — the runtime walks any depth, and `createForm`'s
+type-level `pathDepth` option widens the union per form (a deliberate
+compile-time trade; see the [typed paths guide](https://scrumrot.github.io/formstand/guide/typed-paths)).
 
 ## Subscriptions (non-React)
 

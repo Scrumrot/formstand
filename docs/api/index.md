@@ -23,6 +23,7 @@ const form = createForm(schema, {
 | `mode` | `ValidationMode` | `"onChange" \| "onBlur" \| "onSubmit" \| "onTouched" \| "all"`, default `"onBlur"` |
 | `reValidateMode` | `ValidationMode` | mode used after the first submit attempt, default `"onChange"` |
 | `validateOnMount` | `boolean` | validate at creation so `useIsValid` reflects the initial values (async schemas validate in the background) |
+| `pathDepth` | `number` literal | **type-level only** — the typed-path depth budget in segments, default `9`. Widens/narrows the `FieldPath` union for this form (`Form<TSchema, D>`); the runtime ignores it. Raising it is a compile-time cost trade — see [Typed paths](../guide/typed-paths#how-path-segments-are-interpreted) |
 
 ## `Form<TSchema>` methods
 

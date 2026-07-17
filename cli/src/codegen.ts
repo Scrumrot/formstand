@@ -102,12 +102,15 @@ const camelJoin = (segments: readonly string[]): string => {
 // carry the key).
 export const isUnaddressable = (name: string): boolean => name.includes(".");
 
-// formstand's typed path union stops at 7 SEGMENTS: src/core/fieldPath.ts
-// declares `FieldPath<T, D extends number = 7>`, spending one D per dot-
-// separated segment. A binding whose full path has more segments falls
-// outside the union and fails typecheck (TS2820), so the emitters degrade
-// it to a TODO comment instead — exactly like other unsupported shapes.
-export const FORMSTAND_PATH_DEPTH = 7;
+// formstand's typed path union stops at 9 SEGMENTS by default:
+// src/core/fieldPath.ts declares `FieldPath<T, D extends number = 9>`,
+// spending one D per dot-separated segment. A binding whose full path has
+// more segments falls outside the union and fails typecheck (TS2820), so
+// the emitters degrade it to a TODO comment instead — exactly like other
+// unsupported shapes. Generated forms don't set createForm's `pathDepth`
+// option, so the library default is the budget here; a future --path-depth
+// flag would pair with it.
+export const FORMSTAND_PATH_DEPTH = 9;
 
 // Segments of a bound path, counted the way the library splits paths: on
 // ".", with each template hole (`${index}`, `${p0}`, ...) one numeric

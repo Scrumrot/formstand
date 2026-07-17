@@ -19,13 +19,27 @@ type IsRecord<T> = T extends LeafType
 
 type IsArray<T> = T extends readonly unknown[] ? true : false;
 
-type Prev = [never, 0, 1, 2, 3, 4, 5, 6, 7, 8];
+// Decrement table for the depth budget. Its length bounds the largest
+// usable `pathDepth`: indices 0..25 support budgets up to D = 25 (already
+// far past what the compiler enjoys — see FieldPath's doc below).
+type Prev = [
+  never, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+  13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+];
 
 // Recursion steps strip null/undefined (NonNullable) so paths inside optional
 // objects/arrays ("profile.name" for `profile?: {...}`) are still addressable;
 // FieldValue re-adds `| undefined` for values reached through an optional
 // level.
-export type FieldPath<T, D extends number = 7> = [D] extends [0]
+//
+// D counts SEGMENTS, not recursion steps: one D is spent per dot-separated
+// segment (each record key or array index), so at D = 1 only single-segment
+// paths bind and the default D = 9 admits paths up to 9 segments — the same
+// counting formstand-cli's depth budget uses. The cap is a TS compile-cost
+// guardrail (the union's size grows with every level the type recurses
+// into), not a runtime limit: the path runtime walks any depth. Forms can
+// widen or narrow it per form via createForm's `pathDepth` option.
+export type FieldPath<T, D extends number = 9> = [D] extends [0]
   ? never
   : IsArray<T> extends true
     ? T extends readonly (infer U)[]

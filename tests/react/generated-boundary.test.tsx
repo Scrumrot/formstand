@@ -4,16 +4,17 @@
 // root, after `npm --prefix cli run build`) instead of editing:
 //
 //   node cli/dist/cli.js examples/src/generated/boundarySchemas.ts --export kitchenSinkSchema --name KitchenSinkForm --layout module --out examples/src/generated/KitchenSinkForm --force
-//   node cli/dist/cli.js examples/src/generated/boundarySchemas.ts --export deepBoundarySchema --name DeepBoundaryForm --out examples/src/generated/DeepBoundaryForm.tsx --force
+//   node cli/dist/cli.js examples/src/generated/boundarySchemas.ts --export deepBoundarySchema --name DeepBoundaryForm --max-depth 11 --out examples/src/generated/DeepBoundaryForm.tsx --force
 //   node cli/dist/cli.js examples/src/generated/boundarySchemas.ts --export nestedArrayStressSchema --name NestedArrayStressForm --layout module --out examples/src/generated/NestedArrayStressForm --force
 //
 // (scripts/generate-cli-demos.mjs runs all three; CI diffs the output.)
 //
 // DeepBoundaryForm.tsx (single-file layout) exists to pin the FieldPath
-// depth boundary: its l1...l8 branch would bind 9-segment paths, past
-// formstand's 7-segment FieldPath budget (src/core/fieldPath.ts), so the
-// CLI degrades that subtree to a `// TODO` comment while the in-budget
-// `mixed` branch renders real controls.
+// depth boundary on BOTH sides: the l1...l8 leaves are 9-segment paths —
+// exactly AT formstand's default FieldPath budget of 9 segments
+// (src/core/fieldPath.ts), so they bind real controls — while the l9
+// level's 10-segment leaf is past it, so the CLI degrades that subtree to
+// a `// TODO` comment. The `mixed` branch stays comfortably in budget.
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -192,7 +193,7 @@ describe("generated NestedArrayStressForm (untouched --layout module output)", (
 });
 
 describe("generated DeepBoundaryForm (untouched single-file output)", () => {
-  it("mounts with the in-budget mixed-branch controls", () => {
+  it("mounts with the in-budget and at-the-limit controls", () => {
     // Single-file layout: useForm inside the component, no module singleton
     // to reset — each render is a fresh form.
     render(
@@ -210,10 +211,13 @@ describe("generated DeepBoundaryForm (untouched single-file output)", () => {
     expect(
       (screen.getByLabelText("Defaulted Number") as HTMLInputElement).value,
     ).toBe("42");
-    // The over-budget l1...l8 branch renders no controls (its section chain
-    // stops where every deeper path would exceed the FieldPath budget).
-    expect(screen.queryByLabelText("Leaf")).toBeNull();
-    expect(screen.queryByLabelText("Count")).toBeNull();
+    // The l1...l8 leaves sit exactly AT the 9-segment budget, so they bind
+    // real controls now...
+    expect(screen.getByLabelText("Leaf")).toBeDefined();
+    expect(screen.getByLabelText("Count")).toBeDefined();
+    // ...while the l9 level's 10-segment leaf renders nothing (degraded to
+    // the TODO pinned below).
+    expect(screen.queryByLabelText("Too Deep")).toBeNull();
     expect(console.error).not.toHaveBeenCalled();
   });
 
@@ -223,10 +227,13 @@ describe("generated DeepBoundaryForm (untouched single-file output)", () => {
       join(process.cwd(), "examples/src/generated/DeepBoundaryForm.tsx"),
       "utf8",
     );
+    // The at-limit 9-segment paths are bound for real...
+    expect(source).toContain('path={"l1.l2.l3.l4.l5.l6.l7.l8.leaf"}');
+    // ...and the TODO lands at l9, the first over-budget node.
     expect(source).toContain(
-      `{/* TODO: path "l1.l2.l3.l4.l5.l6.l7" exceeds formstand's typed FieldPath depth (7); bind by hand */}`,
+      `{/* TODO: path "l1.l2.l3.l4.l5.l6.l7.l8.l9" exceeds formstand's typed FieldPath depth (9); bind by hand */}`,
     );
     // No binding past the budget survives in the file.
-    expect(source).not.toContain("l1.l2.l3.l4.l5.l6.l7.l8.leaf");
+    expect(source).not.toContain("l1.l2.l3.l4.l5.l6.l7.l8.l9.tooDeep");
   });
 });

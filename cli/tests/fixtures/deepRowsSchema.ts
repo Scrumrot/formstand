@@ -4,11 +4,14 @@ import { z } from "zod";
 // level spends TWO segments (name + row index), so walk-depth alone says
 // nothing about the bound path. Counts of the full template paths:
 //
-//   a.${p0}.b.${p1}.c.${index}.name          7  → binds (at the limit)
-//   a.${p0}.b.${p1}.c.${p2}.d                7  → list hook binds...
-//   a.${p0}.b.${p1}.c.${p2}.d.${index}       8  → ...but scalar rows degrade
-//   a.${p0}.b.${p1}.c.${p2}.e.${index}.f     9  → row field degrades
-//   a.${p0}.b.${p1}.c.${p2}.e.${index}.g     9  → no Rows pair extracted
+//   a.${p0}.b.${p1}.c.${p2}.h.${index}.name        9  → binds (at the limit)
+//   a.${p0}.b.${p1}.c.${p2}.h.${p3}.d              9  → list hook binds...
+//   a.${p0}.b.${p1}.c.${p2}.h.${p3}.d.${index}    10  → ...but scalar rows degrade
+//   a.${p0}.b.${p1}.c.${p2}.h.${p3}.e.${index}.f  11  → row field degrades
+//   a.${p0}.b.${p1}.c.${p2}.h.${p3}.e.${index}.g  11  → no Rows pair extracted
+//
+// NOTE: like deepPathsSchema, deeper than fromZod's default --max-depth of
+// 10 — consumers pass an explicit maxDepth (the tests use 12).
 export const deepRowsSchema = z.object({
   a: z.array(
     z.object({
@@ -16,12 +19,16 @@ export const deepRowsSchema = z.object({
         z.object({
           c: z.array(
             z.object({
-              name: z.string(),
-              d: z.array(z.string()),
-              e: z.array(
+              h: z.array(
                 z.object({
-                  f: z.string(),
-                  g: z.array(z.string()),
+                  name: z.string(),
+                  d: z.array(z.string()),
+                  e: z.array(
+                    z.object({
+                      f: z.string(),
+                      g: z.array(z.string()),
+                    }),
+                  ),
                 }),
               ),
             }),

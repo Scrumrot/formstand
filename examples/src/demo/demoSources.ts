@@ -177,9 +177,9 @@ const sources = {
   genMui: generatedMuiFiles,
   genKitchenSink: kitchenSinkFiles,
   // The untouched single-file DeepBoundaryForm.tsx next to the module
-  // folders: its l1...l8 branch exceeds formstand's FieldPath budget (7
-  // segments), so the CLI degrades that subtree to a `// TODO` while the
-  // in-budget `mixed` branch binds real controls.
+  // folders: its l1...l8 leaves sit exactly AT formstand's FieldPath budget
+  // (9 segments) and bind real controls, while the l9 level's 10-segment
+  // leaf exceeds it — the CLI degrades that subtree to a `// TODO`.
   genDeepNest: single("DeepBoundaryForm.tsx", deepBoundarySrc),
   genArrayStress: nestedArrayStressFiles,
   cliCommand: single("CliCommandBuilder.tsx", cliCommandSrc),

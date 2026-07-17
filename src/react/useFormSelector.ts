@@ -14,8 +14,12 @@ export type FormStateApi = Readonly<{
   store: ReadonlyStore<FormState<unknown>>;
 }>;
 
-export function useFormSelector<TSchema extends z.ZodType, U>(
-  form: Form<TSchema>,
+export function useFormSelector<
+  TSchema extends z.ZodType,
+  U,
+  D extends number = 9,
+>(
+  form: Form<TSchema, D>,
   selector: (state: FormState<z.input<TSchema>>) => U,
 ): U;
 // The `schema?: undefined` brand forces Form<TSchema> (which has a real
@@ -33,8 +37,12 @@ export function useFormSelector<U>(
   return useStore(form.store, selector);
 }
 
-export function useFormSelectorShallow<TSchema extends z.ZodType, U>(
-  form: Form<TSchema>,
+export function useFormSelectorShallow<
+  TSchema extends z.ZodType,
+  U,
+  D extends number = 9,
+>(
+  form: Form<TSchema, D>,
   selector: (state: FormState<z.input<TSchema>>) => U,
 ): U;
 export function useFormSelectorShallow<U>(

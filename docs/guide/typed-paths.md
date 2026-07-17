@@ -100,7 +100,15 @@ Three limitations:
 
 - **Keys containing `.` are not addressable.** Paths are split on dots, so a record key like `"a.b"` can't be reached. Use nested objects or dot-free keys.
 - **Array writes beyond index 100 000 are refused** (with a console warning) — a typo'd index must not allocate gigabytes.
-- **`FieldPath` stops at 7 segments deep.** The union is built by recursing through your schema's shape, and each level multiplies the work TypeScript does per path-taking call — uncapped, a deep or self-referential type would make every keystroke in your editor pay for it. So paths like `a.b.c.d.e.f.g.h` fall out of the union: the *runtime* handles them fine (every path API walks arbitrary depth), the compiler just can't vouch for them anymore. Cast at the boundary exactly like a [runtime-built string](#dynamic-paths) — or, better, ask whether a form nine levels deep wants a flatter schema.
+- **`FieldPath` stops at 9 segments deep (configurable per form).** The union is built by recursing through your schema's shape, and each level multiplies the work TypeScript does per path-taking call — uncapped, a deep or self-referential type would make every keystroke in your editor pay for it. So paths like `a.b.c.d.e.f.g.h.i.j` fall out of the union: the *runtime* handles them fine (every path API walks arbitrary depth), the compiler just can't vouch for them anymore.
+
+  When a form genuinely needs deeper typed paths — the classic case is one global store backing many forms, whose leaves sit past 9 segments — widen the budget per form with `createForm`'s `pathDepth` option:
+
+  ```ts
+  const form = createForm(schema, { initialValues, pathDepth: 12 });
+  ```
+
+  `pathDepth` is **type-level only**: the runtime ignores it entirely; it just widens (or narrows) the `FieldPath` union this form's typed surface — and every hook you pass the form to — is checked against. Raising it is a deliberate TypeScript compile-time trade (the union grows with every extra level, and your editor pays for it on each path-taking call), so treat it as an opt-in for genuinely deep stores, not a default. Pass a number *literal* (`pathDepth: 12`), and note the budget becomes part of the form's type: a `Form<S, 12>` prop must be typed as such, not as `Form<S>`. For a one-off deep path, cast at the boundary exactly like a [runtime-built string](#dynamic-paths) — or, better, ask whether a form ten levels deep wants a flatter schema.
 
 ## Next
 

@@ -26,6 +26,9 @@ const initialValues: FormValues = {
                 l8: {
                   leaf: "",
                   count: null,
+                  l9: {
+                    tooDeep: "",
+                  },
                 },
               },
             },
@@ -65,7 +68,15 @@ export const DeepBoundaryForm = () => {
                 <legend>{"L5"}</legend>
                 <fieldset>
                   <legend>{"L6"}</legend>
-                  {/* TODO: path "l1.l2.l3.l4.l5.l6.l7" exceeds formstand's typed FieldPath depth (7); bind by hand */}
+                  <fieldset>
+                    <legend>{"L7"}</legend>
+                    <fieldset>
+                      <legend>{"L8"}</legend>
+                      <TextField form={form} path={"l1.l2.l3.l4.l5.l6.l7.l8.leaf"} label={"Leaf"} />
+                      <NumberField form={form} path={"l1.l2.l3.l4.l5.l6.l7.l8.count"} label={"Count"} />
+                      {/* TODO: path "l1.l2.l3.l4.l5.l6.l7.l8.l9" exceeds formstand's typed FieldPath depth (9); bind by hand */}
+                    </fieldset>
+                  </fieldset>
                 </fieldset>
               </fieldset>
             </fieldset>

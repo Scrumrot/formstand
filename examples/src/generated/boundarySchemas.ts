@@ -43,9 +43,14 @@ export const kitchenSinkSchema = z.object({
     .min(1),
 });
 
-// Eight levels of object nesting (inside the CLI's default depth budget of
-// 10) ending in constrained leaves, plus one branch exercising every
-// wrapper the walkers unwrap.
+// Nine levels of object nesting straddling formstand's typed-path budget
+// (FieldPath stops at 9 SEGMENTS by default): the l1...l8 leaves are
+// 9-segment paths — exactly AT the limit, so they bind real controls —
+// while the extra l9 level puts its leaf at 10 segments, which the CLI
+// degrades to a `// TODO`. Both sides of the boundary in one form, plus a
+// branch exercising every wrapper the walkers unwrap. (The chain outgrows
+// the walkers' default nesting budget, so generation passes
+// `--max-depth 11` — see scripts/generate-cli-demos.mjs.)
 export const deepBoundarySchema = z.object({
   l1: z.object({
     l2: z.object({
@@ -57,6 +62,9 @@ export const deepBoundarySchema = z.object({
                 l8: z.object({
                   leaf: z.string().min(1),
                   count: z.int().nullable(),
+                  l9: z.object({
+                    tooDeep: z.string(),
+                  }),
                 }),
               }),
             }),

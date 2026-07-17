@@ -25,8 +25,9 @@ export function useIsDirty(
 ): boolean;
 export function useIsDirty<
   TSchema extends z.ZodType,
-  P extends FieldPath<z.input<TSchema>>,
->(form: Form<TSchema>, path?: P): boolean;
+  P extends FieldPath<z.input<TSchema>, D>,
+  D extends number = 9,
+>(form: Form<TSchema, D>, path?: P): boolean;
 export function useIsDirty(form: FormStateApi, path?: string): boolean {
   return useStore(form.store, (state) =>
     path === undefined || path === ""
@@ -47,8 +48,9 @@ export function useIsValid(
 ): boolean;
 export function useIsValid<
   TSchema extends z.ZodType,
-  P extends FieldPath<z.input<TSchema>>,
->(form: Form<TSchema>, path?: P): boolean;
+  P extends FieldPath<z.input<TSchema>, D>,
+  D extends number = 9,
+>(form: Form<TSchema, D>, path?: P): boolean;
 export function useIsValid(form: FormStateApi, path?: string): boolean {
   return useStore(form.store, (state) => {
     for (const k in state.errors) {

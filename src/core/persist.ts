@@ -68,8 +68,8 @@ const defaultStorage = (): PersistStorage | null => {
   }
 };
 
-export const persistForm = <TSchema extends z.ZodType>(
-  form: Form<TSchema>,
+export const persistForm = <TSchema extends z.ZodType, D extends number = 9>(
+  form: Form<TSchema, D>,
   options: PersistOptions<TSchema>,
 ): PersistHandle => {
   const storage = options.storage ?? defaultStorage();

@@ -83,8 +83,18 @@ type FieldSlice<TValue> = Readonly<{
 // typo'd path on a Form<TSchema> is blamed on the path argument against the
 // full FieldPath union ('"naem"' is not assignable to '"name" | "age" | ...')
 // instead of on the form argument.
+// The form is matched structurally (schema witness + typed store) instead
+// of as Form<TSchema, D>: every Form is assignable regardless of its
+// pathDepth, and keeping this overload at ONE type parameter preserves
+// explicit instantiation expressions (`typeof useField<Schema, "name">`) —
+// TS applies explicit type args to every arity-compatible overload, so a
+// second parameter here would check "name" against it.
 export function useField<TSchema extends z.ZodType>(
-  form: Form<TSchema>,
+  form: FieldFormApi &
+    Readonly<{
+      schema: TSchema;
+      store: ReadonlyStore<FormState<z.input<TSchema>>>;
+    }>,
   pathSelector: (state: FormState<z.input<TSchema>>) => string,
   options?: UseFieldOptions,
 ): UseFieldReturn<unknown>;
@@ -97,11 +107,17 @@ export function useField<TValue = unknown>(
   path: FieldPathArg<unknown>,
   options?: UseFieldOptions,
 ): UseFieldReturn<TValue>;
+// D is recovered from the form argument (the Form type's "~pathDepth"
+// marker), so a `pathDepth: 12` form checks paths against its widened union.
+// It sits LAST (P's constraint forward-references it — legal in TS) with a
+// default, so pre-existing explicit instantiations like
+// `useField<typeof schema, "name">` keep their arity.
 export function useField<
   TSchema extends z.ZodType,
-  P extends FieldPath<z.input<TSchema>>,
+  P extends FieldPath<z.input<TSchema>, D>,
+  D extends number = 9,
 >(
-  form: Form<TSchema>,
+  form: Form<TSchema, D>,
   path: P,
   options?: UseFieldOptions,
 ): UseFieldReturn<FieldValue<z.input<TSchema>, P>>;

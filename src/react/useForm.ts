@@ -9,11 +9,13 @@ import { valuesEqual } from "../core/equality";
 
 // Lazy-creates a Form bound to this component instance. Schema and options are
 // locked in on the first render; later changes are ignored (warned once below).
-export const useForm = <TSchema extends z.ZodType>(
+// D mirrors createForm's inference: a literal from `options.pathDepth`,
+// defaulting to the 9-segment typed-path budget.
+export const useForm = <TSchema extends z.ZodType, D extends number = 9>(
   schema: TSchema,
-  options: CreateFormOptions<TSchema>,
-): Form<TSchema> => {
-  const formRef = useRef<Form<TSchema> | null>(null);
+  options: CreateFormOptions<TSchema, D>,
+): Form<TSchema, D> => {
+  const formRef = useRef<Form<TSchema, D> | null>(null);
   if (formRef.current === null) {
     formRef.current = createForm(schema, options);
   }

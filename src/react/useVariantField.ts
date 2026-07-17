@@ -71,8 +71,9 @@ export function useVariantField<
   TSchema extends z.ZodType,
   P extends string,
   TField extends VariantKeys<UnionValueAt<z.input<TSchema>, P>>,
+  D extends number = 9,
 >(
-  form: Form<TSchema>,
+  form: Form<TSchema, D>,
   unionPath: P,
   field: TField,
 ): UseFieldReturn<

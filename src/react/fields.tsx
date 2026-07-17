@@ -19,10 +19,14 @@ import { type FieldFormApi, type UseFieldReturn, useField } from "./useField";
 // typed overloads. Template-literal paths with a numeric hole
 // (`users.${index}.email`) are part of that union, so dynamic array rows
 // still typecheck. A bare structural FieldFormApi keeps plain string paths.
+// The form's own depth budget (createForm's `pathDepth`, default 9) is
+// recovered alongside the schema, so a widened form widens its bound
+// components' paths too.
 export type PathsOf<F extends FieldFormApi> = F extends Form<
-  infer TSchema extends z.ZodType
+  infer TSchema extends z.ZodType,
+  infer D extends number
 >
-  ? FieldPath<z.input<TSchema>>
+  ? FieldPath<z.input<TSchema>, D>
   : string;
 
 // Structural stand-in for React.Ref<T>: accepts useRef objects and callback

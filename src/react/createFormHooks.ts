@@ -55,12 +55,12 @@ import {
 // The bound signatures mirror the unbound hooks minus the form parameter;
 // the typed-path call signature sits last for the same error-blame reason
 // as the originals.
-export type BoundUseField<TSchema extends z.ZodType> = {
+export type BoundUseField<TSchema extends z.ZodType, D extends number = 9> = {
   (
     pathSelector: (state: FormState<z.input<TSchema>>) => string,
     options?: UseFieldOptions,
   ): UseFieldReturn<unknown>;
-  <P extends FieldPath<z.input<TSchema>>>(
+  <P extends FieldPath<z.input<TSchema>, D>>(
     path: P,
     options?: UseFieldOptions,
   ): UseFieldReturn<FieldValue<z.input<TSchema>, P>>;
@@ -79,11 +79,14 @@ export type BoundUseVariantField<TSchema extends z.ZodType> = <
   VariantFieldValue<UnionValueAt<z.input<TSchema>, P>, TField> | undefined
 >;
 
-export type BoundUseFieldArray<TSchema extends z.ZodType> = {
+export type BoundUseFieldArray<
+  TSchema extends z.ZodType,
+  D extends number = 9,
+> = {
   (
     pathSelector: (state: FormState<z.input<TSchema>>) => string,
   ): UseFieldArrayReturn<unknown>;
-  <P extends FieldPath<z.input<TSchema>>>(
+  <P extends FieldPath<z.input<TSchema>, D>>(
     path: P,
   ): UseFieldArrayReturn<ArrayItemOf<FieldValue<z.input<TSchema>, P>>>;
 };
@@ -92,24 +95,28 @@ export type BoundUseSelector<TSchema extends z.ZodType> = <U>(
   selector: (state: FormState<z.input<TSchema>>) => U,
 ) => U;
 
-export type BoundUseFlag<TSchema extends z.ZodType> = (
-  path?: FieldPath<z.input<TSchema>>,
+export type BoundUseFlag<TSchema extends z.ZodType, D extends number = 9> = (
+  path?: FieldPath<z.input<TSchema>, D>,
 ) => boolean;
 
 // One single-key mapped type per hook, intersected: template-literal keys
 // carry the capitalized name, so the destructured names are typo-checked
 // ({ useInvoceField } fails to compile against createFormHooks(f, "invoice")).
-export type FormHooks<TSchema extends z.ZodType, N extends string> = Readonly<
-  { [K in `use${Capitalize<N>}Field`]: BoundUseField<TSchema> } & {
+export type FormHooks<
+  TSchema extends z.ZodType,
+  N extends string,
+  D extends number = 9,
+> = Readonly<
+  { [K in `use${Capitalize<N>}Field`]: BoundUseField<TSchema, D> } & {
     [K in `use${Capitalize<N>}VariantField`]: BoundUseVariantField<TSchema>;
   } & {
-    [K in `use${Capitalize<N>}FieldArray`]: BoundUseFieldArray<TSchema>;
+    [K in `use${Capitalize<N>}FieldArray`]: BoundUseFieldArray<TSchema, D>;
   } & { [K in `use${Capitalize<N>}Selector`]: BoundUseSelector<TSchema> } & {
     [K in `use${Capitalize<N>}SelectorShallow`]: BoundUseSelector<TSchema>;
   } & {
     [K in `use${Capitalize<N>}Error`]: () => readonly string[] | undefined;
-  } & { [K in `use${Capitalize<N>}IsDirty`]: BoundUseFlag<TSchema> } & {
-    [K in `use${Capitalize<N>}IsValid`]: BoundUseFlag<TSchema>;
+  } & { [K in `use${Capitalize<N>}IsDirty`]: BoundUseFlag<TSchema, D> } & {
+    [K in `use${Capitalize<N>}IsValid`]: BoundUseFlag<TSchema, D>;
   } & { [K in `use${Capitalize<N>}IsSubmitting`]: () => boolean } & {
     [K in `use${Capitalize<N>}SubmitCount`]: () => number;
   }
@@ -120,13 +127,17 @@ export type FormHooks<TSchema extends z.ZodType, N extends string> = Readonly<
 const capitalize = (name: string): string =>
   name.length === 0 ? name : name.charAt(0).toUpperCase() + name.slice(1);
 
+// D (the form's typed-path depth budget) sits LAST so existing explicit
+// instantiations — createFormHooks<Schema, "invoice"> — keep compiling; it
+// is inferred from the form argument anyway.
 export const createFormHooks = <
   TSchema extends z.ZodType,
   N extends string = "",
+  D extends number = 9,
 >(
-  form: Form<TSchema>,
+  form: Form<TSchema, D>,
   name?: N,
-): FormHooks<TSchema, N> => {
+): FormHooks<TSchema, N, D> => {
   // Calling the unbound hooks through a structural view (no `schema`
   // property) binds their widened overloads — the precise typing is
   // re-established by the Bound* signatures above, which the type tests pin.
@@ -187,5 +198,5 @@ export const createFormHooks = <
     [`use${prefix}IsValid`]: useBoundIsValid,
     [`use${prefix}IsSubmitting`]: useBoundIsSubmitting,
     [`use${prefix}SubmitCount`]: useBoundSubmitCount,
-  } as FormHooks<TSchema, N>;
+  } as FormHooks<TSchema, N, D>;
 };

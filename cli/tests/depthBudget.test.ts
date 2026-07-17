@@ -25,12 +25,18 @@ import {
 import { deepPathsSchema } from "./fixtures/deepPathsSchema";
 import { deepRowsSchema } from "./fixtures/deepRowsSchema";
 
-// formstand's FieldPath union stops at 7 segments (src/core/fieldPath.ts,
-// D=7); a binding past that fails typecheck (TS2820). The emitters must
-// degrade such bindings to a TODO — counted on the FULL bound path, where an
-// array level spends TWO segments — while paths exactly AT the limit keep
+// formstand's FieldPath union stops at 9 segments by default
+// (src/core/fieldPath.ts, D=9 — the CLI follows the library default); a
+// binding past that fails typecheck (TS2820). The emitters must degrade
+// such bindings to a TODO — counted on the FULL bound path, where an array
+// level spends TWO segments — while paths exactly AT the limit keep
 // binding. These suites pin both sides of the boundary and prove every
 // degraded output still typechecks against the real library source.
+
+// Both depth fixtures nest past fromZod's default --max-depth of 10, so
+// every walk passes an explicit budget — the PATH budget must be the only
+// thing degrading.
+const FIXTURE_MAX_DEPTH = 12;
 
 const DEPTH_TODO = `exceeds formstand's typed FieldPath depth (${FORMSTAND_PATH_DEPTH}); bind by hand`;
 
@@ -46,7 +52,7 @@ const generate = (
   dir: string,
 ): Readonly<{ file: string; code: string }> => {
   const code = emit({
-    ir: fromZod(schema),
+    ir: fromZod(schema, FIXTURE_MAX_DEPTH),
     formName,
     schemaImport: {
       name: schemaName,
@@ -67,7 +73,7 @@ const generateModule = (
   formName: string,
   dir: string,
 ) => {
-  const ir = fromZod(schema);
+  const ir = fromZod(schema, FIXTURE_MAX_DEPTH);
   const files = emitModuleForm({
     ir,
     formName,
@@ -87,26 +93,25 @@ const generateModule = (
 describe("pathSegmentCount", () => {
   it("splits on dots with template holes one segment each", () => {
     expect(pathSegmentCount("title")).toBe(1);
-    expect(pathSegmentCount("l1.l2.l3.l4.l5.l6.l7.l8.leaf")).toBe(9);
+    expect(pathSegmentCount("l1.l2.l3.l4.l5.l6.l7.l8.l9.leaf")).toBe(10);
     expect(pathSegmentCount("teams.${p0}.members.${p1}.phones.${index}")).toBe(6);
   });
 });
 
 describe("overBudgetFieldPaths", () => {
   it("reports the boundary node once per emitted TODO site", () => {
-    // The recursion stops at l7 (its own path is AT the budget, so every
+    // The recursion stops at l9 (its own path is AT the budget, so every
     // child can only exceed it); the at-limit branch and shallow fields are
     // clean.
-    expect(overBudgetFieldPaths(fromZod(deepPathsSchema))).toEqual([
-      "l1.l2.l3.l4.l5.l6.l7",
-    ]);
+    expect(
+      overBudgetFieldPaths(fromZod(deepPathsSchema, FIXTURE_MAX_DEPTH)),
+    ).toEqual(["l1.l2.l3.l4.l5.l6.l7.l8.l9"]);
   });
 
   it("counts array levels as two segments (`*` marks the row index)", () => {
-    expect(overBudgetFieldPaths(fromZod(deepRowsSchema))).toEqual([
-      "a.*.b.*.c.*.d.*",
-      "a.*.b.*.c.*.e.*",
-    ]);
+    expect(
+      overBudgetFieldPaths(fromZod(deepRowsSchema, FIXTURE_MAX_DEPTH)),
+    ).toEqual(["a.*.b.*.c.*.h.*.d.*", "a.*.b.*.c.*.h.*.e.*"]);
   });
 
   it("stays empty within the budget", () => {
@@ -136,43 +141,45 @@ describe("depth budget in the single-file layout", () => {
   );
 
   it("degrades the over-budget subtree to a TODO and keeps binding at the limit", () => {
-    // The TODO lands at l7 — the first node whose children can only exceed
-    // the budget — and no 8+-segment path is ever bound.
+    // The TODO lands at l9 — the first node whose children can only exceed
+    // the budget — and no 10+-segment path is ever bound.
     expect(plain.code).toContain(
-      `{/* TODO: path "l1.l2.l3.l4.l5.l6.l7" ${DEPTH_TODO} */}`,
+      `{/* TODO: path "l1.l2.l3.l4.l5.l6.l7.l8.l9" ${DEPTH_TODO} */}`,
     );
-    expect(plain.code).not.toContain("l1.l2.l3.l4.l5.l6.l7.l8");
-    // Exactly 7 segments still binds normally...
-    expect(plain.code).toContain('path={"a.b.c.d.e.f.g"}');
+    expect(plain.code).not.toContain("l1.l2.l3.l4.l5.l6.l7.l8.l9.leaf");
+    // Exactly 9 segments still binds normally...
+    expect(plain.code).toContain('path={"a.b.c.d.e.f.g.h.i"}');
     // ...and so do shallow fields.
     expect(plain.code).toContain('path={"title"}');
   });
 
   it("still materializes the over-budget subtree in initialValues", () => {
     // Like unaddressable keys: no binding, but the draft keeps the shape.
-    expect(plain.code).toContain("l8: {");
+    expect(plain.code).toContain("l9: {");
     expect(plain.code).toContain('leaf: "",');
     expect(plain.code).toContain("count: null,");
   });
 
   it("counts a row leaf's full template path (arrays spend two segments)", () => {
-    // 7-segment row field: binds.
-    expect(rows.code).toContain("path={`a.${p0}.b.${p1}.c.${index}.name`}");
-    // 7-segment list: the hook binds, its 8-segment scalar rows degrade.
+    // 9-segment row field: binds.
     expect(rows.code).toContain(
-      "useFieldArray(form, `a.${p0}.b.${p1}.c.${p2}.d`);",
+      "path={`a.${p0}.b.${p1}.c.${p2}.h.${index}.name`}",
+    );
+    // 9-segment list: the hook binds, its 10-segment scalar rows degrade.
+    expect(rows.code).toContain(
+      "useFieldArray(form, `a.${p0}.b.${p1}.c.${p2}.h.${p3}.d`);",
     );
     expect(rows.code).toContain(
-      `{/* TODO: path "a.\${p0}.b.\${p1}.c.\${p2}.d.\${index}" ${DEPTH_TODO} */}`,
+      `{/* TODO: path "a.\${p0}.b.\${p1}.c.\${p2}.h.\${p3}.d.\${index}" ${DEPTH_TODO} */}`,
     );
-    // 9-segment row field / nested list: TODO, and no over-budget hook.
+    // 11-segment row field / nested list: TODO, and no over-budget hook.
     expect(rows.code).toContain(
-      `{/* TODO: path "a.\${p0}.b.\${p1}.c.\${p2}.e.\${index}.f" ${DEPTH_TODO} */}`,
+      `{/* TODO: path "a.\${p0}.b.\${p1}.c.\${p2}.h.\${p3}.e.\${index}.f" ${DEPTH_TODO} */}`,
     );
     expect(rows.code).toContain(
-      `{/* TODO: path "a.\${p0}.b.\${p1}.c.\${p2}.e.\${index}.g" ${DEPTH_TODO} */}`,
+      `{/* TODO: path "a.\${p0}.b.\${p1}.c.\${p2}.h.\${p3}.e.\${index}.g" ${DEPTH_TODO} */}`,
     );
-    expect(rows.code).not.toContain(".e.${p3}");
+    expect(rows.code).not.toContain(".e.${p4}");
   });
 
   // THE BIG ONE for this bug: the degraded outputs must typecheck against
@@ -212,36 +219,36 @@ describe("depth budget in the module layout", () => {
       (f) => f.path === "sections/L1Section.tsx",
     );
     expect(section?.content).toContain(
-      `{/* TODO: path "l1.l2.l3.l4.l5.l6.l7" ${DEPTH_TODO} */}`,
+      `{/* TODO: path "l1.l2.l3.l4.l5.l6.l7.l8.l9" ${DEPTH_TODO} */}`,
     );
     // No field file reaches under the TODO'd subtree...
     expect(deep.files.some((f) => f.path === "fields/LeafField.tsx")).toBe(false);
     expect(deep.files.some((f) => f.path === "fields/CountField.tsx")).toBe(false);
     // ...while the at-the-limit leaf gets its normal bound field file.
-    const g = deep.files.find((f) => f.path === "fields/GField.tsx");
-    expect(g?.content).toContain('useDeepField("a.b.c.d.e.f.g")');
+    const i = deep.files.find((f) => f.path === "fields/IField.tsx");
+    expect(i?.content).toContain('useDeepField("a.b.c.d.e.f.g.h.i")');
   });
 
   it("degrades over-budget row bindings, keeping in-budget extraction", () => {
     const section = rows.files.find((f) => f.path === "sections/ASection.tsx");
-    // 7-segment row field binds; the at-limit list hook binds.
+    // 9-segment row field binds; the at-limit list hook binds.
     expect(section?.content).toContain(
-      "useRowsField(`a.${p0}.b.${p1}.c.${index}.name`);",
+      "useRowsField(`a.${p0}.b.${p1}.c.${p2}.h.${index}.name`);",
     );
     expect(section?.content).toContain(
-      "useRowsFieldArray(`a.${p0}.b.${p1}.c.${p2}.d`);",
+      "useRowsFieldArray(`a.${p0}.b.${p1}.c.${p2}.h.${p3}.d`);",
     );
-    // 8-segment scalar rows and 9-segment row fields degrade to TODOs.
+    // 10-segment scalar rows and 11-segment row fields degrade to TODOs.
     expect(section?.content).toContain(
-      `{/* TODO: path "a.\${p0}.b.\${p1}.c.\${p2}.d.\${index}" ${DEPTH_TODO} */}`,
-    );
-    expect(section?.content).toContain(
-      `{/* TODO: path "a.\${p0}.b.\${p1}.c.\${p2}.e.\${index}.f" ${DEPTH_TODO} */}`,
+      `{/* TODO: path "a.\${p0}.b.\${p1}.c.\${p2}.h.\${p3}.d.\${index}" ${DEPTH_TODO} */}`,
     );
     expect(section?.content).toContain(
-      `{/* TODO: path "a.\${p0}.b.\${p1}.c.\${p2}.e.\${index}.g" ${DEPTH_TODO} */}`,
+      `{/* TODO: path "a.\${p0}.b.\${p1}.c.\${p2}.h.\${p3}.e.\${index}.f" ${DEPTH_TODO} */}`,
     );
-    expect(section?.content).not.toContain(".e.${p3}");
+    expect(section?.content).toContain(
+      `{/* TODO: path "a.\${p0}.b.\${p1}.c.\${p2}.h.\${p3}.e.\${index}.g" ${DEPTH_TODO} */}`,
+    );
+    expect(section?.content).not.toContain(".e.${p4}");
   });
 
   it("both degraded modules typecheck against the library source", () => {
@@ -302,13 +309,15 @@ describe("CLI warnings for over-budget paths", () => {
           path.join(fixturesDir, "deepPathsSchema.ts"),
           "--out",
           out,
+          "--max-depth",
+          "12",
         ]),
       ).toBe(0);
     } finally {
       spy.mockRestore();
     }
     expect(chunks.join("")).toContain(
-      `warning: path "l1.l2.l3.l4.l5.l6.l7" exceeds formstand's typed FieldPath depth (${FORMSTAND_PATH_DEPTH}); emitted a TODO — bind it by hand`,
+      `warning: path "l1.l2.l3.l4.l5.l6.l7.l8.l9" exceeds formstand's typed FieldPath depth (${FORMSTAND_PATH_DEPTH}); emitted a TODO — bind it by hand`,
     );
   });
 });

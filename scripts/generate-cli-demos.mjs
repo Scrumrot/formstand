@@ -33,16 +33,21 @@ const commands = [
     "--out",
     "examples/src/generated/KitchenSinkForm",
   ],
-  // Single-file layout on purpose: the l1...l8 branch pushes past
-  // formstand's FieldPath budget (7 segments), so the emitter degrades the
-  // over-budget subtree to a `// TODO` (and warns on stderr) while the
-  // `mixed` branch keeps real controls — the demo's point.
+  // Single-file layout on purpose: the l1...l8 leaves sit exactly AT
+  // formstand's FieldPath budget (9 segments — real controls), while the
+  // l9 level's 10-segment leaf pushes past it, so the emitter degrades that
+  // subtree to a `// TODO` (and warns on stderr) — both sides of the
+  // boundary in one demo. --max-depth 11: the nine-level chain outgrows the
+  // walkers' default nesting budget of 10, and the PATH budget must be the
+  // only thing degrading here.
   [
     boundarySchemas,
     "--export",
     "deepBoundarySchema",
     "--name",
     "DeepBoundaryForm",
+    "--max-depth",
+    "11",
     "--out",
     "examples/src/generated/DeepBoundaryForm.tsx",
   ],

@@ -38,8 +38,21 @@ export type ReadonlyStoreApi<T> = Pick<
   "getState" | "getInitialState" | "subscribe"
 >;
 
-export type CreateFormOptions<TSchema extends z.ZodType> = Readonly<{
+export type CreateFormOptions<
+  TSchema extends z.ZodType,
+  D extends number = 9,
+> = Readonly<{
   initialValues: z.input<TSchema>;
+  // TYPE-LEVEL ONLY: the typed-path depth budget for this form, in SEGMENTS
+  // (default 9). The runtime ignores it entirely — every path API already
+  // walks any depth — it only widens (or narrows) the FieldPath union the
+  // form's typed surface is checked against. Raising it is a deliberate
+  // TypeScript compile-time trade: the union's size grows with every level
+  // the type recurses into, and every path-taking call pays for it in the
+  // editor. Reach for it when one deep store backs many forms (a global
+  // store whose leaves sit past 9 segments); must be a number LITERAL
+  // (e.g. `pathDepth: 12`) so the budget stays a compile-time constant.
+  pathDepth?: D;
   mode?: ValidationMode;
   reValidateMode?: ValidationMode;
   // Run a full validation pass at creation so the error map (and flags derived
@@ -83,7 +96,7 @@ export type SubmitResult<TOutput> =
 type ArrayItemOf<T> = T extends readonly (infer U)[] ? U : never;
 
 // Root-level errors (schema-wide .refine) live at the "" key.
-type ErrorPath<TValues> = FieldPath<TValues> | "";
+type ErrorPath<TValues, D extends number = 9> = FieldPath<TValues, D> | "";
 
 // No keepDirty: per-field dirtiness is derived from values vs initialValues,
 // and reset makes those equal by definition — a kept dirty map would say
@@ -112,7 +125,18 @@ const shallowFieldEqual = <TValue>(
   a.dirty === b.dirty &&
   a.isValidating === b.isValidating;
 
-export type Form<TSchema extends z.ZodType> = Readonly<{
+export type Form<
+  TSchema extends z.ZodType,
+  D extends number = 9,
+> = Readonly<{
+  // Type-level marker only — never present at runtime. It carries the form's
+  // typed-path depth budget (createForm's `pathDepth`, default 9) in a
+  // directly-inferable position so the React hooks' `Form<TSchema, D>`
+  // parameters recover D from the form argument (inferring it out of the
+  // FieldPath instantiations in the method types below is not something TS
+  // can do). It also makes the budget part of the form's identity:
+  // Form<S, 12> is deliberately not assignable to Form<S, 9>.
+  "~pathDepth"?: D;
   schema: TSchema;
   store: ReadonlyStoreApi<FormState<z.input<TSchema>>>;
   getState: () => FormState<z.input<TSchema>>;
@@ -122,14 +146,14 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
       prev: FormState<z.input<TSchema>>,
     ) => void,
   ) => () => void;
-  getField: <P extends FieldPath<z.input<TSchema>>>(
+  getField: <P extends FieldPath<z.input<TSchema>, D>>(
     path: P,
   ) => FieldValue<z.input<TSchema>, P>;
-  watchField: <P extends FieldPath<z.input<TSchema>>>(
+  watchField: <P extends FieldPath<z.input<TSchema>, D>>(
     path: P,
     listener: (snapshot: FieldSnapshot<FieldValue<z.input<TSchema>, P>>) => void,
   ) => () => void;
-  watchValue: <P extends FieldPath<z.input<TSchema>>>(
+  watchValue: <P extends FieldPath<z.input<TSchema>, D>>(
     path: P,
     listener: (
       value: FieldValue<z.input<TSchema>, P>,
@@ -146,21 +170,21 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
       previous: z.input<TSchema>,
     ) => void,
   ) => () => void;
-  setValue: <P extends FieldPath<z.input<TSchema>>>(
+  setValue: <P extends FieldPath<z.input<TSchema>, D>>(
     path: P,
     value: FieldValue<z.input<TSchema>, P>,
   ) => void;
   setValues: (next: z.input<TSchema>) => void;
-  setTouched: (path: FieldPath<z.input<TSchema>>, touched?: boolean) => void;
+  setTouched: (path: FieldPath<z.input<TSchema>, D>, touched?: boolean) => void;
   setSubmitting: (value: boolean) => void;
   setMode: (mode: ValidationMode) => void;
   setReValidateMode: (mode: ValidationMode) => void;
   setError: (
-    path: ErrorPath<z.input<TSchema>>,
+    path: ErrorPath<z.input<TSchema>, D>,
     errors: string | readonly string[],
   ) => void;
   setErrors: (errors: ErrorMap) => void;
-  clearErrors: (path?: ErrorPath<z.input<TSchema>>) => void;
+  clearErrors: (path?: ErrorPath<z.input<TSchema>, D>) => void;
   // The patch type omits `errors`: the merged map is derived from
   // schemaErrors/serverErrors, so writing it directly is unrepresentable for
   // TS callers (plain-JS writes are ignored with a warning).
@@ -175,50 +199,50 @@ export type Form<TSchema extends z.ZodType> = Readonly<{
   ) => void;
   // Reset one field to its initial value, clearing its (and its descendants')
   // dirty/touched/error state.
-  resetField: (path: FieldPath<z.input<TSchema>>) => void;
+  resetField: (path: FieldPath<z.input<TSchema>, D>) => void;
   adoptValues: (values: z.input<TSchema>) => void;
   // One-shot read of a field's full slice (value/error/touched/dirty/
   // isValidating) — the imperative sibling of useField's state.
-  getFieldState: <P extends FieldPath<z.input<TSchema>>>(
+  getFieldState: <P extends FieldPath<z.input<TSchema>, D>>(
     path: P,
   ) => FieldSnapshot<FieldValue<z.input<TSchema>, P>>;
   validate: () => ValidationResult<z.output<TSchema>>;
-  validateField: (path: ErrorPath<z.input<TSchema>>) => FieldValidationResult;
+  validateField: (path: ErrorPath<z.input<TSchema>, D>) => FieldValidationResult;
   // Mirrors validateField's discriminated result — "pending" (carrying the
   // already-started async pass's promise) when the schema needs async
   // parsing. A bare boolean | Promise<boolean> union would let a truthy
   // in-flight Promise silently pass `if (form.validateFields(...))` gates.
   validateFields: (
-    paths: readonly FieldPath<z.input<TSchema>>[],
+    paths: readonly FieldPath<z.input<TSchema>, D>[],
   ) => FieldsValidationResult;
   validateAsync: () => Promise<ValidationResult<z.output<TSchema>>>;
   validateFieldAsync: (
-    path: ErrorPath<z.input<TSchema>>,
+    path: ErrorPath<z.input<TSchema>, D>,
   ) => Promise<FieldValidationResult>;
   validateFieldsAsync: (
-    paths: readonly FieldPath<z.input<TSchema>>[],
+    paths: readonly FieldPath<z.input<TSchema>, D>[],
   ) => Promise<SettledFieldsValidationResult>;
   submit: (
     onValid: SubmitHandler<TSchema>,
     onInvalid?: InvalidSubmitHandler,
     options?: SubmitOptions,
   ) => Promise<SubmitResult<z.output<TSchema>>>;
-  arrayPush: <P extends FieldPath<z.input<TSchema>>>(
+  arrayPush: <P extends FieldPath<z.input<TSchema>, D>>(
     path: P,
     item: ArrayItemOf<NonNullable<FieldValue<z.input<TSchema>, P>>>,
   ) => void;
-  arrayRemove: (path: FieldPath<z.input<TSchema>>, index: number) => void;
-  arrayInsert: <P extends FieldPath<z.input<TSchema>>>(
+  arrayRemove: (path: FieldPath<z.input<TSchema>, D>, index: number) => void;
+  arrayInsert: <P extends FieldPath<z.input<TSchema>, D>>(
     path: P,
     index: number,
     item: ArrayItemOf<NonNullable<FieldValue<z.input<TSchema>, P>>>,
   ) => void;
   arrayMove: (
-    path: FieldPath<z.input<TSchema>>,
+    path: FieldPath<z.input<TSchema>, D>,
     from: number,
     to: number,
   ) => void;
-  arraySwap: (path: FieldPath<z.input<TSchema>>, a: number, b: number) => void;
+  arraySwap: (path: FieldPath<z.input<TSchema>, D>, a: number, b: number) => void;
   handleSubmit: (
     onValid: SubmitHandler<TSchema>,
     onInvalid?: InvalidSubmitHandler,
@@ -447,10 +471,13 @@ const releaseChangedSlices = (
   return kept.length === entries.length ? server : Object.fromEntries(kept);
 };
 
-export const createForm = <TSchema extends z.ZodType>(
+// D infers as a LITERAL from `options.pathDepth` (the bare `D extends
+// number` constraint preserves literal inference); when the option is
+// omitted, D falls back to the default budget of 9.
+export const createForm = <TSchema extends z.ZodType, D extends number = 9>(
   schema: TSchema,
-  options: CreateFormOptions<TSchema>,
-): Form<TSchema> => {
+  options: CreateFormOptions<TSchema, D>,
+): Form<TSchema, D> => {
   type Values = z.input<TSchema>;
 
   const initialMode: ValidationMode = options.mode ?? "onBlur";
@@ -1139,16 +1166,16 @@ export const createForm = <TSchema extends z.ZodType>(
     store,
     getState: store.getState,
     subscribe: store.subscribe,
-    getField: <P extends FieldPath<z.input<TSchema>>>(path: P) =>
+    getField: <P extends FieldPath<z.input<TSchema>, D>>(path: P) =>
       getAtPath(store.getState().values, path) as FieldValue<
         z.input<TSchema>,
         P
       >,
-    getFieldState: <P extends FieldPath<z.input<TSchema>>>(path: P) =>
+    getFieldState: <P extends FieldPath<z.input<TSchema>, D>>(path: P) =>
       snapshotField(store.getState(), path) as FieldSnapshot<
         FieldValue<z.input<TSchema>, P>
       >,
-    watchField: <P extends FieldPath<z.input<TSchema>>>(
+    watchField: <P extends FieldPath<z.input<TSchema>, D>>(
       path: P,
       listener: (snapshot: FieldSnapshot<FieldValue<z.input<TSchema>, P>>) => void,
     ) => {
@@ -1163,7 +1190,7 @@ export const createForm = <TSchema extends z.ZodType>(
         }
       });
     },
-    watchValue: <P extends FieldPath<z.input<TSchema>>>(
+    watchValue: <P extends FieldPath<z.input<TSchema>, D>>(
       path: P,
       listener: (
         value: FieldValue<z.input<TSchema>, P>,
@@ -1506,5 +1533,5 @@ export const createForm = <TSchema extends z.ZodType>(
         };
       });
     },
-  }) as Form<TSchema>;
+  }) as Form<TSchema, D>;
 };

@@ -6,26 +6,36 @@ import {
 import type { z } from "zod";
 import type { Form } from "../core/createForm";
 
-export type FormProviderProps<TSchema extends z.ZodType> = Readonly<{
-  form: Form<TSchema>;
+export type FormProviderProps<
+  TSchema extends z.ZodType,
+  D extends number = 9,
+> = Readonly<{
+  form: Form<TSchema, D>;
   children: ReactNode;
 }>;
 
-export type FormContextApi<TSchema extends z.ZodType> = Readonly<{
-  Provider: (props: FormProviderProps<TSchema>) => ReactNode;
-  useFormContext: () => Form<TSchema>;
+export type FormContextApi<
+  TSchema extends z.ZodType,
+  D extends number = 9,
+> = Readonly<{
+  Provider: (props: FormProviderProps<TSchema, D>) => ReactNode;
+  useFormContext: () => Form<TSchema, D>;
 }>;
 
+// A form created with a non-default `pathDepth` names it here too:
+// createFormContext<typeof schema, 12>() — the context can't infer it (there
+// is no value argument), and Form<S, 12> is deliberately not Form<S, 9>.
 export const createFormContext = <
   TSchema extends z.ZodType,
->(): FormContextApi<TSchema> => {
-  const Context = createContext<Form<TSchema> | null>(null);
+  D extends number = 9,
+>(): FormContextApi<TSchema, D> => {
+  const Context = createContext<Form<TSchema, D> | null>(null);
 
-  const Provider = ({ form, children }: FormProviderProps<TSchema>) => (
+  const Provider = ({ form, children }: FormProviderProps<TSchema, D>) => (
     <Context.Provider value={form}>{children}</Context.Provider>
   );
 
-  const useFormContext = (): Form<TSchema> => {
+  const useFormContext = (): Form<TSchema, D> => {
     const ctx = useContext(Context);
     if (ctx === null) {
       throw new Error(
