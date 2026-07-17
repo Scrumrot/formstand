@@ -13,7 +13,12 @@ import {
 } from "./array";
 import { clearArrayOpsUnder, recordArrayOp } from "./arrayOpLog";
 import { isFieldDirty, isPlainObject, valuesEqual } from "./equality";
-import type { FieldPath, FieldValue } from "./fieldPath";
+import type {
+  DefaultPathDepth,
+  FieldPath,
+  FieldValue,
+  PathDepth,
+} from "./fieldPath";
 import type { ValidationMode } from "./mode";
 import { getAtPath, setAtPath, slotAtPath } from "./path";
 import type { BoolMap, ErrorMap, FormState } from "./types";
@@ -40,7 +45,7 @@ export type ReadonlyStoreApi<T> = Pick<
 
 export type CreateFormOptions<
   TSchema extends z.ZodType,
-  D extends number = 9,
+  D extends PathDepth = DefaultPathDepth,
 > = Readonly<{
   initialValues: z.input<TSchema>;
   // TYPE-LEVEL ONLY: the typed-path depth budget for this form, in SEGMENTS
@@ -52,6 +57,9 @@ export type CreateFormOptions<
   // editor. Reach for it when one deep store backs many forms (a global
   // store whose leaves sit past 9 segments); must be a number LITERAL
   // (e.g. `pathDepth: 12`) so the budget stays a compile-time constant.
+  // The `PathDepth` constraint (0-25, the Prev table's range) makes an
+  // out-of-range literal or a widened `number` variable a compile error at
+  // the call site.
   pathDepth?: D;
   mode?: ValidationMode;
   reValidateMode?: ValidationMode;
@@ -96,7 +104,9 @@ export type SubmitResult<TOutput> =
 type ArrayItemOf<T> = T extends readonly (infer U)[] ? U : never;
 
 // Root-level errors (schema-wide .refine) live at the "" key.
-type ErrorPath<TValues, D extends number = 9> = FieldPath<TValues, D> | "";
+type ErrorPath<TValues, D extends number = DefaultPathDepth> =
+  | FieldPath<TValues, D>
+  | "";
 
 // No keepDirty: per-field dirtiness is derived from values vs initialValues,
 // and reset makes those equal by definition — a kept dirty map would say
@@ -127,7 +137,7 @@ const shallowFieldEqual = <TValue>(
 
 export type Form<
   TSchema extends z.ZodType,
-  D extends number = 9,
+  D extends number = DefaultPathDepth,
 > = Readonly<{
   // Type-level marker only — never present at runtime. It carries the form's
   // typed-path depth budget (createForm's `pathDepth`, default 9) in a
@@ -471,10 +481,15 @@ const releaseChangedSlices = (
   return kept.length === entries.length ? server : Object.fromEntries(kept);
 };
 
-// D infers as a LITERAL from `options.pathDepth` (the bare `D extends
-// number` constraint preserves literal inference); when the option is
-// omitted, D falls back to the default budget of 9.
-export const createForm = <TSchema extends z.ZodType, D extends number = 9>(
+// D infers as a LITERAL from `options.pathDepth` (the `D extends PathDepth`
+// constraint is a union of literals, so inference stays literal); when the
+// option is omitted, D falls back to the default budget of 9. An
+// out-of-range literal (26, -1) or a `number`-typed variable fails the
+// constraint here, at the call site.
+export const createForm = <
+  TSchema extends z.ZodType,
+  D extends PathDepth = DefaultPathDepth,
+>(
   schema: TSchema,
   options: CreateFormOptions<TSchema, D>,
 ): Form<TSchema, D> => {

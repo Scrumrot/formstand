@@ -48,9 +48,9 @@ export const kitchenSinkSchema = z.object({
 // 9-segment paths — exactly AT the limit, so they bind real controls —
 // while the extra l9 level puts its leaf at 10 segments, which the CLI
 // degrades to a `// TODO`. Both sides of the boundary in one form, plus a
-// branch exercising every wrapper the walkers unwrap. (The chain outgrows
-// the walkers' default nesting budget, so generation passes
-// `--max-depth 11` — see scripts/generate-cli-demos.mjs.)
+// branch exercising every wrapper the walkers unwrap. (The walkers' default
+// nesting budget is derived from the path budget — 9 + 2 = 11 — so the
+// chain generates at default flags; see scripts/generate-cli-demos.mjs.)
 export const deepBoundarySchema = z.object({
   l1: z.object({
     l2: z.object({

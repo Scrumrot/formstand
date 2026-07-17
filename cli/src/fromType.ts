@@ -1,5 +1,6 @@
 import path from "node:path";
 import ts from "typescript";
+import { DEFAULT_MAX_DEPTH } from "./fromZod";
 import { type FieldSpec, type NamedField, labelFromName } from "./ir";
 
 // TS compiler API frontend: point it at a file + an exported type/interface
@@ -15,8 +16,8 @@ export type FromTypeResult = Readonly<{
 type Flags = Readonly<{ optional: boolean; nullable: boolean }>;
 
 const NO_FLAGS: Flags = { optional: false, nullable: false };
-// Shared default with fromZod; overridable via fromType's maxDepth argument.
-const DEFAULT_MAX_DEPTH = 10;
+// The nesting budget default is fromZod's (derived from the FieldPath
+// budget); overridable via fromType's maxDepth argument.
 
 const fallback = (flags: Flags, todo: string): FieldSpec => ({
   kind: "string",

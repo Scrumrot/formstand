@@ -37,17 +37,15 @@ const commands = [
   // formstand's FieldPath budget (9 segments — real controls), while the
   // l9 level's 10-segment leaf pushes past it, so the emitter degrades that
   // subtree to a `// TODO` (and warns on stderr) — both sides of the
-  // boundary in one demo. --max-depth 11: the nine-level chain outgrows the
-  // walkers' default nesting budget of 10, and the PATH budget must be the
-  // only thing degrading here.
+  // boundary in one demo. No --max-depth needed: the walkers' default
+  // nesting budget is derived from the path budget (9 + 2 = 11), so the
+  // PATH budget is the only thing degrading here at default flags.
   [
     boundarySchemas,
     "--export",
     "deepBoundarySchema",
     "--name",
     "DeepBoundaryForm",
-    "--max-depth",
-    "11",
     "--out",
     "examples/src/generated/DeepBoundaryForm.tsx",
   ],

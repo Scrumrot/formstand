@@ -10,8 +10,9 @@ import { z } from "zod";
 //   a.${p0}.b.${p1}.c.${p2}.h.${p3}.e.${index}.f  11  → row field degrades
 //   a.${p0}.b.${p1}.c.${p2}.h.${p3}.e.${index}.g  11  → no Rows pair extracted
 //
-// NOTE: like deepPathsSchema, deeper than fromZod's default --max-depth of
-// 10 — consumers pass an explicit maxDepth (the tests use 12).
+// NOTE: unlike deepPathsSchema, this nests past even the derived default
+// walker budget (FORMSTAND_PATH_DEPTH + 2 = 11) — consumers pass an
+// explicit maxDepth (the tests use 12).
 export const deepRowsSchema = z.object({
   a: z.array(
     z.object({

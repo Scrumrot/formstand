@@ -56,8 +56,9 @@ Options:
   --columns <1|2|3>   evenly spaced field columns inside each section
                       (default: 1); multi-row content spans the full row
   --max-depth <n>     schema/type nesting budget before a level degrades to a
-                      string + TODO (default: 10; also bounds nested-array
-                      row extraction)
+                      string + TODO (default: derived from the FieldPath
+                      budget, currently 11; also bounds nested-array row
+                      extraction)
   --name <MyForm>     component name (default: derived from the schema/type)
   --out <file>        write the component here instead of stdout
   --schema-out <file> (type mode) where to write the generated zod schema

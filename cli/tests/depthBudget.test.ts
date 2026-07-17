@@ -14,7 +14,7 @@ import {
   pathSegmentCount,
 } from "../src/codegen";
 import { emitModuleForm, joinModuleFiles } from "../src/moduleLayout";
-import { fromZod } from "../src/fromZod";
+import { DEFAULT_MAX_DEPTH, fromZod } from "../src/fromZod";
 import {
   fixturesDir,
   freshTmpDir,
@@ -33,9 +33,10 @@ import { deepRowsSchema } from "./fixtures/deepRowsSchema";
 // binding. These suites pin both sides of the boundary and prove every
 // degraded output still typechecks against the real library source.
 
-// Both depth fixtures nest past fromZod's default --max-depth of 10, so
-// every walk passes an explicit budget — the PATH budget must be the only
-// thing degrading.
+// deepRowsSchema nests past even the derived default walker budget
+// (FORMSTAND_PATH_DEPTH + 2 = 11), so these suites pass an explicit budget
+// — the PATH budget must be the only thing degrading. The default-flags
+// behavior (no override at all) gets its own suite below.
 const FIXTURE_MAX_DEPTH = 12;
 
 const DEPTH_TODO = `exceeds formstand's typed FieldPath depth (${FORMSTAND_PATH_DEPTH}); bind by hand`;
@@ -109,9 +110,16 @@ describe("overBudgetFieldPaths", () => {
   });
 
   it("counts array levels as two segments (`*` marks the row index)", () => {
+    // One entry PER EMITTED TODO: the scalar rows of `d` degrade at the row
+    // path, while `e`'s OBJECT rows degrade per field (`f`, `g`) — exactly
+    // the TODO lines the emission tests below pin.
     expect(
       overBudgetFieldPaths(fromZod(deepRowsSchema, FIXTURE_MAX_DEPTH)),
-    ).toEqual(["a.*.b.*.c.*.h.*.d.*", "a.*.b.*.c.*.h.*.e.*"]);
+    ).toEqual([
+      "a.*.b.*.c.*.h.*.d.*",
+      "a.*.b.*.c.*.h.*.e.*.f",
+      "a.*.b.*.c.*.h.*.e.*.g",
+    ]);
   });
 
   it("stays empty within the budget", () => {
@@ -254,6 +262,122 @@ describe("depth budget in the module layout", () => {
   it("both degraded modules typecheck against the library source", () => {
     expect(typecheckDiagnostics(deep.written)).toEqual([]);
     expect(typecheckDiagnostics(rows.written)).toEqual([]);
+  });
+});
+
+describe("at-budget arrays with non-scalar items", () => {
+  // Eight object levels put `list` at exactly 9 segments: the list hook
+  // still binds, but every row path sits at 10 — extraction (or any hand
+  // binding) is impossible within the budget, so the emitters must say so
+  // with the DEPTH todo (not the generic extract-a-row advice), and the
+  // warning list must match the emitted TODOs one for one.
+  const atBudgetList = (item: z.ZodType): z.ZodType =>
+    z.object({
+      o1: z.object({
+        o2: z.object({
+          o3: z.object({
+            o4: z.object({
+              o5: z.object({
+                o6: z.object({
+                  o7: z.object({ o8: z.object({ list: z.array(item) }) }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+  const LIST = "o1.o2.o3.o4.o5.o6.o7.o8.list";
+  const depthTodoCount = (code: string): number =>
+    (code.match(/exceeds formstand's typed FieldPath depth/g) ?? []).length;
+
+  it("array-of-arrays rows emit the depth TODO with a matching warning", () => {
+    const ir = fromZod(atBudgetList(z.array(z.string())), 13);
+    const code = emitPlainForm({
+      ir,
+      formName: "AtBudgetForm",
+      schemaImport: { name: "s", from: "./s", kind: "named" },
+    });
+    expect(code).toContain(
+      `{/* TODO: path "${LIST}.\${index}" ${DEPTH_TODO} */}`,
+    );
+    expect(code).not.toContain("extract a row component");
+    const warnings = overBudgetFieldPaths(ir);
+    expect(warnings).toEqual([`${LIST}.*`]);
+    expect(warnings).toHaveLength(depthTodoCount(code));
+  });
+
+  it("object rows emit one depth TODO per field with per-field warnings", () => {
+    const ir = fromZod(atBudgetList(z.object({ x: z.string(), y: z.string() })), 13);
+    const code = emitPlainForm({
+      ir,
+      formName: "AtBudgetRowsForm",
+      schemaImport: { name: "s", from: "./s", kind: "named" },
+    });
+    expect(code).toContain(
+      `{/* TODO: path "${LIST}.\${index}.x" ${DEPTH_TODO} */}`,
+    );
+    expect(code).toContain(
+      `{/* TODO: path "${LIST}.\${index}.y" ${DEPTH_TODO} */}`,
+    );
+    const warnings = overBudgetFieldPaths(ir);
+    expect(warnings).toEqual([`${LIST}.*.x`, `${LIST}.*.y`]);
+    expect(warnings).toHaveLength(depthTodoCount(code));
+  });
+
+  it("the module layout says the same thing at the same sites", () => {
+    const ir = fromZod(atBudgetList(z.array(z.string())), 13);
+    const joined = joinModuleFiles(
+      emitModuleForm({
+        ir,
+        formName: "AtBudgetForm",
+        ui: "plain",
+        schemaImport: { name: "s", from: "./external", kind: "named" },
+        schemaSource: emitZodSchema(ir, "s"),
+      }),
+    );
+    expect(joined).toContain(`{/* TODO: path "${LIST}.\${index}" ${DEPTH_TODO} */}`);
+    expect(joined).not.toContain("extract it by hand");
+  });
+});
+
+describe("deep chains at DEFAULT flags", () => {
+  it("the walker budget derives from the path budget (one level past it)", () => {
+    // The walker must reach one level PAST the 9-segment path budget so a
+    // deep chain degrades via the PATH budget (real subtree + depth TODO),
+    // never via walker truncation and its wrong-kind string fallback.
+    expect(DEFAULT_MAX_DEPTH).toBe(FORMSTAND_PATH_DEPTH + 2);
+    expect(DEFAULT_MAX_DEPTH).toBe(11);
+  });
+
+  it("a 10-level object chain degrades via the PATH budget and typechecks", () => {
+    const dir = freshTmpDir("depth-default-flags");
+    // NO maxDepth override: the derived default must cover the chain.
+    const { file, code } = ((): Readonly<{ file: string; code: string }> => {
+      const code = emitPlainForm({
+        ir: fromZod(deepPathsSchema),
+        formName: "DeepPathsDefaultForm",
+        schemaImport: {
+          name: "deepPathsSchema",
+          from: moduleSpecifier(dir, path.join(fixturesDir, "deepPathsSchema.ts")),
+          kind: "named",
+        },
+      });
+      const file = path.join(dir, "DeepPathsDefaultForm.tsx");
+      fs.writeFileSync(file, code, "utf8");
+      return { file, code };
+    })();
+    // No walker truncation anywhere in the output...
+    expect(code).not.toContain("nesting depth limit reached");
+    // ...the PATH budget does the degrading (TODO at l9), and the subtree
+    // beneath it is materialized with its REAL kinds (the nullable number
+    // blanks to null — the old string fallback blanked it to "" and failed
+    // tsc against the imported schema).
+    expect(code).toContain(
+      `{/* TODO: path "l1.l2.l3.l4.l5.l6.l7.l8.l9" ${DEPTH_TODO} */}`,
+    );
+    expect(code).toContain("count: null,");
+    expect(typecheckDiagnostics([file])).toEqual([]);
   });
 });
 

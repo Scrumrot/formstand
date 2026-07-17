@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { Form } from "./createForm";
+import type { DefaultPathDepth } from "./fieldPath";
 
 // Draft persistence for a form: watch the values, debounce-write them as JSON
 // under a storage key, and re-apply a found draft on the next visit. This is
@@ -68,7 +69,7 @@ const defaultStorage = (): PersistStorage | null => {
   }
 };
 
-export const persistForm = <TSchema extends z.ZodType, D extends number = 9>(
+export const persistForm = <TSchema extends z.ZodType, D extends number = DefaultPathDepth>(
   form: Form<TSchema, D>,
   options: PersistOptions<TSchema>,
 ): PersistHandle => {

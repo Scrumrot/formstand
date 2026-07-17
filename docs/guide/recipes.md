@@ -120,6 +120,58 @@ const DeeplyNestedField = () => {
 };
 ```
 
+## One store, many forms
+
+The pattern that motivated the [`pathDepth`](./typed-paths#how-path-segments-are-interpreted) option: one module-level store backs several forms, each editing a namespaced slice — so leaf paths pick up the namespace segments and can sit past the default 9-segment typed-path budget. Widen the budget once, at `createForm`, and export per-slice hooks with `createFormHooks`:
+
+```ts
+// appStore.ts — one schema, namespaced per feature
+const appSchema = z.object({
+  settings: z.object({
+    profile: z.object({
+      contact: z.object({
+        address: z.object({
+          geo: z.object({
+            coords: z.object({
+              lat: z.object({ value: z.number(), precision: z.number() }),
+            }),
+          }),
+        }),
+      }),
+    }),
+  }),
+  billing: z.object({ plan: z.enum(["free", "pro"]) }),
+});
+
+// "settings.profile.contact.address.geo.coords.lat.value" is 8 segments
+// here — one more wrapper and the default budget of 9 runs out. Widen once:
+export const appForm = createForm(appSchema, {
+  initialValues,
+  pathDepth: 12, // a literal in 0–25; `number` variables are compile errors
+});
+
+// Per-slice hook APIs, all sharing the one store. D rides along, so the
+// deep paths stay fully typed in every bound hook.
+export const { useSettingsField, useSettingsIsDirty } =
+  createFormHooks(appForm, "settings");
+export const { useBillingField } = createFormHooks(appForm, "billing");
+```
+
+```tsx
+// A slice component binds through its own hooks — no form prop anywhere.
+const LatitudeField = () => {
+  const lat = useSettingsField(
+    "settings.profile.contact.address.geo.coords.lat.value",
+  );
+  return <input {...numberInputProps(lat)} />;
+};
+```
+
+Two wrinkles to know about:
+
+- **The budget is part of the form's type.** `Form<typeof appSchema, 12>` is deliberately not assignable to `Form<typeof appSchema>` (or vice versa), so any prop or helper that takes this form must say `Form<typeof appSchema, 12>`.
+- **Context can't infer it.** `createFormContext` takes no value argument, so a widened form's context names the budget explicitly: `createFormContext<typeof appSchema, 12>()`. Forgetting it produces a `Form<S, 12> is not assignable to Form<S, 9>` error at the `<Provider form={...}>` site — the mismatch is caught, never silently widened.
+
 ## Focus a field imperatively
 
 `focusField(path, root?)` is `focusFirstError`'s path-keyed sibling (and the equivalent of react-hook-form's `setFocus`): it focuses the first control in DOM order whose `name` is the path or a descendant of it, with the same focusability rules. The classic uses are landing focus after appending an array row, or when a dialog opens:

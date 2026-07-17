@@ -34,13 +34,26 @@
   the default budget. Raising it is a deliberate TypeScript compile-cost
   trade: the union grows with every extra level, and every path-taking call
   in the editor pays for it. `D` must be a number literal; budgets up to 25
-  are supported. NOT breaking for existing code: `D` is appended LAST with a
+  are supported, and the option is CONSTRAINED to the exported `PathDepth`
+  union (`0 | 1 | ... | 25`, exactly the decrement table's range) —
+  `pathDepth: 26`, `pathDepth: -1`, and a widened `number`-typed variable
+  all fail to compile at the call site instead of silently misbehaving.
+  `FieldPath<T, D>` itself also guards against a NON-LITERAL `D`: when `D`
+  has widened to `number` (an options object built separately, a
+  `Form<S, number>` passing through a helper), the union falls back to the
+  default depth instead of silently building the enormous ~25-level one (an
+  empirically verified hazard). The default is now the exported
+  `DefaultPathDepth` alias — one source of truth replacing the 22 scattered
+  `= 9` literals across the typed surfaces. NOT breaking for existing
+  code: `D` is appended LAST with a
   default on every generic surface (the hooks' typed overloads
   forward-reference it from the path parameter's constraint, and the
   selector overloads stay at one type parameter), so existing references —
   `Form<Schema>`, explicit instantiations like
   `useFieldArray<typeof schema, "tags">`, `createFormHooks<S, "name">` —
-  keep compiling unchanged; type tests pin the arity.
+  keep compiling unchanged; type tests pin the arity, the option's
+  rejection cases, the non-literal fallback, and both directions of
+  `Form<S, 12>` / `Form<S, 9>` non-assignability.
 
 ### Changed
 
@@ -126,6 +139,26 @@
   library's new per-form `pathDepth` option can widen a form past 9; a
   future `--path-depth` flag would pair with it (not implemented — bind
   those paths by hand for now).
+- **The default walker nesting budget is now DERIVED from the path budget**
+  (`DEFAULT_MAX_DEPTH = FORMSTAND_PATH_DEPTH + 2` = 11, up from the
+  standalone 10; the constant moved to a shared `depth` module both walkers
+  and emitters import). The walker must reach one level PAST the path
+  budget so a too-deep chain at default flags always degrades via the PATH
+  budget — a real, correctly typed subtree with a depth TODO — and never
+  via walker truncation, whose wrong-kind string fallback poisoned
+  `initialValues` and failed the consumer's typecheck (a nullable number at
+  level 10 blanked to `""` instead of `null`). The DeepBoundaryForm
+  playground demo no longer needs its `--max-depth 11` override, and its
+  regenerated output is byte-identical. `--max-depth` remains as an
+  override and the recursion backstop.
+- **One boundary predicate for every depth decision.** The ~38 hand-written
+  `>`/`>=` comparisons against `FORMSTAND_PATH_DEPTH` across the
+  single-file and module emitters are replaced by a single exported
+  `overDepthBudget(spec, segments)` (which picks the at-the-budget vs
+  needs-headroom boundary from the spec's kind) plus `pastRowBudget` for
+  spec-less row paths — so the two layouts and the CLI warnings can no
+  longer drift on where degradation starts. `depthTodoLine` is likewise the
+  one production of the TODO comment shared by both emitters.
 
 ### Fixed
 
@@ -149,19 +182,39 @@
   recursive nested-array row extraction; this is deliberately NOT a walker
   depth clamp (walk-depth is the wrong proxy for segments — a coarse cap
   would have broken the working 3-level nested-array output).
+  Follow-up alignment: an at-budget array whose ITEM is non-scalar (an
+  array-of-arrays, or array rows holding a tuple/union) now emits the DEPTH
+  todo at the row site instead of the generic extract-a-row advice — which
+  was unachievable there, since the row path itself is past the budget —
+  and `overBudgetFieldPaths` (the stderr warning list) now mirrors the
+  emitted TODOs exactly, one entry per TODO site, per-FIELD for an array's
+  object rows (the emitters degrade those field by field).
 - **`.default()` / `.prefault()` values now land in the generated
   `initialValues`** instead of being ignored (`defaultedNumber: z.number()
   .default(42)` emitted `undefined`, contradicting the README). `fromZod`
-  captures the value off the zod def (`defaultValue` — a resolved value in
-  zod v4, a factory function in older shapes; factories are called, throwing
-  ones treated as no default) into a new optional `defaultValue` on the IR's
-  `SharedSpecProps`, and `emitInitialValues` seeds the field with it whenever
-  it is a JSON-serializable primitive matching the field kind (string /
-  finite number / boolean / declared enum option). Dates and object/array
-  defaults keep the blank behavior. A seeded default satisfies `z.input`, so
-  it also counts toward the checked-annotation-instead-of-cast decision.
-  Type mode is unchanged — TS types can't carry runtime defaults, so
-  `fromType` never sets `defaultValue`. The README now states the real rule.
+  captures the value off the zod def into a new optional `defaultValue` on
+  the IR's `SharedSpecProps`, and `emitInitialValues` seeds the field with
+  it whenever it is a JSON-serializable primitive matching the field kind
+  (string / finite number / boolean / declared enum option). Dates and
+  object/array defaults keep the blank behavior. A seeded default satisfies
+  `z.input`, so it also counts toward the
+  checked-annotation-instead-of-cast decision. Type mode is unchanged — TS
+  types can't carry runtime defaults, so `fromType` never sets
+  `defaultValue`. The README now states the real rule.
+  Capture hardening on review: zod v4's `def.defaultValue` is a GETTER that
+  already resolves the user's factory, so the walk only READS it — a
+  function-valued result (an older shape storing the factory itself, or a
+  factory returning a function) is treated as not capturable rather than
+  invoked, which previously executed arbitrary user code at generation
+  time (a fixture spy proves the resolved function is never called). The
+  getter is read TWICE and the value captured only when both reads
+  `Object.is`-agree on a JSON primitive, so a non-deterministic factory
+  (`Date.now`, `randomUUID`) can never bake a run-dependent literal into
+  byte-deterministic output. And a default is NEVER seeded into a
+  todo-fallback spec (`z.custom<T>().default(...)` walks as a string
+  stand-in whose kind lies about `T`): seeding there broke the generated
+  file's checked `initialValues` annotation — the field keeps its blank
+  behavior instead.
 
 ## formstand-cli 0.7.0 — 2026-07-12
 

@@ -1,3 +1,4 @@
+import { FORMSTAND_PATH_DEPTH } from "./depth";
 import {
   type FieldSpec,
   type NamedField,
@@ -30,8 +31,9 @@ type ZodDefLike = Readonly<{
   // rest schema (which we don't generate).
   items?: unknown;
   rest?: unknown;
-  // z.default / z.prefault: the captured default. zod v4 resolves it to the
-  // value on the def; other versions keep the user's factory function.
+  // z.default / z.prefault: the default. In zod v4 this is a getter that
+  // resolves the user's factory to its value; other versions store the
+  // factory function itself (which the walk treats as not capturable).
   defaultValue?: unknown;
 }>;
 
@@ -120,11 +122,19 @@ const discriminatedUnionFrom = (
     : null;
 };
 
-// The default nesting budget (fromType shares it). Also the backstop for
-// recursion the seen-set misses (getters that build a fresh schema object on
-// every access) — the walk always terminates even for a truly cyclic schema.
-// Overridable via fromZod's maxDepth argument (the CLI's --max-depth).
-export const DEFAULT_MAX_DEPTH = 10;
+// The default nesting budget (fromType shares it), DERIVED from the
+// FieldPath budget: the walker must reach one level PAST the path budget so
+// that a too-deep chain degrades via the PATH budget (a real subtree,
+// materialized in the schema/initialValues, with a depth TODO at the
+// boundary) and never via walker truncation — whose wrong-kind string
+// fallback poisons initialValues and fails the consumer's typecheck. A
+// 9-segment object needs its 10-segment children walked truly, and the root
+// spends one level, hence budget + 2 (= 11 at the default budget of 9).
+// Also the backstop for recursion the seen-set misses (getters that build a
+// fresh schema object on every access) — the walk always terminates even
+// for a truly cyclic schema. Overridable via fromZod's maxDepth argument
+// (the CLI's --max-depth).
+export const DEFAULT_MAX_DEPTH = FORMSTAND_PATH_DEPTH + 2;
 
 const fieldsFromShape = (
   shape: unknown,
@@ -232,10 +242,16 @@ const walk = (
     case "nullable":
       return walk(def.innerType, { ...flags, nullable: true }, depth, nextSeen);
     // A .default() means the *input* may omit the value — and the wrapped
-    // value is what the generated initialValues should start from. zod v4
-    // exposes it as `def.defaultValue` (already resolved, possibly via a
-    // getter); older shapes store the user's factory — call it, and treat a
-    // throwing factory as "no capturable default".
+    // value is what the generated initialValues should start from. zod v4's
+    // `def.defaultValue` is a GETTER that already resolves the user's
+    // factory, so it is read, never invoked: a function-valued result (an
+    // older shape storing the factory itself, or a factory returning a
+    // function) means "not capturable" — calling it would execute arbitrary
+    // user code at generation time. And a non-deterministic factory
+    // (Date.now, randomUUID) must not bake a run-dependent value into
+    // byte-deterministic output: the getter is read TWICE, and the value is
+    // captured only when both reads agree (Object.is) on a JSON primitive.
+    // A throwing getter is "no capturable default".
     case "default":
     case "prefault": {
       const inner = walk(
@@ -244,15 +260,20 @@ const walk = (
         depth,
         nextSeen,
       );
-      const value = ((): unknown => {
+      const read = (): unknown => {
         try {
-          const raw = def.defaultValue;
-          return typeof raw === "function" ? (raw as () => unknown)() : raw;
+          return def.defaultValue;
         } catch {
           return undefined;
         }
-      })();
-      return value === undefined ? inner : { ...inner, defaultValue: value };
+      };
+      const first = read();
+      const capturable =
+        (typeof first === "string" ||
+          typeof first === "number" ||
+          typeof first === "boolean") &&
+        Object.is(first, read());
+      return capturable ? { ...inner, defaultValue: first } : inner;
     }
     case "union": {
       const discriminated = discriminatedUnionFrom(

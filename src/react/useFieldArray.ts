@@ -9,7 +9,7 @@ import {
   clearArrayOps,
 } from "../core/arrayOpLog";
 import type { Form } from "../core/createForm";
-import type { FieldPath, FieldValue } from "../core/fieldPath";
+import type { DefaultPathDepth, FieldPath, FieldValue } from "../core/fieldPath";
 import { getAtPath } from "../core/path";
 import type { FormState } from "../core/types";
 import type { FieldPathArg } from "./useField";
@@ -315,7 +315,7 @@ export function useFieldArray<TItem = unknown>(
 export function useFieldArray<
   TSchema extends z.ZodType,
   P extends FieldPath<z.input<TSchema>, D>,
-  D extends number = 9,
+  D extends number = DefaultPathDepth,
 >(
   form: Form<TSchema, D>,
   path: P,

@@ -13,7 +13,12 @@ export type {
 export type { FormState, ErrorMap, BoolMap } from "./core/types";
 export { parsePath, getAtPath, setAtPath } from "./core/path";
 export type { PathSegment } from "./core/path";
-export type { FieldPath, FieldValue } from "./core/fieldPath";
+export type {
+  DefaultPathDepth,
+  FieldPath,
+  FieldValue,
+  PathDepth,
+} from "./core/fieldPath";
 export {
   flattenIssues,
   validateSync,

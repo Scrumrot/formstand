@@ -10,7 +10,13 @@ import {
 } from "../src/codegen";
 import { fromZod } from "../src/fromZod";
 import { fixturesDir, freshTmpDir, typecheckDiagnostics } from "./helpers";
+import { customDefaultSchema } from "./fixtures/customDefaultSchema";
 import { defaultsSchema } from "./fixtures/defaultsSchema";
+import {
+  callTracker,
+  functionDefaultSchema,
+} from "./fixtures/functionDefaultSchema";
+import { nonDeterministicDefaultSchema } from "./fixtures/nonDeterministicDefaultSchema";
 
 // `.default()` values must land in the generated initialValues whenever the
 // captured value is a JSON-serializable primitive matching the field kind
@@ -71,6 +77,75 @@ describe("defaults in emitInitialValues", () => {
     // Every field is defaulted or blankable, so the draft gets the checked
     // annotation, not the as-unknown-as escape hatch.
     expect(blankNeedsCast(fromZod(defaultsSchema))).toBe(false);
+  });
+});
+
+describe("defaults the capture must refuse", () => {
+  it("never seeds a default into a todo fallback (z.custom + .default)", () => {
+    const ir = fromZod(customDefaultSchema);
+    if (ir.kind !== "object") throw new Error("expected object root");
+    const accent = ir.fields.find((field) => field.name === "accent");
+    // The value IS captured off the def (a deterministic string)...
+    expect(accent?.spec.defaultValue).toBe("#c0ffee");
+    expect(accent?.spec.todo).toBeDefined();
+    // ...but the emitter refuses to seed it: the fallback kind lies about
+    // the field's real input type, so the field keeps its blank behavior.
+    expect(emitInitialValues(ir, 0)).toContain("accent: undefined,");
+    expect(emitInitialValues(ir, 0)).not.toContain("#c0ffee");
+  });
+
+  it("the todo-fallback output typechecks with its checked annotation", () => {
+    const dir = freshTmpDir("defaults-custom");
+    const code = emitPlainForm({
+      ir: fromZod(customDefaultSchema),
+      formName: "CustomDefaultForm",
+      schemaImport: {
+        name: "customDefaultSchema",
+        from: moduleSpecifier(
+          dir,
+          path.join(fixturesDir, "customDefaultSchema.ts"),
+        ),
+        kind: "named",
+      },
+    });
+    // The old seeding put "#c0ffee" (a plain string) in the HexColor slot,
+    // breaking exactly this checked annotation.
+    expect(code).toContain("const initialValues: FormValues =");
+    expect(code).not.toContain("#c0ffee");
+    const file = path.join(dir, "CustomDefaultForm.tsx");
+    fs.writeFileSync(file, code, "utf8");
+    expect(typecheckDiagnostics([file])).toEqual([]);
+  });
+
+  it("a function-valued resolved default is neither invoked nor captured", () => {
+    const ir = fromZod(functionDefaultSchema);
+    if (ir.kind !== "object") throw new Error("expected object root");
+    const onPing = ir.fields.find((field) => field.name === "onPing");
+    expect(onPing?.spec.defaultValue).toBeUndefined();
+    // The fixture's tracker proves the resolved function never ran: reading
+    // zod's defaultValue getter resolves the factory (returning the
+    // callback), and the walk must stop there.
+    expect(callTracker.called).toBe(false);
+    expect(emitInitialValues(ir, 0)).toContain("onPing: undefined,");
+  });
+
+  it("a non-deterministic factory is not captured and output is byte-stable", () => {
+    const emit = (): string =>
+      emitPlainForm({
+        ir: fromZod(nonDeterministicDefaultSchema),
+        formName: "SeqForm",
+        schemaImport: {
+          name: "nonDeterministicDefaultSchema",
+          from: "./nonDeterministicDefaultSchema",
+          kind: "named",
+        },
+      });
+    const first = emit();
+    // The counter yields a fresh value per read — no literal may land.
+    expect(first).toContain("seq: undefined,");
+    expect(first).not.toMatch(/seq: \d/);
+    // Two full generations are byte-identical despite the impure factory.
+    expect(emit()).toBe(first);
   });
 });
 

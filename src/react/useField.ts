@@ -5,7 +5,7 @@ import { useStore } from "zustand/react";
 import { useShallow } from "zustand/react/shallow";
 import type { Form } from "../core/createForm";
 import { isFieldDirty } from "../core/equality";
-import type { FieldPath, FieldValue } from "../core/fieldPath";
+import type { DefaultPathDepth, FieldPath, FieldValue } from "../core/fieldPath";
 import { shouldValidateOn } from "../core/mode";
 import { getAtPath } from "../core/path";
 import type { FormState } from "../core/types";
@@ -115,7 +115,7 @@ export function useField<TValue = unknown>(
 export function useField<
   TSchema extends z.ZodType,
   P extends FieldPath<z.input<TSchema>, D>,
-  D extends number = 9,
+  D extends number = DefaultPathDepth,
 >(
   form: Form<TSchema, D>,
   path: P,

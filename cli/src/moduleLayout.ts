@@ -2,9 +2,8 @@ import { camelCase, camelIdent, pascalCase } from "./casing";
 import {
   DEFAULT_VISUAL,
   type EmitFormOptions,
-  FORMSTAND_PATH_DEPTH,
   blankNeedsCast,
-  depthTodoText,
+  depthTodoLine,
   gridColsClass,
   gridSxProps,
   gridStyleProps,
@@ -19,9 +18,11 @@ import {
   emitInitialValues,
   hasVariantFieldUsage,
   identifierSuffix,
+  isScalarSpec,
   isUnaddressable,
   jsxText,
   muiAdapterSection,
+  overDepthBudget,
   pathSegmentCount,
   q,
   shadcnAdapterSection,
@@ -125,12 +126,6 @@ type Plan = Readonly<{
   rootTodos: readonly string[]; // dot-keys etc. surfaced in the body
 }>;
 
-const isScalar = (spec: FieldSpec): boolean =>
-  spec.kind !== "object" &&
-  spec.kind !== "array" &&
-  spec.kind !== "tuple" &&
-  spec.kind !== "union";
-
 // Whether the subtree holds a discriminated-union field at any addressable
 // object depth — gates the bound Field/VariantField hook exports.
 const specHasUnion = (spec: FieldSpec): boolean =>
@@ -164,7 +159,7 @@ const collectLeaves = (
     const at = [...segments, field.name];
     switch (field.spec.kind) {
       case "object":
-        return at.length >= FORMSTAND_PATH_DEPTH
+        return overDepthBudget(field.spec, at.length)
           ? []
           : collectLeaves(field.spec.fields, at);
       case "array":
@@ -175,7 +170,9 @@ const collectLeaves = (
       case "tuple":
         return [];
       default:
-        return at.length > FORMSTAND_PATH_DEPTH ? [] : [{ segments: at, field }];
+        return overDepthBudget(field.spec, at.length)
+          ? []
+          : [{ segments: at, field }];
     }
   });
 
@@ -204,7 +201,7 @@ const buildPlan = (root: ObjectSpec, naming: Naming): Plan => {
   });
 
   const rootFields = root.fields
-    .filter((field) => !isUnaddressable(field.name) && isScalar(field.spec))
+    .filter((field) => !isUnaddressable(field.name) && isScalarSpec(field.spec))
     .map((field) => planField([field.name], field));
 
   const sections = root.fields
@@ -1075,11 +1072,11 @@ const collectNestedArrays = (
     const at = [...segments, field.name];
     switch (field.spec.kind) {
       case "object":
-        return at.length >= FORMSTAND_PATH_DEPTH
+        return overDepthBudget(field.spec, at.length)
           ? []
           : collectNestedArrays(field.spec.fields, at);
       case "array":
-        return at.length > FORMSTAND_PATH_DEPTH
+        return overDepthBudget(field.spec, at.length)
           ? []
           : [{ segments: at, label: field.label, item: field.spec.item }];
       default:
@@ -1235,7 +1232,7 @@ const nestedArrayComponents = (
   const emptyName = `empty${entry.stem}Item`;
   const shell = arrayShell(ui, entry.label);
   const wrap = nestedListShell(ui, entry.label);
-  const scalarItem = isScalar(entry.item);
+  const scalarItem = isScalarSpec(entry.item);
 
   // This row's own index becomes the next hole for arrays extracted from it.
   const rowIndexHole = `p${entry.holes.length}`;
@@ -1244,6 +1241,16 @@ const nestedArrayComponents = (
   // segment past the (already-validated) list template; a named field or a
   // child array's list adds one more.
   const rowSegments = pathSegmentCount(entry.templateBase) + 1;
+
+  // The one production of an over-budget row-field TODO (shared by every
+  // item-field kind — scalar bindings, child lists, and nested containers
+  // degrade identically).
+  const overBudgetFieldBody = (fieldName: string): readonly string[] => [
+    depthTodoLine(`${entry.commentBase}.$\{index}.${fieldName}`, "      "),
+  ];
+  const overBudgetRowBody = (): readonly string[] => [
+    depthTodoLine(`${entry.commentBase}.$\{index}`, "      "),
+  ];
 
   // The entry for an array extracted from this row (one deeper hole), claiming
   // a unique stem. fieldName undefined => the item itself is an array.
@@ -1320,14 +1327,14 @@ const nestedArrayComponents = (
               ],
             };
           }
-          if (isScalar(field.spec)) {
-            if (rowSegments + 1 > FORMSTAND_PATH_DEPTH) {
-              return {
-                body: [
-                  `      {/* TODO: ${depthTodoText(`${entry.commentBase}.$\{index}.${field.name}`)} */}`,
-                ],
-              };
-            }
+          // Every field of a row sits one segment past the row path — past
+          // the budget nothing binds (a scalar's useField, a child list's
+          // useFieldArray, a container's hand-extraction), so all kinds
+          // degrade to the same depth TODO.
+          if (overDepthBudget(field.spec, rowSegments + 1)) {
+            return { body: overBudgetFieldBody(field.name) };
+          }
+          if (isScalarSpec(field.spec)) {
             const varName = leafVar(field.name);
             return {
               body: leafControl(
@@ -1343,15 +1350,6 @@ const nestedArrayComponents = (
             };
           }
           if (field.spec.kind === "array") {
-            // The child's list path sits one segment past this row — past
-            // the budget, its useFieldArray hook could never bind.
-            if (rowSegments + 1 > FORMSTAND_PATH_DEPTH) {
-              return {
-                body: [
-                  `      {/* TODO: ${depthTodoText(`${entry.commentBase}.$\{index}.${field.name}`)} */}`,
-                ],
-              };
-            }
             const child = childEntry(
               field.name,
               field.label,
@@ -1387,19 +1385,20 @@ const nestedArrayComponents = (
           specs: objectPieces.flatMap((p) => (p.spec ? [p.spec] : [])),
           children: objectPieces.flatMap((p) => (p.part ? [p.part] : [])),
         }
-      : scalarItem
-        ? rowSegments > FORMSTAND_PATH_DEPTH
+      : overDepthBudget(entry.item, rowSegments)
+        ? {
+            // The row path itself is past the budget (for an array item the
+            // inner list IS the row path; a tuple/union needs headroom for
+            // its positions/discriminant): the list hook still binds, but
+            // each row degrades to the depth TODO — extraction or binding
+            // by hand is impossible within the budget.
+            bindings: [],
+            body: overBudgetRowBody(),
+            specs: [],
+            children: [],
+          }
+        : scalarItem
           ? {
-              // The scalar row path itself is past the budget: the list hook
-              // still binds, but each row degrades to a TODO.
-              bindings: [],
-              body: [
-                `      {/* TODO: ${depthTodoText(`${entry.commentBase}.$\{index}`)} */}`,
-              ],
-              specs: [],
-              children: [],
-            }
-          : {
               bindings: [
                 `  const field = ${naming.hook("Field")}(\`${entry.templateBase}.\${index}\`);`,
               ],
@@ -1414,19 +1413,8 @@ const nestedArrayComponents = (
               specs: [entry.item],
               children: [],
             }
-        : entry.item.kind === "array"
-          ? rowSegments > FORMSTAND_PATH_DEPTH
-            ? {
-                // The inner list IS the row path — over budget, its hook
-                // could never bind, so no Row/Rows pair is extracted.
-                bindings: [],
-                body: [
-                  `      {/* TODO: ${depthTodoText(`${entry.commentBase}.$\{index}`)} */}`,
-                ],
-                specs: [],
-                children: [],
-              }
-            : ((): typeof parts => {
+          : entry.item.kind === "array"
+            ? ((): typeof parts => {
                 const child = childEntry(
                   undefined,
                   entry.label,
@@ -1440,14 +1428,14 @@ const nestedArrayComponents = (
                   children: [nestedArrayComponents(ui, naming, child, used)],
                 };
               })()
-          : {
-              bindings: [],
-              body: [
-                `      {/* TODO: array item is a ${entry.item.kind} in ${commentText(q(entry.commentBase))} rows — bind it by hand */}`,
-              ],
-              specs: [],
-              children: [],
-            };
+            : {
+                bindings: [],
+                body: [
+                  `      {/* TODO: array item is a ${entry.item.kind} in ${commentText(q(entry.commentBase))} rows — bind it by hand */}`,
+                ],
+                specs: [],
+                children: [],
+              };
 
   const holeParams = entry.holes.map((h) => `  ${h},`);
   const holeTypes = entry.holes.map((h) => `${h}: number`);
@@ -1550,13 +1538,15 @@ const objectSectionFile = (
         ];
       }
       const at = [...segments, field.name];
+      // The FieldPath boundary first, for EVERY kind — same order as the
+      // single-file walker, so an over-budget union/tuple degrades to the
+      // depth TODO (its hand-binding advice would be unachievable) and the
+      // CLI warning list mirrors the emitted TODOs exactly.
+      if (overDepthBudget(field.spec, at.length)) {
+        return [depthTodoLine(at.join("."), indent)];
+      }
       switch (field.spec.kind) {
         case "object":
-          // Children of an object at the FieldPath budget can only exceed it
-          // — same boundary the single-file walker stops at.
-          if (at.length >= FORMSTAND_PATH_DEPTH) {
-            return [`${indent}{/* TODO: ${depthTodoText(at.join("."))} */}`];
-          }
           return [
             `${indent}<fieldset${
               visual.columns > 1
@@ -1570,9 +1560,6 @@ const objectSectionFile = (
             `${indent}</fieldset>`,
           ];
         case "array": {
-          if (at.length > FORMSTAND_PATH_DEPTH) {
-            return [`${indent}{/* TODO: ${depthTodoText(at.join("."))} */}`];
-          }
           const entry = nestedByKey.get(at.join("."));
           return entry === undefined
             ? [
@@ -1594,10 +1581,7 @@ const objectSectionFile = (
           ];
         default: {
           // Over-budget scalars were never planned (collectLeaves skips
-          // them), so the TODO lands here at the field's site.
-          if (at.length > FORMSTAND_PATH_DEPTH) {
-            return [`${indent}{/* TODO: ${depthTodoText(at.join("."))} */}`];
-          }
+          // them) — the guard above already emitted their TODO.
           const planned = own(at);
           return planned === undefined
             ? []
@@ -1683,7 +1667,7 @@ const tupleSectionFile = (
     const base = `element${index}`;
     const varName = `${base}${identifierSuffix(base, used)}`;
     used.add(varName);
-    return { element, index, varName, scalar: isScalar(element) };
+    return { element, index, varName, scalar: isScalarSpec(element) };
   });
   const scalarElements = elements.filter((e) => e.scalar);
 
@@ -1758,7 +1742,7 @@ const arraySectionFile = (
   const itemLeaves =
     spec.item.kind === "object"
       ? spec.item.fields.filter(
-          (field) => !isUnaddressable(field.name) && isScalar(field.spec),
+          (field) => !isUnaddressable(field.name) && isScalarSpec(field.spec),
         )
       : [];
 
@@ -1821,7 +1805,7 @@ const arraySectionFile = (
               ? []
               : [`      <${entry.stem}Rows p0={index} />`];
           }
-          return isScalar(field.spec)
+          return isScalarSpec(field.spec)
             ? []
             : [
                 `      {/* TODO: nested ${field.spec.kind} ${commentText(q(`${section.key}.$\{index}.${field.name}`))} — extract a row component with its own hook */}`,
@@ -1844,7 +1828,7 @@ const arraySectionFile = (
   // (useVariantField needs a static union path), so it emits no leaf control,
   // no scalar row binding, and no union-only builder import — just a TODO,
   // mirroring the single-file backend's unreachable-container handling.
-  const scalarItem = isScalar(spec.item);
+  const scalarItem = isScalarSpec(spec.item);
 
   const rowSpecs =
     spec.item.kind === "object"
@@ -2072,7 +2056,7 @@ const unionSectionFile = (
   // and variant-only keys (useXVariantField).
   const partitioned = spec.variants
     .flatMap((variant) => variant.fields)
-    .filter((field) => !isUnaddressable(field.name) && isScalar(field.spec))
+    .filter((field) => !isUnaddressable(field.name) && isScalarSpec(field.spec))
     .reduce<
       Readonly<{
         used: ReadonlySet<string>;

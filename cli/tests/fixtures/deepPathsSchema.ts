@@ -5,9 +5,10 @@ import { z } from "zod";
 // (a.b.c.d.e.f.g.h.i — exactly 9 segments) and a shallow control, so one
 // schema exercises degrade-to-TODO and still-binds side by side.
 //
-// NOTE: the object chain is deeper than fromZod's default nesting budget
-// (--max-depth 10), so consumers must pass an explicit maxDepth (the tests
-// use 12) — the PATH budget has to be the only thing degrading here.
+// NOTE: the ten-level chain fits the walkers' DERIVED default nesting
+// budget (FORMSTAND_PATH_DEPTH + 2 = 11), so default-flags generation
+// degrades via the PATH budget alone; some tests still pass an explicit
+// maxDepth (12) for headroom.
 export const deepPathsSchema = z.object({
   l1: z.object({
     l2: z.object({

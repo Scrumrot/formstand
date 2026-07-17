@@ -5,10 +5,11 @@ import {
 } from "react";
 import type { z } from "zod";
 import type { Form } from "../core/createForm";
+import type { DefaultPathDepth } from "../core/fieldPath";
 
 export type FormProviderProps<
   TSchema extends z.ZodType,
-  D extends number = 9,
+  D extends number = DefaultPathDepth,
 > = Readonly<{
   form: Form<TSchema, D>;
   children: ReactNode;
@@ -16,7 +17,7 @@ export type FormProviderProps<
 
 export type FormContextApi<
   TSchema extends z.ZodType,
-  D extends number = 9,
+  D extends number = DefaultPathDepth,
 > = Readonly<{
   Provider: (props: FormProviderProps<TSchema, D>) => ReactNode;
   useFormContext: () => Form<TSchema, D>;
@@ -27,7 +28,7 @@ export type FormContextApi<
 // is no value argument), and Form<S, 12> is deliberately not Form<S, 9>.
 export const createFormContext = <
   TSchema extends z.ZodType,
-  D extends number = 9,
+  D extends number = DefaultPathDepth,
 >(): FormContextApi<TSchema, D> => {
   const Context = createContext<Form<TSchema, D> | null>(null);
 

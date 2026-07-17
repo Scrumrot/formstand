@@ -6,12 +6,17 @@ import {
   createForm,
 } from "../core/createForm";
 import { valuesEqual } from "../core/equality";
+import type { DefaultPathDepth, PathDepth } from "../core/fieldPath";
 
 // Lazy-creates a Form bound to this component instance. Schema and options are
 // locked in on the first render; later changes are ignored (warned once below).
-// D mirrors createForm's inference: a literal from `options.pathDepth`,
-// defaulting to the 9-segment typed-path budget.
-export const useForm = <TSchema extends z.ZodType, D extends number = 9>(
+// D mirrors createForm's inference: a literal from `options.pathDepth`
+// (constrained to PathDepth, 0-25), defaulting to the 9-segment typed-path
+// budget.
+export const useForm = <
+  TSchema extends z.ZodType,
+  D extends PathDepth = DefaultPathDepth,
+>(
   schema: TSchema,
   options: CreateFormOptions<TSchema, D>,
 ): Form<TSchema, D> => {
