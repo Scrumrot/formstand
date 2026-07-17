@@ -56,7 +56,7 @@ const single = (path: string, raw: string): readonly DemoFile[] => [
   { path, source: stripHarness(raw) },
 ];
 
-// Reading order for the Onboarding modules' file trees.
+// Reading order for the module demos' file trees.
 const MODULE_ORDER = [
   "schema.ts",
   "types.ts",
@@ -67,6 +67,8 @@ const MODULE_ORDER = [
   "OnboardingForm.tsx",
   "MuiOnboardingForm.tsx",
   "ShadcnOnboardingForm.tsx",
+  "KitchenSinkForm.tsx",
+  "NestedArrayStressForm.tsx",
   "index.ts",
 ];
 
@@ -126,6 +128,24 @@ const generatedMuiFiles = moduleFiles(
   "../generated/OnboardingForm/",
 );
 
+const kitchenSinkFiles = moduleFiles(
+  import.meta.glob("../generated/KitchenSinkForm/**/*.{ts,tsx}", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }),
+  "../generated/KitchenSinkForm/",
+);
+
+const nestedArrayStressFiles = moduleFiles(
+  import.meta.glob("../generated/NestedArrayStressForm/**/*.{ts,tsx}", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }),
+  "../generated/NestedArrayStressForm/",
+);
+
 const sources = {
   basic: single("BasicForm.tsx", basicSrc),
   bound: single("BoundFieldsForm.tsx", boundSrc),
@@ -154,6 +174,14 @@ const sources = {
   muiSurvey: single("MuiSurveyBuilder.tsx", muiSurveySrc),
   onboardingMui: onboardingMuiFiles,
   genMui: generatedMuiFiles,
+  genKitchenSink: kitchenSinkFiles,
+  // genDeepNest (the untouched single-file DeepBoundaryForm.tsx next to the
+  // module folders) is deliberately NOT a demo: the CLI's default depth
+  // budget (10) exceeds formstand's FieldPath type budget (7 segments), so
+  // its 9-segment paths fail tsc — see tests/react/generated-boundary.test.tsx
+  // for the full account. Wire it here once the CLI clamps to the library's
+  // budget.
+  genArrayStress: nestedArrayStressFiles,
   cliCommand: single("CliCommandBuilder.tsx", cliCommandSrc),
   // Explicit order (not the module glob): the component leads so the code
   // panel opens on the useForm call, then the schema and the emitter bridge.

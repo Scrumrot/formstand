@@ -4,10 +4,10 @@
 // anything under examples/src/generated/.
 import { execFileSync } from "node:child_process";
 
-execFileSync(
-  "node",
+const boundarySchemas = "examples/src/generated/boundarySchemas.ts";
+
+const commands = [
   [
-    "cli/dist/cli.js",
     "examples/src/forms/OnboardingForm/schema.ts",
     "--layout",
     "module",
@@ -21,7 +21,47 @@ execFileSync(
     "OnboardingForm",
     "--out",
     "examples/src/generated/OnboardingForm",
-    "--force",
   ],
-  { stdio: "inherit" },
+  [
+    boundarySchemas,
+    "--export",
+    "kitchenSinkSchema",
+    "--name",
+    "KitchenSinkForm",
+    "--layout",
+    "module",
+    "--out",
+    "examples/src/generated/KitchenSinkForm",
+  ],
+  // Kept as a known-failure reproduction, NOT wired as a demo: the CLI's
+  // default --max-depth (10) emits 9-segment paths, past formstand's
+  // FieldPath type budget (7), so this file fails tsc (TS2820) and is
+  // excluded in examples/tsconfig.json until the CLI clamps to the
+  // library's budget.
+  [
+    boundarySchemas,
+    "--export",
+    "deepBoundarySchema",
+    "--name",
+    "DeepBoundaryForm",
+    "--out",
+    "examples/src/generated/DeepBoundaryForm.tsx",
+  ],
+  [
+    boundarySchemas,
+    "--export",
+    "nestedArrayStressSchema",
+    "--name",
+    "NestedArrayStressForm",
+    "--layout",
+    "module",
+    "--out",
+    "examples/src/generated/NestedArrayStressForm",
+  ],
+];
+
+commands.forEach((args) =>
+  execFileSync("node", ["cli/dist/cli.js", ...args, "--force"], {
+    stdio: "inherit",
+  }),
 );

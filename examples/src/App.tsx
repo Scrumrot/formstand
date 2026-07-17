@@ -22,6 +22,11 @@ import { ContextForm } from "./forms/ContextForm";
 import { DependentFieldsForm } from "./forms/DependentFieldsForm";
 import { DerivedFieldForm } from "./forms/DerivedFieldForm";
 import { FileUploadForm } from "./forms/FileUploadForm";
+import { KitchenSinkForm, kitchenSinkForm } from "./generated/KitchenSinkForm";
+import {
+  NestedArrayStressForm,
+  nestedArrayStressForm,
+} from "./generated/NestedArrayStressForm";
 import {
   OnboardingForm as GeneratedOnboardingForm,
   onboardingForm as generatedOnboardingForm,
@@ -84,6 +89,16 @@ const shadcnTab = (
 const GeneratedOnboardingDemo = () => {
   useDemoForm(generatedOnboardingForm);
   return <GeneratedOnboardingForm />;
+};
+
+const GeneratedKitchenSinkDemo = () => {
+  useDemoForm(kitchenSinkForm);
+  return <KitchenSinkForm />;
+};
+
+const GeneratedNestedArrayStressDemo = () => {
+  useDemoForm(nestedArrayStressForm);
+  return <NestedArrayStressForm />;
 };
 
 const TABS: readonly Tab[] = [
@@ -213,6 +228,16 @@ const TABS: readonly Tab[] = [
       </MuiThemeBridge>
     ),
   },
+  {
+    key: "genKitchenSink",
+    label: "Gen: kitchen sink",
+    render: () => <GeneratedKitchenSinkDemo />,
+  },
+  {
+    key: "genArrayStress",
+    label: "Gen: nested arrays",
+    render: () => <GeneratedNestedArrayStressDemo />,
+  },
 ];
 
 type GroupTitle =
@@ -257,6 +282,8 @@ const GROUP_OF: Readonly<Record<TabKey, GroupTitle>> = {
   shadTeam: "shadcn/ui",
   onboardingShadcn: "shadcn/ui",
   genMui: "Generated",
+  genKitchenSink: "Generated",
+  genArrayStress: "Generated",
   cliCommand: "Generated",
   schemaBuilder: "Generated",
 };
@@ -318,6 +345,10 @@ const BLURBS: Readonly<Record<TabKey, string>> = {
     "The Onboarding feature module over shadcn/ui: collapsible sections with dirty/valid badges.",
   genMui:
     "formstand-gen's untouched --layout module --ui mui --sections panel output — CI regenerates it and fails on drift.",
+  genKitchenSink:
+    "Every schema kind and wrapper the CLI supports in one form — tuple included — as untouched --layout module output.",
+  genArrayStress:
+    "Three-level nested arrays (teams → members → phones) from the CLI's recursive row extraction, untouched module output.",
   cliCommand:
     "Fill the options and the formstand-gen command updates live — the command line is useFormSelector-derived state.",
   schemaBuilder:
