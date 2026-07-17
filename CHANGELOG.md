@@ -81,6 +81,43 @@
 - `FieldPathArg` is now actually used by the `useField` / `useFieldArray`
   overloads it describes (it was exported dead).
 
+## formstand-cli Unreleased
+
+### Fixed
+
+- **Emitted bindings now respect formstand's typed `FieldPath` budget of 7
+  segments** (found by dogfooding: the DeepBoundaryForm playground demo). The
+  walkers happily emitted 9-segment paths (`l1.l2....l8.leaf`) that fail
+  typecheck in every consumer (TS2820, `FieldPath<T, D = 7>` in
+  `src/core/fieldPath.ts`). The emitters now count segments of the FULL bound
+  path — dots split, a template hole (`${index}`, `${p0}`) one segment each,
+  so an array level spends TWO — and a binding that would exceed the budget
+  degrades exactly like other unsupported shapes: compiling output with a
+  `{/* TODO: path ... exceeds formstand's typed FieldPath depth (7); bind by
+  hand */}` comment plus a stderr warning per degraded path. Container
+  recursion stops at the boundary (an object whose own path is at 7 segments
+  can only produce over-budget children), the subtree is still materialized
+  in the zod schema and `initialValues`, and paths exactly AT the limit —
+  including 7-segment nested-array templates like
+  `` `teams.${p0}.members.${p1}.phones.${index}` `` — keep binding
+  byte-identically to before. Covers both layouts, all three UIs, and
+  recursive nested-array row extraction; this is deliberately NOT a walker
+  depth clamp (walk-depth is the wrong proxy for segments — a coarse cap
+  would have broken the working 3-level nested-array output).
+- **`.default()` / `.prefault()` values now land in the generated
+  `initialValues`** instead of being ignored (`defaultedNumber: z.number()
+  .default(42)` emitted `undefined`, contradicting the README). `fromZod`
+  captures the value off the zod def (`defaultValue` — a resolved value in
+  zod v4, a factory function in older shapes; factories are called, throwing
+  ones treated as no default) into a new optional `defaultValue` on the IR's
+  `SharedSpecProps`, and `emitInitialValues` seeds the field with it whenever
+  it is a JSON-serializable primitive matching the field kind (string /
+  finite number / boolean / declared enum option). Dates and object/array
+  defaults keep the blank behavior. A seeded default satisfies `z.input`, so
+  it also counts toward the checked-annotation-instead-of-cast decision.
+  Type mode is unchanged — TS types can't carry runtime defaults, so
+  `fromType` never sets `defaultValue`. The README now states the real rule.
+
 ## formstand-cli 0.7.0 — 2026-07-12
 
 ### Added

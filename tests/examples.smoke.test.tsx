@@ -11,6 +11,12 @@ const statePres = (card: HTMLElement): readonly HTMLElement[] =>
 
 const TAB_COUNT = Object.keys(DEMO_SOURCES).length;
 
+// Demos with no registered form instance: the CLI's single-file layout
+// creates its form inside the component (useForm) and exports nothing to
+// hand useDemoForm, so the shell's View state button stays disabled there
+// — asserted as such below instead of exempted silently.
+const NO_REGISTERED_FORM: ReadonlySet<string> = new Set(["Gen: deep nesting"]);
+
 // The sidebar is a tree view: demo leaves carry the nav-tab class and switch
 // tabs when their content row is clicked.
 const renderAppAndGetTabs = (): readonly HTMLElement[] => {
@@ -68,10 +74,19 @@ describe("examples playground smoke test", () => {
       fireEvent.click(codeButton);
       expect(statePres(card as HTMLElement)).toHaveLength(0);
 
-      // View state: every demo registers its live form with the shell.
+      // View state: every demo registers its live form with the shell —
+      // except the single-file generated demo, which has no form instance
+      // to register (the button must be disabled, not broken).
       const stateButton = scope.getByRole("button", {
         name: "View state",
       }) as HTMLButtonElement;
+      if (NO_REGISTERED_FORM.has(tab.textContent ?? "")) {
+        expect(
+          stateButton.disabled,
+          `View state enabled without a registered form on tab "${tab.textContent}"`,
+        ).toBe(true);
+        return;
+      }
       expect(
         stateButton.disabled,
         `View state disabled on tab "${tab.textContent}"`,

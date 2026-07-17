@@ -58,7 +58,7 @@ Without `--out`, both files print to stdout separated by `// --- file: ...` head
 
 ## What is generated
 
-- `useForm` + typed `initialValues` (strings `""`, booleans `false`, numbers/dates/enums `undefined`, nullable fields `null`, arrays `[]`).
+- `useForm` + typed `initialValues` (strings `""`, booleans `false`, numbers/dates/enums `undefined`, nullable fields `null`, arrays `[]`). A field wrapped in `.default()` / `.prefault()` starts at its default **when the value is a JSON-serializable primitive matching the field kind** — a string, a finite number, a boolean, or a declared enum option (factory defaults are called and captured). Date and object/array defaults have no safe source literal, so those fields keep the blank behavior above.
 - One bound control per field: `TextField`, `NumberField`, `CheckboxField`, `SelectField` (enum options from the schema).
 - Nested objects as `<fieldset>`/`<legend>` sections.
 - Field arrays via `useFieldArray` with stable row keys, add/remove buttons, and a typed empty-item constant.
@@ -148,6 +148,7 @@ Unlisted kinds fall back to the plain output, so a template can override only th
 Known limitations:
 
 - **Dots in keys**: formstand paths split on `.`, so a field named `"a.b"` is not path-addressable. The key is kept in the zod schema and `initialValues`, but no control is bound — a `{/* TODO: field "a.b" skipped ... */}` comment marks the spot and the CLI prints a warning.
+- **Paths deeper than formstand's typed budget**: `FieldPath` stops at **7 segments** (an array level spends two — name + row index), so a binding whose full path would exceed that degrades to a `{/* TODO: path ... exceeds formstand's typed FieldPath depth (7); bind by hand */}` comment plus a CLI warning. The subtree is still materialized in the zod schema and `initialValues`; paths exactly at the limit bind normally.
 - **Tuple elements** that aren't scalar (an object/array/union/nested tuple at a tuple position), and a tuple's **variadic rest** (`z.tuple([...], rest)`), degrade to a `// TODO` at that position — the fixed scalar positions still generate. **Methods and callable types** are skipped / degraded to a string field the same way.
 
 ## Programmatic API

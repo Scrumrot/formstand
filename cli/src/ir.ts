@@ -9,6 +9,13 @@ export type SharedSpecProps = Readonly<{
   // Set when the source construct wasn't representable — emitters surface it
   // as a `// TODO: ...` comment next to the generated fallback.
   todo?: string;
+  // The runtime value of a `.default()` / `.prefault()` wrapper. Zod mode
+  // only — TS types can't carry runtime defaults, so fromType never sets it.
+  // emitInitialValues seeds the field with it when it is a JSON-serializable
+  // primitive matching the field kind (string / finite number / boolean /
+  // declared enum option); anything else (dates, objects, arrays) keeps the
+  // blank-form behavior.
+  defaultValue?: unknown;
 }>;
 
 export type NamedField = Readonly<{

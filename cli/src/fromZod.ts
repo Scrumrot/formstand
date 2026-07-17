@@ -30,6 +30,9 @@ type ZodDefLike = Readonly<{
   // rest schema (which we don't generate).
   items?: unknown;
   rest?: unknown;
+  // z.default / z.prefault: the captured default. zod v4 resolves it to the
+  // value on the def; other versions keep the user's factory function.
+  defaultValue?: unknown;
 }>;
 
 const defOf = (schema: unknown): ZodDefLike | null => {
@@ -228,10 +231,29 @@ const walk = (
       return walk(def.innerType, { ...flags, optional: true }, depth, nextSeen);
     case "nullable":
       return walk(def.innerType, { ...flags, nullable: true }, depth, nextSeen);
-    // A .default() means the *input* may omit the value.
+    // A .default() means the *input* may omit the value — and the wrapped
+    // value is what the generated initialValues should start from. zod v4
+    // exposes it as `def.defaultValue` (already resolved, possibly via a
+    // getter); older shapes store the user's factory — call it, and treat a
+    // throwing factory as "no capturable default".
     case "default":
-    case "prefault":
-      return walk(def.innerType, { ...flags, optional: true }, depth, nextSeen);
+    case "prefault": {
+      const inner = walk(
+        def.innerType,
+        { ...flags, optional: true },
+        depth,
+        nextSeen,
+      );
+      const value = ((): unknown => {
+        try {
+          const raw = def.defaultValue;
+          return typeof raw === "function" ? (raw as () => unknown)() : raw;
+        } catch {
+          return undefined;
+        }
+      })();
+      return value === undefined ? inner : { ...inner, defaultValue: value };
+    }
     case "union": {
       const discriminated = discriminatedUnionFrom(
         def,

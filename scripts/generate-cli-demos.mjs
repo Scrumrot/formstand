@@ -33,11 +33,10 @@ const commands = [
     "--out",
     "examples/src/generated/KitchenSinkForm",
   ],
-  // Kept as a known-failure reproduction, NOT wired as a demo: the CLI's
-  // default --max-depth (10) emits 9-segment paths, past formstand's
-  // FieldPath type budget (7), so this file fails tsc (TS2820) and is
-  // excluded in examples/tsconfig.json until the CLI clamps to the
-  // library's budget.
+  // Single-file layout on purpose: the l1...l8 branch pushes past
+  // formstand's FieldPath budget (7 segments), so the emitter degrades the
+  // over-budget subtree to a `// TODO` (and warns on stderr) while the
+  // `mixed` branch keeps real controls — the demo's point.
   [
     boundarySchemas,
     "--export",

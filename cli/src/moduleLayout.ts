@@ -2,7 +2,9 @@ import { camelCase, camelIdent, pascalCase } from "./casing";
 import {
   DEFAULT_VISUAL,
   type EmitFormOptions,
+  FORMSTAND_PATH_DEPTH,
   blankNeedsCast,
+  depthTodoText,
   gridColsClass,
   gridSxProps,
   gridStyleProps,
@@ -20,6 +22,7 @@ import {
   isUnaddressable,
   jsxText,
   muiAdapterSection,
+  pathSegmentCount,
   q,
   shadcnAdapterSection,
   templateEscape,
@@ -149,7 +152,9 @@ const specHasArray = (spec: FieldSpec): boolean =>
     ));
 
 // Scalar leaves under `fields` that are NOT inside an array (array rows bind
-// dynamic paths inline in their section file instead).
+// dynamic paths inline in their section file instead). Leaves past
+// formstand's FieldPath budget can't bind — the section body degrades them
+// to a TODO, so they get no field file (mirroring the single-file walkers).
 const collectLeaves = (
   fields: readonly NamedField[],
   segments: readonly string[],
@@ -159,7 +164,9 @@ const collectLeaves = (
     const at = [...segments, field.name];
     switch (field.spec.kind) {
       case "object":
-        return collectLeaves(field.spec.fields, at);
+        return at.length >= FORMSTAND_PATH_DEPTH
+          ? []
+          : collectLeaves(field.spec.fields, at);
       case "array":
       // A union renders inline in its section file, not as a leaf field.
       case "union":
@@ -168,7 +175,7 @@ const collectLeaves = (
       case "tuple":
         return [];
       default:
-        return [{ segments: at, field }];
+        return at.length > FORMSTAND_PATH_DEPTH ? [] : [{ segments: at, field }];
     }
   });
 
@@ -1057,6 +1064,8 @@ type RawNestedArray = Readonly<{
 
 // Addressable arrays anywhere under an object section's fields. Objects do
 // not consume an extraction level; each array does, so the walk stops there.
+// Mirrors the body walker's FieldPath boundary: no Rows pair for an array
+// whose list path exceeds the budget, nor under an object the body TODOs.
 const collectNestedArrays = (
   fields: readonly NamedField[],
   segments: readonly string[],
@@ -1066,9 +1075,13 @@ const collectNestedArrays = (
     const at = [...segments, field.name];
     switch (field.spec.kind) {
       case "object":
-        return collectNestedArrays(field.spec.fields, at);
+        return at.length >= FORMSTAND_PATH_DEPTH
+          ? []
+          : collectNestedArrays(field.spec.fields, at);
       case "array":
-        return [{ segments: at, label: field.label, item: field.spec.item }];
+        return at.length > FORMSTAND_PATH_DEPTH
+          ? []
+          : [{ segments: at, label: field.label, item: field.spec.item }];
       default:
         return [];
     }
@@ -1227,6 +1240,11 @@ const nestedArrayComponents = (
   // This row's own index becomes the next hole for arrays extracted from it.
   const rowIndexHole = `p${entry.holes.length}`;
 
+  // FieldPath budget accounting for this entry's rows: the row path is one
+  // segment past the (already-validated) list template; a named field or a
+  // child array's list adds one more.
+  const rowSegments = pathSegmentCount(entry.templateBase) + 1;
+
   // The entry for an array extracted from this row (one deeper hole), claiming
   // a unique stem. fieldName undefined => the item itself is an array.
   const childEntry = (
@@ -1303,6 +1321,13 @@ const nestedArrayComponents = (
             };
           }
           if (isScalar(field.spec)) {
+            if (rowSegments + 1 > FORMSTAND_PATH_DEPTH) {
+              return {
+                body: [
+                  `      {/* TODO: ${depthTodoText(`${entry.commentBase}.$\{index}.${field.name}`)} */}`,
+                ],
+              };
+            }
             const varName = leafVar(field.name);
             return {
               body: leafControl(
@@ -1318,6 +1343,15 @@ const nestedArrayComponents = (
             };
           }
           if (field.spec.kind === "array") {
+            // The child's list path sits one segment past this row — past
+            // the budget, its useFieldArray hook could never bind.
+            if (rowSegments + 1 > FORMSTAND_PATH_DEPTH) {
+              return {
+                body: [
+                  `      {/* TODO: ${depthTodoText(`${entry.commentBase}.$\{index}.${field.name}`)} */}`,
+                ],
+              };
+            }
             const child = childEntry(
               field.name,
               field.label,
@@ -1354,36 +1388,58 @@ const nestedArrayComponents = (
           children: objectPieces.flatMap((p) => (p.part ? [p.part] : [])),
         }
       : scalarItem
-        ? {
-            bindings: [
-              `  const field = ${naming.hook("Field")}(\`${entry.templateBase}.\${index}\`);`,
-            ],
-            body: leafControl(
-              ui,
-              entry.item,
-              "field",
-              jsxText(entry.label),
-              dynamicId(undefined),
-              "      ",
-            ),
-            specs: [entry.item],
-            children: [],
-          }
+        ? rowSegments > FORMSTAND_PATH_DEPTH
+          ? {
+              // The scalar row path itself is past the budget: the list hook
+              // still binds, but each row degrades to a TODO.
+              bindings: [],
+              body: [
+                `      {/* TODO: ${depthTodoText(`${entry.commentBase}.$\{index}`)} */}`,
+              ],
+              specs: [],
+              children: [],
+            }
+          : {
+              bindings: [
+                `  const field = ${naming.hook("Field")}(\`${entry.templateBase}.\${index}\`);`,
+              ],
+              body: leafControl(
+                ui,
+                entry.item,
+                "field",
+                jsxText(entry.label),
+                dynamicId(undefined),
+                "      ",
+              ),
+              specs: [entry.item],
+              children: [],
+            }
         : entry.item.kind === "array"
-          ? ((): typeof parts => {
-              const child = childEntry(
-                undefined,
-                entry.label,
-                entry.item.item,
-                `NonNullable<${entry.itemTypeExpr}>[number]`,
-              );
-              return {
+          ? rowSegments > FORMSTAND_PATH_DEPTH
+            ? {
+                // The inner list IS the row path — over budget, its hook
+                // could never bind, so no Row/Rows pair is extracted.
                 bindings: [],
-                body: [childRef(child)],
+                body: [
+                  `      {/* TODO: ${depthTodoText(`${entry.commentBase}.$\{index}`)} */}`,
+                ],
                 specs: [],
-                children: [nestedArrayComponents(ui, naming, child, used)],
-              };
-            })()
+                children: [],
+              }
+            : ((): typeof parts => {
+                const child = childEntry(
+                  undefined,
+                  entry.label,
+                  entry.item.item,
+                  `NonNullable<${entry.itemTypeExpr}>[number]`,
+                );
+                return {
+                  bindings: [],
+                  body: [childRef(child)],
+                  specs: [],
+                  children: [nestedArrayComponents(ui, naming, child, used)],
+                };
+              })()
           : {
               bindings: [],
               body: [
@@ -1496,6 +1552,11 @@ const objectSectionFile = (
       const at = [...segments, field.name];
       switch (field.spec.kind) {
         case "object":
+          // Children of an object at the FieldPath budget can only exceed it
+          // — same boundary the single-file walker stops at.
+          if (at.length >= FORMSTAND_PATH_DEPTH) {
+            return [`${indent}{/* TODO: ${depthTodoText(at.join("."))} */}`];
+          }
           return [
             `${indent}<fieldset${
               visual.columns > 1
@@ -1509,6 +1570,9 @@ const objectSectionFile = (
             `${indent}</fieldset>`,
           ];
         case "array": {
+          if (at.length > FORMSTAND_PATH_DEPTH) {
+            return [`${indent}{/* TODO: ${depthTodoText(at.join("."))} */}`];
+          }
           const entry = nestedByKey.get(at.join("."));
           return entry === undefined
             ? [
@@ -1529,6 +1593,11 @@ const objectSectionFile = (
             `${indent}{/* TODO: tuple ${commentText(q(at.join(".")))} — only a top-level tuple is generated; bind its elements by hand with ${naming.hook("Field")} at .0, .1, ... */}`,
           ];
         default: {
+          // Over-budget scalars were never planned (collectLeaves skips
+          // them), so the TODO lands here at the field's site.
+          if (at.length > FORMSTAND_PATH_DEPTH) {
+            return [`${indent}{/* TODO: ${depthTodoText(at.join("."))} */}`];
+          }
           const planned = own(at);
           return planned === undefined
             ? []

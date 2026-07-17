@@ -37,7 +37,7 @@ const initialValues: FormValues = {
   mixed: {
     optionalDate: undefined,
     nullableEnum: null,
-    defaultedNumber: undefined,
+    defaultedNumber: 42,
     piped: "",
   },
 };
@@ -65,14 +65,7 @@ export const DeepBoundaryForm = () => {
                 <legend>{"L5"}</legend>
                 <fieldset>
                   <legend>{"L6"}</legend>
-                  <fieldset>
-                    <legend>{"L7"}</legend>
-                    <fieldset>
-                      <legend>{"L8"}</legend>
-                      <TextField form={form} path={"l1.l2.l3.l4.l5.l6.l7.l8.leaf"} label={"Leaf"} />
-                      <NumberField form={form} path={"l1.l2.l3.l4.l5.l6.l7.l8.count"} label={"Count"} />
-                    </fieldset>
-                  </fieldset>
+                  {/* TODO: path "l1.l2.l3.l4.l5.l6.l7" exceeds formstand's typed FieldPath depth (7); bind by hand */}
                 </fieldset>
               </fieldset>
             </fieldset>

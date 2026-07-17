@@ -10,11 +10,13 @@ import {
   type EmitFormOptions,
   type VisualOptions,
   type SchemaImport,
+  FORMSTAND_PATH_DEPTH,
   emitMuiForm,
   emitPlainForm,
   emitShadcnForm,
   emitTemplateForm,
   emitZodSchema,
+  overBudgetFieldPaths,
   unaddressableFieldPaths,
 } from "./codegen";
 import { fromType } from "./fromType";
@@ -612,10 +614,18 @@ const loadModule = async (
   }
 };
 
-const warnUnaddressable = (ir: FieldSpec): void => {
+const warnDegradedBindings = (ir: FieldSpec): void => {
   unaddressableFieldPaths(ir).forEach((fieldPath) => {
     stderr(
       `warning: field "${fieldPath}" skipped — "." in a key is not path-addressable (see formstand docs)`,
+    );
+  });
+  // Bindings past the library's typed-path budget degrade to in-file TODOs;
+  // mirror each one on stderr so the degradation is visible at generation
+  // time ("*" marks an array row index).
+  overBudgetFieldPaths(ir).forEach((fieldPath) => {
+    stderr(
+      `warning: path "${fieldPath}" exceeds formstand's typed FieldPath depth (${FORMSTAND_PATH_DEPTH}); emitted a TODO — bind it by hand`,
     );
   });
 };
@@ -638,7 +648,7 @@ const runZodMode = async (
     return 1;
   }
   const ir: FieldSpec = fromZod(pick.schema, options.maxDepth);
-  warnUnaddressable(ir);
+  warnDegradedBindings(ir);
   const formName = options.name ?? deriveFormName(pick.exportName);
   const fromDir =
     options.out !== undefined
@@ -692,7 +702,7 @@ const runTypeMode = (options: CliOptions, template?: Template): number => {
     options.typeName,
     options.maxDepth,
   );
-  warnUnaddressable(ir);
+  warnDegradedBindings(ir);
   const schemaName = `${camelCase(typeName)}Schema`;
   const formName = options.name ?? deriveFormName(typeName);
   const schemaSource = emitZodSchema(ir, schemaName);

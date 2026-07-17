@@ -22,10 +22,5 @@
   // src/recipes: personal scratch space (gitignored, see the root
   // .gitignore) — sketches there may be pseudocode and must not gate the
   // build.
-  // src/generated/DeepBoundaryForm.tsx: untouched formstand-cli output kept
-  // as a known-failure reproduction — the CLI's default --max-depth (10)
-  // emits 9-segment paths, past formstand's FieldPath type budget of 7, so
-  // the file fails tsc (TS2820) until the CLI clamps to the library budget.
-  // It is not imported anywhere; see tests/react/generated-boundary.test.tsx.
-  "exclude": ["src/recipes", "src/generated/DeepBoundaryForm.tsx"]
+  "exclude": ["src/recipes"]
 }

@@ -22,6 +22,7 @@ import { ContextForm } from "./forms/ContextForm";
 import { DependentFieldsForm } from "./forms/DependentFieldsForm";
 import { DerivedFieldForm } from "./forms/DerivedFieldForm";
 import { FileUploadForm } from "./forms/FileUploadForm";
+import { DeepBoundaryForm } from "./generated/DeepBoundaryForm";
 import { KitchenSinkForm, kitchenSinkForm } from "./generated/KitchenSinkForm";
 import {
   NestedArrayStressForm,
@@ -234,6 +235,14 @@ const TABS: readonly Tab[] = [
     render: () => <GeneratedKitchenSinkDemo />,
   },
   {
+    key: "genDeepNest",
+    // The single-file layout exports no form instance (useForm inside the
+    // component), so there is nothing to register with useDemoForm — the
+    // View state panel stays empty, like the builder tabs.
+    label: "Gen: deep nesting",
+    render: () => <DeepBoundaryForm />,
+  },
+  {
     key: "genArrayStress",
     label: "Gen: nested arrays",
     render: () => <GeneratedNestedArrayStressDemo />,
@@ -283,6 +292,7 @@ const GROUP_OF: Readonly<Record<TabKey, GroupTitle>> = {
   onboardingShadcn: "shadcn/ui",
   genMui: "Generated",
   genKitchenSink: "Generated",
+  genDeepNest: "Generated",
   genArrayStress: "Generated",
   cliCommand: "Generated",
   schemaBuilder: "Generated",
@@ -347,6 +357,8 @@ const BLURBS: Readonly<Record<TabKey, string>> = {
     "formstand-gen's untouched --layout module --ui mui --sections panel output — CI regenerates it and fails on drift.",
   genKitchenSink:
     "Every schema kind and wrapper the CLI supports in one form — tuple included — as untouched --layout module output.",
+  genDeepNest:
+    "Eight levels of nesting, untouched single-file output: the branch past formstand's 7-segment FieldPath budget degrades to a // TODO, while the in-budget mixed branch binds real controls.",
   genArrayStress:
     "Three-level nested arrays (teams → members → phones) from the CLI's recursive row extraction, untouched module output.",
   cliCommand:

@@ -102,6 +102,65 @@ const camelJoin = (segments: readonly string[]): string => {
 // carry the key).
 export const isUnaddressable = (name: string): boolean => name.includes(".");
 
+// formstand's typed path union stops at 7 SEGMENTS: src/core/fieldPath.ts
+// declares `FieldPath<T, D extends number = 7>`, spending one D per dot-
+// separated segment. A binding whose full path has more segments falls
+// outside the union and fails typecheck (TS2820), so the emitters degrade
+// it to a TODO comment instead — exactly like other unsupported shapes.
+export const FORMSTAND_PATH_DEPTH = 7;
+
+// Segments of a bound path, counted the way the library splits paths: on
+// ".", with each template hole (`${index}`, `${p0}`, ...) one numeric
+// segment. Works on static paths and backtick templates alike.
+export const pathSegmentCount = (path: string): number =>
+  path
+    .replace(/\$\{[^}]*\}/g, "0")
+    .split(".")
+    .filter((segment) => segment.length > 0).length;
+
+// The shared TODO text for an over-budget binding — the emitters put it in a
+// comment, the CLI mirrors it as a stderr warning (overBudgetFieldPaths).
+export const depthTodoText = (path: string): string =>
+  `path ${commentText(q(path))} exceeds formstand's typed FieldPath depth (${FORMSTAND_PATH_DEPTH}); bind by hand`;
+
+const depthTodoLine = (path: string, level: number): string =>
+  `${ind(level)}{/* TODO: ${depthTodoText(path)} */}`;
+
+// The over-budget paths in an IR, mirroring the emitters' boundary decisions
+// (one entry per emitted TODO site, not per buried leaf): an object stops
+// recursion once its own path is at the budget (every child would exceed),
+// an array level spends TWO segments (name + row index, shown as `*`), a
+// union/tuple needs one segment of headroom for its discriminant/positions,
+// and a scalar simply may not exceed the budget. The CLI surfaces these as
+// stderr warnings alongside the in-file TODO comments.
+export const overBudgetFieldPaths = (ir: FieldSpec): readonly string[] => {
+  const walk = (
+    spec: FieldSpec,
+    segments: readonly string[],
+  ): readonly string[] => {
+    const count = segments.length;
+    const at = segments.join(".");
+    switch (spec.kind) {
+      case "object":
+        return count >= FORMSTAND_PATH_DEPTH
+          ? [at]
+          : spec.fields
+              .filter((field) => !isUnaddressable(field.name))
+              .flatMap((field) => walk(field.spec, [...segments, field.name]));
+      case "array":
+        return count > FORMSTAND_PATH_DEPTH
+          ? [at]
+          : walk(spec.item, [...segments, "*"]);
+      case "union":
+      case "tuple":
+        return count >= FORMSTAND_PATH_DEPTH ? [at] : [];
+      default:
+        return count > FORMSTAND_PATH_DEPTH ? [at] : [];
+    }
+  };
+  return walk(ir, []);
+};
+
 // The unaddressable field paths in an IR, for the CLI to surface as stderr
 // warnings alongside the in-file TODO comments.
 export const unaddressableFieldPaths = (ir: FieldSpec): readonly string[] => {
@@ -133,12 +192,41 @@ export const unaddressableFieldPaths = (ir: FieldSpec): readonly string[] => {
 // as a compile error in every user's generated file.
 type BlankLeaf = Readonly<{ expr: string; satisfiesInput: boolean }>;
 
-const blankLeaf = (
-  spec: Extract<
-    FieldSpec,
-    Readonly<{ kind: "string" | "boolean" | "number" | "date" | "enum" }>
-  >,
-): BlankLeaf => {
+type ScalarSpec = Extract<
+  FieldSpec,
+  Readonly<{ kind: "string" | "boolean" | "number" | "date" | "enum" }>
+>;
+
+// The `.default()` literal for a leaf, emitted only when the captured value
+// is a JSON-serializable primitive MATCHING the field kind (a string, a
+// finite number, a boolean, or a declared enum option). Dates and container
+// defaults have no safe source literal, and a mismatched value would emit a
+// type error — both degrade to the blank behavior below.
+const defaultLiteral = (spec: ScalarSpec): string | undefined => {
+  const value = spec.defaultValue;
+  switch (spec.kind) {
+    case "string":
+      return typeof value === "string" ? q(value) : undefined;
+    case "number":
+      return typeof value === "number" && Number.isFinite(value)
+        ? JSON.stringify(value)
+        : undefined;
+    case "boolean":
+      return typeof value === "boolean" ? String(value) : undefined;
+    case "enum":
+      return typeof value === "string" && spec.options.includes(value)
+        ? q(value)
+        : undefined;
+    case "date":
+      return undefined;
+  }
+};
+
+const blankLeaf = (spec: ScalarSpec): BlankLeaf => {
+  // A captured default is a legal value of the base type, and a defaulted
+  // field's z.input is optional anyway — the literal always satisfies input.
+  const dflt = defaultLiteral(spec);
+  if (dflt !== undefined) return { expr: dflt, satisfiesInput: true };
   switch (spec.kind) {
     case "string":
       return spec.nullable
@@ -337,25 +425,42 @@ const unionKindUsage = (
     { ...NO_USAGE, union: true, enum: true },
   );
 
-export const collectUsage = (spec: FieldSpec): KindUsage => {
+// `count` is the segment count of the path at which `spec` sits (0 for the
+// root object). Subtrees the walkers degrade to a depth TODO render no
+// control, so they must contribute no usage — an over-budget-only kind would
+// otherwise emit an unused import. The guards mirror fieldLines: an object/
+// union/tuple needs one segment of headroom for its children, an array's
+// rows sit one segment past its list path.
+export const collectUsage = (spec: FieldSpec, count = 0): KindUsage => {
   switch (spec.kind) {
     case "object":
-      return spec.fields.reduce(
-        (acc, field) => mergeUsage(acc, collectUsage(field.spec)),
-        NO_USAGE,
-      );
+      return count >= FORMSTAND_PATH_DEPTH
+        ? NO_USAGE
+        : spec.fields.reduce(
+            (acc, field) => mergeUsage(acc, collectUsage(field.spec, count + 1)),
+            NO_USAGE,
+          );
     case "array":
-      return collectUsage(spec.item);
+      return count > FORMSTAND_PATH_DEPTH
+        ? NO_USAGE
+        : collectUsage(spec.item, count + 1);
     // Non-scalar elements render as TODOs, not controls, so they pull in no
     // builders — only scalar elements count toward usage.
     case "tuple":
-      return spec.elements
-        .filter(isScalarSpec)
-        .reduce((acc, el) => mergeUsage(acc, collectUsage(el)), NO_USAGE);
+      return count >= FORMSTAND_PATH_DEPTH
+        ? NO_USAGE
+        : spec.elements
+            .filter(isScalarSpec)
+            .reduce(
+              (acc, el) => mergeUsage(acc, collectUsage(el, count + 1)),
+              NO_USAGE,
+            );
     case "union":
-      return unionKindUsage(spec);
+      return count >= FORMSTAND_PATH_DEPTH ? NO_USAGE : unionKindUsage(spec);
     default:
-      return { ...NO_USAGE, [spec.kind]: true };
+      return count > FORMSTAND_PATH_DEPTH
+        ? NO_USAGE
+        : { ...NO_USAGE, [spec.kind]: true };
   }
 };
 
@@ -384,15 +489,27 @@ const collectRawArrays = (
 ): readonly RawArrayEntry[] => {
   switch (spec.kind) {
     case "object":
-      return spec.fields
-        .filter((field) => !isUnaddressable(field.name))
-        .flatMap((field) =>
-          collectRawArrays(field.spec, [...segments, field.name], field.label),
-        );
+      // Mirrors fieldLines' FieldPath boundary: an object at the budget is
+      // emitted as a TODO (children can only exceed), and an array whose own
+      // list path exceeds it can't bind its useFieldArray hook — neither may
+      // claim a hook that the body never references.
+      return segments.length >= FORMSTAND_PATH_DEPTH
+        ? []
+        : spec.fields
+            .filter((field) => !isUnaddressable(field.name))
+            .flatMap((field) =>
+              collectRawArrays(
+                field.spec,
+                [...segments, field.name],
+                field.label,
+              ),
+            );
     case "array":
       // Arrays nested inside this array's items have dynamic paths; they are
       // emitted as TODO comments instead of hooks.
-      return [{ segments, label, item: spec.item }];
+      return segments.length > FORMSTAND_PATH_DEPTH
+        ? []
+        : [{ segments, label, item: spec.item }];
     default:
       return [];
   }
@@ -513,13 +630,21 @@ const collectRawUnions = (
 ): readonly RawUnionEntry[] => {
   switch (spec.kind) {
     case "object":
-      return spec.fields
-        .filter((field) => !isUnaddressable(field.name))
-        .flatMap((field) =>
-          collectRawUnions(field.spec, [...segments, field.name]),
-        );
+      // Same FieldPath boundary as collectRawArrays: no hooks under a
+      // depth-TODO'd object.
+      return segments.length >= FORMSTAND_PATH_DEPTH
+        ? []
+        : spec.fields
+            .filter((field) => !isUnaddressable(field.name))
+            .flatMap((field) =>
+              collectRawUnions(field.spec, [...segments, field.name]),
+            );
     case "union":
-      return [{ segments, spec }];
+      // The discriminant and every field binding sit one segment past the
+      // union's path, so the union needs headroom below the budget.
+      return segments.length >= FORMSTAND_PATH_DEPTH
+        ? []
+        : [{ segments, spec }];
     default:
       return [];
   }
@@ -620,17 +745,22 @@ const unionHooks = (
 // The KindUsage of union CONTROLS only (discriminant select + variant field
 // kinds), ignoring non-union siblings — so the plain backend imports exactly
 // the prop builders its union rendering calls.
-export const collectUnionUsage = (spec: FieldSpec): KindUsage => {
+export const collectUnionUsage = (spec: FieldSpec, count = 0): KindUsage => {
   switch (spec.kind) {
     case "object":
-      return spec.fields.reduce(
-        (acc, field) => mergeUsage(acc, collectUnionUsage(field.spec)),
-        NO_USAGE,
-      );
+      return count >= FORMSTAND_PATH_DEPTH
+        ? NO_USAGE
+        : spec.fields.reduce(
+            (acc, field) =>
+              mergeUsage(acc, collectUnionUsage(field.spec, count + 1)),
+            NO_USAGE,
+          );
     case "array":
-      return collectUnionUsage(spec.item);
+      return count > FORMSTAND_PATH_DEPTH
+        ? NO_USAGE
+        : collectUnionUsage(spec.item, count + 1);
     case "union":
-      return unionKindUsage(spec);
+      return count >= FORMSTAND_PATH_DEPTH ? NO_USAGE : unionKindUsage(spec);
     default:
       return NO_USAGE;
   }
@@ -643,25 +773,37 @@ export const collectUnionUsage = (spec: FieldSpec): KindUsage => {
 // kit Bound* components); the prop-builder and useField/useVariantField
 // imports stay on total usage / collectUnionUsage, since union rendering does
 // call them. Fixes leaf components imported-but-unused for a union-only kind.
-export const collectStaticUsage = (spec: FieldSpec): KindUsage => {
+export const collectStaticUsage = (spec: FieldSpec, count = 0): KindUsage => {
   switch (spec.kind) {
     case "object":
-      return spec.fields.reduce(
-        (acc, field) => mergeUsage(acc, collectStaticUsage(field.spec)),
-        NO_USAGE,
-      );
+      return count >= FORMSTAND_PATH_DEPTH
+        ? NO_USAGE
+        : spec.fields.reduce(
+            (acc, field) =>
+              mergeUsage(acc, collectStaticUsage(field.spec, count + 1)),
+            NO_USAGE,
+          );
     case "array":
-      return collectStaticUsage(spec.item);
+      return count > FORMSTAND_PATH_DEPTH
+        ? NO_USAGE
+        : collectStaticUsage(spec.item, count + 1);
     // Only the SCALAR elements render a static leaf; non-scalar elements are
     // TODOs, so they contribute no leaf-component import.
     case "tuple":
-      return spec.elements
-        .filter(isScalarSpec)
-        .reduce((acc, el) => mergeUsage(acc, collectStaticUsage(el)), NO_USAGE);
+      return count >= FORMSTAND_PATH_DEPTH
+        ? NO_USAGE
+        : spec.elements
+            .filter(isScalarSpec)
+            .reduce(
+              (acc, el) => mergeUsage(acc, collectStaticUsage(el, count + 1)),
+              NO_USAGE,
+            );
     case "union":
       return NO_USAGE;
     default:
-      return { ...NO_USAGE, [spec.kind]: true };
+      return count > FORMSTAND_PATH_DEPTH
+        ? NO_USAGE
+        : { ...NO_USAGE, [spec.kind]: true };
   }
 };
 
@@ -669,13 +811,22 @@ export const collectStaticUsage = (spec: FieldSpec): KindUsage => {
 // source of a useVariantField call. Common fields (present in every variant,
 // including every field of a single-variant union) bind with useField, so a
 // union without variant-only fields needs no useVariantField import.
-export const hasVariantFieldUsage = (spec: FieldSpec): boolean => {
+export const hasVariantFieldUsage = (spec: FieldSpec, count = 0): boolean => {
   switch (spec.kind) {
     case "object":
-      return spec.fields.some((field) => hasVariantFieldUsage(field.spec));
+      return (
+        count < FORMSTAND_PATH_DEPTH &&
+        spec.fields.some((field) =>
+          hasVariantFieldUsage(field.spec, count + 1),
+        )
+      );
     case "array":
-      return hasVariantFieldUsage(spec.item);
+      return (
+        count <= FORMSTAND_PATH_DEPTH &&
+        hasVariantFieldUsage(spec.item, count + 1)
+      );
     case "union": {
+      if (count >= FORMSTAND_PATH_DEPTH) return false;
       const common = unionCommonFieldNames(spec);
       return spec.variants.some((variant) =>
         variant.fields.some(
@@ -909,6 +1060,26 @@ const fieldLines = (
         `${ind(level)}{/* TODO: field ${commentText(q(field.name))} skipped — "." in a key is not path-addressable (see formstand docs) */}`,
       ];
     }
+    // The FieldPath budget check on the FULL bound path (template holes count
+    // one segment each). A scalar/array binds its own path, so it may sit AT
+    // the budget; an object/union/tuple binds one segment past its path
+    // (child fields / the discriminant / positional indices), so it needs
+    // headroom below it. Over-budget shapes degrade to a TODO before any
+    // hook or map entry is consulted.
+    const fullPath =
+      prefix.text +
+      (prefix.dynamic ? templateEscape(field.name) : field.name);
+    const segments = pathSegmentCount(fullPath);
+    const overBudget =
+      field.spec.kind === "string" ||
+      field.spec.kind === "number" ||
+      field.spec.kind === "boolean" ||
+      field.spec.kind === "date" ||
+      field.spec.kind === "enum" ||
+      field.spec.kind === "array"
+        ? segments > FORMSTAND_PATH_DEPTH
+        : segments >= FORMSTAND_PATH_DEPTH;
+    if (overBudget) return [depthTodoLine(fullPath, level)];
     switch (field.spec.kind) {
       case "object":
         return [
@@ -1005,11 +1176,16 @@ const arraySectionLines = (
   // out inline (nested arrays among them extract into child components). A
   // non-scalar item (an array-of-arrays, or an array of tuples/unions) can't
   // bind at the row's dynamic path — a TODO rather than an empty row.
+  // A scalar row binds one segment past the list path (`list.${index}`),
+  // so it can exceed the FieldPath budget even when the list hook binds.
+  const rowPath = `${templateEscape(entry.path)}.\${index}`;
   const rowBody: readonly string[] =
     entry.item.kind === "object"
       ? fieldLines(backend, entry.item.fields, rowPrefix, level + 3, arrays, unions, ctx)
       : isScalarSpec(entry.item)
-        ? backend.leaf(entry.item, pathAttr(rowPrefix, ""), entry.label, level + 3)
+        ? pathSegmentCount(rowPath) > FORMSTAND_PATH_DEPTH
+          ? [depthTodoLine(rowPath, level + 3)]
+          : backend.leaf(entry.item, pathAttr(rowPrefix, ""), entry.label, level + 3)
         : [
             `${ind(level + 3)}{/* TODO: ${entry.item.kind} array-item in ${commentText(q(entry.path))} rows — extract a row component with its own useFieldArray */}`,
           ];
@@ -1058,11 +1234,16 @@ const emitNestedRows = (
     holes: childHoles,
     valueTypeExpr: itemTypeExpr,
   };
+  // Same budget rule as arraySectionLines: a scalar row binds one segment
+  // past the (already-validated) list template.
+  const scalarRowPath = `${listTemplate}.\${index}`;
   const rowBody =
     item.kind === "object"
       ? fieldLines(backend, item.fields, childPrefix, 5, arrays, unions, ctx)
       : isScalarSpec(item)
-        ? backend.leaf(item, pathAttr(childPrefix, ""), field.label, 5)
+        ? pathSegmentCount(scalarRowPath) > FORMSTAND_PATH_DEPTH
+          ? [depthTodoLine(scalarRowPath, 5)]
+          : backend.leaf(item, pathAttr(childPrefix, ""), field.label, 5)
         : [
             `${ind(5)}{/* TODO: ${item.kind} array-item in ${commentText(q(listTemplate))} rows — extract it by hand */}`,
           ];

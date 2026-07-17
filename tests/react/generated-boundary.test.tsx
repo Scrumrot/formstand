@@ -9,18 +9,17 @@
 //
 // (scripts/generate-cli-demos.mjs runs all three; CI diffs the output.)
 //
-// DeepBoundaryForm.tsx is NOT rendered here and NOT wired as a playground
-// demo: the CLI's default --max-depth (10) emits 9-segment paths
-// ("l1.l2.l3.l4.l5.l6.l7.l8.leaf"), past formstand's FieldPath type budget
-// of 7 segments (src/core/fieldPath.ts), so importing the file into any
-// typechecked program fails with TS2820. The untouched output is kept on
-// disk (excluded in examples/tsconfig.json) as the reproduction; render it
-// here once the CLI clamps its depth budget to the library's.
+// DeepBoundaryForm.tsx (single-file layout) exists to pin the FieldPath
+// depth boundary: its l1...l8 branch would bind 9-segment paths, past
+// formstand's 7-segment FieldPath budget (src/core/fieldPath.ts), so the
+// CLI degrades that subtree to a `// TODO` comment while the in-budget
+// `mixed` branch renders real controls.
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DeepBoundaryForm } from "../../examples/src/generated/DeepBoundaryForm";
 import {
   KitchenSinkForm,
   kitchenSinkForm,
@@ -192,17 +191,42 @@ describe("generated NestedArrayStressForm (untouched --layout module output)", (
   });
 });
 
-describe("generated DeepBoundaryForm (known failure, not rendered)", () => {
-  it("keeps the untouched reproduction on disk", () => {
-    // The file cannot be imported (TS2820: "l1.l2.l3.l4.l5.l6.l7.l8.leaf"
-    // is not assignable to formstand's FieldPath union, which stops at 7
-    // segments) — assert the evidence stays checked in until the CLI bug
-    // is fixed and the form gets rendered here like the other two.
-    // Vitest runs from the repo root.
-    const file = join(
-      process.cwd(),
-      "examples/src/generated/DeepBoundaryForm.tsx",
+describe("generated DeepBoundaryForm (untouched single-file output)", () => {
+  it("mounts with the in-budget mixed-branch controls", () => {
+    // Single-file layout: useForm inside the component, no module singleton
+    // to reset — each render is a fresh form.
+    render(
+      <StrictMode>
+        <DeepBoundaryForm />
+      </StrictMode>,
     );
-    expect(existsSync(file)).toBe(true);
+    expect(screen.getByRole("button", { name: "Submit" })).toBeDefined();
+    // The `mixed` branch (2-segment paths) binds real controls...
+    expect(screen.getByLabelText("Optional Date")).toBeDefined();
+    expect(screen.getByLabelText("Nullable Enum")).toBeDefined();
+    expect(screen.getByLabelText("Defaulted Number")).toBeDefined();
+    expect(screen.getByLabelText("Piped")).toBeDefined();
+    // ...and the captured `.default(42)` seeds the initial value.
+    expect(
+      (screen.getByLabelText("Defaulted Number") as HTMLInputElement).value,
+    ).toBe("42");
+    // The over-budget l1...l8 branch renders no controls (its section chain
+    // stops where every deeper path would exceed the FieldPath budget).
+    expect(screen.queryByLabelText("Leaf")).toBeNull();
+    expect(screen.queryByLabelText("Count")).toBeNull();
+    expect(console.error).not.toHaveBeenCalled();
+  });
+
+  it("carries the depth TODO in the generated source", () => {
+    // Vitest runs from the repo root.
+    const source = readFileSync(
+      join(process.cwd(), "examples/src/generated/DeepBoundaryForm.tsx"),
+      "utf8",
+    );
+    expect(source).toContain(
+      `{/* TODO: path "l1.l2.l3.l4.l5.l6.l7" exceeds formstand's typed FieldPath depth (7); bind by hand */}`,
+    );
+    // No binding past the budget survives in the file.
+    expect(source).not.toContain("l1.l2.l3.l4.l5.l6.l7.l8.leaf");
   });
 });

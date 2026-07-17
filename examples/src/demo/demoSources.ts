@@ -8,6 +8,7 @@ import autosaveSrc from "../forms/AutosaveForm.tsx?raw";
 import basicSrc from "../forms/BasicForm.tsx?raw";
 import boundSrc from "../forms/BoundFieldsForm.tsx?raw";
 import cliCommandSrc from "../forms/CliCommandBuilder.tsx?raw";
+import deepBoundarySrc from "../generated/DeepBoundaryForm.tsx?raw";
 import schemaBuilderSrc from "../forms/SchemaBuilder/SchemaBuilder.tsx?raw";
 import schemaBuilderSchemaSrc from "../forms/SchemaBuilder/builderSchema.ts?raw";
 import schemaBuilderGenerateSrc from "../forms/SchemaBuilder/generate.ts?raw";
@@ -175,12 +176,11 @@ const sources = {
   onboardingMui: onboardingMuiFiles,
   genMui: generatedMuiFiles,
   genKitchenSink: kitchenSinkFiles,
-  // genDeepNest (the untouched single-file DeepBoundaryForm.tsx next to the
-  // module folders) is deliberately NOT a demo: the CLI's default depth
-  // budget (10) exceeds formstand's FieldPath type budget (7 segments), so
-  // its 9-segment paths fail tsc — see tests/react/generated-boundary.test.tsx
-  // for the full account. Wire it here once the CLI clamps to the library's
-  // budget.
+  // The untouched single-file DeepBoundaryForm.tsx next to the module
+  // folders: its l1...l8 branch exceeds formstand's FieldPath budget (7
+  // segments), so the CLI degrades that subtree to a `// TODO` while the
+  // in-budget `mixed` branch binds real controls.
+  genDeepNest: single("DeepBoundaryForm.tsx", deepBoundarySrc),
   genArrayStress: nestedArrayStressFiles,
   cliCommand: single("CliCommandBuilder.tsx", cliCommandSrc),
   // Explicit order (not the module glob): the component leads so the code

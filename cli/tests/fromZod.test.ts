@@ -109,7 +109,7 @@ describe("fromZod", () => {
     });
   });
 
-  it("unwraps default as optional and pipes to their input side", () => {
+  it("unwraps default as optional (capturing the value) and pipes to their input side", () => {
     const ir = fromZod(
       z.object({
         theme: z.string().default("light"),
@@ -123,7 +123,12 @@ describe("fromZod", () => {
         {
           name: "theme",
           label: "Theme",
-          spec: { kind: "string", optional: true, nullable: false },
+          spec: {
+            kind: "string",
+            optional: true,
+            nullable: false,
+            defaultValue: "light",
+          },
         },
         {
           name: "count",
