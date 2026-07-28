@@ -2,6 +2,7 @@ import { renderHook } from "@testing-library/react";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { z } from "zod";
 import type { Form } from "../../src/core/createForm";
+import { createFormContext } from "../../src/react/FormContext";
 import { useField } from "../../src/react/useField";
 import { useFieldArray } from "../../src/react/useFieldArray";
 import { useForm } from "../../src/react/useForm";
@@ -39,6 +40,28 @@ describe("useForm + hooks with pathDepth", () => {
       // @ts-expect-error — a widened `number` variable is not a literal budget
       return useForm(deepSchema, { initialValues, pathDepth: widened });
     });
+  });
+
+  it("useForm rejects a UNION pathDepth at the call site", () => {
+    renderHook(() => {
+      const cond = Math.random() > 0.5;
+      // @ts-expect-error — a union depth (9 | 12) is not a single literal
+      return useForm(deepSchema, { initialValues, pathDepth: cond ? 12 : 9 });
+    });
+  });
+
+  it("createFormContext constrains its explicit D like createForm's option", () => {
+    // The context names D explicitly (no value argument to infer from), so
+    // the PathDepth constraint is the only guard against an out-of-range or
+    // widened budget silently unbinding the decrement table.
+    // @ts-expect-error — 26 is past the PathDepth range (0-25)
+    createFormContext<typeof deepSchema, 26>();
+    // @ts-expect-error — a negative budget is not a PathDepth
+    createFormContext<typeof deepSchema, -1>();
+    // @ts-expect-error — a widened `number` D fails the constraint
+    createFormContext<typeof deepSchema, number>();
+    const ctx = createFormContext<typeof deepSchema, 12>();
+    expect(typeof ctx.useFormContext).toBe("function");
   });
 
   it("useField binds a 10-segment path on a pathDepth: 12 form", () => {
@@ -101,6 +124,11 @@ describe("useForm + hooks with pathDepth", () => {
       typeof useFieldArray<typeof deepSchema, typeof TEN_ARRAY, 12>
     >;
     expectTypeOf<ThreeArgArray["items"]>().toEqualTypeOf<readonly string[]>();
+    // ...and the explicit-D position is PathDepth-constrained (finding-2 pin;
+    // instantiation expression only — nothing is called).
+    // @ts-expect-error — 26 is past the PathDepth range (0-25)
+    const useFieldAt26 = useField<typeof deepSchema, typeof TEN, 26>;
+    expect(useFieldAt26).toBeTypeOf("function");
   });
 
   it("typo blame lands on the path argument, widened form included", () => {

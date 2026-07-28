@@ -1,6 +1,7 @@
 import { pascalCase } from "./casing";
 import {
   FORMSTAND_PATH_DEPTH,
+  NESTING_LIMIT_TODO,
   isScalarSpec,
   overDepthBudget,
 } from "./depth";
@@ -112,9 +113,9 @@ export const isUnaddressable = (name: string): boolean => name.includes(".");
 // programmatic consumers.
 export {
   FORMSTAND_PATH_DEPTH,
+  NESTING_LIMIT_TODO,
   isScalarSpec,
   overDepthBudget,
-  pastRowBudget,
 } from "./depth";
 
 // Segments of a bound path, counted the way the library splits paths: on
@@ -136,43 +137,152 @@ export const depthTodoText = (path: string): string =>
 export const depthTodoLine = (path: string, indent: string): string =>
   `${indent}{/* TODO: ${depthTodoText(path)} */}`;
 
+// Where a LAYOUT's emitter stops descending — the degradation frontier. The
+// two layouts genuinely diverge past it (each degrades the shape to a
+// GENERIC extract/bind-by-hand TODO, not a depth TODO), so the depth-warning
+// walk below must stop exactly where the chosen layout's emitter stops or
+// the warnings promise depth TODOs the file doesn't contain.
+export type DepthWarningFrontier = Readonly<{
+  // Does the emitter descend into an array item that is ITSELF a container
+  // (an array-of-arrays)? The module layout extracts an inner Rows component
+  // (emitting depth TODOs inside it); the single-file layout degrades the
+  // whole item to the generic extract-a-row TODO.
+  descendsArrayItemContainers: boolean;
+  // Does the emitter recurse into an OBJECT field of an array row? The
+  // single-file layout lays row-object fields out inline (nested objects
+  // included); the module layout degrades non-scalar, non-array row fields
+  // to a generic bind-by-hand TODO.
+  descendsRowObjects: boolean;
+}>;
+
+export const depthWarningFrontier = (
+  layout: "single" | "module",
+): DepthWarningFrontier =>
+  layout === "module"
+    ? { descendsArrayItemContainers: true, descendsRowObjects: false }
+    : { descendsArrayItemContainers: false, descendsRowObjects: true };
+
 // The over-budget paths in an IR, mirroring the emitters' boundary decisions
 // through the SAME overDepthBudget predicate the walkers consult — one entry
-// per emitted depth-TODO site, not per buried leaf. An object stops
-// recursion once overDepthBudget says its children can only exceed; an array
-// level spends TWO segments (name + row index, shown as `*`). An array's
-// OBJECT item never checks its own row path — the emitters walk straight
-// into its fields (one TODO per field), so the warnings are per-field too;
-// every other item kind checks the row path itself. The CLI surfaces these
-// as stderr warnings alongside the in-file TODO comments.
-export const overBudgetFieldPaths = (ir: FieldSpec): readonly string[] => {
+// per depth-TODO site the CHOSEN layout emits (default: the single-file
+// layout), not per buried leaf. An object stops recursion once
+// overDepthBudget says its children can only exceed; an array level spends
+// TWO segments (name + row index, shown as `*`). An array's OBJECT item
+// never checks its own row path — the emitters walk straight into its
+// fields (one TODO per field), so the warnings are per-field too; every
+// other item kind checks the row path itself. Past the frontier the walk
+// stops (the emitter degraded the shape to a generic TODO there, so a depth
+// warning would over-promise). The CLI surfaces these as stderr warnings
+// alongside the in-file TODO comments.
+export const overBudgetFieldPaths = (
+  ir: FieldSpec,
+  frontier: DepthWarningFrontier = depthWarningFrontier("single"),
+): readonly string[] => {
   const walkFields = (
     fields: readonly NamedField[],
     segments: readonly string[],
+    rowFields: boolean,
   ): readonly string[] =>
     fields
       .filter((field) => !isUnaddressable(field.name))
-      .flatMap((field) => walk(field.spec, [...segments, field.name]));
+      .flatMap((field) =>
+        walk(field.spec, [...segments, field.name], rowFields),
+      );
   const walk = (
     spec: FieldSpec,
     segments: readonly string[],
+    rowField: boolean,
   ): readonly string[] => {
     if (overDepthBudget(spec, segments.length)) return [segments.join(".")];
     switch (spec.kind) {
       case "object":
-        return walkFields(spec.fields, segments);
+        // An in-budget object field of an array row: only recurse when the
+        // layout's emitter does (the module layout degrades it instead).
+        return rowField && !frontier.descendsRowObjects
+          ? []
+          : walkFields(spec.fields, segments, false);
       case "array": {
         const row = [...segments, "*"];
-        return spec.item.kind === "object"
-          ? walkFields(spec.item.fields, row)
-          : walk(spec.item, row);
+        if (spec.item.kind === "object") {
+          return walkFields(spec.item.fields, row, true);
+        }
+        // Both layouts check the row path itself for every non-object item…
+        if (overDepthBudget(spec.item, row.length)) return [row.join(".")];
+        // …but only the module layout descends into a container item.
+        return frontier.descendsArrayItemContainers
+          ? walk(spec.item, row, false)
+          : [];
       }
       default:
         return [];
     }
   };
+  return walk(ir, [], false);
+};
+
+// Every path in the IR whose spec matches `match`, "*" marking array rows,
+// tuple elements at their numeric index, union variant fields under the
+// union's path. Unlike overBudgetFieldPaths this walk descends EVERYWHERE —
+// it reports facts about the IR itself (truncation, dropped defaults), not
+// emitter decisions, so no frontier applies. The root is skipped (it has no
+// path to name).
+const matchingSpecPaths = (
+  ir: FieldSpec,
+  match: (spec: FieldSpec) => boolean,
+): readonly string[] => {
+  const walk = (
+    spec: FieldSpec,
+    segments: readonly string[],
+  ): readonly string[] => [
+    ...(segments.length > 0 && match(spec) ? [segments.join(".")] : []),
+    ...((): readonly string[] => {
+      switch (spec.kind) {
+        case "object":
+          return spec.fields.flatMap((field) =>
+            walk(field.spec, [...segments, field.name]),
+          );
+        case "array":
+          return walk(spec.item, [...segments, "*"]);
+        case "tuple":
+          return spec.elements.flatMap((element, i) =>
+            walk(element, [...segments, String(i)]),
+          );
+        case "union":
+          return spec.variants.flatMap((variant) =>
+            variant.fields.flatMap((field) =>
+              walk(field.spec, [...segments, field.name]),
+            ),
+          );
+        default:
+          return [];
+      }
+    })(),
+  ];
   return walk(ir, []);
 };
+
+// The paths the WALKER truncated (nesting budget exhausted before the leaf
+// was reached): their specs are string-kind stand-ins whose kind and flags
+// may be wrong, so blankNeedsCast forces the initialValues cast and the CLI
+// mirrors each one as its own stderr warning — truncation is never silent.
+export const truncatedFieldPaths = (ir: FieldSpec): readonly string[] =>
+  matchingSpecPaths(ir, (spec) => spec.todo === NESTING_LIMIT_TODO);
+
+// The paths whose `.default()` / `.prefault()` value will NOT be seeded into
+// the generated initialValues: the capture guard refused it in the walk
+// (droppedDefault — function-valued, non-deterministic, throwing getter), or
+// the emitter refuses the captured value (defaultLiteral: todo fallback,
+// kind mismatch, non-finite number, undeclared enum option, any date). The
+// CLI mirrors each as a stderr warning; fields with no default never appear.
+export const droppedDefaultFieldPaths = (ir: FieldSpec): readonly string[] =>
+  matchingSpecPaths(
+    ir,
+    (spec) =>
+      spec.droppedDefault === true ||
+      (spec.defaultValue !== undefined &&
+        isScalarSpec(spec) &&
+        defaultLiteral(spec as ScalarSpec) === undefined),
+  );
 
 // The unaddressable field paths in an IR, for the CLI to surface as stderr
 // warnings alongside the in-file TODO comments.
@@ -253,7 +363,15 @@ const blankLeaf = (spec: ScalarSpec): BlankLeaf => {
         ? { expr: "null", satisfiesInput: true }
         : spec.optional
           ? { expr: "undefined", satisfiesInput: true }
-          : { expr: '""', satisfiesInput: true };
+          : // A todo-bearing stand-in LIES about the kind (z.custom degrades
+            // here; walker truncation fires before .optional()/.nullable()
+            // even unwrap), so a required fallback's `""` is a guess at an
+            // unknown input type — it must force the as-unknown-as cast, or
+            // the checked annotation ships a compile error to the consumer.
+            // An optional/nullable fallback keeps its honest blank above:
+            // those flags only come from wrappers that really unwrapped, so
+            // undefined/null genuinely satisfy z.input.
+            { expr: '""', satisfiesInput: spec.todo === undefined };
     case "boolean":
       return spec.nullable
         ? { expr: "null", satisfiesInput: true }
@@ -881,7 +999,8 @@ const valuesTypeAndInitials = (ir: FieldSpec, schemaName: string): string =>
     "",
     ...(blankNeedsCast(ir)
       ? [
-          "// A form starts blank: required numbers/dates/enums begin undefined,",
+          "// A form starts blank: required numbers/dates/enums begin undefined",
+          "// (and any TODO-degraded placeholder field starts as a blank guess),",
           "// so these initial values intentionally do not satisfy the schema",
           "// yet; hence the cast. Validation reports the gaps on submit.",
           `const initialValues = ${emitInitialValues(ir, 0)} as unknown as FormValues;`,

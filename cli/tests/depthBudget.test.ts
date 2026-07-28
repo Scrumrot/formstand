@@ -6,12 +6,14 @@ import { main, moduleSpecifier } from "../src/cli";
 import {
   type EmitFormOptions,
   FORMSTAND_PATH_DEPTH,
+  depthWarningFrontier,
   emitMuiForm,
   emitPlainForm,
   emitShadcnForm,
   emitZodSchema,
   overBudgetFieldPaths,
   pathSegmentCount,
+  truncatedFieldPaths,
 } from "../src/codegen";
 import { emitModuleForm, joinModuleFiles } from "../src/moduleLayout";
 import { DEFAULT_MAX_DEPTH, fromZod } from "../src/fromZod";
@@ -23,6 +25,7 @@ import {
   typecheckDiagnostics,
 } from "./helpers";
 import { deepPathsSchema } from "./fixtures/deepPathsSchema";
+import { deeperPathsSchema } from "./fixtures/deeperPathsSchema";
 import { deepRowsSchema } from "./fixtures/deepRowsSchema";
 
 // formstand's FieldPath union stops at 9 segments by default
@@ -341,11 +344,120 @@ describe("at-budget arrays with non-scalar items", () => {
   });
 });
 
+describe("warnings stop at each layout's degradation frontier", () => {
+  // The two layouts genuinely diverge past their frontiers: the single-file
+  // layout does not descend into array-of-array items (generic extract-a-row
+  // TODO), the module layout does not recurse into object fields of a row
+  // (generic bind-by-hand TODO). The warning walk must match the layout
+  // that's emitting, or warnings promise depth TODOs the file doesn't have.
+  const depthTodoCount = (code: string): number =>
+    (code.match(/exceeds formstand's typed FieldPath depth/g) ?? []).length;
+  const emitSingle = (ir: ReturnType<typeof fromZod>): string =>
+    emitPlainForm({
+      ir,
+      formName: "FrontierForm",
+      schemaImport: { name: "s", from: "./s", kind: "named" },
+    });
+  const emitModule = (ir: ReturnType<typeof fromZod>): string =>
+    joinModuleFiles(
+      emitModuleForm({
+        ir,
+        formName: "FrontierForm",
+        ui: "plain",
+        schemaImport: { name: "s", from: "./external", kind: "named" },
+        schemaSource: emitZodSchema(ir, "s"),
+      }),
+    );
+
+  // Six object levels put `list` at 7 segments; the inner rows' `x` sits at
+  // 10 (o1...o6.list.*.*.x) — reachable only by the module layout, which
+  // extracts the inner Rows component.
+  const arrayOfArrays = z.object({
+    o1: z.object({
+      o2: z.object({
+        o3: z.object({
+          o4: z.object({
+            o5: z.object({
+              o6: z.object({
+                list: z.array(z.array(z.object({ x: z.string() }))),
+              }),
+            }),
+          }),
+        }),
+      }),
+    }),
+  });
+
+  // Five object levels put `list` at 6 segments; `nest.deeper` sits at 9
+  // (an object needs headroom below the budget) — reachable only by the
+  // single-file layout, which lays row-object fields out inline.
+  const objectInRows = z.object({
+    o1: z.object({
+      o2: z.object({
+        o3: z.object({
+          o4: z.object({
+            o5: z.object({
+              list: z.array(
+                z.object({
+                  nest: z.object({
+                    deeper: z.object({ x: z.string() }),
+                  }),
+                }),
+              ),
+            }),
+          }),
+        }),
+      }),
+    }),
+  });
+
+  it("array-of-arrays: warnings match each layout's depth-TODO count", () => {
+    const ir = fromZod(arrayOfArrays);
+    const single = emitSingle(ir);
+    const moduleJoined = emitModule(ir);
+    // Single-file degrades the container item to the generic TODO — no
+    // depth TODO, so no depth warning either.
+    expect(single).toContain("extract a row component");
+    expect(depthTodoCount(single)).toBe(0);
+    expect(overBudgetFieldPaths(ir, depthWarningFrontier("single"))).toEqual([]);
+    // The module layout descends and emits exactly one depth TODO (the
+    // inner rows' field), mirrored one for one.
+    const moduleWarnings = overBudgetFieldPaths(ir, depthWarningFrontier("module"));
+    expect(moduleWarnings).toEqual(["o1.o2.o3.o4.o5.o6.list.*.*.x"]);
+    expect(depthTodoCount(moduleJoined)).toBe(moduleWarnings.length);
+  });
+
+  it("object-in-rows: warnings match each layout's depth-TODO count", () => {
+    const ir = fromZod(objectInRows);
+    const single = emitSingle(ir);
+    const moduleJoined = emitModule(ir);
+    // Single-file recurses into the row object and emits exactly one depth
+    // TODO (at `nest.deeper`), mirrored one for one.
+    const singleWarnings = overBudgetFieldPaths(ir, depthWarningFrontier("single"));
+    expect(singleWarnings).toEqual(["o1.o2.o3.o4.o5.list.*.nest.deeper"]);
+    expect(depthTodoCount(single)).toBe(singleWarnings.length);
+    // The module layout degrades the row's object field to the generic TODO
+    // — no depth TODO, so no depth warning either.
+    expect(moduleJoined).toContain("bind it by hand");
+    expect(depthTodoCount(moduleJoined)).toBe(0);
+    expect(overBudgetFieldPaths(ir, depthWarningFrontier("module"))).toEqual([]);
+  });
+
+  it("the default frontier is the single-file layout's", () => {
+    const ir = fromZod(objectInRows);
+    expect(overBudgetFieldPaths(ir)).toEqual(
+      overBudgetFieldPaths(ir, depthWarningFrontier("single")),
+    );
+  });
+});
+
 describe("deep chains at DEFAULT flags", () => {
   it("the walker budget derives from the path budget (one level past it)", () => {
     // The walker must reach one level PAST the 9-segment path budget so a
-    // deep chain degrades via the PATH budget (real subtree + depth TODO),
-    // never via walker truncation and its wrong-kind string fallback.
+    // leaf of up to 10 segments degrades via the PATH budget (real subtree
+    // + depth TODO) rather than via walker truncation and its wrong-kind
+    // string fallback. Deeper leaves DO truncate — the suite below pins
+    // that they force the cast and their own stderr warning.
     expect(DEFAULT_MAX_DEPTH).toBe(FORMSTAND_PATH_DEPTH + 2);
     expect(DEFAULT_MAX_DEPTH).toBe(11);
   });
@@ -378,6 +490,66 @@ describe("deep chains at DEFAULT flags", () => {
     );
     expect(code).toContain("count: null,");
     expect(typecheckDiagnostics([file])).toEqual([]);
+  });
+});
+
+describe("walker truncation past the derived budget (11+ segments)", () => {
+  const TRUNCATED = "m1.m2.m3.m4.m5.m6.m7.m8.m9.m10.count";
+
+  it("an 11-segment leaf truncates, forces the cast, and still typechecks", () => {
+    const dir = freshTmpDir("depth-truncation");
+    // NO maxDepth override: the leaf sits one past the derived budget, so
+    // the walker truncates it to a string-kind stand-in BEFORE .nullable()
+    // unwraps — wrong kind AND wrong flags, collected for the CLI warning.
+    const ir = fromZod(deeperPathsSchema);
+    expect(truncatedFieldPaths(ir)).toEqual([TRUNCATED]);
+    const code = emitPlainForm({
+      ir,
+      formName: "DeeperPathsForm",
+      schemaImport: {
+        name: "deeperPathsSchema",
+        from: moduleSpecifier(
+          dir,
+          path.join(fixturesDir, "deeperPathsSchema.ts"),
+        ),
+        kind: "named",
+      },
+    });
+    // The stand-in blanks the number|null leaf to "" — a checked annotation
+    // would ship 'string is not assignable to number' to the consumer, so
+    // the cast MUST be emitted.
+    expect(code).toContain('count: "",');
+    expect(code).toContain("as unknown as FormValues");
+    expect(code).not.toContain("no cast needed");
+    const file = path.join(dir, "DeeperPathsForm.tsx");
+    fs.writeFileSync(file, code, "utf8");
+    expect(typecheckDiagnostics([file])).toEqual([]);
+  });
+
+  it("the CLI mirrors the truncation as its own stderr warning", async () => {
+    const dir = freshTmpDir("depth-truncation-cli");
+    const out = path.join(dir, "DeeperPathsForm.tsx");
+    const chunks: string[] = [];
+    const spy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(((chunk: unknown): boolean => {
+        chunks.push(String(chunk));
+        return true;
+      }) as typeof process.stderr.write);
+    try {
+      expect(
+        await main([
+          path.join(fixturesDir, "deeperPathsSchema.ts"),
+          "--out",
+          out,
+        ]),
+      ).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(chunks.join("")).toContain(
+      `warning: path "${TRUNCATED}" exceeds the walker nesting budget (${DEFAULT_MAX_DEPTH}); field degraded to a placeholder — raise --max-depth or bind by hand`,
+    );
   });
 });
 

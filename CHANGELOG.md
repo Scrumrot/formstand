@@ -36,13 +36,24 @@
   in the editor pays for it. `D` must be a number literal; budgets up to 25
   are supported, and the option is CONSTRAINED to the exported `PathDepth`
   union (`0 | 1 | ... | 25`, exactly the decrement table's range) —
-  `pathDepth: 26`, `pathDepth: -1`, and a widened `number`-typed variable
-  all fail to compile at the call site instead of silently misbehaving.
-  `FieldPath<T, D>` itself also guards against a NON-LITERAL `D`: when `D`
-  has widened to `number` (an options object built separately, a
-  `Form<S, number>` passing through a helper), the union falls back to the
-  default depth instead of silently building the enormous ~25-level one (an
-  empirically verified hazard). The default is now the exported
+  `pathDepth: 26`, `pathDepth: -1`, a widened `number`-typed variable, and
+  a UNION value (`cond ? 12 : 9`, which would infer an unusable
+  `Form<S, 9 | 12>`) all fail to compile at the call site instead of
+  silently misbehaving. The same `D extends PathDepth` constraint is
+  enforced on EVERY generic surface carrying a depth parameter — `Form`
+  itself, `createFormContext<S, D>`, `persistForm`, the hooks'
+  explicit-`D` positions — so `Form<S, number>` and
+  `createFormContext<S, 26>()` are compile errors too, not silently
+  unbounded budgets.
+  `FieldPath<T, D>` itself (the compat surface for direct users, still
+  `D extends number`) NORMALIZES any unusable `D` before recursing: a
+  widened `number` (an options object built separately), an out-of-range
+  literal (26, -1 — outside the decrement table, where the decrement would
+  silently no-op), and a finite union (`9 | 12`, or `PathDepth` itself —
+  the decrement distributes over unions and would recurse to the union's
+  max) all fall back to the default depth instead of silently building the
+  enormous ~25-level union (an empirically verified hazard) or
+  hard-erroring TS2615 on recursive value types. The default is now the exported
   `DefaultPathDepth` alias — one source of truth replacing the 22 scattered
   `= 9` literals across the typed surfaces. NOT breaking for existing
   code: `D` is appended LAST with a
@@ -143,22 +154,29 @@
   (`DEFAULT_MAX_DEPTH = FORMSTAND_PATH_DEPTH + 2` = 11, up from the
   standalone 10; the constant moved to a shared `depth` module both walkers
   and emitters import). The walker must reach one level PAST the path
-  budget so a too-deep chain at default flags always degrades via the PATH
-  budget — a real, correctly typed subtree with a depth TODO — and never
-  via walker truncation, whose wrong-kind string fallback poisoned
-  `initialValues` and failed the consumer's typecheck (a nullable number at
-  level 10 blanked to `""` instead of `null`). The DeepBoundaryForm
-  playground demo no longer needs its `--max-depth 11` override, and its
-  regenerated output is byte-identical. `--max-depth` remains as an
-  override and the recursion backstop.
+  budget so a leaf of up to 10 segments (path budget + 1) at default flags
+  degrades via the PATH budget — a real, correctly typed subtree with a
+  depth TODO — rather than via walker truncation, whose wrong-kind string
+  fallback poisoned `initialValues` and failed the consumer's typecheck (a
+  nullable number at level 10 blanked to `""` instead of `null`). Leaves
+  DEEPER than that (11+ segments at default flags) still truncate to the
+  string-kind stand-in; the generated file now always compiles anyway (the
+  truncated leaf forces the `as unknown as` initialValues cast) and each
+  truncated path gets its own stderr warning — see Fixed below. The
+  DeepBoundaryForm playground demo no longer needs its `--max-depth 11`
+  override, and its regenerated output is byte-identical. `--max-depth`
+  remains as an override and the recursion backstop.
 - **One boundary predicate for every depth decision.** The ~38 hand-written
   `>`/`>=` comparisons against `FORMSTAND_PATH_DEPTH` across the
   single-file and module emitters are replaced by a single exported
-  `overDepthBudget(spec, segments)` (which picks the at-the-budget vs
-  needs-headroom boundary from the spec's kind) plus `pastRowBudget` for
-  spec-less row paths — so the two layouts and the CLI warnings can no
-  longer drift on where degradation starts. `depthTodoLine` is likewise the
-  one production of the TODO comment shared by both emitters.
+  `overDepthBudget(spec, segments)` — spec-aware (it picks the
+  at-the-budget vs needs-headroom boundary from the spec's kind) and used
+  at every depth decision in both layouts and the CLI warnings, so they
+  can no longer drift on where degradation starts. (A second predicate for
+  spec-less row paths, `pastRowBudget`, briefly existed but had no call
+  sites and disagreed with `overDepthBudget`'s boundary — it has been
+  deleted.) `depthTodoLine` is likewise the one production of the TODO
+  comment shared by both emitters.
 
 ### Fixed
 
@@ -186,9 +204,12 @@
   array-of-arrays, or array rows holding a tuple/union) now emits the DEPTH
   todo at the row site instead of the generic extract-a-row advice — which
   was unachievable there, since the row path itself is past the budget —
-  and `overBudgetFieldPaths` (the stderr warning list) now mirrors the
-  emitted TODOs exactly, one entry per TODO site, per-FIELD for an array's
-  object rows (the emitters degrade those field by field).
+  and `overBudgetFieldPaths` (the stderr warning list) mirrors the emitted
+  TODOs exactly, one entry per TODO site, per-FIELD for an array's object
+  rows (the emitters degrade those field by field). The mirror is
+  LAYOUT-AWARE (see Fixed below): the walk takes the emitting layout's
+  degradation frontier, since the two layouts stop descending at different
+  places.
 - **`.default()` / `.prefault()` values now land in the generated
   `initialValues`** instead of being ignored (`defaultedNumber: z.number()
   .default(42)` emitted `undefined`, contradicting the README). `fromZod`
@@ -215,6 +236,47 @@
   stand-in whose kind lies about `T`): seeding there broke the generated
   file's checked `initialValues` annotation — the field keeps its blank
   behavior instead.
+- **Walker truncation can no longer ship a non-compiling file, and is never
+  silent.** A leaf past the walker nesting budget (11+ segments at default
+  flags) degrades to a string-kind stand-in BEFORE its wrappers unwrap, so
+  its kind and flags can be wrong (`z.number().nullable()` at 11 segments
+  blanked to `""` in a `number | null` slot) — and the checked
+  `initialValues` annotation shipped that as a compile error in the
+  consumer's tsc. `blankNeedsCast` now treats a REQUIRED todo-bearing leaf
+  (truncated specs are always required-flagged; a required `z.custom`
+  fallback hits the same rule) as not input-satisfying, forcing the
+  `as unknown as` cast so the generated file always compiles — in both
+  layouts, which share the one predicate. Optional/nullable fallbacks keep
+  the checked annotation (their `undefined`/`null` blanks genuinely satisfy
+  `z.input` — those flags only exist when real wrappers unwrapped). And the
+  truncation is mirrored on stderr: the walkers stamp a recognizable marker
+  todo (`NESTING_LIMIT_TODO`), `truncatedFieldPaths` collects the truncated
+  paths, and the CLI prints
+  `warning: path "…" exceeds the walker nesting budget (11); field degraded
+  to a placeholder — raise --max-depth or bind by hand` per path.
+- **Depth warnings no longer promise TODOs the chosen layout never emits.**
+  `overBudgetFieldPaths` walked one fixed shape while the two layouts stop
+  descending at different frontiers: the single-file layout does not descend
+  into array-of-array items (generic extract-a-row TODO, no depth TODO
+  inside), and the module layout does not recurse into OBJECT fields of an
+  array row (generic bind-by-hand TODO) — so for those shapes the stderr
+  warnings claimed depth TODOs that weren't in the file (always
+  over-promising, never under-reporting). The walk now takes the emitting
+  layout's `DepthWarningFrontier` (`depthWarningFrontier("single" |
+  "module")`; the single-file frontier is the default, preserving existing
+  programmatic behavior), and `warnDegradedBindings` passes the CLI's
+  `--layout`. Tests pin warnings-per-TODO equality for both divergent
+  shapes in both layouts.
+- **Refused `.default()` captures now warn instead of degrading silently.**
+  Every mode that leaves a declared default unseeded is mirrored on stderr:
+  the capture guard's refusals (function-valued resolved default,
+  non-deterministic two-read disagreement, throwing getter) are recorded on
+  the IR as `droppedDefault`, and emit-time refusals (todo-fallback specs,
+  kind-mismatched or non-finite values, undeclared enum options, dates,
+  container defaults) are detected off the captured `defaultValue` — the
+  CLI prints `warning: field "…" has a .default() the CLI could not capture
+  (non-primitive, non-deterministic, or degraded field); it starts blank —
+  seed it by hand`, one per field. Fields with no default never warn.
 
 ## formstand-cli 0.7.0 — 2026-07-12
 

@@ -2,7 +2,7 @@ import type { z } from "zod";
 import { useStore } from "zustand/react";
 import type { Form } from "../core/createForm";
 import { isFieldDirty } from "../core/equality";
-import type { DefaultPathDepth, FieldPath } from "../core/fieldPath";
+import type { DefaultPathDepth, FieldPath, PathDepth } from "../core/fieldPath";
 import { getAtPath } from "../core/path";
 import { isPathOrChild } from "../core/validation";
 import type { FormStateApi } from "./useFormSelector";
@@ -26,7 +26,7 @@ export function useIsDirty(
 export function useIsDirty<
   TSchema extends z.ZodType,
   P extends FieldPath<z.input<TSchema>, D>,
-  D extends number = DefaultPathDepth,
+  D extends PathDepth = DefaultPathDepth,
 >(form: Form<TSchema, D>, path?: P): boolean;
 export function useIsDirty(form: FormStateApi, path?: string): boolean {
   return useStore(form.store, (state) =>
@@ -49,7 +49,7 @@ export function useIsValid(
 export function useIsValid<
   TSchema extends z.ZodType,
   P extends FieldPath<z.input<TSchema>, D>,
-  D extends number = DefaultPathDepth,
+  D extends PathDepth = DefaultPathDepth,
 >(form: Form<TSchema, D>, path?: P): boolean;
 export function useIsValid(form: FormStateApi, path?: string): boolean {
   return useStore(form.store, (state) => {

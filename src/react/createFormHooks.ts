@@ -1,6 +1,11 @@
 import type { z } from "zod";
 import type { Form } from "../core/createForm";
-import type { DefaultPathDepth, FieldPath, FieldValue } from "../core/fieldPath";
+import type {
+  DefaultPathDepth,
+  FieldPath,
+  FieldValue,
+  PathDepth,
+} from "../core/fieldPath";
 import type { FormState } from "../core/types";
 import {
   type FieldFormApi,
@@ -55,7 +60,7 @@ import {
 // The bound signatures mirror the unbound hooks minus the form parameter;
 // the typed-path call signature sits last for the same error-blame reason
 // as the originals.
-export type BoundUseField<TSchema extends z.ZodType, D extends number = DefaultPathDepth> = {
+export type BoundUseField<TSchema extends z.ZodType, D extends PathDepth = DefaultPathDepth> = {
   (
     pathSelector: (state: FormState<z.input<TSchema>>) => string,
     options?: UseFieldOptions,
@@ -81,7 +86,7 @@ export type BoundUseVariantField<TSchema extends z.ZodType> = <
 
 export type BoundUseFieldArray<
   TSchema extends z.ZodType,
-  D extends number = DefaultPathDepth,
+  D extends PathDepth = DefaultPathDepth,
 > = {
   (
     pathSelector: (state: FormState<z.input<TSchema>>) => string,
@@ -95,7 +100,7 @@ export type BoundUseSelector<TSchema extends z.ZodType> = <U>(
   selector: (state: FormState<z.input<TSchema>>) => U,
 ) => U;
 
-export type BoundUseFlag<TSchema extends z.ZodType, D extends number = DefaultPathDepth> = (
+export type BoundUseFlag<TSchema extends z.ZodType, D extends PathDepth = DefaultPathDepth> = (
   path?: FieldPath<z.input<TSchema>, D>,
 ) => boolean;
 
@@ -105,7 +110,7 @@ export type BoundUseFlag<TSchema extends z.ZodType, D extends number = DefaultPa
 export type FormHooks<
   TSchema extends z.ZodType,
   N extends string,
-  D extends number = DefaultPathDepth,
+  D extends PathDepth = DefaultPathDepth,
 > = Readonly<
   { [K in `use${Capitalize<N>}Field`]: BoundUseField<TSchema, D> } & {
     [K in `use${Capitalize<N>}VariantField`]: BoundUseVariantField<TSchema>;
@@ -133,7 +138,7 @@ const capitalize = (name: string): string =>
 export const createFormHooks = <
   TSchema extends z.ZodType,
   N extends string = "",
-  D extends number = DefaultPathDepth,
+  D extends PathDepth = DefaultPathDepth,
 >(
   form: Form<TSchema, D>,
   name?: N,

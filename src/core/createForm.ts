@@ -17,6 +17,7 @@ import type {
   DefaultPathDepth,
   FieldPath,
   FieldValue,
+  IsUnion,
   PathDepth,
 } from "./fieldPath";
 import type { ValidationMode } from "./mode";
@@ -59,8 +60,13 @@ export type CreateFormOptions<
   // (e.g. `pathDepth: 12`) so the budget stays a compile-time constant.
   // The `PathDepth` constraint (0-25, the Prev table's range) makes an
   // out-of-range literal or a widened `number` variable a compile error at
-  // the call site.
-  pathDepth?: D;
+  // the call site. The intersection additionally rejects a UNION depth
+  // (`cond ? 12 : 9` infers D = 9 | 12, a budget assignable to neither
+  // Form<S, 9> nor Form<S, 12>): for a single literal the extra operand is
+  // `unknown` and the type stays `D`, keeping literal inference intact; for
+  // a union it becomes `never`, so the value can't satisfy the property and
+  // the call errors instead of minting an unusable Form type.
+  pathDepth?: D & (IsUnion<D> extends true ? never : unknown);
   mode?: ValidationMode;
   reValidateMode?: ValidationMode;
   // Run a full validation pass at creation so the error map (and flags derived
@@ -104,7 +110,7 @@ export type SubmitResult<TOutput> =
 type ArrayItemOf<T> = T extends readonly (infer U)[] ? U : never;
 
 // Root-level errors (schema-wide .refine) live at the "" key.
-type ErrorPath<TValues, D extends number = DefaultPathDepth> =
+type ErrorPath<TValues, D extends PathDepth = DefaultPathDepth> =
   | FieldPath<TValues, D>
   | "";
 
@@ -137,7 +143,7 @@ const shallowFieldEqual = <TValue>(
 
 export type Form<
   TSchema extends z.ZodType,
-  D extends number = DefaultPathDepth,
+  D extends PathDepth = DefaultPathDepth,
 > = Readonly<{
   // Type-level marker only — never present at runtime. It carries the form's
   // typed-path depth budget (createForm's `pathDepth`, default 9) in a

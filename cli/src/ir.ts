@@ -16,6 +16,13 @@ export type SharedSpecProps = Readonly<{
   // declared enum option); anything else (dates, objects, arrays) keeps the
   // blank-form behavior.
   defaultValue?: unknown;
+  // Set when a `.default()` / `.prefault()` wrapper existed but the capture
+  // guard refused its value (a function-valued resolved default, a
+  // non-deterministic factory whose two reads disagreed, or a throwing
+  // getter). Refusals decided later, at emit time (kind mismatch, todo
+  // fallback), are detected off `defaultValue` instead — see codegen's
+  // droppedDefaultFieldPaths, which mirrors both as stderr warnings.
+  droppedDefault?: true;
 }>;
 
 export type NamedField = Readonly<{

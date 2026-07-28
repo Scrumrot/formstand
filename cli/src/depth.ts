@@ -36,7 +36,12 @@ export const overDepthBudget = (spec: FieldSpec, segments: number): boolean =>
     ? segments > FORMSTAND_PATH_DEPTH
     : segments >= FORMSTAND_PATH_DEPTH;
 
-// The same boundary for a spec-less ROW path (`list.${index}`): a row binds
-// its own path, scalar-style — over only past the budget.
-export const pastRowBudget = (segments: number): boolean =>
-  segments > FORMSTAND_PATH_DEPTH;
+// The EXACT todo text both walkers (fromZod/fromType) stamp on a node the
+// nesting budget truncated — a recognizable marker, not just prose, so the
+// CLI can collect truncated paths (codegen's truncatedFieldPaths) and mirror
+// them as stderr warnings. Truncation degrades the node to a string-kind
+// stand-in BEFORE wrappers unwrap, so the spec's kind (and flags) may be
+// wrong — which is also why blankNeedsCast forces the initialValues cast for
+// a required todo-bearing leaf (truncated specs are always required-flagged).
+export const NESTING_LIMIT_TODO =
+  "nesting depth limit reached; defaulted to string";

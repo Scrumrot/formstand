@@ -3,7 +3,7 @@ import type { StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand/react";
 import { useShallow } from "zustand/react/shallow";
 import type { Form } from "../core/createForm";
-import type { DefaultPathDepth } from "../core/fieldPath";
+import type { DefaultPathDepth, PathDepth } from "../core/fieldPath";
 import type { FormState } from "../core/types";
 
 type ReadonlyStore<T> = Pick<
@@ -18,7 +18,7 @@ export type FormStateApi = Readonly<{
 export function useFormSelector<
   TSchema extends z.ZodType,
   U,
-  D extends number = DefaultPathDepth,
+  D extends PathDepth = DefaultPathDepth,
 >(
   form: Form<TSchema, D>,
   selector: (state: FormState<z.input<TSchema>>) => U,
@@ -41,7 +41,7 @@ export function useFormSelector<U>(
 export function useFormSelectorShallow<
   TSchema extends z.ZodType,
   U,
-  D extends number = DefaultPathDepth,
+  D extends PathDepth = DefaultPathDepth,
 >(
   form: Form<TSchema, D>,
   selector: (state: FormState<z.input<TSchema>>) => U,

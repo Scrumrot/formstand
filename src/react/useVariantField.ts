@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import type { Form } from "../core/createForm";
-import type { DefaultPathDepth } from "../core/fieldPath";
+import type { DefaultPathDepth, PathDepth } from "../core/fieldPath";
 import { type FieldFormApi, type UseFieldReturn, useField } from "./useField";
 
 // Discriminated-union support. A z.discriminatedUnion field types its value
@@ -72,7 +72,7 @@ export function useVariantField<
   TSchema extends z.ZodType,
   P extends string,
   TField extends VariantKeys<UnionValueAt<z.input<TSchema>, P>>,
-  D extends number = DefaultPathDepth,
+  D extends PathDepth = DefaultPathDepth,
 >(
   form: Form<TSchema, D>,
   unionPath: P,

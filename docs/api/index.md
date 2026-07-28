@@ -226,7 +226,7 @@ Everything importable via `import type { ... } from "formstand"`:
 
 - **Core:** `Form`, `CreateFormOptions`, `SubmitHandler`, `InvalidSubmitHandler`, `SubmitOptions`, `SubmitResult`, `ResetOptions`, `ReadonlyStoreApi`, `FieldSnapshot`
 - **State:** `FormState`, `ErrorMap`, `BoolMap`
-- **Paths:** `PathSegment`, `FieldPath`, `FieldValue`
+- **Paths:** `PathSegment`, `FieldPath`, `FieldValue`, `PathDepth` (the legal `pathDepth` budgets, the literals 0–25), `DefaultPathDepth` (the default budget, 9)
 - **Validation:** `ValidationResult`, `SettledValidationResult`, `FieldValidationResult`, `SettledFieldValidationResult`, `FieldsValidationResult`, `SettledFieldsValidationResult`, `ValidationMode`, `ValidationTrigger`
 - **Hooks:** `FormStateApi`, `UseFieldReturn`, `FieldFormApi`, `FieldPathArg`, `UseFieldOptions`, `UseFieldArrayReturn`, `FieldArrayFormApi`, `FieldArrayEntry`, `FormProviderProps`, `FormContextApi`
 - **Components:** `TextFieldProps`, `NumberFieldProps`, `CheckboxFieldProps`, `SelectFieldProps`, `SelectFieldOption`, `FieldRef`, `PathsOf`

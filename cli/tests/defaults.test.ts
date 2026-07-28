@@ -1,10 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { moduleSpecifier } from "../src/cli";
+import { main, moduleSpecifier } from "../src/cli";
 import {
   blankNeedsCast,
+  droppedDefaultFieldPaths,
   emitInitialValues,
   emitPlainForm,
 } from "../src/codegen";
@@ -146,6 +147,90 @@ describe("defaults the capture must refuse", () => {
     expect(first).not.toMatch(/seq: \d/);
     // Two full generations are byte-identical despite the impure factory.
     expect(emit()).toBe(first);
+  });
+});
+
+describe("refused defaults are mirrored as warnings, never silent", () => {
+  // Every refusal mode — capture-guard (function-valued, non-deterministic)
+  // and emit-time (todo fallback, kind mismatch, dates/containers) — lists
+  // the field exactly once; captured defaults and fields with no default at
+  // all never appear.
+  it("a function-valued resolved default is listed", () => {
+    expect(droppedDefaultFieldPaths(fromZod(functionDefaultSchema))).toEqual([
+      "onPing",
+    ]);
+  });
+
+  it("a non-deterministic factory is listed", () => {
+    expect(
+      droppedDefaultFieldPaths(fromZod(nonDeterministicDefaultSchema)),
+    ).toEqual(["seq"]);
+  });
+
+  it("a default on a todo fallback (z.custom) is listed", () => {
+    expect(droppedDefaultFieldPaths(fromZod(customDefaultSchema))).toEqual([
+      "accent",
+    ]);
+  });
+
+  it("a kind-mismatched default is listed", () => {
+    // "gold" is captured (a deterministic primitive) but the emitter
+    // refuses to seed an undeclared enum option.
+    const ir = fromZod(
+      z.object({ plan: z.enum(["free", "pro"]).default("gold" as "free") }),
+    );
+    expect(droppedDefaultFieldPaths(ir)).toEqual(["plan"]);
+  });
+
+  it("captured defaults are not listed; unseedable dates/containers are", () => {
+    // theme/retries/newsletter/plan/factory/quoted all seed literals — no
+    // warning; the date and array defaults keep the blank behavior, so they
+    // ARE listed (their .default() never reaches the generated form).
+    expect(droppedDefaultFieldPaths(fromZod(defaultsSchema))).toEqual([
+      "createdAt",
+      "tags",
+    ]);
+  });
+
+  it("fields with no default at all never warn", () => {
+    expect(
+      droppedDefaultFieldPaths(
+        fromZod(z.object({ name: z.string(), age: z.number() })),
+      ),
+    ).toEqual([]);
+  });
+
+  it("the CLI prints one stderr warning per refused default", async () => {
+    const dir = freshTmpDir("defaults-warn");
+    const out = path.join(dir, "CustomDefaultForm.tsx");
+    const chunks: string[] = [];
+    const spy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(((chunk: unknown): boolean => {
+        chunks.push(String(chunk));
+        return true;
+      }) as typeof process.stderr.write);
+    try {
+      expect(
+        await main([
+          path.join(fixturesDir, "customDefaultSchema.ts"),
+          "--export",
+          "customDefaultSchema",
+          "--out",
+          out,
+        ]),
+      ).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
+    const text = chunks.join("");
+    expect(text).toContain(
+      'warning: field "accent" has a .default() the CLI could not capture (non-primitive, non-deterministic, or degraded field); it starts blank — seed it by hand',
+    );
+    // Exactly one refused default in this fixture — one warning.
+    expect(
+      text.match(/has a \.default\(\) the CLI could not capture/g),
+    ).toHaveLength(1);
   });
 });
 

@@ -1,4 +1,4 @@
-import { FORMSTAND_PATH_DEPTH } from "./depth";
+import { FORMSTAND_PATH_DEPTH, NESTING_LIMIT_TODO } from "./depth";
 import {
   type FieldSpec,
   type NamedField,
@@ -124,12 +124,17 @@ const discriminatedUnionFrom = (
 
 // The default nesting budget (fromType shares it), DERIVED from the
 // FieldPath budget: the walker must reach one level PAST the path budget so
-// that a too-deep chain degrades via the PATH budget (a real subtree,
-// materialized in the schema/initialValues, with a depth TODO at the
-// boundary) and never via walker truncation — whose wrong-kind string
-// fallback poisons initialValues and fails the consumer's typecheck. A
-// 9-segment object needs its 10-segment children walked truly, and the root
-// spends one level, hence budget + 2 (= 11 at the default budget of 9).
+// that a leaf of up to pathBudget + 1 segments degrades via the PATH budget
+// (a real subtree, materialized in the schema/initialValues, with a depth
+// TODO at the boundary) rather than via walker truncation. A 9-segment
+// object needs its 10-segment children walked truly, and the root spends
+// one level, hence budget + 2 (= 11 at the default budget of 9). Leaves
+// DEEPER than that (11+ segments at default flags) still truncate to the
+// string-kind stand-in (NESTING_LIMIT_TODO) — possibly with the wrong
+// kind/flags, since the fallback fires before wrappers unwrap — which is
+// why blankNeedsCast forces the initialValues cast for any required
+// todo-bearing leaf and the CLI mirrors every truncated path as a stderr
+// warning.
 // Also the backstop for recursion the seen-set misses (getters that build a
 // fresh schema object on every access) — the walk always terminates even
 // for a truly cyclic schema. Overridable via fromZod's maxDepth argument
@@ -174,7 +179,7 @@ const walk = (
     return fallback(flags, "recursive schema; defaulted to string");
   }
   if (depth <= 0) {
-    return fallback(flags, "nesting depth limit reached; defaulted to string");
+    return fallback(flags, NESTING_LIMIT_TODO);
   }
   const nextSeen: ReadonlySet<unknown> = new Set([...seen, schema]);
   const type = typeof def.type === "string" ? def.type : "<unknown>";
@@ -273,7 +278,13 @@ const walk = (
           typeof first === "number" ||
           typeof first === "boolean") &&
         Object.is(first, read());
-      return capturable ? { ...inner, defaultValue: first } : inner;
+      // A refused capture is never silent: the marker lets the CLI mirror
+      // the degradation on stderr (the field starts blank despite its
+      // .default()). Captured values can still be refused later at emit
+      // time — droppedDefaultFieldPaths covers those off `defaultValue`.
+      return capturable
+        ? { ...inner, defaultValue: first }
+        : { ...inner, droppedDefault: true };
     }
     case "union": {
       const discriminated = discriminatedUnionFrom(

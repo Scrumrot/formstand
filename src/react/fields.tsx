@@ -1,7 +1,7 @@
 import { type ChangeEvent, type ReactNode, useId, useState } from "react";
 import type { z } from "zod";
 import type { Form } from "../core/createForm";
-import type { FieldPath } from "../core/fieldPath";
+import type { FieldPath, PathDepth } from "../core/fieldPath";
 import {
   checkboxProps,
   dateInputProps,
@@ -24,7 +24,7 @@ import { type FieldFormApi, type UseFieldReturn, useField } from "./useField";
 // components' paths too.
 export type PathsOf<F extends FieldFormApi> = F extends Form<
   infer TSchema extends z.ZodType,
-  infer D extends number
+  infer D extends PathDepth
 >
   ? FieldPath<z.input<TSchema>, D>
   : string;

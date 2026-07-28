@@ -11,16 +11,19 @@ import {
   type VisualOptions,
   type SchemaImport,
   FORMSTAND_PATH_DEPTH,
+  depthWarningFrontier,
+  droppedDefaultFieldPaths,
   emitMuiForm,
   emitPlainForm,
   emitShadcnForm,
   emitTemplateForm,
   emitZodSchema,
   overBudgetFieldPaths,
+  truncatedFieldPaths,
   unaddressableFieldPaths,
 } from "./codegen";
 import { fromType } from "./fromType";
-import { fromZod, isZodSchema } from "./fromZod";
+import { DEFAULT_MAX_DEPTH, fromZod, isZodSchema } from "./fromZod";
 import type { FieldSpec } from "./ir";
 import {
   type ModuleFile,
@@ -615,7 +618,11 @@ const loadModule = async (
   }
 };
 
-const warnDegradedBindings = (ir: FieldSpec): void => {
+const warnDegradedBindings = (
+  ir: FieldSpec,
+  layout: Layout,
+  walkerBudget: number,
+): void => {
   unaddressableFieldPaths(ir).forEach((fieldPath) => {
     stderr(
       `warning: field "${fieldPath}" skipped — "." in a key is not path-addressable (see formstand docs)`,
@@ -623,10 +630,26 @@ const warnDegradedBindings = (ir: FieldSpec): void => {
   });
   // Bindings past the library's typed-path budget degrade to in-file TODOs;
   // mirror each one on stderr so the degradation is visible at generation
-  // time ("*" marks an array row index).
-  overBudgetFieldPaths(ir).forEach((fieldPath) => {
+  // time ("*" marks an array row index). The two layouts stop descending at
+  // different frontiers, so the walk is told which one is emitting.
+  overBudgetFieldPaths(ir, depthWarningFrontier(layout)).forEach((fieldPath) => {
     stderr(
       `warning: path "${fieldPath}" exceeds formstand's typed FieldPath depth (${FORMSTAND_PATH_DEPTH}); emitted a TODO — bind it by hand`,
+    );
+  });
+  // Leaves the WALKER truncated (past the nesting budget) degrade to
+  // string-kind placeholders whose kind may be wrong — the initialValues
+  // cast keeps the file compiling, but the field needs hand attention.
+  truncatedFieldPaths(ir).forEach((fieldPath) => {
+    stderr(
+      `warning: path "${fieldPath}" exceeds the walker nesting budget (${walkerBudget}); field degraded to a placeholder — raise --max-depth or bind by hand`,
+    );
+  });
+  // Defaults the capture guard or the emitter refused start blank despite
+  // the schema's .default() — never silently.
+  droppedDefaultFieldPaths(ir).forEach((fieldPath) => {
+    stderr(
+      `warning: field "${fieldPath}" has a .default() the CLI could not capture (non-primitive, non-deterministic, or degraded field); it starts blank — seed it by hand`,
     );
   });
 };
@@ -649,7 +672,7 @@ const runZodMode = async (
     return 1;
   }
   const ir: FieldSpec = fromZod(pick.schema, options.maxDepth);
-  warnDegradedBindings(ir);
+  warnDegradedBindings(ir, options.layout, options.maxDepth ?? DEFAULT_MAX_DEPTH);
   const formName = options.name ?? deriveFormName(pick.exportName);
   const fromDir =
     options.out !== undefined
@@ -703,7 +726,7 @@ const runTypeMode = (options: CliOptions, template?: Template): number => {
     options.typeName,
     options.maxDepth,
   );
-  warnDegradedBindings(ir);
+  warnDegradedBindings(ir, options.layout, options.maxDepth ?? DEFAULT_MAX_DEPTH);
   const schemaName = `${camelCase(typeName)}Schema`;
   const formName = options.name ?? deriveFormName(typeName);
   const schemaSource = emitZodSchema(ir, schemaName);

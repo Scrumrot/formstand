@@ -931,9 +931,10 @@ const hooksFile = (
       ...(blankNeedsCast(root)
         ? [
             "// A form starts blank: required numbers/dates/enums begin",
-            "// undefined, so these initial values intentionally do not satisfy",
-            "// the schema yet; hence the cast. Validation reports the gaps on",
-            "// submit.",
+            "// undefined (and any TODO-degraded placeholder field starts as a",
+            "// blank guess), so these initial values intentionally do not",
+            "// satisfy the schema yet; hence the cast. Validation reports the",
+            "// gaps on submit.",
             `const initialValues = ${emitInitialValues(root, 0)} as unknown as ${naming.valuesType};`,
           ]
         : [

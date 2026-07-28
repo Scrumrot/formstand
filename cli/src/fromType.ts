@@ -1,5 +1,6 @@
 import path from "node:path";
 import ts from "typescript";
+import { NESTING_LIMIT_TODO } from "./depth";
 import { DEFAULT_MAX_DEPTH } from "./fromZod";
 import { type FieldSpec, type NamedField, labelFromName } from "./ir";
 
@@ -111,7 +112,7 @@ const walkType = (
   depth: number,
 ): FieldSpec => {
   if (depth <= 0) {
-    return fallback(flags, "nesting depth limit reached; defaulted to string");
+    return fallback(flags, NESTING_LIMIT_TODO);
   }
   if (type.isUnion()) return unionSpec(checker, type, flags, depth);
   if (hasFlag(type, ts.TypeFlags.String)) return { kind: "string", ...flags };

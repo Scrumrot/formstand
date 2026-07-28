@@ -147,7 +147,7 @@ const appSchema = z.object({
 // here — one more wrapper and the default budget of 9 runs out. Widen once:
 export const appForm = createForm(appSchema, {
   initialValues,
-  pathDepth: 12, // a literal in 0–25; `number` variables are compile errors
+  pathDepth: 12, // one literal in 0–25; `number` variables and unions error
 });
 
 // Per-slice hook APIs, all sharing the one store. D rides along, so the
@@ -170,7 +170,7 @@ const LatitudeField = () => {
 Two wrinkles to know about:
 
 - **The budget is part of the form's type.** `Form<typeof appSchema, 12>` is deliberately not assignable to `Form<typeof appSchema>` (or vice versa), so any prop or helper that takes this form must say `Form<typeof appSchema, 12>`.
-- **Context can't infer it.** `createFormContext` takes no value argument, so a widened form's context names the budget explicitly: `createFormContext<typeof appSchema, 12>()`. Forgetting it produces a `Form<S, 12> is not assignable to Form<S, 9>` error at the `<Provider form={...}>` site — the mismatch is caught, never silently widened.
+- **Context can't infer it.** `createFormContext` takes no value argument, so a widened form's context names the budget explicitly: `createFormContext<typeof appSchema, 12>()`. Forgetting it produces a `Form<S, 12> is not assignable to Form<S, 9>` error at the `<Provider form={...}>` site — the mismatch is caught, never silently widened. The explicit `D` position enforces the same 0–25 constraint as the option: `createFormContext<S, 26>()` or a widened `number` argument is a compile error.
 
 ## Focus a field imperatively
 
