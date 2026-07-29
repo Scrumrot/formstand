@@ -26,6 +26,7 @@ import { ContextForm } from "./forms/ContextForm";
 import { DependentFieldsForm } from "./forms/DependentFieldsForm";
 import { DerivedFieldForm } from "./forms/DerivedFieldForm";
 import { FileUploadForm } from "./forms/FileUploadForm";
+import { FlightSearchLive } from "./forms/FlightSearchLive";
 import { AntdOnboardingForm } from "./generated/AntdOnboardingForm";
 import { ChakraOnboardingForm } from "./generated/ChakraOnboardingForm";
 import { DeepBoundaryForm } from "./generated/DeepBoundaryForm";
@@ -359,6 +360,11 @@ const TABS: readonly Tab[] = [
       </AntdBridge>
     ),
   },
+  {
+    key: "genLive",
+    label: "Gen: live + form prop",
+    render: () => <FlightSearchLive />,
+  },
 ];
 
 type GroupTitle =
@@ -409,6 +415,7 @@ const GROUP_OF: Readonly<Record<TabKey, GroupTitle>> = {
   genChakra: "Generated",
   genMantine: "Generated",
   genAntd: "Generated",
+  genLive: "Generated",
   cliCommand: "Generated",
   schemaBuilder: "Generated",
 };
@@ -428,7 +435,8 @@ const BLURBS: Readonly<Record<TabKey, string>> = {
   onboarding:
     "A 26-field, five-section feature module: one file per field, one per section, with path-scoped dirty/valid badges in each section header.",
   nested: "Nested object paths and the full handleSubmit flow.",
-  array: "useFieldArray basics: push, remove, and reorder with stable row ids.",
+  array:
+    "useFieldArray basics: push, remove, and reorder with stable row ids. Ops revalidate the array path — after a submit, remove the last row and the min(1) message appears live; add one back and it clears, no resubmit.",
   async:
     "An async refine username check with debounce, isValidating spinners, and race handling.",
   wizard:
@@ -448,11 +456,11 @@ const BLURBS: Readonly<Record<TabKey, string>> = {
   tag: "A tag input over an array of primitives.",
   perf: "A 200-row stress test showing per-field re-render isolation.",
   muiCheckout:
-    "A Stepper wizard gating each step with validateFields, and a billing-same-as-shipping Switch that copies values.",
+    "A Stepper wizard gating each step with validateFields, a billing-same-as-shipping Switch that copies values, and a review step reading everything via useFormValues.",
   muiJob:
     "Autocomplete over an array field, a salary Slider, an async email check, and a server rejection via setError.",
   muiInvoice:
-    "useFieldArray rendered as a MUI Table with reorder/delete, derived totals, and a dirty-gated save.",
+    "useFieldArray rendered as a MUI Table with reorder/delete, derived totals, a dirty-gated save, and Add line moving focus into the new row via focusField.",
   muiSettings:
     "Card-sectioned settings with a nullable bio, live dirtyFields() chips, and Save/Discard as adoptValues/reset.",
   muiSurvey:
@@ -482,6 +490,8 @@ const BLURBS: Readonly<Record<TabKey, string>> = {
     "The same Onboarding schema through --ui mantine: Mantine v9's TextInput/NativeSelect/Switch with their built-in label and error props, untouched single-file output.",
   genAntd:
     "The same Onboarding schema through --ui antd: Ant Design v6 bound as plain controlled components — no antd Form/Form.Item anywhere — untouched single-file output.",
+  genLive:
+    "formstand-gen --live --form-prop output: the page owns the form via the exported useFlightSearchForm() hook, and onValuesChange streams every keystroke into the values panel — no submit scaffold anywhere.",
   cliCommand:
     "Fill the options and the formstand-gen command updates live — the command line is useFormSelector-derived state.",
   schemaBuilder:
@@ -489,12 +499,13 @@ const BLURBS: Readonly<Record<TabKey, string>> = {
 };
 
 // Demos whose content is legitimately wide — Perf's autofill grid, the
-// Schema builder's field rows + output viewer, the Invoice table — skip
-// the demo body's readable-measure cap.
+// Schema builder's field rows + output viewer, the Invoice table, the live
+// demo's form + values panel — skip the demo body's readable-measure cap.
 const WIDE_DEMOS: ReadonlySet<TabKey> = new Set([
   "perf",
   "schemaBuilder",
   "muiInvoice",
+  "genLive",
 ]);
 
 const GROUP_TITLES: readonly GroupTitle[] = [

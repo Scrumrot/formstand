@@ -3,8 +3,8 @@ import {
   textInputProps,
   useField,
   useForm,
-  useFormSelector,
   useFormSelectorShallow,
+  useFormValues,
   useIsDirty,
 } from "formstand";
 import { useDemoForm } from "../demo/DemoShell";
@@ -43,7 +43,7 @@ export const AutosaveForm = () => {
   useDemoForm(form);
   const title = useField(form, "title");
   const body = useField(form, "body");
-  const values = useFormSelector(form, (s) => s.values);
+  const values = useFormValues(form);
   const dirty = useIsDirty(form);
   const dirtyPaths = useFormSelectorShallow(form, () => form.dirtyFields());
 

@@ -24,10 +24,10 @@ import {
 import { z } from "zod";
 import { useDemoForm } from "../demo/DemoShell";
 import {
-  muiNumberFieldProps,
   muiSliderProps,
   muiSwitchProps,
   muiTextFieldProps,
+  useMuiNumberFieldProps,
 } from "./muiAdapter";
 
 const SKILLS: readonly string[] = [
@@ -98,6 +98,7 @@ export const MuiJobApplication = () => {
 
   const emailProps = muiTextFieldProps(email);
   const salaryProps = muiSliderProps(salary);
+  const yearsProps = useMuiNumberFieldProps(years);
   const skillsInvalid = skills.error !== undefined && skills.error.length > 0;
 
   return (
@@ -153,12 +154,7 @@ export const MuiJobApplication = () => {
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
-          <TextField
-            label="Years of experience"
-            fullWidth
-            {...muiNumberFieldProps(years)}
-            slotProps={{ htmlInput: { min: 0, max: 50, step: 1 } }}
-          />
+          <TextField label="Years of experience" fullWidth {...yearsProps} />
         </Grid>
         <Grid size={{ xs: 12 }}>
           <Autocomplete

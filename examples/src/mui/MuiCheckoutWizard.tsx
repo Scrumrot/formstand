@@ -27,7 +27,7 @@ import {
   focusFirstError,
   useField,
   useForm,
-  useFormSelector,
+  useFormValues,
 } from "formstand";
 import { z } from "zod";
 import { useDemoForm } from "../demo/DemoShell";
@@ -248,9 +248,10 @@ const PaymentStep = ({ form }: StepProps) => {
 };
 
 // Its own component so only the Review step subscribes to every value — the
-// wizard shell doesn't re-render per keystroke on earlier steps.
+// useFormValues whole-values subscription is isolated to this subtree, so
+// the wizard shell doesn't re-render per keystroke on earlier steps.
 const ReviewStep = ({ form }: StepProps) => {
-  const values = useFormSelector(form, (s) => s.values);
+  const values = useFormValues(form);
   const rows: readonly Readonly<{ label: string; text: string }>[] = [
     { label: "Name", text: values.contact.fullName },
     { label: "Email", text: values.contact.email },

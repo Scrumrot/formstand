@@ -22,6 +22,9 @@ import contextSrc from "../forms/ContextForm.tsx?raw";
 import dependentSrc from "../forms/DependentFieldsForm.tsx?raw";
 import derivedSrc from "../forms/DerivedFieldForm.tsx?raw";
 import fileSrc from "../forms/FileUploadForm.tsx?raw";
+import flightSearchLiveSrc from "../forms/FlightSearchLive.tsx?raw";
+import flightSearchFormSrc from "../generated/FlightSearchForm.tsx?raw";
+import flightSearchSchemaSrc from "../generated/flightSearchSchema.ts?raw";
 import hooksFactorySrc from "../forms/HooksFactoryForm.tsx?raw";
 import invoiceSrc from "../forms/InvoiceForm.tsx?raw";
 import nestedArraysSrc from "../forms/NestedArraysForm.tsx?raw";
@@ -190,6 +193,24 @@ const sources = {
   genChakra: single("ChakraOnboardingForm.tsx", chakraOnboardingSrc),
   genMantine: single("MantineOnboardingForm.tsx", mantineOnboardingSrc),
   genAntd: single("AntdOnboardingForm.tsx", antdOnboardingSrc),
+  // Explicit order: the untouched --live --form-prop output leads (the code
+  // panel opens on the exported useFlightSearchForm hook and the
+  // onValuesChange prop), then the hand-written consumer page that wires
+  // them up, then the schema input.
+  genLive: [
+    {
+      path: "FlightSearchForm.tsx",
+      source: stripHarness(flightSearchFormSrc),
+    },
+    {
+      path: "FlightSearchLive.tsx",
+      source: stripHarness(flightSearchLiveSrc),
+    },
+    {
+      path: "flightSearchSchema.ts",
+      source: stripHarness(flightSearchSchemaSrc),
+    },
+  ],
   cliCommand: single("CliCommandBuilder.tsx", cliCommandSrc),
   // Explicit order (not the module glob): the component leads so the code
   // panel opens on the useForm call, then the schema and the emitter bridge.

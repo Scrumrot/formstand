@@ -86,6 +86,22 @@ const commands = [
   kitDemo("chakra", "ChakraOnboardingForm"),
   kitDemo("mantine", "MantineOnboardingForm"),
   kitDemo("antd", "AntdOnboardingForm"),
+  // The --live --form-prop demo: no submit scaffold (onValuesChange streams
+  // every value change instead) and the page owns the form via the exported
+  // useFlightSearchForm() hook. --ui plain (default) keeps the generated
+  // file dependency-free; the hand-written consumer page lives at
+  // examples/src/forms/FlightSearchLive.tsx.
+  [
+    "examples/src/generated/flightSearchSchema.ts",
+    "--export",
+    "flightSearchSchema",
+    "--live",
+    "--form-prop",
+    "--name",
+    "FlightSearchForm",
+    "--out",
+    "examples/src/generated/FlightSearchForm.tsx",
+  ],
 ];
 
 commands.forEach((args) =>

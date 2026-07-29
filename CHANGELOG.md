@@ -11,7 +11,11 @@
   replaces the values object immutably, so the hook re-renders exactly when
   some value changes and never on touched/error/submit churn. The motivating
   case: form values driving derived rendering (a map re-rendering from live
-  coordinates).
+  coordinates). The playground's three whole-values subscriptions (Autosave,
+  the MUI checkout's review step, the Schema builder's live preview) now use
+  it, and the MUI adapter's number binding now goes through the exported
+  `useNumberInput` (as `useMuiNumberFieldProps`) — the same shape
+  `formstand-gen --ui mui` emits.
 
 ### Fixed
 
@@ -69,6 +73,16 @@
   pieces, so the submit and `--live` shapes are composed from one
   production and cannot drift per kit. Default-flag output is
   byte-identical.
+- **Playground: the two modes as a living demo** — a new Generated tab
+  (**Gen: live + form prop**) renders a compact flight-search schema
+  generated with `--live --form-prop` (`--ui plain`, single-file,
+  committed untouched and drift-checked via
+  `scripts/generate-cli-demos.mjs` like the other generated demos) next to
+  a hand-written consumer page: the page owns the form via the exported
+  `useFlightSearchForm()` hook and a live values panel renders only what
+  `onValuesChange` delivers — updating per keystroke, the map-driven case
+  in miniature. Smoke-tested in the root suite (mount, type, assert the
+  panel reflects the keystroke; no submit scaffold in the output).
 
 ## 0.12.0 — 2026-07-29
 

@@ -96,6 +96,16 @@ export const ArrayForm = () => {
         />
       ))}
 
+      {/* The ARRAY-level error (z.array(...).min(1)) — ops revalidate the
+          array path, so once the revalidate gate is open (post-submit),
+          removing the last row surfaces this line and pushing a row clears
+          it, live. */}
+      {users.error ? (
+        <p className="error" role="alert" style={{ margin: "4px 0 0" }}>
+          {users.error[0]}
+        </p>
+      ) : null}
+
       <div className="row" style={{ marginTop: 12 }}>
         <button
           className="secondary"

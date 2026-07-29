@@ -27,7 +27,7 @@ Every feature has a working, interactive demo in the **[live playground](https:/
 
 ## Material UI
 
-Five demos bind formstand to [Material UI](https://mui.com/) through a ~60-line adapter — [muiAdapter.ts](https://github.com/Scrumrot/formstand/blob/main/examples/src/mui/muiAdapter.ts) turns a `useField` result into spreadable props for `TextField`, `Select`, `Switch`, and `Slider`, reusing the library's exported `parseNumberText`/`numberToInputText` rules. Nothing MUI-specific lives in the library; this is the pattern to copy for any third-party UI kit. All five run in the same [live playground](https://scrumrot.github.io/formstand/examples/).
+Six demos bind formstand to [Material UI](https://mui.com/) through one adapter file — [muiAdapter.ts](https://github.com/Scrumrot/formstand/blob/main/examples/src/mui/muiAdapter.ts), the same adapter shape `formstand-gen --ui mui` emits. It turns a `useField` result into spreadable props for `TextField`, `Select`, `Switch`, and `Slider`; numbers go through the library's exported `useNumberInput` — the text-preserving binding behind `NumberField`, since MUI's `TextField` is a text input (the stateless `numberInputProps` builder remains the right choice for native `type="number"` inputs). Nothing MUI-specific lives in the library; this is the adapter shape to copy for any third-party UI kit. All six run in the same [live playground](https://scrumrot.github.io/formstand/examples/).
 
 | Demo | What it shows | Source |
 | --- | --- | --- |
@@ -36,6 +36,7 @@ Five demos bind formstand to [Material UI](https://mui.com/) through a ~60-line 
 | MUI: Invoice | `useFieldArray` rendered as a MUI `Table` with reorder/delete `IconButton`s, derived totals, an array-level error `Alert`, and a dirty-gated save that rebases with `adoptValues` | [MuiInvoiceBuilder.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/mui/MuiInvoiceBuilder.tsx) |
 | MUI: Settings | Card-sectioned settings with a nullable bio (clearing the field round-trips to `null` via `emptyValue`), live `dirtyFields()` chips, and Save/Discard as `adoptValues`/`reset()` | [MuiProfileSettings.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/mui/MuiProfileSettings.tsx) |
 | MUI: Survey | Nested field arrays (sections → questions) with type-switched sub-editors and a root-level refine surfaced through `useFormError` | [MuiSurveyBuilder.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/mui/MuiSurveyBuilder.tsx) |
+| MUI: Onboarding | The Onboarding feature module over Material UI: `Accordion` sections with path-scoped dirty/valid chips | [OnboardingForm/](https://github.com/Scrumrot/formstand/tree/main/examples/src/mui/OnboardingForm) |
 
 ## shadcn/ui
 

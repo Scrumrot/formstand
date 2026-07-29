@@ -8,7 +8,7 @@ import {
   useField,
   useFieldArray,
   useForm,
-  useFormSelector,
+  useFormValues,
 } from "formstand";
 import { CodeView } from "../../demo/CodeView";
 import { useDemoForm } from "../../demo/DemoShell";
@@ -402,7 +402,7 @@ export const SchemaBuilder = () => {
   const [pasteLang, setPasteLang] = useState<ImportLang>("ts");
   const [pasteSource, setPasteSource] = useState(SAMPLE_TS);
   const [importOpen, setImportOpen] = useState(false);
-  const values = useFormSelector(form, (state) => state.values);
+  const values = useFormValues(form);
 
   // One emit path, two IR sources. Build mode reads the field rows; paste
   // mode parses the imported source (a TS type or a zod schema) into IR —

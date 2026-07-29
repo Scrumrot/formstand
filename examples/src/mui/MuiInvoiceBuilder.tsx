@@ -23,6 +23,7 @@ import {
 } from "@mui/material";
 import {
   type Form,
+  focusField,
   focusFirstError,
   useField,
   useFieldArray,
@@ -34,9 +35,9 @@ import {
 import { z } from "zod";
 import { useDemoForm } from "../demo/DemoShell";
 import {
-  muiNumberFieldProps,
   muiSelectProps,
   muiTextFieldProps,
+  useMuiNumberFieldProps,
 } from "./muiAdapter";
 
 const CATEGORIES = [
@@ -94,6 +95,8 @@ const ItemRow = ({
   const quantity = useField(form, `items.${index}.quantity`);
   const unitPrice = useField(form, `items.${index}.unitPrice`);
   const categoryProps = muiSelectProps(category);
+  const quantityProps = useMuiNumberFieldProps(quantity);
+  const unitPriceProps = useMuiNumberFieldProps(unitPrice);
   const rowTotal = (quantity.value ?? 0) * (unitPrice.value ?? 0);
 
   return (
@@ -118,20 +121,10 @@ const ItemRow = ({
         </FormControl>
       </TableCell>
       <TableCell sx={{ width: 90 }}>
-        <TextField
-          variant="standard"
-          fullWidth
-          {...muiNumberFieldProps(quantity)}
-          slotProps={{ htmlInput: { min: 1, step: 1 } }}
-        />
+        <TextField variant="standard" fullWidth {...quantityProps} />
       </TableCell>
       <TableCell sx={{ width: 110 }}>
-        <TextField
-          variant="standard"
-          fullWidth
-          {...muiNumberFieldProps(unitPrice)}
-          slotProps={{ htmlInput: { min: 0, step: 0.01 } }}
-        />
+        <TextField variant="standard" fullWidth {...unitPriceProps} />
       </TableCell>
       <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
         {usd.format(rowTotal)}
@@ -273,7 +266,17 @@ export const MuiInvoiceBuilder = () => {
         <Button
           variant="outlined"
           startIcon={<AddIcon />}
-          onClick={() => items.push(NEW_ITEM)}
+          onClick={() => {
+            // The new row's index is the PRE-push length — read it before
+            // the op. focusField waits a frame so the row exists in the
+            // DOM, then lands on its description input (the library's
+            // "setFocus", keyed by path).
+            const newIndex = items.length;
+            items.push(NEW_ITEM);
+            requestAnimationFrame(() =>
+              focusField(`items.${newIndex}.description`),
+            );
+          }}
         >
           Add line
         </Button>

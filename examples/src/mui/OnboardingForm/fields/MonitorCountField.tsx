@@ -1,5 +1,5 @@
 import { TextField } from "@mui/material";
-import { muiNumberFieldProps } from "../../muiAdapter";
+import { useMuiNumberFieldProps } from "../../muiAdapter";
 import { useOnboardingField } from "../hooks";
 
 export type MonitorCountFieldProps = Readonly<{ label?: string }>;
@@ -8,5 +8,6 @@ export const useMonitorCountField = () => useOnboardingField("equipment.monitorC
 
 export const MonitorCountField = ({ label = "External monitors (0-4)" }: MonitorCountFieldProps) => {
   const field = useMonitorCountField();
-  return <TextField fullWidth label={label} {...muiNumberFieldProps(field)} />;
+  const numberProps = useMuiNumberFieldProps(field);
+  return <TextField fullWidth label={label} {...numberProps} />;
 };
