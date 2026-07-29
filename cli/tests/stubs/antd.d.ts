@@ -60,6 +60,21 @@ export declare const Select: (
   }>,
 ) => ReactElement;
 
+// Value-shaped like Select, but the value is the free TEXT (an input-backed
+// combobox): options carry { value } only, no `name` prop exists (no
+// form-posting input — same focus-helper caveat as Select), and "" is the
+// empty state (the real 6.x .d.ts is proven by the cli/matrix harness).
+export declare const AutoComplete: (
+  props: Readonly<{
+    id?: string;
+    options?: readonly Readonly<{ value: string }>[];
+    value?: string;
+    status?: "error" | "warning" | "" | undefined;
+    onChange?: (value: string) => void;
+    onBlur?: FocusEventHandler<HTMLElement>;
+  }>,
+) => ReactElement;
+
 export declare const Typography: Readonly<{
   Title: (
     props: Readonly<{

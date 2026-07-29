@@ -32,6 +32,23 @@ export declare const TextInput: (
   }>,
 ) => ReactElement;
 
+// Mirrors the real Autocomplete surface the emitter binds: value-shaped
+// (value: string, onChange: (value: string) => void), data accepting a
+// readonly array, native label/description/error props, and onBlur (the
+// real 9.x .d.ts is proven by the cli/matrix harness).
+export declare const Autocomplete: (
+  props: Readonly<{
+    label?: ReactNode;
+    description?: ReactNode;
+    error?: ReactNode;
+    name?: string;
+    value?: string;
+    data?: readonly string[];
+    onChange?: (value: string) => void;
+    onBlur?: () => void;
+  }>,
+) => ReactElement;
+
 export declare const NativeSelect: (
   props: Readonly<{
     label?: ReactNode;

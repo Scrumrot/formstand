@@ -1,4 +1,5 @@
 import type { VisualOptions } from "./codegen";
+import type { FieldOverrides } from "./overrides";
 import type { Ui } from "./uiTarget";
 
 // The project-level defaults formstand-gen reads from formstand.config.ts
@@ -28,6 +29,19 @@ export type FormstandConfig = Readonly<{
   // Path to a custom template module (see defineTemplate), resolved relative
   // to the config file. A --template flag overrides it.
   template?: string;
+  // Per-field component overrides, keyed by exact dot path against the
+  // walked schema ("*" matches one array-index segment):
+  //   fields: {
+  //     "icao": { component: "autocomplete", optionsProp: true },
+  //     "crew.*.role": { component: "autocomplete", optionsProp: true },
+  //   }
+  // "autocomplete" (free text with suggestions) is the only flavor today;
+  // string fields REQUIRE optionsProp: true (the generated component then
+  // takes e.g. `crewRoleOptions: readonly string[]`), enum fields default
+  // to their baked-in values (optionsProp: true replaces them with the
+  // prop). A path matching nothing, a non-string/enum target, or a string
+  // without optionsProp is a loud generation-time ERROR.
+  fields?: FieldOverrides;
 }>;
 
 // Identity with types — `export default defineConfig({ ui: "mui" })` gets

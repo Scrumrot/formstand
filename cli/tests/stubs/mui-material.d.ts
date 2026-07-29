@@ -4,7 +4,12 @@
 // uses, typed with the adapter's shapes, so the generated MUI output is
 // structurally typechecked instead of merely parsed — escaping or prop-name
 // regressions fail the suite.
-import type { ChangeEvent, ReactElement, ReactNode } from "react";
+import type {
+  ChangeEvent,
+  ReactElement,
+  ReactNode,
+  SyntheticEvent,
+} from "react";
 
 type SxProps = Readonly<Record<string, unknown>>;
 
@@ -94,23 +99,47 @@ export declare const AccordionDetails: (
   }>,
 ) => ReactElement;
 
-export declare const TextField: (
+// Exported like the real package's TextFieldProps — the autocomplete
+// override's renderInput casts its params through it.
+export type TextFieldProps = Readonly<{
+  fullWidth?: boolean;
+  select?: boolean;
+  type?: string;
+  label?: ReactNode;
+  name?: string;
+  value?: unknown;
+  error?: boolean;
+  helperText?: ReactNode;
+  slotProps?: Readonly<{
+    input?: Readonly<Record<string, unknown>>;
+    inputLabel?: Readonly<Record<string, unknown>>;
+  }>;
+  onChange?: TextChangeHandler;
+  onBlur?: () => void;
+  children?: ReactNode;
+}>;
+
+export declare const TextField: (props: TextFieldProps) => ReactElement;
+
+// Mirrors the real Autocomplete surface the emitter binds (freeSolo with a
+// controlled INPUT value — inputValue/onInputChange — options as a readonly
+// array, onBlur on the root, renderInput receiving spreadable params; the
+// real .d.ts is proven by the cli/matrix harness).
+export type AutocompleteRenderInputParams = Readonly<{
+  id: string;
+  disabled: boolean;
+  fullWidth: boolean;
+}>;
+
+export declare const Autocomplete: (
   props: Readonly<{
     fullWidth?: boolean;
-    select?: boolean;
-    type?: string;
-    label?: ReactNode;
-    name?: string;
-    value?: unknown;
-    error?: boolean;
-    helperText?: ReactNode;
-    slotProps?: Readonly<{
-      input?: Readonly<Record<string, unknown>>;
-      inputLabel?: Readonly<Record<string, unknown>>;
-    }>;
-    onChange?: TextChangeHandler;
+    freeSolo?: boolean;
+    options: readonly string[];
+    inputValue?: string;
+    onInputChange?: (event: SyntheticEvent, value: string) => void;
     onBlur?: () => void;
-    children?: ReactNode;
+    renderInput: (params: AutocompleteRenderInputParams) => ReactNode;
   }>,
 ) => ReactElement;
 

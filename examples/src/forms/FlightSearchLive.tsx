@@ -15,6 +15,21 @@ import {
 // updating per keystroke IS the proof that the live channel works. One
 // instance, two consumers, no submit anywhere: the twin's map-driven case
 // in miniature.
+//
+// origin/destination additionally ride the config `fields` autocomplete
+// override (see flightSearch.config.ts next to the schema): the fields stay
+// free-text ICAO strings, and this page supplies the suggestion DATA — an
+// airport list no zod enum could hold — through the generated
+// originOptions/destinationOptions props.
+
+const AIRPORTS: readonly string[] = [
+  "KSEA",
+  "KPDX",
+  "KSFO",
+  "KBFI",
+  "KGEG",
+  "KLAX",
+];
 
 export const FlightSearchLive = () => {
   const form = useFlightSearchForm();
@@ -33,7 +48,12 @@ export const FlightSearchLive = () => {
       </p>
       <div className="row" style={{ alignItems: "flex-start" }}>
         <div style={{ flex: 1, minWidth: 260 }}>
-          <FlightSearchForm form={form} onValuesChange={setValues} />
+          <FlightSearchForm
+            form={form}
+            onValuesChange={setValues}
+            originOptions={AIRPORTS}
+            destinationOptions={AIRPORTS}
+          />
         </div>
         <pre
           className="command-line"

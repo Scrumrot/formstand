@@ -3,6 +3,21 @@ import { capitalize, splitWords } from "./casing";
 // The intermediate representation both frontends (zod runtime walk, TS
 // compiler API walk) produce and all code emitters consume.
 
+// A per-field component override, resolved from formstand.config.ts `fields`
+// by applyFieldOverrides (see ./overrides) and stamped onto the matched
+// string/enum leaf. "autocomplete" is the only flavor today (free text with
+// suggestions — the field stays a string; strict select-from-list remains
+// the enum/Select path); the discriminated shape leaves room for future
+// flavors (textarea, slider, ...).
+export type FieldOverrideSpec = Readonly<{
+  component: "autocomplete";
+  // Present when the generated component takes a `{name}: readonly string[]`
+  // prop feeding the suggestions (required for plain string fields — no
+  // other options source exists; optional for enums, where it REPLACES the
+  // baked-in enum values). The name is already collision-resolved.
+  optionsPropName?: string;
+}>;
+
 export type SharedSpecProps = Readonly<{
   optional: boolean;
   nullable: boolean;
@@ -30,6 +45,10 @@ export type SharedSpecProps = Readonly<{
   // helper-text slot; where the kit shares one slot with the error line, the
   // error wins while present.
   description?: string;
+  // Set by applyFieldOverrides when formstand.config.ts `fields` names this
+  // leaf: the emitters swap the kind's default control for the override's
+  // component. Only ever present on string/enum leaves (validated loudly).
+  override?: FieldOverrideSpec;
 }>;
 
 export type NamedField = Readonly<{

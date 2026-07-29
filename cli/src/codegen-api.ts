@@ -23,9 +23,25 @@ export {
   emitMantineForm,
   emitAntdForm,
   emitTemplateForm,
+  collectOptionsProps,
   DEFAULT_VISUAL,
 } from "./codegen";
-export type { SchemaImport, EmitFormOptions, VisualOptions } from "./codegen";
+export type {
+  SchemaImport,
+  EmitFormOptions,
+  OptionsPropEntry,
+  VisualOptions,
+} from "./codegen";
+
+// Per-field component overrides (formstand.config.ts `fields`): validate a
+// config block and stamp a walked IR — pure data-in/data-out, browser-safe
+// like the rest of this surface.
+export {
+  applyFieldOverrides,
+  overridablePaths,
+  parseFieldOverrides,
+} from "./overrides";
+export type { FieldOverrideConfig, FieldOverrides } from "./overrides";
 
 export { emitModuleForm, joinModuleFiles } from "./moduleLayout";
 export type { EmitModuleOptions, ModuleFile } from "./moduleLayout";
@@ -41,6 +57,7 @@ export type { MuiVersion, ParseUiResult, Ui, UiTarget } from "./uiTarget";
 
 export { labelFromName } from "./ir";
 export type {
+  FieldOverrideSpec,
   FieldSpec,
   NamedField,
   SharedSpecProps,

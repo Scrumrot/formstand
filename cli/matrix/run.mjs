@@ -86,6 +86,26 @@ const withDescriptions = (spec) => {
 };
 const describedIr = withDescriptions(kitchenSinkIr);
 
+// The config-fields override twin: autocomplete on a root string, a nested
+// object leaf, an enum (baked options), an array-row leaf, a scalar array
+// item, and a leaf inside a nested array-of-rows — so every kit's
+// autocomplete binding surface (and the options-prop threading through both
+// layouts' extraction) typechecks against the real installed .d.ts. Applied
+// with the module-layout reachability rule (the stricter one), so ONE
+// stamped IR serves both layout variants.
+const overridesIr = api.applyFieldOverrides(
+  kitchenSinkIr,
+  {
+    title: { component: "autocomplete", optionsProp: true },
+    plan: { component: "autocomplete" },
+    "contact.address.city": { component: "autocomplete", optionsProp: true },
+    "projects.*.name": { component: "autocomplete", optionsProp: true },
+    "projects.*.tags.*": { component: "autocomplete", optionsProp: true },
+    "aliases.*": { component: "autocomplete", optionsProp: true },
+  },
+  "module",
+);
+
 const posix = (p) => p.replace(/\\/g, "/");
 const nm = (p) => posix(path.join(matrixDir, "node_modules", p));
 
@@ -118,7 +138,8 @@ const compilerOptions = (kitPaths) => ({
 // style (see the header comment for why spreads alone can't catch this).
 const muiProbeSource = (usesSlotProps) =>
   [
-    'import { TextField } from "@mui/material";',
+    'import type { SyntheticEvent } from "react";',
+    'import { Autocomplete, TextField, type TextFieldProps } from "@mui/material";',
     "",
     "export const Probe = () => (",
     "  <>",
@@ -131,6 +152,27 @@ const muiProbeSource = (usesSlotProps) =>
           '    <TextField InputProps={{ inputMode: "decimal" as const }} />',
           "    <TextField InputLabelProps={{ shrink: true }} />",
         ]),
+    // The autocomplete-override binding surface: freeSolo with a CONTROLLED
+    // input value (inputValue/onInputChange), readonly options, onBlur on
+    // the root, and the renderInput params spread onto a TextField carrying
+    // label/name/error/helperText after the spread.
+    "    <Autocomplete",
+    "      fullWidth",
+    "      freeSolo",
+    '      options={["KSEA"] as readonly string[]}',
+    '      inputValue=""',
+    "      onInputChange={(_event: SyntheticEvent, value: string) => void value}",
+    "      onBlur={() => {}}",
+    "      renderInput={(params) => (",
+    "        <TextField",
+    "          {...(params as unknown as TextFieldProps)}",
+    '          label={"Origin"}',
+    '          name="origin"',
+    "          error",
+    '          helperText={"required"}',
+    "        />",
+    "      )}",
+    "    />",
     "  </>",
     ");",
     "",
@@ -146,6 +188,9 @@ const CHAKRA_PROBE = [
   "export const Probe = () => (",
   "  <>",
   '    <Input name="n" value="" onChange={(e) => void e.target.value} onBlur={() => {}} />',
+  // The autocomplete override binds a native datalist through the Input's
+  // DOM `list` attribute (chakra forwards DOM props).
+  '    <Input list="origin-datalist" name="n" value="" onChange={() => {}} onBlur={() => {}} />',
   '    <Input inputMode="decimal" name="n" value="" onChange={() => {}} onBlur={() => {}} />',
   '    <Input type="date" name="n" value="" onChange={() => {}} onBlur={() => {}} />',
   "    <NativeSelect.Root>",
@@ -182,7 +227,7 @@ const CHAKRA_PROBE = [
 // with `| undefined`) — never a hand-written shape the adapter stopped
 // emitting.
 const MANTINE_PROBE = [
-  'import { NativeSelect, Switch, TextInput } from "@mantine/core";',
+  'import { Autocomplete, NativeSelect, Switch, TextInput } from "@mantine/core";',
   "",
   "export const Probe = () => (",
   "  <>",
@@ -201,6 +246,19 @@ const MANTINE_PROBE = [
   '      <option value="a">{"A"}</option>',
   "    </NativeSelect>",
   '    <Switch label={"Active"} name="n" checked onChange={(e) => void e.target.checked} onBlur={() => {}} />',
+  // The autocomplete-override binding surface: value-shaped (value: string,
+  // onChange receives the string), data accepting a READONLY array, the
+  // native label/description/error props, and onBlur.
+  "    <Autocomplete",
+  '      label={"Origin"}',
+  '      description={"ICAO code"}',
+  '      error={"required"}',
+  '      name="origin"',
+  '      value=""',
+  '      data={["KSEA"] as readonly string[]}',
+  "      onChange={(value: string) => void value}",
+  "      onBlur={() => {}}",
+  "    />",
   "  </>",
   ");",
   "",
@@ -219,7 +277,7 @@ const MANTINE_PROBE = [
 // emits, and exactOptionalPropertyTypes rightly rejects it.
 const ANTD_PROBE = [
   'import type { ChangeEvent } from "react";',
-  'import { Checkbox, Input, Select, type CheckboxChangeEvent } from "antd";',
+  'import { AutoComplete, Checkbox, Input, Select, type CheckboxChangeEvent } from "antd";',
   "",
   "export const Probe = () => (",
   "  <>",
@@ -250,6 +308,17 @@ const ANTD_PROBE = [
   "    >",
   '      {"On"}',
   "    </Checkbox>",
+  // The autocomplete-override binding surface: value-shaped like Select but
+  // the value is the free TEXT ("" empty state), { value } options, id for
+  // the focus-helper fallback (AutoComplete sets no `name`).
+  "    <AutoComplete",
+  '      id="p"',
+  '      options={[{ value: "KSEA" }]}',
+  '      value=""',
+  '      status={"error" as const}',
+  "      onChange={(value: string) => void value}",
+  "      onBlur={() => {}}",
+  "    />",
   "  </>",
   ");",
   "",
@@ -321,6 +390,17 @@ const generateKit = ({ alias, emitSingle, moduleUi, moduleExtra, probe }) => {
       live: true,
       formProp: true,
     }),
+    // The config-fields autocomplete overrides, in both layouts: proves each
+    // kit's autocomplete binding (MUI freeSolo/inputValue, Mantine and antd
+    // value-shaped, chakra/shadcn/plain datalist) against the real .d.ts,
+    // plus the options-prop threading through rows and nested extractions.
+    single("KitchenSinkOverrides", overridesIr, "kitchenSinkSchema"),
+    ...moduleForm(
+      "KitchenSinkOverrides",
+      overridesIr,
+      "kitchenSinkSchema",
+      "KitchenSinkOverridesForm",
+    ),
     ...moduleForm(
       "KitchenSink",
       kitchenSinkIr,

@@ -90,13 +90,19 @@ const commands = [
   // every value change instead) and the page owns the form via the exported
   // useFlightSearchForm() hook. --ui plain (default) keeps the generated
   // file dependency-free; the hand-written consumer page lives at
-  // examples/src/forms/FlightSearchLive.tsx.
+  // examples/src/forms/FlightSearchLive.tsx. The --config fixture adds the
+  // per-field component overrides (fields): origin/destination are plain
+  // ICAO strings whose suggestion list is DATA, so they upgrade to
+  // autocomplete and the component takes originOptions/destinationOptions —
+  // the twin project's exact page, generated.
   [
     "examples/src/generated/flightSearchSchema.ts",
     "--export",
     "flightSearchSchema",
     "--live",
     "--form-prop",
+    "--config",
+    "examples/src/generated/flightSearch.config.ts",
     "--name",
     "FlightSearchForm",
     "--out",

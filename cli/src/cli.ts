@@ -15,6 +15,11 @@ import {
 } from "./uiTarget";
 import { type Template, isTemplate } from "./template";
 import {
+  type FieldOverrides,
+  applyFieldOverrides,
+  parseFieldOverrides,
+} from "./overrides";
+import {
   type EmitFormOptions,
   type VisualOptions,
   type SchemaImport,
@@ -118,7 +123,12 @@ Options:
                       scaffold. --layout single only. Overrides --ui.
   --config <file>     config file (default: formstand.config.{ts,mts,js,mjs}
                       in the working directory). Holds project defaults for
-                      ui/layout/sections/columns; explicit flags win.
+                      ui/layout/sections/columns (explicit flags win) and
+                      per-field component overrides: fields maps exact dot
+                      paths ("*" = one array-index segment) to overrides,
+                      e.g. { "icao": { component: "autocomplete",
+                      optionsProp: true } } — see the README's config
+                      section for the options rules per field kind.
   --watch             regenerate whenever the input file changes (requires
                       --out)
   --force             overwrite existing output files
@@ -172,6 +182,9 @@ type CliOptions = Readonly<{
   schemaOut?: string;
   config?: string;
   template?: string;
+  // Per-field component overrides from the config file (no flag spelling —
+  // structured per-path data belongs in formstand.config.ts).
+  fields?: FieldOverrides;
   maxDepth?: number;
   watch: boolean;
   force: boolean;
@@ -393,13 +406,15 @@ const parseConfig = (raw: unknown, from: string): LoadedConfig => {
     "live",
     "formProp",
     "template",
+    "fields",
   ]);
   Object.keys(record)
     .filter((key) => !known.has(key))
     .forEach((key) => {
       stderr(`note: ${from}: ignoring unknown config key "${key}"`);
     });
-  const { ui, layout, sections, columns, live, formProp, template } = record;
+  const { ui, layout, sections, columns, live, formProp, template, fields } =
+    record;
   const uiTarget =
     ui === undefined
       ? undefined
@@ -439,6 +454,10 @@ const parseConfig = (raw: unknown, from: string): LoadedConfig => {
   if (template !== undefined && typeof template !== "string") {
     throw new Error(`${from}: template must be a path string`);
   }
+  // Shape-checked here (component/optionsProp spellings); the paths are
+  // validated against the walked schema later, in applyFieldOverrides.
+  const fieldOverrides =
+    fields === undefined ? undefined : parseFieldOverrides(fields, from);
   return {
     ...(uiTarget !== undefined ? { ui: uiTarget.target } : {}),
     ...(layout !== undefined ? { layout: layout as Layout } : {}),
@@ -452,6 +471,7 @@ const parseConfig = (raw: unknown, from: string): LoadedConfig => {
     ...(typeof template === "string"
       ? { template: path.resolve(path.dirname(from), template) }
       : {}),
+    ...(fieldOverrides !== undefined ? { fields: fieldOverrides } : {}),
   };
 };
 
@@ -503,6 +523,8 @@ export const resolveOptions = (
   ...(parsed.template ?? config.template
     ? { template: parsed.template ?? config.template }
     : {}),
+  // Config-only (no flag): per-field component overrides.
+  ...(config.fields !== undefined ? { fields: config.fields } : {}),
 });
 
 const visualOf = (options: CliOptions): VisualOptions => ({
@@ -786,7 +808,14 @@ const runZodMode = async (
     stderr(`error: ${pick.message}`);
     return 1;
   }
-  const ir: FieldSpec = fromZod(pick.schema, options.maxDepth);
+  // Config `fields` overrides stamp the IR before any emitter runs; a bad
+  // override (unknown path, non-string/enum target, missing optionsProp)
+  // throws here — main() reports it and exits 1 with nothing written.
+  const ir: FieldSpec = applyFieldOverrides(
+    fromZod(pick.schema, options.maxDepth),
+    options.fields,
+    options.layout,
+  );
   warnDegradedBindings(ir, options.layout, options.maxDepth ?? DEFAULT_MAX_DEPTH);
   const formName = options.name ?? deriveFormName(pick.exportName);
   const fromDir =
@@ -837,11 +866,15 @@ const runZodMode = async (
 const runTypeMode = (options: CliOptions, template?: Template): number => {
   // Pass the input as the user typed it so error messages echo it verbatim
   // (fromType resolves it internally).
-  const { ir, typeName } = fromType(
+  const { ir: walkedIr, typeName } = fromType(
     options.input,
     options.typeName,
     options.maxDepth,
   );
+  // Same override stamping as zod mode — the config speaks IR paths, so it
+  // is frontend-agnostic (the emitted zod schema source stays override-free;
+  // overrides shape COMPONENTS, not validation).
+  const ir = applyFieldOverrides(walkedIr, options.fields, options.layout);
   warnDegradedBindings(ir, options.layout, options.maxDepth ?? DEFAULT_MAX_DEPTH);
   const schemaName = `${camelCase(typeName)}Schema`;
   const formName = options.name ?? deriveFormName(typeName);

@@ -59,6 +59,9 @@ export declare const Input: (
     inputMode?: "decimal";
     name?: string;
     value?: string;
+    // The native datalist hookup (chakra's Input forwards DOM props) — the
+    // autocomplete override binds suggestions through it.
+    list?: string;
     onChange?: (event: ChangeEvent<HTMLInputElement>) => void;
     onBlur?: () => void;
   }>,

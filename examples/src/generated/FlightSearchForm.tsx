@@ -5,8 +5,10 @@ import {
   CheckboxField,
   NumberField,
   SelectField,
-  TextField,
+  textInputProps,
+  useField,
   useForm,
+  type FieldFormApi,
 } from "formstand";
 import type { Form } from "formstand";
 import { flightSearchSchema } from "./flightSearchSchema";
@@ -27,6 +29,39 @@ const initialValues = {
 } as unknown as FormValues;
 
 
+// ---- autocomplete override (config fields) ---------------------------------
+type AutocompleteFieldProps = Readonly<{
+  form: FieldFormApi;
+  path: string;
+  label: string;
+  options: readonly string[];
+}>;
+
+const AutocompleteField = ({
+  form,
+  path,
+  label,
+  options,
+}: AutocompleteFieldProps) => {
+  const field = useField<string | null | undefined>(form, path);
+  return (
+    <div className="zf-field">
+      <label className="zf-label">
+        {label}
+        <input list={`${path}-datalist`} {...textInputProps(field)} />
+      </label>
+      <datalist id={`${path}-datalist`}>
+        {options.map((option) => (
+          <option key={option} value={option} />
+        ))}
+      </datalist>
+      {field.error?.[0] !== undefined ? (
+        <p role="alert">{field.error?.[0]}</p>
+      ) : null}
+    </div>
+  );
+};
+
 // The page owns the form: create it with this hook (or an
 // equivalent useForm call) and pass it down — the same instance can
 // drive this component and any other consumer of the values.
@@ -42,9 +77,13 @@ export type FlightSearchFormProps = Readonly<{
   // so reference identity tracks real changes) — drive a map, a
   // preview, or an autosave from here.
   onValuesChange?: (values: FormValues) => void;
+  // Suggestions for the "origin" autocomplete override.
+  originOptions: readonly string[];
+  // Suggestions for the "destination" autocomplete override.
+  destinationOptions: readonly string[];
 }>;
 
-export const FlightSearchForm = ({ form, onValuesChange }: FlightSearchFormProps) => {
+export const FlightSearchForm = ({ form, onValuesChange, originOptions, destinationOptions }: FlightSearchFormProps) => {
   // form.watchValues (formstand >= 0.2) returns its own
   // unsubscribe. On formstand > 0.12, useFormValues(form) is the
   // render-side one-liner for the same subscription.
@@ -65,8 +104,20 @@ export const FlightSearchForm = ({ form, onValuesChange }: FlightSearchFormProps
         event.preventDefault();
       }}
     >
-      <TextField form={form} path={"origin"} label={"Origin"} />
-      <TextField form={form} path={"destination"} label={"Destination"} />
+      {/* autocomplete override: suggestions from the originOptions prop; free text stays allowed */}
+      <AutocompleteField
+        form={form}
+        path={"origin"}
+        label={"Origin"}
+        options={originOptions}
+      />
+      {/* autocomplete override: suggestions from the destinationOptions prop; free text stays allowed */}
+      <AutocompleteField
+        form={form}
+        path={"destination"}
+        label={"Destination"}
+        options={destinationOptions}
+      />
       <SelectField
         form={form}
         path={"aircraft"}

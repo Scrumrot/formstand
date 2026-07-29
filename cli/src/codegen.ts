@@ -599,6 +599,12 @@ export type KindUsage = Readonly<{
   // A discriminated-union field is present: gates the useField/useVariantField
   // imports the union rendering needs.
   union: boolean;
+  // A field carries a config `fields` override with component "autocomplete"
+  // (see ./overrides): it renders the autocomplete control INSTEAD of its
+  // kind's default, so it counts here and NOT under string/enum — the
+  // default Bound components and their imports must not be pulled in by an
+  // override-only schema.
+  autocomplete: boolean;
 }>;
 
 const NO_USAGE: KindUsage = {
@@ -608,6 +614,7 @@ const NO_USAGE: KindUsage = {
   date: false,
   enum: false,
   union: false,
+  autocomplete: false,
 };
 
 const mergeUsage = (a: KindUsage, b: KindUsage): KindUsage => ({
@@ -617,7 +624,21 @@ const mergeUsage = (a: KindUsage, b: KindUsage): KindUsage => ({
   date: a.date || b.date,
   enum: a.enum || b.enum,
   union: a.union || b.union,
+  autocomplete: a.autocomplete || b.autocomplete,
 });
+
+// Whether this leaf renders the autocomplete override control instead of its
+// kind's default (only ever true on string/enum leaves — applyFieldOverrides
+// validates that loudly). Shared with the module layout.
+export const isAutocompleteLeaf = (spec: FieldSpec): boolean =>
+  spec.override?.component === "autocomplete";
+
+// The options EXPRESSION an autocomplete leaf feeds its control: the
+// generated component's `{name}Options` prop when the override declares one,
+// else the enum's baked-in values as an array literal.
+export const autocompleteOptionsExpr = (spec: FieldSpec): string =>
+  spec.override?.optionsPropName ??
+  `[${(spec.kind === "enum" ? spec.options : []).map(q).join(", ")}]`;
 
 // The kinds a union's controls render: the discriminant is a select (enum),
 // plus every variant field's kind. Shared with collectUsage so a union pulls
@@ -661,7 +682,11 @@ export const collectUsage = (spec: FieldSpec, count = 0): KindUsage => {
     case "union":
       return unionKindUsage(spec);
     default:
-      return { ...NO_USAGE, [spec.kind]: true };
+      // An overridden leaf renders the override control, not its kind's
+      // default — count it as autocomplete only.
+      return isAutocompleteLeaf(spec)
+        ? { ...NO_USAGE, autocomplete: true }
+        : { ...NO_USAGE, [spec.kind]: true };
   }
 };
 
@@ -1031,7 +1056,11 @@ export const collectStaticUsage = (spec: FieldSpec, count = 0): KindUsage => {
     case "union":
       return NO_USAGE;
     default:
-      return { ...NO_USAGE, [spec.kind]: true };
+      // Same override rule as collectUsage: an autocomplete leaf pulls in
+      // the Bound autocomplete component, not its kind's default.
+      return isAutocompleteLeaf(spec)
+        ? { ...NO_USAGE, autocomplete: true }
+        : { ...NO_USAGE, [spec.kind]: true };
   }
 };
 
@@ -1058,6 +1087,46 @@ export const hasStaticDescriptions = (spec: FieldSpec, count = 0): boolean => {
       return false;
     default:
       return spec.description !== undefined;
+  }
+};
+
+// One generated options prop (a config-fields autocomplete override with
+// optionsProp): `name` is the collision-resolved prop identifier the
+// component accepts as `readonly string[]`, `path` the override's config
+// path ("*" marking array rows) for the emitted comment.
+export type OptionsPropEntry = Readonly<{ name: string; path: string }>;
+
+// The options props a subtree's overridden leaves consume, in IR order —
+// what the generated component (or an extracted child Rows component) must
+// accept and thread. Mirrors collectStaticUsage's walk: same depth boundary,
+// unions/tuples excluded (overrides can't land there — applyFieldOverrides
+// validates that), so a declared prop is always consumed by a rendered
+// control.
+export const collectOptionsProps = (
+  spec: FieldSpec,
+  count = 0,
+  segments: readonly string[] = [],
+): readonly OptionsPropEntry[] => {
+  if (overDepthBudget(spec, count)) return [];
+  switch (spec.kind) {
+    case "object":
+      return spec.fields
+        .filter((field) => !isUnaddressable(field.name))
+        .flatMap((field) =>
+          collectOptionsProps(field.spec, count + 1, [
+            ...segments,
+            field.name,
+          ]),
+        );
+    case "array":
+      return collectOptionsProps(spec.item, count + 1, [...segments, "*"]);
+    case "tuple":
+    case "union":
+      return [];
+    default:
+      return spec.override?.optionsPropName !== undefined
+        ? [{ name: spec.override.optionsPropName, path: segments.join(".") }]
+        : [];
   }
 };
 
@@ -1471,6 +1540,11 @@ const emitNestedRows = (
   ctx: NestedCtx,
 ): readonly string[] => {
   const item = (field.spec as Extract<FieldSpec, { kind: "array" }>).item;
+  // Options props consumed by overridden leaves inside this subtree: the
+  // child component declares them and the reference passes them through from
+  // the enclosing scope (the main component's props, or an outer child's own
+  // threaded props), so the chain composes to any depth.
+  const itemOptionsProps = collectOptionsProps(item).map((entry) => entry.name);
   // The enclosing row's own `index` becomes the next hole (pN) for this child.
   const nextHole = `p${prefix.holes.length}`;
   const listTemplate =
@@ -1529,7 +1603,12 @@ const emitNestedRows = (
     `const ${compName} = ({`,
     "  form,",
     ...childHoles.map((hole) => `  ${hole},`),
-    `}: Readonly<{ ${["form: Form<typeof " + ctx.schemaName + ">", ...childHoles.map((hole) => `${hole}: number`)].join("; ")} }>) => {`,
+    ...itemOptionsProps.map((name) => `  ${name},`),
+    `}: Readonly<{ ${[
+      "form: Form<typeof " + ctx.schemaName + ">",
+      ...childHoles.map((hole) => `${hole}: number`),
+      ...itemOptionsProps.map((name) => `${name}: readonly string[]`),
+    ].join("; ")} }>) => {`,
     `  const ${hookName} = useFieldArray(form, \`${listTemplate}\`);`,
     "  return (",
     ...backend.arraySection(synthEntry, 2, rowBody),
@@ -1542,6 +1621,7 @@ const emitNestedRows = (
     "form={form}",
     ...prefix.holes.map((hole) => `${hole}={${hole}}`),
     `${nextHole}={index}`,
+    ...itemOptionsProps.map((name) => `${name}={${name}}`),
   ].join(" ");
   return [`${ind(level)}<${compName} ${refAttrs} />`];
 };
@@ -1561,6 +1641,7 @@ const scaffoldBlocks = (
   scaffold: ScaffoldOptions,
   formName: string,
   schemaName: string,
+  optionsProps: readonly OptionsPropEntry[],
 ): Readonly<{
   beforeComponent: readonly string[];
   componentParams: string;
@@ -1599,6 +1680,13 @@ const scaffoldBlocks = (
           "  onValuesChange?: (values: FormValues) => void;",
         ]
       : []),
+    // Config-fields autocomplete overrides with optionsProp: the page
+    // supplies the suggestion list — options are DATA (an airport list),
+    // not schema.
+    ...optionsProps.flatMap((entry) => [
+      `  // Suggestions for the ${q(entry.path)} autocomplete override.`,
+      `  ${entry.name}: readonly string[];`,
+    ]),
   ];
   const propsBlock =
     propsFields.length === 0
@@ -1612,6 +1700,7 @@ const scaffoldBlocks = (
   const params = [
     ...(scaffold.formProp ? ["form"] : []),
     ...(scaffold.live ? ["onValuesChange"] : []),
+    ...optionsProps.map((entry) => entry.name),
   ];
   return {
     beforeComponent: [...ownerHook, ...propsBlock],
@@ -1652,6 +1741,11 @@ const emitForm = (
   const arrayMap: ReadonlyMap<string, ArrayEntry> = new Map(
     arrays.map((entry) => [entry.path, entry]),
   );
+  // Options props (config-fields autocomplete overrides) are component
+  // parameters: every other derived identifier — union binding vars, nested
+  // Rows stems — must steer clear of them, so they seed both used-sets.
+  const optionsProps = collectOptionsProps(root);
+  const optionsPropNames = optionsProps.map((entry) => entry.name);
   // Union hook variables must not collide with array hook/type identifiers.
   const arrayIdents = new Set(
     arrays.flatMap((entry) => [
@@ -1660,7 +1754,10 @@ const emitForm = (
       entry.emptyItemName,
     ]),
   );
-  const unions = collectUnions(root, arrayIdents);
+  const unions = collectUnions(
+    root,
+    new Set([...arrayIdents, ...optionsPropNames]),
+  );
   const unionMap: ReadonlyMap<string, UnionEntry> = new Map(
     unions.map((entry) => [entry.path, entry]),
   );
@@ -1669,7 +1766,7 @@ const emitForm = (
   // component) and their `Form` import added.
   const nested: NestedCtx = {
     components: [],
-    used: new Set([...arrayIdents, formName]),
+    used: new Set([...arrayIdents, formName, ...optionsPropNames]),
     schemaName: schemaImport.name,
   };
   const bodyLines = fieldLines(
@@ -1685,7 +1782,12 @@ const emitForm = (
     ...lines,
     "",
   ]);
-  const blocks = scaffoldBlocks(scaffold, formName, schemaImport.name);
+  const blocks = scaffoldBlocks(
+    scaffold,
+    formName,
+    schemaImport.name,
+    optionsProps,
+  );
   return [
     "// Generated by formstand-cli — edit freely, this file is yours.",
     ...backend.header(usage, arrays, root),
@@ -1745,6 +1847,22 @@ const plainLeaf = (
     spec.description !== undefined
       ? [`${ind(level)}<p className="zf-help">${jsxText(spec.description)}</p>`]
       : [];
+  // The config-fields autocomplete override wins over the kind's default
+  // control: an in-file AutocompleteField (input + native datalist — see
+  // the preamble) instead of formstand's TextField/SelectField.
+  if (isAutocompleteLeaf(spec)) {
+    return [
+      ...todo,
+      `${ind(level)}{/* ${autocompleteSiteComment(spec)} */}`,
+      `${ind(level)}<AutocompleteField`,
+      `${ind(level + 1)}form={form}`,
+      `${ind(level + 1)}${attr}`,
+      `${ind(level + 1)}${jsxAttr("label", label)}`,
+      `${ind(level + 1)}options={${autocompleteOptionsExpr(spec)}}`,
+      `${ind(level)}/>`,
+      ...desc,
+    ];
+  }
   switch (spec.kind) {
     case "string":
       return [
@@ -1872,6 +1990,50 @@ const plainVariantLeaf = (
   }
 };
 
+// The plain (and custom-template fallback) autocomplete override control:
+// free text with suggestions as a plain input bound through formstand's
+// textInputProps, the suggestion list a native <datalist> — no new
+// dependency, and the field stays a string the user can type freely.
+// Emitted once in the preamble when some static leaf carries the override.
+const PLAIN_AUTOCOMPLETE_PROPS_TYPE: readonly string[] = [
+  "type AutocompleteFieldProps = Readonly<{",
+  "  form: FieldFormApi;",
+  "  path: string;",
+  "  label: string;",
+  "  options: readonly string[];",
+  "}>;",
+];
+
+const plainAutocompleteBody = (
+  componentName: string,
+): readonly string[] => [
+  "",
+  `const ${componentName} = ({`,
+  "  form,",
+  "  path,",
+  "  label,",
+  "  options,",
+  `}: AutocompleteFieldProps) => {`,
+  "  const field = useField<string | null | undefined>(form, path);",
+  "  return (",
+  '    <div className="zf-field">',
+  '      <label className="zf-label">',
+  "        {label}",
+  "        <input list={`${path}-datalist`} {...textInputProps(field)} />",
+  "      </label>",
+  "      <datalist id={`${path}-datalist`}>",
+  "        {options.map((option) => (",
+  "          <option key={option} value={option} />",
+  "        ))}",
+  "      </datalist>",
+  "      {field.error?.[0] !== undefined ? (",
+  '        <p role="alert">{field.error?.[0]}</p>',
+  "      ) : null}",
+  "    </div>",
+  "  );",
+  "};",
+];
+
 const plainBackend = (
   visual: VisualOptions,
   scaffold: ScaffoldOptions,
@@ -1915,8 +2077,14 @@ const plainBackend = (
       ...(staticUsage.enum ? ["SelectField"] : []),
       ...(staticUsage.string ? ["TextField"] : []),
       ...builderImports,
+      // The in-file AutocompleteField (autocomplete override) binds through
+      // textInputProps + useField; dedupe against the union builders above.
+      ...(staticUsage.autocomplete &&
+      !builderImports.includes("textInputProps")
+        ? ["textInputProps"]
+        : []),
       ...(arrays.length > 0 ? ["useFieldArray"] : []),
-      ...(usage.union ? ["useField"] : []),
+      ...(usage.union || staticUsage.autocomplete ? ["useField"] : []),
       ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
       "useForm",
       ...(scaffold.live ? [] : ["useIsSubmitting"]),
@@ -1926,10 +2094,22 @@ const plainBackend = (
       `import { z } from "zod";`,
       "import {",
       ...formstandImports.map((name) => `  ${name},`),
+      // FieldFormApi types the in-file AutocompleteField's form prop.
+      ...(staticUsage.autocomplete ? ["  type FieldFormApi,"] : []),
       `} from "formstand";`,
     ];
   },
-  preamble: () => [],
+  preamble: (_usage, staticUsage) =>
+    staticUsage.autocomplete
+      ? [
+          [
+            "// ---- autocomplete override (config fields) ---------------------------------",
+            ...PLAIN_AUTOCOMPLETE_PROPS_TYPE,
+            ...plainAutocompleteBody("AutocompleteField"),
+          ].join("\n"),
+          "",
+        ]
+      : [],
   leaf: plainLeaf,
   variantLeaf: plainVariantLeaf,
   objectSection: (label, level, body) =>
@@ -2020,7 +2200,12 @@ export const gridColsClass = (columns: number): string =>
   columns > 1 ? ` md:grid-cols-${columns}` : "";
 
 export const hasLeafUsage = (usage: KindUsage): boolean =>
-  usage.string || usage.date || usage.number || usage.boolean || usage.enum;
+  usage.string ||
+  usage.date ||
+  usage.number ||
+  usage.boolean ||
+  usage.enum ||
+  usage.autocomplete;
 
 // The kit backends the shared snippet helpers below parameterize over
 // (everything but plain and custom templates).
@@ -2050,20 +2235,26 @@ export const kitScalarBinding = (
 // `needsEffect` (--live) adds useEffect for the onValuesChange
 // subscription; number usage still promotes the whole import to a value
 // import carrying useState.
+// `needsSyntheticEvent` (mui autocomplete only): the muiAutocompleteProps
+// builder types onInputChange's event parameter with React's SyntheticEvent.
 export const reactImportLines = (
   needsChangeEvent: boolean,
   needsNumberState: boolean,
   needsEffect = false,
+  needsSyntheticEvent = false,
 ): readonly string[] => {
   const names = [
     ...(needsEffect ? ["useEffect"] : []),
     ...(needsNumberState ? ["useState"] : []),
     ...(needsChangeEvent || needsNumberState ? ["type ChangeEvent"] : []),
+    ...(needsSyntheticEvent ? ["type SyntheticEvent"] : []),
   ];
   return names.length === 0
     ? []
     : names.every((name) => name.startsWith("type "))
-      ? [`import type { ChangeEvent } from "react";`]
+      ? [
+          `import type { ${names.map((name) => name.slice("type ".length)).join(", ")} } from "react";`,
+        ]
       : [`import { ${names.join(", ")} } from "react";`];
 };
 
@@ -2201,6 +2392,16 @@ export const describedLeafKinds = (
   }
 };
 
+// The one production of the override-site documentation comment (single-file
+// backends and the module layout share it, so the wording can't drift): what
+// feeds the suggestions, and that the field stays free text.
+export const autocompleteSiteComment = (spec: FieldSpec): string =>
+  spec.override?.optionsPropName !== undefined
+    ? spec.kind === "enum"
+      ? `autocomplete override: suggestions from the ${spec.override.optionsPropName} prop (replaces the enum values); free text stays allowed`
+      : `autocomplete override: suggestions from the ${spec.override.optionsPropName} prop; free text stays allowed`
+    : "autocomplete override: enum options baked in as suggestions; free text stays allowed";
+
 // Both kit backends emit identical Bound* elements per leaf kind; they
 // differ only in which component binds a boolean (MUI renders a Switch,
 // shadcn a Checkbox) and in which kinds forward a captured description
@@ -2217,6 +2418,23 @@ const boundLeaf =
       spec.description !== undefined && describedKinds.has(spec.kind)
         ? ` ${jsxAttr("description", spec.description)}`
         : "";
+    // The config-fields autocomplete override wins over the kind's default
+    // control (string OR enum — an overridden enum upgrades its select to
+    // the combobox): one Bound component, the options threaded as a prop or
+    // baked from the enum.
+    if (isAutocompleteLeaf(spec)) {
+      return [
+        ...todo,
+        `${ind(level)}{/* ${autocompleteSiteComment(spec)} */}`,
+        `${ind(level)}<BoundAutocompleteField`,
+        `${ind(level + 1)}form={form}`,
+        `${ind(level + 1)}${attr}`,
+        `${ind(level + 1)}${jsxAttr("label", label)}`,
+        ...(desc === "" ? [] : [`${ind(level + 1)}${desc.trimStart()}`]),
+        `${ind(level + 1)}options={${autocompleteOptionsExpr(spec)}}`,
+        `${ind(level)}/>`,
+      ];
+    }
     switch (spec.kind) {
       case "string":
         return [
@@ -2477,7 +2695,12 @@ export const muiAdapterSection = (
   version: MuiVersion = DEFAULT_MUI_VERSION,
 ): string => {
   const { textFieldSlotProps } = muiVersionConfig(version);
-  const needsError = usage.string || usage.date || usage.number || usage.enum;
+  const needsError =
+    usage.string ||
+    usage.date ||
+    usage.number ||
+    usage.enum ||
+    usage.autocomplete;
   const textAdapter = [
     "",
     `${exp}const muiTextFieldProps = <T extends string | null | undefined>(`,
@@ -2560,6 +2783,26 @@ export const muiAdapterSection = (
     "  onBlur: field.onBlur,",
     "});",
   ];
+  // Free text with suggestions (config-fields autocomplete override): the
+  // field stays a string, so the binding is the INPUT value — controlled
+  // inputValue + onInputChange. Typing fires onInputChange (reason "input")
+  // and selecting a suggestion fires it too, so one channel updates the
+  // form either way; `value` stays uncontrolled on purpose (freeSolo — the
+  // selected-option value is not the source of truth, the text is).
+  const autocompleteAdapter = [
+    "",
+    `${exp}const muiAutocompleteProps = <T extends string | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
+    "  freeSolo: true as const,",
+    '  inputValue: field.value ?? "",',
+    "  onInputChange: (_event: SyntheticEvent, value: string) => {",
+    '    field.setValue((value === "" && field.emptyValue === null ? null : value) as T);',
+    "  },",
+    "  // Blur bubbles from the inner input to the Autocomplete root.",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
   return [
     "// ---- formstand → MUI adapter ----------------------------------------------",
     ...(needsError ? withExportPrefix(FIELD_ERROR_HELPER, exp) : []),
@@ -2568,6 +2811,7 @@ export const muiAdapterSection = (
     ...(usage.date ? dateAdapter : []),
     ...(usage.enum ? selectAdapter : []),
     ...(usage.boolean ? switchAdapter : []),
+    ...(usage.autocomplete ? autocompleteAdapter : []),
   ].join("\n");
 };
 
@@ -2673,6 +2917,45 @@ const muiBoundComponents = (
     "  );",
     "};",
   ];
+  // The autocomplete override control: MUI Autocomplete in freeSolo, bound
+  // through the input value (see muiAutocompleteProps). label/error/helper
+  // land on the inner TextField AFTER the params spread (params carries no
+  // name/label/error keys, so nothing is clobbered); name keeps formstand's
+  // focus helpers working through their name walk.
+  const autocomplete = [
+    "",
+    "const BoundAutocompleteField = ({",
+    "  form,",
+    "  path,",
+    "  label,",
+    ...(withDescription ? ["  description,"] : []),
+    "  options,",
+    "}: BoundFieldProps & Readonly<{ options: readonly string[] }>) => {",
+    "  const field = useField<string | null | undefined>(form, path);",
+    "  return (",
+    "    <Autocomplete",
+    "      fullWidth",
+    "      {...muiAutocompleteProps(field)}",
+    "      options={options}",
+    "      renderInput={(params) => (",
+    "        <TextField",
+    "          // The canonical MUI pattern. The cast is for @mui/material",
+    "          // 5/6 only: their params typing (size, the legacy slot",
+    "          // objects) trips exactOptionalPropertyTypes consumers; 7/9",
+    "          // accept the spread as-is.",
+    "          {...(params as unknown as TextFieldProps)}",
+    "          label={label}",
+    "          name={field.path}",
+    "          error={fieldError(field) !== undefined}",
+    withDescription
+      ? "          helperText={fieldError(field) ?? description}"
+      : "          helperText={fieldError(field)}",
+    "        />",
+    "      )}",
+    "    />",
+    "  );",
+    "};",
+  ];
   return [
     ...propsType,
     ...(usage.string ? text : []),
@@ -2680,6 +2963,7 @@ const muiBoundComponents = (
     ...(usage.date ? date : []),
     ...(usage.enum ? select : []),
     ...(usage.boolean ? switchField : []),
+    ...(usage.autocomplete ? autocomplete : []),
   ].join("\n");
 };
 
@@ -2767,6 +3051,7 @@ const muiBackend = (
       ...(hasSection && visual.sections === "collapsible"
         ? ["Accordion", "AccordionDetails", "AccordionSummary"]
         : []),
+      ...(usage.autocomplete ? ["Autocomplete"] : []),
       "Box",
       // --live drops the submit button; arrays still render add/remove.
       ...(scaffold.live && arrays.length === 0 ? [] : ["Button"]),
@@ -2777,13 +3062,20 @@ const muiBackend = (
       ...(usage.enum ? ["MenuItem"] : []),
       "Stack",
       ...(usage.boolean ? ["Switch"] : []),
-      ...(usage.string || usage.date || usage.number || usage.enum
+      // The autocomplete's renderInput is a TextField too (and casts its
+      // params through the exported props type — see BoundAutocompleteField).
+      ...(usage.string ||
+      usage.date ||
+      usage.number ||
+      usage.enum ||
+      usage.autocomplete
         ? ["TextField"]
         : []),
+      ...(usage.autocomplete ? ["type TextFieldProps"] : []),
       ...(hasSection ? ["Typography"] : []),
     ];
     return [
-      ...reactImportLines(true, usage.number, scaffold.live),
+      ...reactImportLines(true, usage.number, scaffold.live, usage.autocomplete),
       "import {",
       ...muiImports.map((name) => `  ${name},`),
       `} from "@mui/material";`,
@@ -2961,7 +3253,9 @@ export const shadcnAdapterSection = (usage: KindUsage, exp = ""): string => {
   return [
     "// ---- formstand → shadcn/ui adapter -----------------------------------------",
     ...(hasLeaf ? withExportPrefix(errorHelper, exp) : []),
-    ...(usage.string ? textAdapter : []),
+    // The autocomplete override binds the same text adapter — its
+    // suggestions ride a native <datalist> on the Input.
+    ...(usage.string || usage.autocomplete ? textAdapter : []),
     ...(usage.number ? numberAdapter : []),
     ...(usage.date ? dateAdapter : []),
     ...(usage.enum ? selectAdapter : []),
@@ -3080,6 +3374,35 @@ const shadcnBoundComponents = (
     "  );",
     "};",
   ];
+  // The autocomplete override control: shadcn ships no installable combobox
+  // (its combobox is a copy-paste recipe), so suggestions ride a native
+  // <datalist> on the Input — DOM-shaped, zero new API surface, and the
+  // field stays free text.
+  const autocomplete = [
+    "",
+    "const BoundAutocompleteField = ({",
+    "  form,",
+    "  path,",
+    "  label,",
+    ...(withDescription ? ["  description,"] : []),
+    "  options,",
+    "}: BoundFieldProps & Readonly<{ options: readonly string[] }>) => {",
+    "  const field = useField<string | null | undefined>(form, path);",
+    "  return (",
+    '    <div className="grid gap-2">',
+    "      <Label htmlFor={path}>{label}</Label>",
+    "      <Input id={path} list={`${path}-datalist`} {...shadcnTextInputProps(field)} />",
+    "      <datalist id={`${path}-datalist`}>",
+    "        {options.map((option) => (",
+    "          <option key={option} value={option} />",
+    "        ))}",
+    "      </datalist>",
+    ...descLines,
+    "      <FieldError field={field} />",
+    "    </div>",
+    "  );",
+    "};",
+  ];
   return [
     ...propsType,
     ...(usage.string ? text : []),
@@ -3087,6 +3410,7 @@ const shadcnBoundComponents = (
     ...(usage.date ? date : []),
     ...(usage.enum ? select : []),
     ...(usage.boolean ? checkbox : []),
+    ...(usage.autocomplete ? autocomplete : []),
   ].join("\n");
 };
 
@@ -3129,9 +3453,10 @@ const shadcnBackend = (
     const hasLeaf = hasLeafUsage(usage);
     return [
       // shadcn's number binding stays the stateless type="number" input, so
-      // no useState import here.
+      // no useState import here. The autocomplete override binds the text
+      // adapter, so it needs ChangeEvent (and Input) too.
       ...reactImportLines(
-        usage.string || usage.date || usage.number,
+        usage.string || usage.date || usage.number || usage.autocomplete,
         false,
         scaffold.live,
       ),
@@ -3142,7 +3467,7 @@ const shadcnBackend = (
       ...(usage.boolean
         ? [`import { Checkbox } from "@/components/ui/checkbox";`]
         : []),
-      ...(usage.string || usage.date || usage.number
+      ...(usage.string || usage.date || usage.number || usage.autocomplete
         ? [`import { Input } from "@/components/ui/input";`]
         : []),
       ...(hasLeaf ? [`import { Label } from "@/components/ui/label";`] : []),
@@ -3255,7 +3580,12 @@ export const chakraAdapterSection = (usage: KindUsage, exp = ""): string => {
   // Error text renders through Field.ErrorText, gated by `invalid` on
   // Field.Root — both read fieldError, so every non-boolean leaf needs it
   // (the Switch renders no error line, like the MUI backend's booleans).
-  const needsError = usage.string || usage.date || usage.number || usage.enum;
+  const needsError =
+    usage.string ||
+    usage.date ||
+    usage.number ||
+    usage.enum ||
+    usage.autocomplete;
   const textAdapter = [
     "",
     `${exp}const chakraTextInputProps = <T extends string | null | undefined>(`,
@@ -3333,7 +3663,11 @@ export const chakraAdapterSection = (usage: KindUsage, exp = ""): string => {
   return [
     "// ---- formstand → Chakra UI v3 adapter --------------------------------------",
     ...(needsError ? withExportPrefix(FIELD_ERROR_HELPER, exp) : []),
-    ...(usage.string ? textAdapter : []),
+    // The autocomplete override binds the same text adapter — its
+    // suggestions ride a native <datalist> on the Input (chakra's Combobox
+    // is Ark's collection-API compound component; see the Bound component's
+    // comment for why the DOM-shaped datalist is the generated binding).
+    ...(usage.string || usage.autocomplete ? textAdapter : []),
     ...(usage.number ? numberAdapter : []),
     ...(usage.date ? dateAdapter : []),
     ...(usage.enum ? selectAdapter : []),
@@ -3437,6 +3771,38 @@ const chakraBoundComponents = (
     "  );",
     "};",
   ];
+  // The autocomplete override control. Chakra 3's own Combobox is Ark's
+  // collection-API compound component (createListCollection + Root/Control/
+  // Input/Positioner/Content/Item and allowCustomValue for free text) — a
+  // disproportionate surface for a faithful free-text-with-suggestions
+  // binding in generated code — so suggestions ride a native <datalist> on
+  // the plain Input instead: DOM-shaped, honest, and the field stays a
+  // string the user can type freely.
+  const autocomplete = [
+    "",
+    "const BoundAutocompleteField = ({",
+    "  form,",
+    "  path,",
+    "  label,",
+    ...(withDescription ? ["  description,"] : []),
+    "  options,",
+    "}: BoundFieldProps & Readonly<{ options: readonly string[] }>) => {",
+    "  const field = useField<string | null | undefined>(form, path);",
+    "  return (",
+    "    <Field.Root invalid={fieldError(field) !== undefined}>",
+    "      <Field.Label>{label}</Field.Label>",
+    "      <Input list={`${path}-datalist`} {...chakraTextInputProps(field)} />",
+    "      <datalist id={`${path}-datalist`}>",
+    "        {options.map((option) => (",
+    "          <option key={option} value={option} />",
+    "        ))}",
+    "      </datalist>",
+    ...descLines,
+    "      <Field.ErrorText>{fieldError(field)}</Field.ErrorText>",
+    "    </Field.Root>",
+    "  );",
+    "};",
+  ];
   return [
     ...propsType,
     ...(usage.string
@@ -3448,6 +3814,7 @@ const chakraBoundComponents = (
       : []),
     ...(usage.enum ? select : []),
     ...(usage.boolean ? switchField : []),
+    ...(usage.autocomplete ? autocomplete : []),
   ].join("\n");
 };
 
@@ -3606,12 +3973,19 @@ const chakraBackend = (
       ...(scaffold.live && arrays.length === 0 ? [] : ["Button"]),
       ...(hasSection && visual.sections === "panel" ? ["Card"] : []),
       // Field.Root/Label/ErrorText wrap every non-boolean control (static
-      // Bound* components and union controls alike).
-      ...(usage.string || usage.date || usage.number || usage.enum
+      // Bound* components and union controls alike, the autocomplete
+      // override included).
+      ...(usage.string ||
+      usage.date ||
+      usage.number ||
+      usage.enum ||
+      usage.autocomplete
         ? ["Field"]
         : []),
       ...(hasSection ? ["Heading"] : []),
-      ...(usage.string || usage.date || usage.number ? ["Input"] : []),
+      ...(usage.string || usage.date || usage.number || usage.autocomplete
+        ? ["Input"]
+        : []),
       ...(usage.enum ? ["NativeSelect"] : []),
       "Stack",
       ...(usage.boolean ? ["Switch"] : []),
@@ -3620,9 +3994,14 @@ const chakraBackend = (
     ];
     return [
       // The Switch adapter's onCheckedChange is a details callback, so only
-      // the DOM-event adapters need ChangeEvent.
+      // the DOM-event adapters need ChangeEvent (the autocomplete override
+      // rides the text adapter).
       ...reactImportLines(
-        usage.string || usage.date || usage.number || usage.enum,
+        usage.string ||
+          usage.date ||
+          usage.number ||
+          usage.enum ||
+          usage.autocomplete,
         usage.number,
         scaffold.live,
       ),
@@ -3711,7 +4090,12 @@ export const mantineAdapterSection = (usage: KindUsage, exp = ""): string => {
   // builders embed `error: fieldError(field)` — every non-boolean leaf needs
   // the helper (the Switch renders no error line, like the other backends'
   // booleans).
-  const needsError = usage.string || usage.date || usage.number || usage.enum;
+  const needsError =
+    usage.string ||
+    usage.date ||
+    usage.number ||
+    usage.enum ||
+    usage.autocomplete;
   const textAdapter = [
     "",
     `${exp}const mantineTextInputProps = <T extends string | null | undefined>(`,
@@ -3789,6 +4173,24 @@ export const mantineAdapterSection = (usage: KindUsage, exp = ""): string => {
     "  onBlur: field.onBlur,",
     "});",
   ];
+  // Free text with suggestions (config-fields autocomplete override):
+  // Mantine's Autocomplete is exactly that semantic — value: string,
+  // onChange: (value: string) => void, the list only suggests. The data
+  // prop stays at the call site (per-field), everything else binds here.
+  const autocompleteAdapter = [
+    "",
+    `${exp}const mantineAutocompleteProps = <T extends string | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
+    "  name: field.path,",
+    '  value: field.value ?? "",',
+    "  error: fieldError(field),",
+    "  onChange: (value: string) => {",
+    '    field.setValue((value === "" && field.emptyValue === null ? null : value) as T);',
+    "  },",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
   return [
     "// ---- formstand → Mantine adapter -------------------------------------------",
     ...(needsError ? withExportPrefix(FIELD_ERROR_HELPER, exp) : []),
@@ -3797,6 +4199,7 @@ export const mantineAdapterSection = (usage: KindUsage, exp = ""): string => {
     ...(usage.date ? dateAdapter : []),
     ...(usage.enum ? selectAdapter : []),
     ...(usage.boolean ? switchAdapter : []),
+    ...(usage.autocomplete ? autocompleteAdapter : []),
   ].join("\n");
 };
 
@@ -3862,6 +4265,24 @@ const mantineBoundComponents = (
     `  return <TextInput label={label}${descAttr} {...numberProps} />;`,
     "};",
   ];
+  // The autocomplete override control: Mantine's own Autocomplete (free
+  // text with suggestions — its native semantic), the options threaded as
+  // `data` (Mantine accepts readonly arrays).
+  const autocomplete = [
+    "",
+    "const BoundAutocompleteField = ({",
+    "  form,",
+    "  path,",
+    "  label,",
+    ...(withDescription ? ["  description,"] : []),
+    "  options,",
+    "}: BoundFieldProps & Readonly<{ options: readonly string[] }>) => {",
+    "  const field = useField<string | null | undefined>(form, path);",
+    "  return (",
+    `    <Autocomplete label={label}${descAttr} data={options} {...mantineAutocompleteProps(field)} />`,
+    "  );",
+    "};",
+  ];
   return [
     ...propsType,
     ...(usage.string
@@ -3881,6 +4302,7 @@ const mantineBoundComponents = (
       : []),
     ...(usage.enum ? select : []),
     ...(usage.boolean ? switchField : []),
+    ...(usage.autocomplete ? autocomplete : []),
   ].join("\n");
 };
 
@@ -4001,10 +4423,10 @@ const mantineBackend = (
 
   return {
   header: (usage, arrays, root) => {
-    const hasLeaf = hasLeafUsage(usage);
     const hasSection = arrays.length > 0 || anyAddressableObjectField(root);
     const mantineImports = [
       ...(hasSection && visual.sections === "collapsible" ? ["Accordion"] : []),
+      ...(usage.autocomplete ? ["Autocomplete"] : []),
       "Box",
       // --live drops the submit button; arrays still render add/remove.
       ...(scaffold.live && arrays.length === 0 ? [] : ["Button"]),
@@ -4023,9 +4445,18 @@ const mantineBackend = (
       ...(hasSection ? ["Title"] : []),
     ];
     return [
-      // Every mantine adapter (the Switch's included) types its onChange
-      // with a DOM ChangeEvent, so any leaf pulls the import in.
-      ...reactImportLines(hasLeaf, usage.number, scaffold.live),
+      // Every DOM-shaped mantine adapter (the Switch's included) types its
+      // onChange with a ChangeEvent; only the autocomplete override is
+      // value-shaped, so it alone pulls no ChangeEvent in.
+      ...reactImportLines(
+        usage.string ||
+          usage.date ||
+          usage.number ||
+          usage.enum ||
+          usage.boolean,
+        usage.number,
+        scaffold.live,
+      ),
       "import {",
       ...mantineImports.map((name) => `  ${name},`),
       `} from "@mantine/core";`,
@@ -4128,7 +4559,12 @@ export const antdAdapterSection = (usage: KindUsage, exp = ""): string => {
   // paints the control; both read fieldError, so every non-boolean leaf
   // needs the helpers (Checkbox renders no error line, like the other
   // backends' booleans).
-  const needsError = usage.string || usage.date || usage.number || usage.enum;
+  const needsError =
+    usage.string ||
+    usage.date ||
+    usage.number ||
+    usage.enum ||
+    usage.autocomplete;
   const errorHelper = [
     ...FIELD_ERROR_HELPER,
     "",
@@ -4241,6 +4677,30 @@ export const antdAdapterSection = (usage: KindUsage, exp = ""): string => {
     "  onBlur: field.onBlur,",
     "});",
   ];
+  // Free text with suggestions (config-fields autocomplete override):
+  // antd's AutoComplete is value-shaped exactly like its Select (onChange
+  // receives the string directly), but the value is the free TEXT, so ""
+  // (not null) is the empty state. Same no-name caveat as the Select: no
+  // form-posting input, so the markup sets id={path} for the focus-helper
+  // fallback.
+  const autocompleteAdapter = [
+    "",
+    "// No `name`: antd's AutoComplete renders no form-posting input.",
+    "// formstand's focus helpers reach it anyway on formstand >= 0.11.0 —",
+    "// their [id=path] fallback finds the combobox through the id={path}",
+    "// the markup sets (antd forwards it to the real input); on 0.10.x and",
+    "// older, focusField/focusFirstError skip it.",
+    `${exp}const antdAutoCompleteProps = <T extends string | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
+    '  value: field.value ?? "",',
+    "  status: fieldStatus(field),",
+    "  onChange: (value: string) => {",
+    '    field.setValue((value === "" && field.emptyValue === null ? null : value) as T);',
+    "  },",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
   return [
     "// ---- formstand → Ant Design adapter ----------------------------------------",
     ...(needsError ? withExportPrefix(errorHelper, exp) : []),
@@ -4249,6 +4709,7 @@ export const antdAdapterSection = (usage: KindUsage, exp = ""): string => {
     ...(usage.date ? dateAdapter : []),
     ...(usage.enum ? selectAdapter : []),
     ...(usage.boolean ? checkboxAdapter : []),
+    ...(usage.autocomplete ? autocompleteAdapter : []),
   ].join("\n");
 };
 
@@ -4337,6 +4798,35 @@ const antdBoundComponents = (
     "  );",
     "};",
   ];
+  // The autocomplete override control: antd's AutoComplete, options mapped
+  // to its { value } shape at the call site, the explicit label/FieldError
+  // lines from the established antd pattern (no Form.Item — formstand owns
+  // the state), id={path} for the focus-helper fallback (see the adapter's
+  // no-name comment).
+  const autocomplete = [
+    "",
+    "const BoundAutocompleteField = ({",
+    "  form,",
+    "  path,",
+    "  label,",
+    ...(withDescription ? ["  description,"] : []),
+    "  options,",
+    "}: BoundFieldProps & Readonly<{ options: readonly string[] }>) => {",
+    "  const field = useField<string | null | undefined>(form, path);",
+    "  return (",
+    '    <Flex vertical gap="small">',
+    "      <label htmlFor={path}>{label}</label>",
+    "      <AutoComplete",
+    "        id={path}",
+    "        options={options.map((option) => ({ value: option }))}",
+    "        {...antdAutoCompleteProps(field)}",
+    "      />",
+    ...descLines,
+    "      <FieldError field={field} />",
+    "    </Flex>",
+    "  );",
+    "};",
+  ];
   return [
     ...propsType,
     ...(usage.string
@@ -4356,6 +4846,7 @@ const antdBoundComponents = (
       : []),
     ...(usage.enum ? select : []),
     ...(usage.boolean ? checkbox : []),
+    ...(usage.autocomplete ? autocomplete : []),
   ].join("\n");
 };
 
@@ -4507,8 +4998,14 @@ const antdBackend = (
   return {
   header: (usage, arrays, root) => {
     const hasSection = arrays.length > 0 || anyAddressableObjectField(root);
-    const needsError = usage.string || usage.date || usage.number || usage.enum;
+    const needsError =
+      usage.string ||
+      usage.date ||
+      usage.number ||
+      usage.enum ||
+      usage.autocomplete;
     const antdImports = [
+      ...(usage.autocomplete ? ["AutoComplete"] : []),
       // --live drops the submit button; arrays still render add/remove.
       ...(scaffold.live && arrays.length === 0 ? [] : ["Button"]),
       ...(hasSection && visual.sections === "panel" ? ["Card"] : []),
@@ -4761,6 +5258,52 @@ const templateBoundComponent = (
   ];
 };
 
+// The autocomplete-override wrapper for the template backend. Overrides WIN
+// over the template: a template owns per-KIND rendering, and an overridden
+// field opted out of its kind's default — so the override emission (plain's
+// input + native <datalist>) applies, not template.leaf.string. Unlike
+// plain's own AutocompleteField, the description arrives as a prop (the
+// boundLeaf path passes it), rendered in plain's separate zf-help slot.
+const templateAutocompleteComponent = (
+  withDescription: boolean,
+): readonly string[] => [
+  "",
+  "// autocomplete override: the config-fields override wins over the",
+  "// template's per-kind renderers — plain input + native <datalist>.",
+  "const BoundAutocompleteField = ({",
+  "  form,",
+  "  path,",
+  "  label,",
+  ...(withDescription ? ["  description,"] : []),
+  "  options,",
+  "}: BoundFieldProps & Readonly<{ options: readonly string[] }>) => {",
+  "  const field = useField<string | null | undefined>(form, path);",
+  "  return (",
+  '    <div className="zf-field">',
+  '      <label className="zf-label">',
+  "        {label}",
+  "        <input list={`${path}-datalist`} {...textInputProps(field)} />",
+  "      </label>",
+  "      <datalist id={`${path}-datalist`}>",
+  "        {options.map((option) => (",
+  "          <option key={option} value={option} />",
+  "        ))}",
+  "      </datalist>",
+  ...(withDescription
+    ? [
+        "      {description !== undefined ? (",
+        '        <p className="zf-help">{description}</p>',
+        "      ) : null}",
+      ]
+    : []),
+  "      {field.error?.[0] !== undefined ? (",
+  '        <p role="alert">{field.error?.[0]}</p>',
+  "      ) : null}",
+  "    </div>",
+  "  );",
+  "};",
+];
+
 // The wrapper components, one per kind that renders as a STATIC leaf (gated on
 // static-leaf usage like the kit backends' Bound components — a union-only kind
 // renders from a hoisted hook and needs no wrapper).
@@ -4785,6 +5328,9 @@ const templateBoundComponents = (
       : []),
     ...(staticUsage.boolean
       ? templateBoundComponent(template, "boolean", withDescription)
+      : []),
+    ...(staticUsage.autocomplete
+      ? templateAutocompleteComponent(withDescription)
       : []),
   ].join("\n");
 
@@ -4874,7 +5420,9 @@ const templateBackend = (
       // through the plain prop builder, so the builder imports track TOTAL
       // usage (not just the union-control usage the plain backend gates on).
       const builderImports = [
-        ...(usage.string ? ["textInputProps"] : []),
+        // The autocomplete override binds textInputProps too (dedupe when
+        // plain strings are also present).
+        ...(usage.string || usage.autocomplete ? ["textInputProps"] : []),
         ...(usage.number ? ["numberInputProps"] : []),
         ...(usage.date ? ["dateInputProps"] : []),
         ...(usage.boolean ? ["checkboxProps"] : []),

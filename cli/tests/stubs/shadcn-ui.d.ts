@@ -43,6 +43,9 @@ declare module "@/components/ui/input" {
       name?: string;
       value?: string;
       className?: string;
+      // The native datalist hookup (shadcn's Input forwards DOM props) —
+      // the autocomplete override binds suggestions through it.
+      list?: string;
       "aria-invalid"?: boolean;
       onChange?: (event: ChangeEvent<HTMLInputElement>) => void;
       onBlur?: () => void;

@@ -53,7 +53,7 @@ Without `--out`, both files print to stdout separated by `// --- file: ...` head
 | `--schema-out <file>` | type mode: where the generated zod schema goes (default `<schemaName>.ts` next to `--out`) |
 | `--live` | live/no-submit form (a map or preview consumes the values as they change): the submit scaffold — `handleSubmit`, the submit button, `useIsSubmitting` — is omitted entirely, the component accepts an optional `onValuesChange?: (values) => void` prop wired through `form.watchValues` (available since formstand 0.2; once on a post-0.12 formstand, `useFormValues(form)` is the render-side one-liner), and the emitted validation mode defaults to `"onChange"` — a live consumer wants validity that tracks the values, not the library-default `"onBlur"` lag. The root element stays a `<form>` for its semantics (label association, the form landmark) with a `preventDefault` `onSubmit` so the browser's implicit Enter-key submission can't navigate the page. Composes with every `--ui`, both layouts, and `--form-prop` |
 | `--form-prop` | the page owns the form: the component's props gain `form: Form<typeof schema>` and it stops calling `useForm` itself — the `useForm` scaffold is still emitted, as an exported `use{Name}Form()` hook the page calls, so one instance can feed the generated UI **and** anything else (a map, an autosave effect). With `--layout module` the component takes the prop too, but the module's field hooks stay pre-wired to the exported singleton — pass that instance (e.g. `profileForm` from `./hooks`). Combined with `--live`, the generated component is pure rendering and `onValuesChange` subscribes to the passed form |
-| `--config <file>` | config file (default: `formstand.config.{ts,mts,js,mjs}` in the working directory) holding project defaults for `ui`/`layout`/`sections`/`columns`/`live`/`formProp`; explicit flags win |
+| `--config <file>` | config file (default: `formstand.config.{ts,mts,js,mjs}` in the working directory) holding project defaults for `ui`/`layout`/`sections`/`columns`/`live`/`formProp` (explicit flags win) plus per-field component overrides (`fields` — see below) |
 | `--watch` | regenerate whenever the input file changes (requires `--out`) |
 | `--template <file>` | a custom template module (`defineTemplate`) for a UI kit formstand doesn't ship — overrides the per-kind field rendering, inheriting the plain form scaffold; `--layout single` only, overrides `--ui` |
 | `--force` | overwrite existing output files |
@@ -126,6 +126,38 @@ export default defineConfig({
 ```
 
 `defineConfig` is an identity function with types — completion and typo-checking in the config file. `ui` accepts the same spellings as `--ui`, including the versioned `"mui@5"` … `"mui@9"`, `"chakra"` (or its explicit spelling `"chakra@3"`), `"mantine"` (or `"mantine@9"`), and `"antd"` (or `"antd@6"`). Pair it with `--watch` for schema-first development: edit the schema, the module regenerates.
+
+### Per-field component overrides (`fields`)
+
+Some fields want a different control than their schema kind implies — the classic case is a string whose suggestion list is **data**, not a zod enum (an ICAO airport field backed by an airport list). The `fields` block names such fields by path and swaps the emitted component:
+
+```ts
+export default defineConfig({
+  fields: {
+    "icao": { component: "autocomplete", optionsProp: true },
+    "crew.*.role": { component: "autocomplete", optionsProp: true }, // array rows via *
+    "aircraft": { component: "autocomplete" }, // enum: select → combobox, values baked in
+  },
+});
+```
+
+- **Paths** are exact dot paths against the walked schema; `*` matches one array-index segment (`"crew.*.role"` = the `role` field of every `crew` row, `"tags.*"` = the rows of a string array). A path that matches nothing is a generation-time **error** (exit 1, nothing written) with near-miss suggestions — same loud-failure style as a typo'd flag.
+- **Semantic: free text with suggestions.** The field stays a string the user can type freely; the list only suggests. Strict select-from-list remains the enum/Select default — an override is how you say "this string has known likely values".
+- **Options source rules.** A **string** field requires `optionsProp: true` (there is no other options source); the generated component then takes a required `{camelPath}Options: readonly string[]` prop — `"crew.*.role"` → `crewRoleOptions` (`*` segments dropped, camel-joined, `Options` appended; name collisions get `2`, `3`, … suffixes like every derived identifier). An **enum** field defaults to its baked-in values as the suggestions; `optionsProp: true` REPLACES them with the prop. Non-string/enum fields, degraded (TODO'd) fields, and — under `--layout module` — fields inside objects nested in array rows are errors.
+- **Per-kit components:**
+
+  | `--ui` | emitted control |
+  | --- | --- |
+  | `plain` | `<input>` + native `<datalist>` (dependency-free) |
+  | `mui` | `Autocomplete` `freeSolo`, bound through the input value (`inputValue`/`onInputChange`); `renderInput` is the kit `TextField` with label/error/helper |
+  | `shadcn` | `Input` + native `<datalist>` (shadcn's combobox is a copy-paste recipe, not an installable component) |
+  | `chakra` | `Input` + native `<datalist>` inside `Field.Root` (Chakra 3's `Combobox` is Ark's collection-API compound component — out of proportion for generated suggestions) |
+  | `mantine` | `Autocomplete` (natively this semantic: `value: string`, `onChange(value)`, `data`) |
+  | `antd` | `AutoComplete` (value-shaped like its Select; `status` for errors; `id={path}` for the focus-helper fallback — it renders no `name`d input) |
+
+- **Both layouts** thread the options prop from the top-level component down (`--layout module`: form file → section file → row/field files, nested-array extractions included), and it composes with `--live`/`--form-prop` — the options props join the same generated props type.
+- **Templates:** a custom `--template` owns per-KIND rendering; an overridden field opted out of its kind, so the override emission wins for that field and the template keeps every other one.
+- Each override site in the generated file carries a short comment naming the options source (prop or baked enum values). `component: "autocomplete"` is the only flavor today; the shape leaves room for more.
 
 ## Custom templates
 

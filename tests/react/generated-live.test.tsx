@@ -35,11 +35,29 @@ describe("generated --live --form-prop demo (FlightSearchForm + consumer page)",
     expect(panel.textContent).toContain('"origin": ""');
 
     // A text field: the panel updates per keystroke through the generated
-    // component's watchValues subscription, not a render-side hook.
+    // component's watchValues subscription, not a render-side hook. origin
+    // rides the config-fields autocomplete override, so it is a free-text
+    // input WITH a native datalist of suggestions — typing works exactly as
+    // before.
     const origin = screen.getByLabelText("Origin") as HTMLInputElement;
     fireEvent.change(origin, { target: { value: "KSEA" } });
     expect(origin.value).toBe("KSEA");
     expect(panel.textContent).toContain('"origin": "KSEA"');
+
+    // The autocomplete override's suggestion plumbing: the input points at
+    // its own datalist (list="origin-datalist"), and the datalist renders
+    // the airport options the page passed through originOptions.
+    expect(origin.getAttribute("list")).toBe("origin-datalist");
+    const datalist = document.getElementById("origin-datalist");
+    expect(datalist?.tagName).toBe("DATALIST");
+    const values = [...(datalist?.querySelectorAll("option") ?? [])].map(
+      (option) => option.value,
+    );
+    expect(values).toContain("KSEA");
+    expect(values).toContain("KPDX");
+    // Free text stays allowed: a value OUTSIDE the list still flows.
+    fireEvent.change(origin, { target: { value: "ZZZZ" } });
+    expect(panel.textContent).toContain('"origin": "ZZZZ"');
 
     // A number field: the parsed number (not its text) crosses the channel.
     const passengers = screen.getByLabelText("Passengers") as HTMLInputElement;

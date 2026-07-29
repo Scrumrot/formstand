@@ -38,6 +38,61 @@
 
 ### Added
 
+- **Per-field component overrides — `fields` in `formstand.config.ts`,
+  with an `autocomplete` flavor and a generated options prop.** The
+  motivating case (straight from the dogfood project): an ICAO airport
+  field is a plain `z.string()` whose suggestion list is DATA — an airport
+  list, not a zod enum — so the CLI emitted a bare text input and the page
+  hand-swapped it for the kit's autocomplete on every regeneration. Now
+  the config names the field and the component:
+
+  ```ts
+  export default defineConfig({
+    fields: {
+      "icao": { component: "autocomplete", optionsProp: true },
+      "crew.*.role": { component: "autocomplete", optionsProp: true },
+    },
+  });
+  ```
+
+  Paths are exact dot paths against the walked schema, `*` matching one
+  array-index segment. The semantic is **free text with suggestions** (the
+  one autocomplete meaning every kit shares): the field stays a string the
+  user can type freely; strict select-from-list remains the enum/Select
+  path. Overrides apply to **string** fields (`optionsProp: true` is
+  required — there is no other options source; the generated component
+  gains `{camelPath}Options: readonly string[]`, e.g. `"crew.*.role"` →
+  `crewRoleOptions`, collision-suffixed like every derived identifier) and
+  **enum** fields (the select upgrades to a combobox seeded with the enum
+  values baked in; `optionsProp: true` REPLACES them with the prop).
+  Everything else is a loud generation-time ERROR, exit 1, nothing
+  written: an unknown path (with near-miss suggestions), a non-string/enum
+  target, a string without `optionsProp`, a walker-degraded or
+  over-FieldPath-budget field, an override under a row-nested object with
+  `--layout module` (that layout degrades those to a TODO). Per-kit
+  bindings, each proven against the real installed `.d.ts` by the matrix:
+  MUI `Autocomplete` `freeSolo` bound through the INPUT value
+  (`inputValue`/`onInputChange`, so typing and picking both update the
+  form); Mantine `Autocomplete` (natively this semantic — value-shaped
+  `onChange`, `data` accepts readonly arrays); antd `AutoComplete`
+  (value-shaped like its Select, `status` for errors, `id={path}` for the
+  focus-helper fallback — no `name` exists); plain, shadcn, and Chakra ride
+  an `Input` + native `<datalist>` (shadcn's combobox is a copy-paste
+  recipe, not an installable component; Chakra 3's `Combobox` is Ark's
+  collection-API compound component — disproportionate for generated
+  free-text suggestions, so the DOM-shaped datalist is the honest
+  binding). Both layouts thread the options prop root → section → row/field
+  files (nested-array extractions included); composes with `--live` and
+  `--form-prop` (the props join the same props type); an overridden field
+  wins over a custom `--template`'s per-kind renderer (templates own
+  per-KIND rendering; an override opts the field out of its kind). Each
+  override site carries a short generated comment naming the options
+  source. `component: "autocomplete"` is the only flavor this cycle; the
+  config shape is a discriminated union so future flavors (textarea,
+  slider, ...) slot in. The playground's flight-search demo now generates
+  its origin/destination ICAO fields through the override (the suggestion
+  list passed by the page), making the dogfood project's exact page real
+  CLI output.
 - **`--live` — live/no-submit scaffold mode** (config key `live`). For
   forms nothing ever submits (a map or preview re-rendering from every
   value change): the submit scaffold — `handleSubmit`, the submit button,

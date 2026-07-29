@@ -20,9 +20,13 @@ import {
   allocateBindingVar,
   antdAdapterSection,
   assertObjectRoot,
+  autocompleteOptionsExpr,
+  autocompleteSiteComment,
   chakraAdapterSection,
+  collectOptionsProps,
   collectUsage,
   commentText,
+  isAutocompleteLeaf,
   describedLeafKinds,
   emitInitialValues,
   gridChakraProps,
@@ -269,6 +273,72 @@ const buildPlan = (root: ObjectSpec, naming: Naming): Plan => {
 const todoTexts = (spec: FieldSpec): readonly string[] =>
   spec.todo !== undefined ? [commentText(spec.todo)] : [];
 
+// ---------------------------------------------------------------------------
+// Options-prop threading (config-fields autocomplete overrides)
+// ---------------------------------------------------------------------------
+
+// The options prop one leaf consumes (empty for non-overridden leaves and
+// baked-enum overrides).
+const leafOptionsProp = (spec: FieldSpec): readonly string[] =>
+  spec.override?.optionsPropName !== undefined
+    ? [spec.override.optionsPropName]
+    : [];
+
+// The options props an array ROW's item subtree consumes, restricted to what
+// the module layout renders: an object item's scalar fields and its nested
+// arrays (recursively) — objects nested inside rows degrade to a TODO, and
+// applyFieldOverrides rejects override paths under them for --layout module,
+// so nothing is collected there. Every collected prop is threaded
+// section → Rows → Row and consumed by a rendered control.
+const rowItemOptionsProps = (item: FieldSpec): readonly string[] => {
+  switch (item.kind) {
+    case "object":
+      return item.fields
+        .filter((field) => !isUnaddressable(field.name))
+        .flatMap((field) =>
+          field.spec.kind === "array"
+            ? rowItemOptionsProps(field.spec.item)
+            : isScalarSpec(field.spec)
+              ? leafOptionsProp(field.spec)
+              : [],
+        );
+    case "array":
+      return rowItemOptionsProps(item.item);
+    case "tuple":
+    case "union":
+      return [];
+    default:
+      return leafOptionsProp(item);
+  }
+};
+
+// The options props a top-level SECTION's subtree consumes (the section
+// component declares them; the form file passes them down).
+const sectionOptionsProps = (spec: FieldSpec): readonly string[] => {
+  switch (spec.kind) {
+    case "object":
+      return spec.fields
+        .filter((field) => !isUnaddressable(field.name))
+        .flatMap((field) => sectionOptionsProps(field.spec));
+    case "array":
+      return rowItemOptionsProps(spec.item);
+    case "tuple":
+    case "union":
+      return [];
+    default:
+      return leafOptionsProp(spec);
+  }
+};
+
+// Props-type lines and destructured params for a component that accepts
+// options props alongside its own fields — one production so every file
+// (sections, rows, fields) declares them identically.
+const optionsPropsTypeFields = (names: readonly string[]): readonly string[] =>
+  names.map((name) => `${name}: readonly string[]`);
+
+const optionsPropsAttrs = (names: readonly string[]): string =>
+  names.map((name) => ` ${name}={${name}}`).join("");
+
 type ImportLine = Readonly<{ from: string; names: readonly string[] }>;
 
 // Merge import needs per module specifier, preserving first-seen order.
@@ -325,6 +395,55 @@ const baseLeafImports = (
   ui: ModuleUi,
   spec: FieldSpec,
 ): readonly ImportLine[] => {
+  // The config-fields autocomplete override wins over the kind's default
+  // control, so it swaps the import set wholesale (string and enum alike).
+  if (isAutocompleteLeaf(spec)) {
+    switch (ui) {
+      case "plain":
+        return [{ from: "formstand", names: ["textInputProps"] }];
+      case "mui":
+        return [
+          {
+            from: "@mui/material",
+            names: ["Autocomplete", "TextField", "type TextFieldProps"],
+          },
+          {
+            from: "../adapter",
+            names: ["fieldError", "muiAutocompleteProps"],
+          },
+        ];
+      case "mantine":
+        return [
+          { from: "@mantine/core", names: ["Autocomplete"] },
+          { from: "../adapter", names: ["mantineAutocompleteProps"] },
+        ];
+      case "antd":
+        return [
+          { from: "antd", names: ["AutoComplete", "Flex"] },
+          {
+            from: "../adapter",
+            names: ["FieldError", "antdAutoCompleteProps"],
+          },
+        ];
+      case "chakra":
+        return [
+          { from: "@chakra-ui/react", names: ["Field", "Input"] },
+          {
+            from: "../adapter",
+            names: ["chakraTextInputProps", "fieldError"],
+          },
+        ];
+      case "shadcn":
+        return [
+          { from: "@/components/ui/input", names: ["Input"] },
+          { from: "@/components/ui/label", names: ["Label"] },
+          {
+            from: "../adapter",
+            names: ["FieldError", "shadcnTextInputProps"],
+          },
+        ];
+    }
+  }
   switch (ui) {
     case "plain": {
       const builder =
@@ -575,6 +694,148 @@ const numberPropsBindings = (
         );
 };
 
+// The autocomplete-override control, bound to `varName` — the module-layout
+// twin of the single-file Bound autocomplete components (same per-kit
+// bindings: MUI Autocomplete freeSolo on the input value, Mantine
+// Autocomplete, antd AutoComplete, plain/shadcn/chakra Input + native
+// <datalist>). The datalist id derives from the bound path at runtime, so
+// array rows each get their own list.
+const autocompleteLeafJsx = (
+  ui: ModuleUi,
+  spec: FieldSpec,
+  varName: string,
+  labelAttr: string,
+  idAttr: string | undefined,
+  indent: string,
+): readonly string[] => {
+  const optionsExpr = autocompleteOptionsExpr(spec);
+  const listAttr = `{\`\${${varName}.path}-datalist\`}`;
+  const datalist = [
+    `${indent}  <datalist id=${listAttr}>`,
+    `${indent}    {${optionsExpr}.map((option) => (`,
+    `${indent}      <option key={option} value={option} />`,
+    `${indent}    ))}`,
+    `${indent}  </datalist>`,
+  ];
+  switch (ui) {
+    case "plain": {
+      const desc =
+        spec.description !== undefined
+          ? [
+              `${indent}  <p className="zf-help">${jsxText(spec.description)}</p>`,
+            ]
+          : [];
+      return [
+        `${indent}<div>`,
+        `${indent}  <label>`,
+        `${indent}    ${labelAttr}`,
+        `${indent}    <input list=${listAttr} {...textInputProps(${varName})} />`,
+        `${indent}  </label>`,
+        ...datalist,
+        ...desc,
+        `${indent}  {${varName}.error?.[0] !== undefined ? (`,
+        `${indent}    <p role="alert">{${varName}.error?.[0]}</p>`,
+        `${indent}  ) : null}`,
+        `${indent}</div>`,
+      ];
+    }
+    case "mui":
+      return [
+        `${indent}<Autocomplete`,
+        `${indent}  fullWidth`,
+        `${indent}  {...muiAutocompleteProps(${varName})}`,
+        `${indent}  options={${optionsExpr}}`,
+        `${indent}  renderInput={(params) => (`,
+        `${indent}    <TextField`,
+        `${indent}      // The canonical MUI pattern. The cast is for`,
+        `${indent}      // @mui/material 5/6 only: their params typing trips`,
+        `${indent}      // exactOptionalPropertyTypes consumers; 7/9 accept`,
+        `${indent}      // the spread as-is.`,
+        `${indent}      {...(params as unknown as TextFieldProps)}`,
+        `${indent}      label=${labelAttr}`,
+        `${indent}      name={${varName}.path}`,
+        `${indent}      error={fieldError(${varName}) !== undefined}`,
+        spec.description !== undefined
+          ? `${indent}      helperText={fieldError(${varName}) ?? ${q(spec.description)}}`
+          : `${indent}      helperText={fieldError(${varName})}`,
+        `${indent}    />`,
+        `${indent}  )}`,
+        `${indent}/>`,
+      ];
+    case "mantine": {
+      const descAttr =
+        spec.description !== undefined
+          ? ` description=${jsxText(spec.description)}`
+          : "";
+      return [
+        `${indent}<Autocomplete label=${labelAttr}${descAttr} data={${optionsExpr}} {...mantineAutocompleteProps(${varName})} />`,
+      ];
+    }
+    case "antd": {
+      const id = idAttr ?? `{${q("")}}`;
+      const descLines =
+        spec.description !== undefined
+          ? [
+              `${indent}  {fieldError(${varName}) === undefined ? (`,
+              `${indent}    <Typography.Text type="secondary">${jsxText(spec.description)}</Typography.Text>`,
+              `${indent}  ) : null}`,
+            ]
+          : [];
+      return [
+        `${indent}<Flex vertical gap="small">`,
+        `${indent}  <label htmlFor=${id}>${labelAttr}</label>`,
+        `${indent}  <AutoComplete`,
+        `${indent}    id=${id}`,
+        `${indent}    options={${optionsExpr}.map((option) => ({ value: option }))}`,
+        `${indent}    {...antdAutoCompleteProps(${varName})}`,
+        `${indent}  />`,
+        ...descLines,
+        `${indent}  <FieldError field={${varName}} />`,
+        `${indent}</Flex>`,
+      ];
+    }
+    case "chakra": {
+      const descLines =
+        spec.description !== undefined
+          ? [
+              `${indent}  {fieldError(${varName}) === undefined ? (`,
+              `${indent}    <Field.HelperText>${jsxText(spec.description)}</Field.HelperText>`,
+              `${indent}  ) : null}`,
+            ]
+          : [];
+      return [
+        `${indent}<Field.Root invalid={fieldError(${varName}) !== undefined}>`,
+        `${indent}  <Field.Label>${labelAttr}</Field.Label>`,
+        `${indent}  <Input list=${listAttr} {...chakraTextInputProps(${varName})} />`,
+        ...datalist,
+        ...descLines,
+        `${indent}  <Field.ErrorText>{fieldError(${varName})}</Field.ErrorText>`,
+        `${indent}</Field.Root>`,
+      ];
+    }
+    case "shadcn": {
+      const id = idAttr ?? `{${q("")}}`;
+      const descLines =
+        spec.description !== undefined
+          ? [
+              `${indent}  {fieldError(${varName}) === undefined ? (`,
+              `${indent}    <p className="text-sm text-muted-foreground">${jsxText(spec.description)}</p>`,
+              `${indent}  ) : null}`,
+            ]
+          : [];
+      return [
+        `${indent}<div className="grid gap-2">`,
+        `${indent}  <Label htmlFor=${id}>${labelAttr}</Label>`,
+        `${indent}  <Input id=${id} list=${listAttr} {...shadcnTextInputProps(${varName})} />`,
+        ...datalist,
+        ...descLines,
+        `${indent}  <FieldError field={${varName}} />`,
+        `${indent}</div>`,
+      ];
+    }
+  }
+};
+
 // The labeled control for one leaf bound to `varName`, at `indent`.
 // `labelAttr` is a JSX expression container string (e.g. `{label}` or
 // `{"Email"}`); `idAttr` likewise, or undefined where the kit needs none.
@@ -586,6 +847,10 @@ const leafJsx = (
   idAttr: string | undefined,
   indent: string,
 ): readonly string[] => {
+  // The autocomplete override swaps the whole control, string or enum.
+  if (isAutocompleteLeaf(spec)) {
+    return autocompleteLeafJsx(ui, spec, varName, labelAttr, idAttr, indent);
+  }
   switch (ui) {
     case "plain": {
       const control =
@@ -932,6 +1197,11 @@ const leafControl = (
   indent: string,
 ): readonly string[] => [
   ...todoTexts(spec).map((text) => `${indent}{/* TODO: ${text} */}`),
+  // The override-site documentation comment (same production as the
+  // single-file backends).
+  ...(isAutocompleteLeaf(spec)
+    ? [`${indent}{/* ${autocompleteSiteComment(spec)} */}`]
+    : []),
   ...leafJsx(ui, spec, varName, labelAttr, idAttr, indent),
 ];
 
@@ -1808,10 +2078,13 @@ const adapterFile = (
     content: [
       HEADER,
       // The stateful number hook needs useState; shadcn's number binding
-      // stays the stateless type="number" builder.
+      // stays the stateless type="number" builder. The mui autocomplete
+      // adapter types onInputChange's event with SyntheticEvent.
       ...reactImportLines(
         needsChangeEvent,
         usage.number && ui !== "shadcn",
+        false,
+        ui === "mui" && usage.autocomplete,
       ),
       ...antdImports,
       "import {",
@@ -1835,6 +2108,13 @@ const fieldFile = (
   const propsType = `${field.componentName}Props`;
   const hookName = `use${field.componentName}`;
   const imports = mergeImports([...leafImports(ui, field.spec)]);
+  // An overridden field's suggestions arrive as a required options prop (the
+  // section/form files thread it down from the page).
+  const optionsProps = leafOptionsProp(field.spec);
+  const propsTypeFields = [
+    "label?: string",
+    ...optionsPropsTypeFields(optionsProps),
+  ];
   return {
     path: `fields/${field.componentName}.tsx`,
     content: [
@@ -1842,14 +2122,18 @@ const fieldFile = (
       ...imports,
       `import { ${naming.hook("Field")} } from "../hooks";`,
       "",
-      `export type ${propsType} = Readonly<{ label?: string }>;`,
+      `export type ${propsType} = Readonly<{ ${propsTypeFields.join("; ")} }>;`,
       "",
       `export const ${hookName} = () => ${naming.hook("Field")}(${q(path)});`,
       "",
       `export const ${field.componentName} = ({`,
       `  label = ${q(field.label)},`,
+      ...optionsProps.map((name) => `  ${name},`),
       `}: ${propsType}) => {`,
       ...todoTexts(field.spec).map((text) => `  // TODO: ${text}`),
+      ...(isAutocompleteLeaf(field.spec)
+        ? [`  // ${autocompleteSiteComment(field.spec)}`]
+        : []),
       `  const field = ${hookName}();`,
       ...numberPropsBindings(ui, [{ varName: "field", spec: field.spec }]),
       "  return (",
@@ -2096,6 +2380,11 @@ const nestedArrayComponents = (
   const shell = arrayShell(ui, entry.label);
   const wrap = nestedListShell(ui, entry.label);
   const scalarItem = isScalarSpec(entry.item);
+  // Options props consumed anywhere in this entry's item subtree: Rows and
+  // Row both declare them, references pass them through from the enclosing
+  // scope, and each child ref forwards its own subset — so the chain
+  // composes to any nesting depth.
+  const entryOptionsProps = rowItemOptionsProps(entry.item);
 
   // This row's own index becomes the next hole for arrays extracted from it.
   const rowIndexHole = `p${entry.holes.length}`;
@@ -2145,12 +2434,13 @@ const nestedArrayComponents = (
     };
   };
 
-  // <ChildRows p0={p0} ... pN={index} /> — this row's ancestors plus its index.
+  // <ChildRows p0={p0} ... pN={index} /> — this row's ancestors plus its
+  // index, plus the child subtree's options props (in scope on this Row).
   const childRef = (child: NestedArrayEntry): string =>
     `      <${child.stem}Rows ${[
       ...entry.holes.map((h) => `${h}={${h}}`),
       `${rowIndexHole}={index}`,
-    ].join(" ")} />`;
+    ].join(" ")}${optionsPropsAttrs(rowItemOptionsProps(child.item))} />`;
 
   const dynamicId = (name: string | undefined): string =>
     name === undefined
@@ -2316,6 +2606,8 @@ const nestedArrayComponents = (
 
   const holeParams = entry.holes.map((h) => `  ${h},`);
   const holeTypes = entry.holes.map((h) => `${h}: number`);
+  const optionsParams = entryOptionsProps.map((name) => `  ${name},`);
+  const optionsTypes = optionsPropsTypeFields(entryOptionsProps);
 
   const lines = [
     // Children are declared before the Row that references them.
@@ -2328,7 +2620,8 @@ const nestedArrayComponents = (
     ...holeParams,
     "  index,",
     "  onRemove,",
-    `}: Readonly<{ ${[...holeTypes, "index: number", "onRemove: () => void"].join("; ")} }>) => {`,
+    ...optionsParams,
+    `}: Readonly<{ ${[...holeTypes, "index: number", "onRemove: () => void", ...optionsTypes].join("; ")} }>) => {`,
     ...parts.bindings,
     "  return (",
     ...shell.rowOpen,
@@ -2337,12 +2630,13 @@ const nestedArrayComponents = (
     "  );",
     "};",
     "",
-    ...(entry.holes.length === 0
+    ...(entry.holes.length === 0 && entryOptionsProps.length === 0
       ? [`const ${rowsName} = () => {`]
       : [
           `const ${rowsName} = ({`,
           ...holeParams,
-          `}: Readonly<{ ${holeTypes.join("; ")} }>) => {`,
+          ...optionsParams,
+          `}: Readonly<{ ${[...holeTypes, ...optionsTypes].join("; ")} }>) => {`,
         ]),
     `  const rows = ${naming.hook("FieldArray")}(${entry.listArg});`,
     "  return (",
@@ -2353,6 +2647,7 @@ const nestedArrayComponents = (
     ...entry.holes.map((h) => `          ${h}={${h}}`),
     "          index={index}",
     "          onRemove={() => rows.remove(index)}",
+    ...entryOptionsProps.map((name) => `          ${name}={${name}}`),
     "        />",
     "      ))}",
     ...shell.listError,
@@ -2442,7 +2737,9 @@ const objectSectionFile = (
             ? [
                 `${indent}{/* TODO: nested array ${commentText(q(at.join(".")))} — extract a row component with its own ${naming.hook("FieldArray")} */}`,
               ]
-            : [`${indent}<${entry.stem}Rows />`];
+            : [
+                `${indent}<${entry.stem}Rows${optionsPropsAttrs(rowItemOptionsProps(entry.item))} />`,
+              ];
         }
         case "union":
           // A union nested inside an object section: only top-level unions
@@ -2458,11 +2755,14 @@ const objectSectionFile = (
           ];
         default: {
           // Over-budget scalars were never planned (collectLeaves skips
-          // them) — the guard above already emitted their TODO.
+          // them) — the guard above already emitted their TODO. Overridden
+          // fields get their options prop threaded through.
           const planned = own(at);
           return planned === undefined
             ? []
-            : [`${indent}<${planned.componentName} />`];
+            : [
+                `${indent}<${planned.componentName}${optionsPropsAttrs(leafOptionsProp(planned.spec))} />`,
+              ];
         }
       }
     });
@@ -2492,6 +2792,14 @@ const objectSectionFile = (
           `import type { ${naming.valuesType} } from "../types";`,
         ];
 
+  // Options props consumed anywhere under this section (field files and
+  // nested rows): declared here, passed in by the form file.
+  const sectionProps = sectionOptionsProps(spec);
+  const sectionPropsTypeFields = [
+    "heading?: string",
+    ...optionsPropsTypeFields(sectionProps),
+  ];
+
   return {
     path: `sections/${section.componentName}.tsx`,
     content: [
@@ -2503,7 +2811,7 @@ const objectSectionFile = (
       ...hooksImports,
       ...fieldImports,
       "",
-      `export type ${propsType} = Readonly<{ heading?: string }>;`,
+      `export type ${propsType} = Readonly<{ ${sectionPropsTypeFields.join("; ")} }>;`,
       "",
       "// The section hook is the path-scoped flags: dirty/valid for this",
       "// subtree only, as boolean-only subscriptions.",
@@ -2515,6 +2823,7 @@ const objectSectionFile = (
       ...nestedParts.flatMap((part) => [...part.lines, ""]),
       `export const ${section.componentName} = ({`,
       `  heading = ${q(section.label)},`,
+      ...sectionProps.map((name) => `  ${name},`),
       `}: ${propsType}) => {`,
       `  const { dirty, valid } = ${hookName}();`,
       "  return (",
@@ -2693,7 +3002,9 @@ const arraySectionFile = (
             const entry = nestedByKey.get(field.name);
             return entry === undefined
               ? []
-              : [`      <${entry.stem}Rows p0={index} />`];
+              : [
+                  `      <${entry.stem}Rows p0={index}${optionsPropsAttrs(rowItemOptionsProps(entry.item))} />`,
+                ];
           }
           return isScalarSpec(field.spec)
             ? []
@@ -2775,7 +3086,9 @@ const arraySectionFile = (
             "      ",
           )
         : arrayItemEntry !== undefined
-          ? [`      <${arrayItemEntry.stem}Rows p0={index} />`]
+          ? [
+              `      <${arrayItemEntry.stem}Rows p0={index}${optionsPropsAttrs(rowItemOptionsProps(arrayItemEntry.item))} />`,
+            ]
           : [
               // A discriminated-union or tuple item can't bind at a dynamic
               // array-row path (useVariantField needs a static union path), so
@@ -2801,6 +3114,15 @@ const arraySectionFile = (
     ...allNestedParts.flatMap((part) => part.lines),
   ].some((line) => line.includes(`${naming.hook("Field")}(`));
 
+  // Options props consumed anywhere in this section's rows (direct row
+  // leaves and nested arrays alike): the section declares them, the Row
+  // takes the full set, and each nested ref forwards its own subset.
+  const rowOptionsProps = rowItemOptionsProps(spec.item);
+  const sectionPropsTypeFields = [
+    "heading?: string",
+    ...optionsPropsTypeFields(rowOptionsProps),
+  ];
+
   return {
     path: `sections/${section.componentName}.tsx`,
     content: [
@@ -2814,7 +3136,7 @@ const arraySectionFile = (
       `} from "../hooks";`,
       `import type { ${naming.valuesType} } from "../types";`,
       "",
-      `export type ${propsType} = Readonly<{ heading?: string }>;`,
+      `export type ${propsType} = Readonly<{ ${sectionPropsTypeFields.join("; ")} }>;`,
       "",
       "// The array section's hook carries the field array alongside the",
       "// path-scoped flags; row fields bind template paths, so they stay",
@@ -2833,7 +3155,8 @@ const arraySectionFile = (
       `const ${rowName} = ({`,
       "  index,",
       "  onRemove,",
-      "}: Readonly<{ index: number; onRemove: () => void }>) => {",
+      ...rowOptionsProps.map((name) => `  ${name},`),
+      `}: Readonly<{ ${["index: number", "onRemove: () => void", ...optionsPropsTypeFields(rowOptionsProps)].join("; ")} }>) => {`,
       ...rowBindings,
       ...numberPropsBindings(
         ui,
@@ -2855,6 +3178,7 @@ const arraySectionFile = (
       "",
       `export const ${section.componentName} = ({`,
       `  heading = ${q(section.label)},`,
+      ...rowOptionsProps.map((name) => `  ${name},`),
       `}: ${propsType}) => {`,
       `  const { rows, dirty, valid } = ${hookName}();`,
       "  return (",
@@ -2864,6 +3188,7 @@ const arraySectionFile = (
         "          key={row.id}",
         "          index={index}",
         "          onRemove={() => rows.remove(index)}",
+        ...rowOptionsProps.map((name) => `          ${name}={${name}}`),
         "        />",
         "      ))}",
         ...shell.listError,
@@ -2889,6 +3214,7 @@ const arraySectionFile = (
 const formFile = (
   ui: ModuleUi,
   naming: Naming,
+  root: ObjectSpec,
   plan: Plan,
   scaffold: ScaffoldOptions,
 ): ModuleFile => {
@@ -2898,9 +3224,14 @@ const formFile = (
     ? importsSansButton(shell.imports)
     : shell.imports;
   const propsType = `${naming.formName}Props`;
+  // Options props (config-fields autocomplete overrides with optionsProp):
+  // the page supplies each suggestion list here, and the form body threads
+  // it down to the section/field that consumes it.
+  const optionsProps = collectOptionsProps(root);
   const params = [
     ...(scaffold.formProp ? ["form"] : []),
     ...(scaffold.live ? ["onValuesChange"] : []),
+    ...optionsProps.map((entry) => entry.name),
   ];
   const propsFields = [
     ...(scaffold.formProp
@@ -2920,6 +3251,10 @@ const formFile = (
           `  onValuesChange?: (values: ${naming.valuesType}) => void;`,
         ]
       : []),
+    ...optionsProps.flatMap((entry) => [
+      `  // Suggestions for the ${q(entry.path)} autocomplete override.`,
+      `  ${entry.name}: readonly string[];`,
+    ]),
   ];
   const typeImports = [
     ...(scaffold.formProp ? [naming.schemaType] : []),
@@ -3001,10 +3336,12 @@ const formFile = (
       ...shell.afterSubmit,
       ...plan.rootTodos.map((todo) => `${shell.bodyIndent}${todo}`),
       ...plan.rootFields.map(
-        (field) => `${shell.bodyIndent}<${field.componentName} />`,
+        (field) =>
+          `${shell.bodyIndent}<${field.componentName}${optionsPropsAttrs(leafOptionsProp(field.spec))} />`,
       ),
       ...plan.sections.map(
-        (section) => `${shell.bodyIndent}<${section.componentName} />`,
+        (section) =>
+          `${shell.bodyIndent}<${section.componentName}${optionsPropsAttrs(sectionOptionsProps(section.spec))} />`,
       ),
       ...(scaffold.live ? [] : shell.submitButton),
       ...shell.close,
@@ -3264,7 +3601,7 @@ export const emitModuleForm = (
             ? tupleSectionFile(ui, visual, naming, section)
             : unionSectionFile(ui, visual, naming, section),
     ),
-    formFile(ui, naming, plan, scaffold),
+    formFile(ui, naming, root, plan, scaffold),
     indexFile(naming),
   ];
 };
