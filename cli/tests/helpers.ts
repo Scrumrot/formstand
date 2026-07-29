@@ -22,6 +22,15 @@ export const muiStubPaths: Readonly<Record<string, readonly string[]>> = {
   "@mui/material": [posix(path.join(testsDir, "stubs", "mui-material.d.ts"))],
 };
 
+// Maps "@chakra-ui/react" onto the hand-written structural stub so chakra
+// output is typechecked (not just parsed) without the real package installed
+// (the real 3.x .d.ts is exercised by the cli/matrix harness).
+export const chakraStubPaths: Readonly<Record<string, readonly string[]>> = {
+  "@chakra-ui/react": [
+    posix(path.join(testsDir, "stubs", "chakra-ui-react.d.ts")),
+  ],
+};
+
 // Maps "@mantine/core" onto the hand-written structural stub, so a custom
 // template targeting Mantine is typechecked (not just parsed) without the real
 // package installed.

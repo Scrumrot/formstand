@@ -83,6 +83,42 @@ describe("parseUiTarget", () => {
       expect(result.kind === "error" && result.message).toContain("plain");
     });
   });
+
+  // chakra is UNVERSIONED: v3 is the only React-19-compatible major with the
+  // compound-component API the backend emits. "chakra@3" is accepted as the
+  // explicit spelling of the same target; older majors error with the scope
+  // rationale (like mui@0..4), anything else lists the supported spelling.
+  it("chakra parses versionless, with chakra@3 as an explicit alias", () => {
+    expect(parseUiTarget("chakra")).toEqual({
+      kind: "ok",
+      target: { kit: "chakra" },
+    });
+    expect(parseUiTarget("chakra@3")).toEqual({
+      kind: "ok",
+      target: { kit: "chakra" },
+    });
+  });
+
+  it("rejects chakra@2 and chakra@1 with the React-19 scope rationale", () => {
+    (["chakra@2", "chakra@1", "chakra@0"] as const).forEach((value) => {
+      const result = parseUiTarget(value);
+      expect(result.kind).toBe("error");
+      expect(result.kind === "error" && result.message).toContain("React 19");
+      expect(result.kind === "error" && result.message).toContain('"chakra@3"');
+    });
+  });
+
+  it("rejects other chakra versions naming the one supported major", () => {
+    (["chakra@4", "chakra@", "chakra@next", "chakra@3.1"] as const).forEach(
+      (value) => {
+        const result = parseUiTarget(value);
+        expect(result.kind).toBe("error");
+        expect(result.kind === "error" && result.message).toContain(
+          '"chakra@3"',
+        );
+      },
+    );
+  });
 });
 
 // The one empirical prop-surface delta across the supported majors is
@@ -174,5 +210,41 @@ describe("--ui mui@N end to end", () => {
     expect(await main([zodFixture, "--ui", "mui@8"])).toBe(1);
     expect(await main([zodFixture, "--ui", "mui@4"])).toBe(1);
     expect(await main([zodFixture, "--ui", "plain@1"])).toBe(1);
+    expect(await main([zodFixture, "--ui", "chakra@2"])).toBe(1);
+  });
+});
+
+describe("--ui chakra end to end", () => {
+  it("--ui chakra reaches the emitted component in both spellings", async () => {
+    const dir = freshTmpDir("ui-target-chakra");
+    const bare = path.join(dir, "Bare.tsx");
+    const pinned = path.join(dir, "Pinned.tsx");
+    expect(await main([zodFixture, "--ui", "chakra", "--out", bare])).toBe(0);
+    expect(
+      await main([zodFixture, "--ui", "chakra@3", "--out", pinned]),
+    ).toBe(0);
+    const code = fs.readFileSync(bare, "utf8");
+    expect(code).toContain('} from "@chakra-ui/react";');
+    expect(code).toContain("<Field.Root invalid={");
+    // chakra@3 IS chakra — byte-identical output.
+    expect(fs.readFileSync(pinned, "utf8")).toBe(code);
+  });
+
+  it("--ui chakra --layout module writes the chakra adapter", async () => {
+    const dir = freshTmpDir("ui-target-chakra-module");
+    const out = path.join(dir, "ProfileForm");
+    expect(
+      await main([
+        zodFixture,
+        "--ui",
+        "chakra",
+        "--layout",
+        "module",
+        "--out",
+        out,
+      ]),
+    ).toBe(0);
+    const adapter = fs.readFileSync(path.join(out, "adapter.ts"), "utf8");
+    expect(adapter).toContain("export const chakraTextInputProps");
   });
 });

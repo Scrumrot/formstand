@@ -19,6 +19,7 @@ export {
   emitPlainForm,
   emitMuiForm,
   emitShadcnForm,
+  emitChakraForm,
   emitTemplateForm,
   DEFAULT_VISUAL,
 } from "./codegen";

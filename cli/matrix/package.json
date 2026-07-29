@@ -1,11 +1,12 @@
 {
-  "name": "formstand-cli-mui-matrix",
+  "name": "formstand-cli-ui-matrix",
   "private": true,
-  "description": "Isolated typecheck matrix for --ui mui@N: every supported @mui/material major installed side by side under npm aliases. Not part of the root or cli installs — run `npm install` here, then `npm run matrix` from cli/.",
+  "description": "Isolated typecheck matrix for the kit backends: every supported @mui/material major plus @chakra-ui/react v3 installed side by side under npm aliases. Not part of the root or cli installs — run `npm install` here, then `npm run matrix` from cli/.",
   "devDependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@types/react": "^19.0.0",
+    "chakra3": "npm:@chakra-ui/react@^3.36.0",
     "mui5": "npm:@mui/material@^5.18.0",
     "mui6": "npm:@mui/material@^6.5.0",
     "mui7": "npm:@mui/material@^7.3.11",

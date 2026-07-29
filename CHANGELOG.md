@@ -174,6 +174,38 @@
   TypeScript's excess-property checks), so a wrong per-version config
   fails the matrix instead of compiling silently. Run it before releasing
   any MUI-backend change; it is deliberately not part of `npm test`.
+- **First-class `--ui chakra`: a Chakra UI v3 backend** — both layouts
+  (single-file and `--layout module`), the full field-kind surface the mui
+  backend covers (strings/numbers/dates/enums/booleans, nested objects,
+  arrays with add/remove and recursive nested-row extraction, tuples,
+  discriminated unions, TODO degradations), and every `--sections` /
+  `--columns` variant. Emits the v3 compound-component API (verified
+  against the installed 3.36 declarations, not v2's): `Field.Root` (with
+  `invalid`) / `Field.Label` / `Field.ErrorText` for labels and errors,
+  `Input` for text/number/date (native bindings — `inputMode="decimal"`,
+  `type="date"`), `NativeSelect.Root` + `NativeSelect.Field` for enums (a
+  real `<select>`, preferred over the Ark collection `Select` so the
+  adapter speaks DOM change events), and `Switch.Root` /
+  `Switch.HiddenInput` / `Switch.Control` / `Switch.Thumb` /
+  `Switch.Label` for booleans (`checked` + `onCheckedChange` details
+  callback, spread on the root where the state lives). Sections render
+  `Stack`/`Heading` (flat), `Card.Root`/`Card.Body` (panel), or one
+  `Accordion.Root` (`collapsible defaultValue={["section"]}`) per section
+  (collapsible); columns use the same CSS-grid shape as the other kits via
+  chakra style props. The generated file assumes the host app mounts
+  `ChakraProvider` (same policy as the mui backend and its theme). The
+  module layout gains a shared `adapter.ts` (`chakraTextInputProps` /
+  `chakraNumberInputProps` / `chakraDateInputProps` / `chakraSelectProps` /
+  `chakraSwitchProps` + `fieldError`). chakra takes no version suffix —
+  v3 is the only supported major (v2 and older lack the compound API and
+  predate formstand's React 19 peer) — with `chakra@3` accepted as the
+  explicit spelling and `chakra@1`/`chakra@2` failing with the scope
+  rationale like `mui@0`–`mui@4`. The config file's `ui` key accepts the
+  same spellings, and the matrix harness gained a `chakra3` alias
+  (`npm:@chakra-ui/react@^3`) plus a chakra job — both schemas, both
+  layouts, all section styles, and a literal-attribute probe for the
+  Input/NativeSelect/Switch prop surfaces — so `npm run matrix` now proves
+  five kit targets against their real .d.ts.
 
 ## formstand-cli 0.8.0 — 2026-07-28
 

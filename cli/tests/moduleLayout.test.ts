@@ -5,6 +5,7 @@ import { main, moduleSpecifier } from "../src/cli";
 import { emitModuleForm, joinModuleFiles } from "../src/moduleLayout";
 import { fromZod } from "../src/fromZod";
 import {
+  chakraStubPaths,
   fixturesDir,
   freshTmpDir,
   muiStubPaths,
@@ -25,7 +26,7 @@ const generateModule = (
   schemaName: string,
   formName: string,
   dir: string,
-  ui: "plain" | "mui" | "shadcn" = "plain",
+  ui: "plain" | "mui" | "shadcn" | "chakra" = "plain",
   visual?: Readonly<{ sections: "flat" | "panel" | "collapsible"; columns: 1 | 2 | 3 }>,
 ) => {
   const files = emitModuleForm({
@@ -186,6 +187,30 @@ describe("emitModuleForm kit uis", () => {
     expect(typecheckDiagnostics(written, realShadcnPaths)).toEqual([]);
   });
 
+  it("chakra modules share one adapter file and typecheck against the chakra stub", () => {
+    const dir = freshTmpDir("module-chakra");
+    const { files, written } = generateModule(
+      profileSchema,
+      "profileSchema",
+      "ProfileForm",
+      dir,
+      "chakra",
+    );
+    const paths = files.map((f) => f.path);
+    // No JSX in the chakra adapter (prop builders only) — adapter.ts.
+    expect(paths).toContain("adapter.ts");
+    const adapter = files.find((f) => f.path === "adapter.ts");
+    expect(adapter?.content).toContain("export const chakraTextInputProps");
+    expect(adapter?.content).toContain("export const chakraSwitchProps");
+    expect(adapter?.content).toContain("export const fieldError");
+    const field = files.find((f) => f.path === "fields/FirstNameField.tsx");
+    expect(field?.content).toContain('from "@chakra-ui/react"');
+    expect(field?.content).toContain("<Field.Root invalid={");
+    const role = files.find((f) => f.path === "fields/RoleField.tsx");
+    expect(role?.content).toContain("<NativeSelect.Field");
+    expect(typecheckDiagnostics(written, chakraStubPaths)).toEqual([]);
+  });
+
   it("leaf-free kit modules omit the adapter and still typecheck", () => {
     const dir = freshTmpDir("module-mui-leaf-free");
     const { files, written } = generateModule(
@@ -234,6 +259,27 @@ describe("emitModuleForm visual options", () => {
     expect(section?.content).toContain("bg-card text-card-foreground shadow-sm");
     expect(section?.content).toContain("md:grid-cols-2");
     expect(typecheckDiagnostics([...written, shadcnStubFile])).toEqual([]);
+  });
+
+  it("chakra collapsible sections wrap in Accordion.Root and typecheck", () => {
+    const dir = freshTmpDir("module-chakra-collapsible");
+    const { files, written } = generateModule(
+      profileSchema,
+      "profileSchema",
+      "ProfileForm",
+      dir,
+      "chakra",
+      { sections: "collapsible", columns: 2 },
+    );
+    const section = files.find((f) => f.path.startsWith("sections/"));
+    expect(section?.content).toContain(
+      '<Accordion.Root collapsible defaultValue={["section"]}>',
+    );
+    expect(section?.content).toContain(
+      'gridTemplateColumns={"repeat(2, minmax(0, 1fr))"}',
+    );
+    expect(section?.content).toContain('} from "@chakra-ui/react";');
+    expect(typecheckDiagnostics(written, chakraStubPaths)).toEqual([]);
   });
 
   it("plain collapsible sections use details/summary and typecheck", () => {

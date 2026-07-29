@@ -8,7 +8,7 @@ npm install --save-dev formstand-cli
 
 ## Requirements
 
-- **formstand >= 0.3.0** for `--ui mui` and `--ui shadcn` output (the inlined adapters use `UseFieldReturn`, `numberToInputText`, and `parseNumberText`); plain output works on 0.2.0. Generated `useFieldArray` hooks get typed items on **formstand >= 0.5** (inferred from the schema through the path); on 0.4 they compile with untyped items.
+- **formstand >= 0.3.0** for `--ui mui`, `--ui shadcn`, and `--ui chakra` output (the inlined adapters use `UseFieldReturn`, `numberToInputText`, and `parseNumberText`); plain output works on 0.2.0. `--ui chakra` output needs `@chakra-ui/react` **v3** (plus its `@emotion/react` peer) and assumes the host app mounts `ChakraProvider` at the root — the generated file does not emit the provider, same as the mui output assumes the MUI theme setup. Generated `useFieldArray` hooks get typed items on **formstand >= 0.5** (inferred from the schema through the path); on 0.4 they compile with untyped items.
 - **formstand >= 0.9** for `date` fields: plain output emits `<DateField>` and the mui/shadcn adapters use `dateToInputText` / `parseDateText`, all shipped in 0.9. On older formstand, avoid `z.date()` in the schema (or replace the emitted date bindings by hand).
 - **zod v4** in your project. The CLI walks your schema structurally (duck-typed by design — no `instanceof` against a bundled copy), so it does not ship zod itself: the schema module and the generated code both use the zod your project supplies.
 
@@ -43,7 +43,7 @@ Without `--out`, both files print to stdout separated by `// --- file: ...` head
 | --- | --- |
 | `--export <name>` | which export holds the zod schema |
 | `--type <TypeName>` | generate from a TS type/interface instead |
-| `--ui plain\|mui[@5\|6\|7\|9]\|shadcn` | component flavor (default `plain`). `mui` may pin an `@mui/material` major — `mui@5`, `mui@6`, `mui@7`, `mui@9`; bare `mui` means `mui@9`. Only React-19-capable majors are supported: formstand peers `react: ^19`, so MUI 4 and older can never install alongside it (and MUI skipped major 8 — 7.x jumps to 9). `plain` and `shadcn` take no version |
+| `--ui plain\|mui[@5\|6\|7\|9]\|shadcn\|chakra` | component flavor (default `plain`). `mui` may pin an `@mui/material` major — `mui@5`, `mui@6`, `mui@7`, `mui@9`; bare `mui` means `mui@9`. Only React-19-capable majors are supported: formstand peers `react: ^19`, so MUI 4 and older can never install alongside it (and MUI skipped major 8 — 7.x jumps to 9). `chakra` targets `@chakra-ui/react` **3** — the only supported major (`chakra@3` spells the same thing; v2 and older lack the v3 compound API and predate the React 19 peer). `plain` and `shadcn` take no version |
 | `--layout single\|module` | `single` (default): one file. `module`: a feature-module folder — see below |
 | `--sections flat\|panel\|collapsible` | section chrome: `flat` headings (default), bordered `panel`s, or `collapsible` sections (`<details>`; MUI `Accordion`) |
 | `--columns 1\|2\|3` | evenly spaced field columns inside each section (default `1`); nested sections span the full row |
@@ -62,21 +62,22 @@ Without `--out`, both files print to stdout separated by `// --- file: ...` head
 - One bound control per field: `TextField`, `NumberField`, `CheckboxField`, `SelectField` (enum options from the schema).
 - Nested objects as `<fieldset>`/`<legend>` sections.
 - Field arrays via `useFieldArray` with stable row keys, add/remove buttons, and a typed empty-item constant.
-- `--sections` / `--columns` pick each section's chrome and field grid, in the ui's own dialect: inline styles for `plain`, `Card`/`Accordion` + `sx` grids for `mui`, Tailwind classes (`md:grid-cols-2`, `bg-card`) for `shadcn`. Both flags work with either `--layout`.
+- `--sections` / `--columns` pick each section's chrome and field grid, in the ui's own dialect: inline styles for `plain`, `Card`/`Accordion` + `sx` grids for `mui`, Tailwind classes (`md:grid-cols-2`, `bg-card`) for `shadcn`, `Card.Root`/`Accordion.Root` + grid style props for `chakra`. Both flags work with either `--layout`.
 - `handleSubmit(console.log)` and a submit button disabled while submitting.
 - `--ui mui`: the same structure over `@mui/material` (any supported major — `mui@5` … `mui@9`, default 9) with an inlined ~50-line adapter (`muiTextFieldProps` / `muiNumberFieldProps` / `muiSelectProps` / `muiSwitchProps`) binding `UseFieldReturn` to MUI props, sharing `parseNumberText` / `numberToInputText` with the library. One emitter serves every major through a per-version config; the only prop-surface difference in the emitted output is TextField's slot-props API (`mui@5` emits the legacy `InputProps` / `InputLabelProps`, v6+ emit `slotProps.{input,inputLabel}`). Each supported major is proven to typecheck the generated output — both layouts — by the version matrix (see below).
 - `--ui shadcn`: the same structure over your app's [shadcn/ui](https://ui.shadcn.com/) components (imported from the `@/components/ui/*` alias that `npx shadcn add` scaffolds) with an inlined adapter speaking the Radix dialect — `onCheckedChange` / `onValueChange` callbacks, dropdown-close as the blur trigger, and `aria-invalid` error styling with a message line.
+- `--ui chakra`: the same structure over [Chakra UI](https://chakra-ui.com/) **v3**'s compound components — `Field.Root` (`invalid`) / `Field.Label` / `Field.ErrorText` for labels and errors, `Input` for text/number/date (native bindings: `inputMode="decimal"`, `type="date"`), `NativeSelect.Root` + `NativeSelect.Field` for enums (a real `<select>`, so the adapter speaks plain DOM change events), and `Switch.Root`/`Switch.HiddenInput`/`Switch.Control`/`Switch.Thumb`/`Switch.Label` for booleans (`checked` + `onCheckedChange` details callback). The generated file assumes your app mounts `ChakraProvider` (`defaultSystem`) at the root and does not emit it. chakra takes no version suffix — v3 is the only supported major (`chakra@3` is accepted as the explicit spelling; `chakra@2` and older fail with an explanation). The output is proven to typecheck against the real v3 declarations — both layouts — by the version matrix (see below).
 
-### The MUI version matrix (pre-release check)
+### The UI-kit version matrix (pre-release check)
 
-`cli/matrix/` is an isolated workspace that installs every supported `@mui/material` major side by side (npm aliases `mui5` … `mui9`) and typechecks freshly generated `--ui mui@N` output — both layouts, every section/column variant, plus a literal-attribute probe for the TextField slot-props delta — against each major's real type declarations:
+`cli/matrix/` is an isolated workspace that installs every supported `@mui/material` major side by side (npm aliases `mui5` … `mui9`) plus `@chakra-ui/react` v3 (alias `chakra3`) and typechecks freshly generated `--ui mui@N` and `--ui chakra` output — both layouts, every section/column variant, plus literal-attribute probes for the props that hide behind JSX spreads (the TextField slot-props delta; chakra's Input/NativeSelect/Switch surfaces) — against each package's real type declarations:
 
 ```bash
 cd cli/matrix && npm install   # once; a chunky install, isolated from the root/cli installs
-cd .. && npm run matrix        # generates + typechecks against mui@5, 6, 7, 9
+cd .. && npm run matrix        # generates + typechecks against mui@5, 6, 7, 9 and chakra@3
 ```
 
-Run it before releasing any change to the MUI backend or the version configs. It is deliberately not part of the default `npm test` (it needs the matrix `node_modules`).
+Run it before releasing any change to the MUI or chakra backends or the version configs. It is deliberately not part of the default `npm test` (it needs the matrix `node_modules`).
 
 ## `--layout module`
 
@@ -117,11 +118,11 @@ export default defineConfig({
 });
 ```
 
-`defineConfig` is an identity function with types — completion and typo-checking in the config file. `ui` accepts the same spellings as `--ui`, including the versioned `"mui@5"` … `"mui@9"`. Pair it with `--watch` for schema-first development: edit the schema, the module regenerates.
+`defineConfig` is an identity function with types — completion and typo-checking in the config file. `ui` accepts the same spellings as `--ui`, including the versioned `"mui@5"` … `"mui@9"` and `"chakra"` (or its explicit spelling `"chakra@3"`). Pair it with `--watch` for schema-first development: edit the schema, the module regenerates.
 
 ## Custom templates
 
-For a UI kit formstand doesn't ship built in — Mantine, Chakra, an in-house design system — a **template** overrides the per-kind field rendering while inheriting the generated form's scaffold (sections, arrays, discriminated unions, submit). A UI kit differs in its field components, not the form skeleton.
+For a UI kit formstand doesn't ship built in — Mantine, an in-house design system — a **template** overrides the per-kind field rendering while inheriting the generated form's scaffold (sections, arrays, discriminated unions, submit). A UI kit differs in its field components, not the form skeleton.
 
 ```ts
 // mantine.template.ts

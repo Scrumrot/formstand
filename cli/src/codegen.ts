@@ -14,9 +14,10 @@ import type {
   TemplateLeafKind,
 } from "./template";
 
-// Code emitters: zod schema source, initial values, and the three component
-// backends (plain HTML inputs bound via formstand's components; MUI v9 and
-// shadcn/ui variants with inlined adapters). All backends share one IR walk
+// Code emitters: zod schema source, initial values, and the component
+// backends (plain HTML inputs bound via formstand's components; MUI,
+// shadcn/ui, and Chakra UI v3 variants with inlined adapters). All backends
+// share one IR walk
 // and one form scaffold (emitForm); a Backend supplies the leaf renderers,
 // section wrappers, and header imports, and the two kit backends also share
 // their emitted snippets (fieldError helper, BoundFieldProps, the leaf
@@ -2675,6 +2676,428 @@ const shadcnBackend = (visual: VisualOptions): Backend => {
 
 export const emitShadcnForm = (options: EmitFormOptions): string =>
   emitForm(shadcnBackend(options.visual ?? DEFAULT_VISUAL), options);
+
+// ---------------------------------------------------------------------------
+// Chakra UI v3 backend (@chakra-ui/react 3, compound components)
+// ---------------------------------------------------------------------------
+
+// Emits against the Chakra 3 compound-component API (verified against the
+// installed 3.36 .d.ts in cli/matrix): Field.Root/Field.Label/Field.ErrorText
+// replace v2's FormControl trio (`invalid` on the root, not `isInvalid`);
+// NativeSelect.Root + NativeSelect.Field bind a plain <select> (preferred
+// over the Ark collection-based Select for generated code — it takes DOM
+// change events like formstand's selectProps); Switch.Root is a <label>
+// carrying checked/onCheckedChange (details.checked) with Switch.HiddenInput
+// / Switch.Control / Switch.Thumb / Switch.Label inside. The generated file
+// assumes the host app mounts ChakraProvider (same policy as the MUI
+// backend, which assumes the kit's provider/theme at the root). Layout is
+// style props (gap/display/gridTemplateColumns), not v2's `spacing`.
+
+// The chakra spelling of the shared section grid, as literal JSX attributes
+// (chakra style props). gap="4" is 1rem — the same 16px the other kits use.
+export const gridChakraProps = (columns: number): string =>
+  `display="grid" gridTemplateColumns={${q(`repeat(${columns}, minmax(0, 1fr))`)}} gap="4"`;
+
+export const chakraAdapterSection = (usage: KindUsage, exp = ""): string => {
+  // Error text renders through Field.ErrorText, gated by `invalid` on
+  // Field.Root — both read fieldError, so every non-boolean leaf needs it
+  // (the Switch renders no error line, like the MUI backend's booleans).
+  const needsError = usage.string || usage.date || usage.number || usage.enum;
+  const textAdapter = [
+    "",
+    `${exp}const chakraTextInputProps = <T extends string | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
+    "  name: field.path,",
+    '  value: field.value ?? "",',
+    "  onChange: (e: ChangeEvent<HTMLInputElement>) => {",
+    "    const text = e.target.value;",
+    '    field.setValue((text === "" && field.emptyValue === null ? null : text) as T);',
+    "  },",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
+  const numberAdapter = [
+    "",
+    `${exp}const chakraNumberInputProps = <T extends number | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
+    '  inputMode: "decimal" as const,',
+    "  name: field.path,",
+    "  value: numberToInputText(field.value),",
+    "  onChange: (e: ChangeEvent<HTMLInputElement>) => {",
+    "    const parsed = parseNumberText(e.target.value);",
+    '    field.setValue((parsed.kind === "number" ? parsed.value : field.emptyValue) as T);',
+    "  },",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
+  const dateAdapter = [
+    "",
+    `${exp}const chakraDateInputProps = <T extends Date | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
+    '  type: "date" as const,',
+    "  name: field.path,",
+    "  value: dateToInputText(field.value),",
+    "  onChange: (e: ChangeEvent<HTMLInputElement>) => {",
+    "    const parsed = parseDateText(e.target.value);",
+    '    field.setValue((parsed.kind === "date" ? parsed.value : field.emptyValue) as T);',
+    "  },",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
+  // NativeSelect.Field is a real <select>: DOM change events, no Radix-style
+  // value callbacks.
+  const selectAdapter = [
+    "",
+    `${exp}const chakraSelectProps = <T extends string | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
+    "  name: field.path,",
+    '  value: field.value ?? "",',
+    "  onChange: (e: ChangeEvent<HTMLSelectElement>) => {",
+    "    const next = e.target.value;",
+    '    field.setValue((next === "" && field.emptyValue === null ? null : next) as T);',
+    "  },",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
+  // Spread onto Switch.Root (the state lives there, not on the hidden
+  // input); onBlur lands on the root <label> and catches the inner input's
+  // blur as it bubbles.
+  const switchAdapter = [
+    "",
+    `${exp}const chakraSwitchProps = <T extends boolean | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
+    "  name: field.path,",
+    "  checked: field.value ?? false,",
+    "  onCheckedChange: (details: Readonly<{ checked: boolean }>) =>",
+    "    field.setValue(details.checked as T),",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
+  return [
+    "// ---- formstand → Chakra UI v3 adapter --------------------------------------",
+    ...(needsError ? withExportPrefix(FIELD_ERROR_HELPER, exp) : []),
+    ...(usage.string ? textAdapter : []),
+    ...(usage.number ? numberAdapter : []),
+    ...(usage.date ? dateAdapter : []),
+    ...(usage.enum ? selectAdapter : []),
+    ...(usage.boolean ? switchAdapter : []),
+  ].join("\n");
+};
+
+const chakraBoundComponents = (usage: KindUsage): string => {
+  const propsType = boundFieldProps(usage);
+  const input = (builder: string, fieldType: string): readonly string[] => [
+    "",
+    `const Bound${builder === "chakraNumberInputProps" ? "Number" : builder === "chakraDateInputProps" ? "Date" : "Text"}Field = ({ form, path, label }: BoundFieldProps) => {`,
+    `  const field = useField<${fieldType}>(form, path);`,
+    "  return (",
+    "    <Field.Root invalid={fieldError(field) !== undefined}>",
+    "      <Field.Label>{label}</Field.Label>",
+    `      <Input {...${builder}(field)} />`,
+    "      <Field.ErrorText>{fieldError(field)}</Field.ErrorText>",
+    "    </Field.Root>",
+    "  );",
+    "};",
+  ];
+  const select = [
+    "",
+    "const BoundSelectField = ({",
+    "  form,",
+    "  path,",
+    "  label,",
+    "  options,",
+    "}: BoundFieldProps & Readonly<{ options: readonly string[] }>) => {",
+    "  const field = useField<string | null | undefined>(form, path);",
+    "  return (",
+    "    <Field.Root invalid={fieldError(field) !== undefined}>",
+    "      <Field.Label>{label}</Field.Label>",
+    "      <NativeSelect.Root>",
+    "        <NativeSelect.Field",
+    "          placeholder={`Select ${label.toLowerCase()}`}",
+    "          {...chakraSelectProps(field)}",
+    "        >",
+    "          {options.map((option) => (",
+    "            <option key={option} value={option}>",
+    "              {option}",
+    "            </option>",
+    "          ))}",
+    "        </NativeSelect.Field>",
+    "        <NativeSelect.Indicator />",
+    "      </NativeSelect.Root>",
+    "      <Field.ErrorText>{fieldError(field)}</Field.ErrorText>",
+    "    </Field.Root>",
+    "  );",
+    "};",
+  ];
+  const switchField = [
+    "",
+    "const BoundSwitchField = ({ form, path, label }: BoundFieldProps) => {",
+    "  const field = useField<boolean | null | undefined>(form, path);",
+    "  return (",
+    "    <Switch.Root {...chakraSwitchProps(field)}>",
+    "      <Switch.HiddenInput />",
+    "      <Switch.Control>",
+    "        <Switch.Thumb />",
+    "      </Switch.Control>",
+    "      <Switch.Label>{label}</Switch.Label>",
+    "    </Switch.Root>",
+    "  );",
+    "};",
+  ];
+  return [
+    ...propsType,
+    ...(usage.string
+      ? input("chakraTextInputProps", "string | null | undefined")
+      : []),
+    ...(usage.number
+      ? input("chakraNumberInputProps", "number | null | undefined")
+      : []),
+    ...(usage.date
+      ? input("chakraDateInputProps", "Date | null | undefined")
+      : []),
+    ...(usage.enum ? select : []),
+    ...(usage.boolean ? switchField : []),
+  ].join("\n");
+};
+
+// A control rendered from a bound field variable, using the in-file chakra
+// adapter builders — the discriminant select and each variant field of a
+// union (the path-typed Bound* components can't reach variant paths).
+const chakraVariantLeaf = (
+  spec: FieldSpec,
+  fieldVar: string,
+  label: string,
+  level: number,
+): readonly string[] => {
+  switch (spec.kind) {
+    case "boolean":
+      return [
+        `${ind(level)}<Switch.Root {...chakraSwitchProps(${fieldVar})}>`,
+        `${ind(level + 1)}<Switch.HiddenInput />`,
+        `${ind(level + 1)}<Switch.Control>`,
+        `${ind(level + 2)}<Switch.Thumb />`,
+        `${ind(level + 1)}</Switch.Control>`,
+        `${ind(level + 1)}<Switch.Label>${jsxText(label)}</Switch.Label>`,
+        `${ind(level)}</Switch.Root>`,
+      ];
+    case "enum":
+      return [
+        `${ind(level)}<Field.Root invalid={fieldError(${fieldVar}) !== undefined}>`,
+        `${ind(level + 1)}<Field.Label>${jsxText(label)}</Field.Label>`,
+        `${ind(level + 1)}<NativeSelect.Root>`,
+        `${ind(level + 2)}<NativeSelect.Field ${jsxAttr("placeholder", `Select ${label.toLowerCase()}`)} {...chakraSelectProps(${fieldVar})}>`,
+        ...spec.options.map(
+          (option) =>
+            `${ind(level + 3)}<option value=${jsxText(option)}>${jsxText(labelFromName(option))}</option>`,
+        ),
+        `${ind(level + 2)}</NativeSelect.Field>`,
+        `${ind(level + 2)}<NativeSelect.Indicator />`,
+        `${ind(level + 1)}</NativeSelect.Root>`,
+        `${ind(level + 1)}<Field.ErrorText>{fieldError(${fieldVar})}</Field.ErrorText>`,
+        `${ind(level)}</Field.Root>`,
+      ];
+    case "string":
+    case "number":
+    case "date": {
+      const builder =
+        spec.kind === "number"
+          ? "chakraNumberInputProps"
+          : spec.kind === "date"
+            ? "chakraDateInputProps"
+            : "chakraTextInputProps";
+      return [
+        `${ind(level)}<Field.Root invalid={fieldError(${fieldVar}) !== undefined}>`,
+        `${ind(level + 1)}<Field.Label>${jsxText(label)}</Field.Label>`,
+        `${ind(level + 1)}<Input {...${builder}(${fieldVar})} />`,
+        `${ind(level + 1)}<Field.ErrorText>{fieldError(${fieldVar})}</Field.ErrorText>`,
+        `${ind(level)}</Field.Root>`,
+      ];
+    }
+    case "object":
+    case "array":
+    case "tuple":
+    case "union":
+      return [
+        `${ind(level)}{/* unreachable: containers never bind as a variant field */}`,
+      ];
+  }
+};
+
+const chakraLeaf = boundLeaf("BoundSwitchField");
+
+const chakraBackend = (visual: VisualOptions): Backend => {
+  const cols = visual.columns;
+  // Every section container is a CSS grid via style props (a one-column grid
+  // with gap "4" is exactly a Stack); section roots span the parent grid's
+  // full row.
+  const grid = gridChakraProps(cols);
+  const span = cols > 1 ? ` gridColumn="1 / -1"` : "";
+  const headingSpan = cols > 1 ? ` gridColumn="1 / -1"` : "";
+  const sectionOpen = (label: string, level: number): readonly string[] => {
+    switch (visual.sections) {
+      case "flat":
+        // The 1-column default reads as a Stack; multi-column flows a grid.
+        return cols === 1
+          ? [
+              `${ind(level)}<Stack gap="4">`,
+              `${ind(level + 1)}<Heading size="sm">${jsxText(label)}</Heading>`,
+            ]
+          : [
+              `${ind(level)}<Box${span} ${grid}>`,
+              `${ind(level + 1)}<Heading size="sm" gridColumn="1 / -1">${jsxText(label)}</Heading>`,
+            ];
+      case "panel":
+        return [
+          `${ind(level)}<Card.Root${span}>`,
+          `${ind(level + 1)}<Card.Body ${grid}>`,
+          `${ind(level + 2)}<Heading size="sm"${headingSpan}>${jsxText(label)}</Heading>`,
+        ];
+      case "collapsible":
+        // One Accordion.Root per section (mirroring the MUI backend's one
+        // Accordion per section); the item value is fixed and defaultValue
+        // opens it, `collapsible` lets it close again.
+        return [
+          `${ind(level)}<Accordion.Root collapsible defaultValue={["section"]}${span}>`,
+          `${ind(level + 1)}<Accordion.Item value="section">`,
+          `${ind(level + 2)}<Accordion.ItemTrigger>`,
+          `${ind(level + 3)}<Heading size="sm">${jsxText(label)}</Heading>`,
+          `${ind(level + 3)}<Accordion.ItemIndicator />`,
+          `${ind(level + 2)}</Accordion.ItemTrigger>`,
+          `${ind(level + 2)}<Accordion.ItemContent>`,
+          `${ind(level + 3)}<Accordion.ItemBody ${grid}>`,
+        ];
+    }
+  };
+  const sectionClose = (level: number): readonly string[] => {
+    switch (visual.sections) {
+      case "flat":
+        return [`${ind(level)}${cols === 1 ? "</Stack>" : "</Box>"}`];
+      case "panel":
+        return [`${ind(level + 1)}</Card.Body>`, `${ind(level)}</Card.Root>`];
+      case "collapsible":
+        return [
+          `${ind(level + 3)}</Accordion.ItemBody>`,
+          `${ind(level + 2)}</Accordion.ItemContent>`,
+          `${ind(level + 1)}</Accordion.Item>`,
+          `${ind(level)}</Accordion.Root>`,
+        ];
+    }
+  };
+
+  return {
+  header: (usage, arrays, root) => {
+    const hasLeaf = hasLeafUsage(usage);
+    // Static-leaf usage gates the Bound* components (and their FieldFormApi
+    // type): union controls render raw chakra elements from hoisted hooks.
+    const hasStaticLeaf = hasLeafUsage(collectStaticUsage(root));
+    const hasSection = arrays.length > 0 || anyAddressableObjectField(root);
+    const chakraImports = [
+      ...(hasSection && visual.sections === "collapsible" ? ["Accordion"] : []),
+      "Box",
+      "Button",
+      ...(hasSection && visual.sections === "panel" ? ["Card"] : []),
+      // Field.Root/Label/ErrorText wrap every non-boolean control (static
+      // Bound* components and union controls alike).
+      ...(usage.string || usage.date || usage.number || usage.enum
+        ? ["Field"]
+        : []),
+      ...(hasSection ? ["Heading"] : []),
+      ...(usage.string || usage.date || usage.number ? ["Input"] : []),
+      ...(usage.enum ? ["NativeSelect"] : []),
+      "Stack",
+      ...(usage.boolean ? ["Switch"] : []),
+    ];
+    const formstandValueImports = [
+      ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
+      ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
+      ...(hasLeaf ? ["useField"] : []),
+      ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
+      ...(arrays.length > 0 ? ["useFieldArray"] : []),
+      "useForm",
+      "useIsSubmitting",
+    ];
+    const formstandTypeImports = [
+      // FieldFormApi is referenced only by the Bound* components' props type.
+      ...(hasStaticLeaf ? ["FieldFormApi"] : []),
+      ...(hasLeaf ? ["UseFieldReturn"] : []),
+    ];
+    return [
+      // The Switch adapter's onCheckedChange is a details callback, so only
+      // the DOM-event adapters need ChangeEvent.
+      ...(usage.string || usage.date || usage.number || usage.enum
+        ? [`import type { ChangeEvent } from "react";`]
+        : []),
+      "import {",
+      ...chakraImports.map((name) => `  ${name},`),
+      `} from "@chakra-ui/react";`,
+      "import {",
+      ...formstandValueImports.map((name) => `  ${name},`),
+      ...formstandTypeImports.map((name) => `  type ${name},`),
+      `} from "formstand";`,
+      `import { z } from "zod";`,
+    ];
+  },
+  preamble: (usage, staticUsage) => [
+    chakraAdapterSection(usage),
+    chakraBoundComponents(staticUsage),
+    "",
+  ],
+  leaf: chakraLeaf,
+  variantLeaf: chakraVariantLeaf,
+  objectSection: (label, level, body) => [
+    ...sectionOpen(label, level),
+    ...body,
+    ...sectionClose(level),
+  ],
+  arraySection: (entry, level, rowBody) => [
+    ...sectionOpen(entry.label, level),
+    `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
+    `${ind(level + 2)}<Stack`,
+    `${ind(level + 3)}key={row.id}`,
+    `${ind(level + 3)}gap="4"`,
+    `${ind(level + 3)}p="4"`,
+    `${ind(level + 3)}borderWidth="1px"`,
+    `${ind(level + 3)}borderRadius="md"`,
+    `${ind(level + 2)}>`,
+    ...rowBody,
+    `${ind(level + 3)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.remove(index)}>`,
+    `${ind(level + 4)}Remove`,
+    `${ind(level + 3)}</Button>`,
+    `${ind(level + 2)}</Stack>`,
+    `${ind(level + 1)}))}`,
+    `${ind(level + 1)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
+    `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
+    `${ind(level + 1)}</Button>`,
+    ...sectionClose(level),
+  ],
+  bodyLevel: 4,
+  formOpen: [
+    "    <Box",
+    `      as="form"`,
+    "      onSubmit={form.handleSubmit((data) => {",
+    `        console.log("submit", data);`,
+    "      })}",
+    `      maxW="640px"`,
+    "    >",
+    `      <Stack gap="4">`,
+  ],
+  formClose: [
+    `        <Button type="submit" disabled={submitting}>`,
+    `          {submitting ? "Submitting..." : "Submit"}`,
+    "        </Button>",
+    "      </Stack>",
+    "    </Box>",
+  ],
+  };
+};
+
+export const emitChakraForm = (options: EmitFormOptions): string =>
+  emitForm(chakraBackend(options.visual ?? DEFAULT_VISUAL), options);
 
 // ---------------------------------------------------------------------------
 // Custom template backend (leaf-override for an arbitrary UI kit)

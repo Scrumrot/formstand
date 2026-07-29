@@ -5,12 +5,14 @@ import { moduleSpecifier } from "../src/cli";
 import {
   type EmitFormOptions,
   type VisualOptions,
+  emitChakraForm,
   emitMuiForm,
   emitPlainForm,
   emitShadcnForm,
 } from "../src/codegen";
 import { fromZod } from "../src/fromZod";
 import {
+  chakraStubPaths,
   fixturesDir,
   freshTmpDir,
   muiStubPaths,
@@ -127,6 +129,7 @@ const fixturesFor = (
 const plain = fixturesFor(emitPlainForm, "plain");
 const mui = fixturesFor(emitMuiForm, "mui");
 const shadcn = fixturesFor(emitShadcnForm, "shadcn");
+const chakra = fixturesFor(emitChakraForm, "chakra");
 
 describe("generated components", () => {
   // THE BIG ONE: every plain-backend output must typecheck against the real
@@ -151,6 +154,21 @@ describe("generated components", () => {
     expect(shadcn.profile.code).toContain('from "@/components/ui/input"');
     expect(shadcn.profile.code).toContain('"aria-invalid":');
     expect(shadcn.profile.code).not.toContain("helperText");
+  });
+
+  it("chakra outputs typecheck against the library source and the chakra stub", () => {
+    expect(typecheckDiagnostics(chakra.files, chakraStubPaths)).toEqual([]);
+    // The Chakra 3 conventions the emitter promises: compound Field parts,
+    // the native select (not the Ark collection Select), Switch composition,
+    // and the `invalid` flag (v2's isInvalid is gone in v3).
+    expect(chakra.profile.code).toContain('} from "@chakra-ui/react";');
+    expect(chakra.profile.code).toContain("<Field.Root invalid={");
+    expect(chakra.profile.code).toContain("<Field.ErrorText>");
+    expect(chakra.profile.code).toContain("<NativeSelect.Field");
+    expect(chakra.profile.code).toContain("<Switch.HiddenInput />");
+    expect(chakra.profile.code).not.toContain("isInvalid");
+    expect(chakra.profile.code).not.toContain("FormControl");
+    expect(chakra.profile.code).not.toContain("helperText");
   });
 
   // The stub is typed with the emitter's shapes, so it can only prove
@@ -195,12 +213,21 @@ describe("generated components", () => {
     expect(mui.panel.code).toContain('gridTemplateColumns: "repeat(2, minmax(0, 1fr))"');
     expect(shadcn.panel.code).toContain("bg-card text-card-foreground shadow-sm");
     expect(shadcn.panel.code).toContain("md:grid-cols-2");
+    expect(chakra.panel.code).toContain("<Card.Root");
+    expect(chakra.panel.code).toContain(
+      'gridTemplateColumns={"repeat(2, minmax(0, 1fr))"}',
+    );
   });
 
-  it("collapsible renders details/summary (Accordion on mui)", () => {
+  it("collapsible renders details/summary (Accordion on mui and chakra)", () => {
     expect(plain.collapsible.code).toContain("<details open");
     expect(mui.collapsible.code).toContain("<Accordion defaultExpanded");
     expect(shadcn.collapsible.code).toContain("<details open");
+    expect(chakra.collapsible.code).toContain(
+      '<Accordion.Root collapsible defaultValue={["section"]}',
+    );
+    expect(chakra.collapsible.code).toContain("<Accordion.ItemTrigger>");
+    expect(chakra.collapsible.code).toContain("<Accordion.ItemBody ");
   });
 
   it("the flat default keeps the historical output and gates the imports", () => {
@@ -208,6 +235,9 @@ describe("generated components", () => {
     expect(mui.profile.code).not.toContain("Card");
     expect(mui.profile.code).not.toContain("Accordion");
     expect(shadcn.profile.code).not.toContain("bg-card");
+    expect(chakra.profile.code).toContain('<Stack gap="4">');
+    expect(chakra.profile.code).not.toContain("Card");
+    expect(chakra.profile.code).not.toContain("Accordion");
   });
 
   // The blank-draft cast is emitted only when the draft genuinely can't
@@ -229,5 +259,6 @@ describe("generated components", () => {
     expect(plain.leafFree.code).not.toContain("BoundFieldProps");
     expect(mui.leafFree.code).not.toContain("BoundFieldProps");
     expect(shadcn.leafFree.code).not.toContain("BoundFieldProps");
+    expect(chakra.leafFree.code).not.toContain("BoundFieldProps");
   });
 });

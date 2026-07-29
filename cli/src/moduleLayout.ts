@@ -13,9 +13,11 @@ import {
   type SchemaImport,
   type VisualOptions,
   assertObjectRoot,
+  chakraAdapterSection,
   collectUsage,
   commentText,
   emitInitialValues,
+  gridChakraProps,
   hasVariantFieldUsage,
   identifierSuffix,
   isScalarSpec,
@@ -52,7 +54,7 @@ import type { MuiVersion } from "./uiTarget";
 // Requires formstand >= 0.7 (createFormHooks). Everything is a pure string
 // builder over the IR, like the single-file backends.
 
-export type ModuleUi = "plain" | "mui" | "shadcn";
+export type ModuleUi = "plain" | "mui" | "shadcn" | "chakra";
 
 export type ModuleFile = Readonly<{
   // Forward-slash relative path inside the module folder.
@@ -318,6 +320,37 @@ const leafImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] => {
             { from: "../adapter", names: ["muiTextFieldProps"] },
           ];
       }
+    case "chakra":
+      switch (spec.kind) {
+        case "boolean":
+          return [
+            { from: "@chakra-ui/react", names: ["Switch"] },
+            { from: "../adapter", names: ["chakraSwitchProps"] },
+          ];
+        case "enum":
+          return [
+            { from: "@chakra-ui/react", names: ["Field", "NativeSelect"] },
+            { from: "../adapter", names: ["chakraSelectProps", "fieldError"] },
+          ];
+        case "number":
+          return [
+            { from: "@chakra-ui/react", names: ["Field", "Input"] },
+            {
+              from: "../adapter",
+              names: ["chakraNumberInputProps", "fieldError"],
+            },
+          ];
+        case "date":
+          return [
+            { from: "@chakra-ui/react", names: ["Field", "Input"] },
+            { from: "../adapter", names: ["chakraDateInputProps", "fieldError"] },
+          ];
+        default:
+          return [
+            { from: "@chakra-ui/react", names: ["Field", "Input"] },
+            { from: "../adapter", names: ["chakraTextInputProps", "fieldError"] },
+          ];
+      }
     case "shadcn":
       switch (spec.kind) {
         case "boolean":
@@ -449,6 +482,52 @@ const leafJsx = (
           return [
             `${indent}<TextField fullWidth label=${labelAttr} {...muiTextFieldProps(${varName})} />`,
           ];
+      }
+    case "chakra":
+      // Chakra 3 compound parts: Field.Root wires ids/aria between Label,
+      // control, and ErrorText via context, so no id attribute is needed.
+      switch (spec.kind) {
+        case "boolean":
+          return [
+            `${indent}<Switch.Root {...chakraSwitchProps(${varName})}>`,
+            `${indent}  <Switch.HiddenInput />`,
+            `${indent}  <Switch.Control>`,
+            `${indent}    <Switch.Thumb />`,
+            `${indent}  </Switch.Control>`,
+            `${indent}  <Switch.Label>${labelAttr}</Switch.Label>`,
+            `${indent}</Switch.Root>`,
+          ];
+        case "enum":
+          return [
+            `${indent}<Field.Root invalid={fieldError(${varName}) !== undefined}>`,
+            `${indent}  <Field.Label>${labelAttr}</Field.Label>`,
+            `${indent}  <NativeSelect.Root>`,
+            `${indent}    <NativeSelect.Field placeholder=${labelAttr} {...chakraSelectProps(${varName})}>`,
+            ...spec.options.map(
+              (option) =>
+                `${indent}      <option value=${jsxText(option)}>${jsxText(labelFromName(option))}</option>`,
+            ),
+            `${indent}    </NativeSelect.Field>`,
+            `${indent}    <NativeSelect.Indicator />`,
+            `${indent}  </NativeSelect.Root>`,
+            `${indent}  <Field.ErrorText>{fieldError(${varName})}</Field.ErrorText>`,
+            `${indent}</Field.Root>`,
+          ];
+        default: {
+          const builder =
+            spec.kind === "number"
+              ? "chakraNumberInputProps"
+              : spec.kind === "date"
+                ? "chakraDateInputProps"
+                : "chakraTextInputProps";
+          return [
+            `${indent}<Field.Root invalid={fieldError(${varName}) !== undefined}>`,
+            `${indent}  <Field.Label>${labelAttr}</Field.Label>`,
+            `${indent}  <Input {...${builder}(${varName})} />`,
+            `${indent}  <Field.ErrorText>{fieldError(${varName})}</Field.ErrorText>`,
+            `${indent}</Field.Root>`,
+          ];
+        }
       }
     case "shadcn": {
       const id = idAttr ?? `{${q("")}}`;
@@ -588,6 +667,59 @@ const objectShell = (
       }
       break;
     }
+    case "chakra": {
+      const grid = gridChakraProps(cols);
+      switch (visual.sections) {
+        case "flat":
+          return cols === 1
+            ? [
+                `    <Stack gap="4">`,
+                `      <Heading size="sm">`,
+                ...headingLines("        "),
+                "      </Heading>",
+                ...children,
+                "    </Stack>",
+              ]
+            : [
+                `    <Box ${grid}>`,
+                `      <Heading size="sm" gridColumn="1 / -1">`,
+                ...headingLines("        "),
+                "      </Heading>",
+                ...children,
+                "    </Box>",
+              ];
+        case "panel":
+          return [
+            "    <Card.Root>",
+            `      <Card.Body ${grid}>`,
+            `        <Heading size="sm"${cols > 1 ? ` gridColumn="1 / -1"` : ""}>`,
+            ...headingLines("          "),
+            "        </Heading>",
+            ...children,
+            "      </Card.Body>",
+            "    </Card.Root>",
+          ];
+        case "collapsible":
+          return [
+            `    <Accordion.Root collapsible defaultValue={["section"]}>`,
+            `      <Accordion.Item value="section">`,
+            "        <Accordion.ItemTrigger>",
+            `          <Heading size="sm">`,
+            ...headingLines("            "),
+            "          </Heading>",
+            "          <Accordion.ItemIndicator />",
+            "        </Accordion.ItemTrigger>",
+            "        <Accordion.ItemContent>",
+            `          <Accordion.ItemBody ${grid}>`,
+            ...children,
+            "          </Accordion.ItemBody>",
+            "        </Accordion.ItemContent>",
+            "      </Accordion.Item>",
+            "    </Accordion.Root>",
+          ];
+      }
+      break;
+    }
     case "shadcn": {
       const colsClass = gridColsClass(cols);
       switch (visual.sections) {
@@ -657,6 +789,24 @@ const objectSectionImports = (
   ui: ModuleUi,
   visual: VisualOptions,
 ): readonly ImportLine[] => {
+  if (ui === "chakra") {
+    switch (visual.sections) {
+      case "flat":
+        return [
+          {
+            from: "@chakra-ui/react",
+            names:
+              visual.columns === 1
+                ? ["Heading", "Stack"]
+                : ["Box", "Heading"],
+          },
+        ];
+      case "panel":
+        return [{ from: "@chakra-ui/react", names: ["Card", "Heading"] }];
+      case "collapsible":
+        return [{ from: "@chakra-ui/react", names: ["Accordion", "Heading"] }];
+    }
+  }
   if (ui !== "mui") return [];
   switch (visual.sections) {
     case "flat":
@@ -696,6 +846,29 @@ type ArrayShellParts = Readonly<{
 
 const arrayShell = (ui: ModuleUi, sectionLabel: string): ArrayShellParts => {
   switch (ui) {
+    case "chakra":
+      return {
+        imports: [
+          { from: "@chakra-ui/react", names: ["Button", "Stack", "Text"] },
+        ],
+        rowOpen: [`    <Stack gap="4" p="4" borderWidth="1px" borderRadius="md">`],
+        rowClose: (removeExpr) => [
+          `      <Button type="button" variant="outline" size="sm" onClick={${removeExpr}}>`,
+          "        Remove",
+          "      </Button>",
+          "    </Stack>",
+        ],
+        listError: [
+          "      {rows.error ? (",
+          `        <Text color="red.500">{rows.error[0]}</Text>`,
+          "      ) : null}",
+        ],
+        addButton: (pushExpr, addLabel) => [
+          `      <Button type="button" variant="outline" size="sm" onClick={${pushExpr}}>`,
+          `        ${jsxText(addLabel)}`,
+          "      </Button>",
+        ],
+      };
     case "mui":
       return {
         imports: [
@@ -789,6 +962,30 @@ type FormShell = Readonly<{
 
 const formShell = (ui: ModuleUi): FormShell => {
   switch (ui) {
+    case "chakra":
+      return {
+        imports: [
+          { from: "@chakra-ui/react", names: ["Box", "Button", "Stack"] },
+        ],
+        open: (naming) => [
+          "    <Box",
+          `      as="form"`,
+          `      onSubmit={${naming.formConst}.handleSubmit((data) => {`,
+          `        console.log("submit", data);`,
+          "      })}",
+          `      maxW="640px"`,
+          "    >",
+          `      <Stack gap="4">`,
+        ],
+        close: [
+          `        <Button type="submit" disabled={submitting}>`,
+          `          {submitting ? "Submitting..." : "Submit"}`,
+          "        </Button>",
+          "      </Stack>",
+          "    </Box>",
+        ],
+        bodyIndent: "        ",
+      };
     case "mui":
       return {
         imports: [{ from: "@mui/material", names: ["Box", "Button", "Stack"] }],
@@ -975,15 +1172,21 @@ const adapterFile = (
   if (ui === "plain" || !hasLeafUsage(usage)) return undefined;
   const needsText = usage.string || usage.date;
   // mui's Switch adapter also types its onChange with ChangeEvent, so a
-  // boolean-only schema needs the import too.
+  // boolean-only schema needs the import too; chakra's select is a native
+  // <select> (ChangeEvent), but its Switch takes a details callback.
   const needsChangeEvent =
-    needsText || usage.number || (ui === "mui" && (usage.enum || usage.boolean));
+    needsText ||
+    usage.number ||
+    (ui === "mui" && (usage.enum || usage.boolean)) ||
+    (ui === "chakra" && usage.enum);
   const formstandValues = [
     ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
     ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
   ];
   return {
-    path: ui === "mui" ? "adapter.ts" : "adapter.tsx",
+    // Only the shadcn adapter renders JSX (its FieldError component); the
+    // mui and chakra adapters are prop builders.
+    path: ui === "shadcn" ? "adapter.tsx" : "adapter.ts",
     content: [
       HEADER,
       ...(needsChangeEvent ? [`import type { ChangeEvent } from "react";`] : []),
@@ -994,7 +1197,9 @@ const adapterFile = (
       "",
       ui === "mui"
         ? muiAdapterSection(usage, "export ", muiVersion)
-        : shadcnAdapterSection(usage, "export "),
+        : ui === "chakra"
+          ? chakraAdapterSection(usage, "export ")
+          : shadcnAdapterSection(usage, "export "),
       "",
     ].join("\n"),
   };
@@ -1191,6 +1396,15 @@ const nestedListShell = (
   close: readonly string[];
 }> => {
   switch (ui) {
+    case "chakra":
+      return {
+        imports: [{ from: "@chakra-ui/react", names: ["Heading", "Stack"] }],
+        open: [
+          `    <Stack gap="4">`,
+          `      <Heading size="xs">${jsxText(label)}</Heading>`,
+        ],
+        close: ["    </Stack>"],
+      };
     case "mui":
       return {
         imports: [{ from: "@mui/material", names: ["Stack", "Typography"] }],
