@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.0 — 2026-07-29
 
 ### Fixed
 
@@ -30,7 +30,7 @@
   accidental newline in a path builds a valid selector that matches
   nothing instead of making `querySelectorAll` throw.
 
-## formstand-cli Unreleased
+## formstand-cli 0.9.1 — 2026-07-29
 
 ### Fixed
 
