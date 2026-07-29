@@ -2,7 +2,11 @@ import { camelCase, camelIdent, pascalCase } from "./casing";
 import {
   DEFAULT_VISUAL,
   type EmitFormOptions,
+  type ScaffoldOptions,
   blankNeedsCast,
+  emittedMode,
+  onSubmitAttrLines,
+  scaffoldOf,
   depthTodoLine,
   gridColsClass,
   gridSxProps,
@@ -1393,9 +1397,18 @@ const arrayShell = (ui: ModuleUi, sectionLabel: string): ArrayShellParts => {
   }
 };
 
+// The form component's kit shell in structured pieces (mirroring the
+// single-file Backend.formShell): `open` is the element open up to (not
+// including) the onSubmit attribute — formFile composes the attribute via
+// the shared onSubmitAttrLines so submit and --live can't drift —
+// `afterSubmit` the remaining attributes plus ">" and inner wrapper opens,
+// `submitButton` the kit's submit control (omitted under --live), `close`
+// the closing tags.
 type FormShell = Readonly<{
   imports: readonly ImportLine[];
-  open: (naming: Naming) => readonly string[];
+  open: readonly string[];
+  afterSubmit: readonly string[];
+  submitButton: readonly string[];
   close: readonly string[];
   bodyIndent: string;
 }>;
@@ -1405,22 +1418,18 @@ const formShell = (ui: ModuleUi): FormShell => {
     case "antd":
       return {
         imports: [{ from: "antd", names: ["Button", "Flex"] }],
-        open: (naming) => [
-          "    <form",
-          `      onSubmit={${naming.formConst}.handleSubmit((data) => {`,
-          `        console.log("submit", data);`,
-          "      })}",
+        open: ["    <form"],
+        afterSubmit: [
           "      style={{ maxWidth: 640 }}",
           "    >",
           `      <Flex vertical gap="middle">`,
         ],
-        close: [
+        submitButton: [
           `        <Button htmlType="submit" type="primary" disabled={submitting}>`,
           `          {submitting ? "Submitting..." : "Submit"}`,
           "        </Button>",
-          "      </Flex>",
-          "    </form>",
         ],
+        close: ["      </Flex>", "    </form>"],
         bodyIndent: "        ",
       };
     case "mantine":
@@ -1428,23 +1437,14 @@ const formShell = (ui: ModuleUi): FormShell => {
         imports: [
           { from: "@mantine/core", names: ["Box", "Button", "Stack"] },
         ],
-        open: (naming) => [
-          "    <Box",
-          `      component="form"`,
-          `      onSubmit={${naming.formConst}.handleSubmit((data) => {`,
-          `        console.log("submit", data);`,
-          "      })}",
-          "      maw={640}",
-          "    >",
-          `      <Stack gap="md">`,
-        ],
-        close: [
+        open: ["    <Box", `      component="form"`],
+        afterSubmit: ["      maw={640}", "    >", `      <Stack gap="md">`],
+        submitButton: [
           `        <Button type="submit" disabled={submitting}>`,
           `          {submitting ? "Submitting..." : "Submit"}`,
           "        </Button>",
-          "      </Stack>",
-          "    </Box>",
         ],
+        close: ["      </Stack>", "    </Box>"],
         bodyIndent: "        ",
       };
     case "chakra":
@@ -1452,86 +1452,75 @@ const formShell = (ui: ModuleUi): FormShell => {
         imports: [
           { from: "@chakra-ui/react", names: ["Box", "Button", "Stack"] },
         ],
-        open: (naming) => [
-          "    <Box",
-          `      as="form"`,
-          `      onSubmit={${naming.formConst}.handleSubmit((data) => {`,
-          `        console.log("submit", data);`,
-          "      })}",
-          `      maxW="640px"`,
-          "    >",
-          `      <Stack gap="4">`,
-        ],
-        close: [
+        open: ["    <Box", `      as="form"`],
+        afterSubmit: [`      maxW="640px"`, "    >", `      <Stack gap="4">`],
+        submitButton: [
           `        <Button type="submit" disabled={submitting}>`,
           `          {submitting ? "Submitting..." : "Submit"}`,
           "        </Button>",
-          "      </Stack>",
-          "    </Box>",
         ],
+        close: ["      </Stack>", "    </Box>"],
         bodyIndent: "        ",
       };
     case "mui":
       return {
         imports: [{ from: "@mui/material", names: ["Box", "Button", "Stack"] }],
-        open: (naming) => [
-          "    <Box",
-          `      component="form"`,
-          `      onSubmit={${naming.formConst}.handleSubmit((data) => {`,
-          `        console.log("submit", data);`,
-          "      })}",
+        open: ["    <Box", `      component="form"`],
+        afterSubmit: [
           "      sx={{ maxWidth: 640 }}",
           "    >",
           "      <Stack spacing={2}>",
         ],
-        close: [
+        submitButton: [
           `        <Button type="submit" variant="contained" disabled={submitting}>`,
           `          {submitting ? "Submitting..." : "Submit"}`,
           "        </Button>",
-          "      </Stack>",
-          "    </Box>",
         ],
+        close: ["      </Stack>", "    </Box>"],
         bodyIndent: "        ",
       };
     case "shadcn":
       return {
         imports: [{ from: "@/components/ui/button", names: ["Button"] }],
-        open: (naming) => [
-          "    <form",
-          `      className="grid max-w-xl gap-4"`,
-          `      onSubmit={${naming.formConst}.handleSubmit((data) => {`,
-          `        console.log("submit", data);`,
-          "      })}",
-          "    >",
-        ],
-        close: [
+        open: ["    <form", `      className="grid max-w-xl gap-4"`],
+        afterSubmit: ["    >"],
+        submitButton: [
           `      <Button type="submit" disabled={submitting}>`,
           `        {submitting ? "Submitting..." : "Submit"}`,
           "      </Button>",
-          "    </form>",
         ],
+        close: ["    </form>"],
         bodyIndent: "      ",
       };
     case "plain":
       return {
         imports: [],
-        open: (naming) => [
-          "    <form",
-          `      onSubmit={${naming.formConst}.handleSubmit((data) => {`,
-          `        console.log("submit", data);`,
-          "      })}",
-          "    >",
-        ],
-        close: [
+        open: ["    <form"],
+        afterSubmit: ["    >"],
+        submitButton: [
           `      <button type="submit" disabled={submitting}>`,
           `        {submitting ? "Submitting..." : "Submit"}`,
           "      </button>",
-          "    </form>",
         ],
+        close: ["    </form>"],
         bodyIndent: "      ",
       };
   }
 };
+
+// --live: the kit shells import Button only for the submit control the
+// mode omits (module-layout array add/remove buttons live in their own
+// section files), so the entry is dropped — and an emptied import line
+// with it.
+const importsSansButton = (
+  imports: readonly ImportLine[],
+): readonly ImportLine[] =>
+  imports
+    .map((line) => ({
+      ...line,
+      names: line.names.filter((name) => name !== "Button"),
+    }))
+    .filter((line) => line.names.length > 0);
 
 // ---------------------------------------------------------------------------
 // File emitters
@@ -1577,6 +1566,7 @@ const hooksFile = (
   schemaImport: SchemaImport,
   root: ObjectSpec,
   plan: Plan,
+  scaffold: ScaffoldOptions,
 ): ModuleFile => {
   // Nested arrays (under object sections, or inside array rows) bind the
   // same bound hooks as top-level array sections, so look past the roots.
@@ -1631,9 +1621,16 @@ const hooksFile = (
       "// these pre-wired hooks instead of receiving `form` via props or a",
       "// provider. A module singleton never unmounts — for a per-mount",
       "// lifecycle, use useForm + createFormContext instead.",
+      ...(scaffold.live
+        ? [
+            `// --live: mode "onChange" (not the library default "onBlur") so`,
+            "// live subscribers never read values whose errors lag a blur",
+            "// behind.",
+          ]
+        : []),
       `export const ${naming.formConst} = createForm(${schemaImport.name}, {`,
       "  initialValues,",
-      `  mode: "onBlur",`,
+      `  mode: ${q(emittedMode(scaffold))},`,
       "});",
       "",
       "export const {",
@@ -2780,14 +2777,74 @@ const arraySectionFile = (
   };
 };
 
-const formFile = (ui: ModuleUi, naming: Naming, plan: Plan): ModuleFile => {
+// The form component under the scaffold modes: --form-prop swaps the
+// singleton import for a typed `form` prop (the submit/subscription shell
+// runs on the prop; the field hooks stay pre-wired to the module's own
+// instance, so the prop must BE that instance — documented in the emitted
+// props comment), and --live swaps the submit scaffold for an optional
+// onValuesChange subscription over form.watchValues (formstand >= 0.2;
+// useFormValues is the post-0.12 render-side spelling).
+const formFile = (
+  ui: ModuleUi,
+  naming: Naming,
+  plan: Plan,
+  scaffold: ScaffoldOptions,
+): ModuleFile => {
   const shell = formShell(ui);
+  const formExpr = scaffold.formProp ? "form" : naming.formConst;
+  const shellImports = scaffold.live
+    ? importsSansButton(shell.imports)
+    : shell.imports;
+  const propsType = `${naming.formName}Props`;
+  const params = [
+    ...(scaffold.formProp ? ["form"] : []),
+    ...(scaffold.live ? ["onValuesChange"] : []),
+  ];
+  const propsFields = [
+    ...(scaffold.formProp
+      ? [
+          `  // The module's field hooks are pre-wired to ${naming.formConst}`,
+          '  // (exported from "./hooks"): pass that instance. A different form',
+          "  // of the same schema would compile, but the fields would keep",
+          "  // reading the module's own form.",
+          `  form: Form<${naming.schemaType}>;`,
+        ]
+      : []),
+    ...(scaffold.live
+      ? [
+          "  // Fires on every value change (values are replaced immutably, so",
+          "  // reference identity tracks real changes) — drive a map, a",
+          "  // preview, or an autosave from here.",
+          `  onValuesChange?: (values: ${naming.valuesType}) => void;`,
+        ]
+      : []),
+  ];
+  const typeImports = [
+    ...(scaffold.formProp ? [naming.schemaType] : []),
+    ...(scaffold.live ? [naming.valuesType] : []),
+  ];
+  const hooksImports = scaffold.formProp
+    ? []
+    : [naming.formConst, ...(scaffold.live ? [] : [naming.hook("IsSubmitting")])];
   return {
     path: `${naming.formName}.tsx`,
     content: [
       HEADER,
-      ...mergeImports(shell.imports),
-      `import { ${naming.formConst}, ${naming.hook("IsSubmitting")} } from "./hooks";`,
+      ...(scaffold.live ? [`import { useEffect } from "react";`] : []),
+      ...mergeImports(shellImports),
+      // --form-prop runs the shell on the passed form, so useIsSubmitting
+      // comes generic from the library instead of pre-wired from ./hooks.
+      ...(scaffold.formProp && !scaffold.live
+        ? [`import { useIsSubmitting, type Form } from "formstand";`]
+        : scaffold.formProp
+          ? [`import type { Form } from "formstand";`]
+          : []),
+      ...(hooksImports.length > 0
+        ? [`import { ${hooksImports.join(", ")} } from "./hooks";`]
+        : []),
+      ...(typeImports.length > 0
+        ? [`import type { ${typeImports.join(", ")} } from "./types";`]
+        : []),
       ...plan.rootFields.map(
         (field) =>
           `import { ${field.componentName} } from "./fields/${field.componentName}";`,
@@ -2797,13 +2854,49 @@ const formFile = (ui: ModuleUi, naming: Naming, plan: Plan): ModuleFile => {
           `import { ${section.componentName} } from "./sections/${section.componentName}";`,
       ),
       "",
+      ...(propsFields.length > 0
+        ? [`export type ${propsType} = Readonly<{`, ...propsFields, "}>;", ""]
+        : []),
       "// The form body composes sections; sections compose fields; fields bind",
-      "// paths. Nothing in this tree passes `form` — every hook comes pre-wired",
-      "// from ./hooks.",
-      `export const ${naming.formName} = () => {`,
-      `  const submitting = ${naming.hook("IsSubmitting")}();`,
+      ...(scaffold.formProp
+        ? [
+            "// paths through the pre-wired hooks from ./hooks — the `form` prop",
+            "// only drives this shell, so it must be the module's own instance.",
+          ]
+        : [
+            "// paths. Nothing in this tree passes `form` — every hook comes pre-wired",
+            "// from ./hooks.",
+          ]),
+      `export const ${naming.formName} = (${
+        params.length === 0 ? "" : `{ ${params.join(", ")} }: ${propsType}`
+      }) => {`,
+      ...(scaffold.live
+        ? []
+        : scaffold.formProp
+          ? ["  const submitting = useIsSubmitting(form);"]
+          : [`  const submitting = ${naming.hook("IsSubmitting")}();`]),
+      ...(scaffold.live
+        ? [
+            `  // ${formExpr}.watchValues (formstand >= 0.2) returns its own`,
+            "  // unsubscribe. On formstand > 0.12, useFormValues is the",
+            "  // render-side one-liner for the same subscription.",
+            "  useEffect(",
+            "    () =>",
+            "      onValuesChange === undefined",
+            "        ? undefined",
+            `        : ${formExpr}.watchValues(onValuesChange),`,
+            // The singleton is module-scoped (stable), so only the prop-form
+            // variant lists it as a dependency.
+            scaffold.formProp
+              ? "    [form, onValuesChange],"
+              : "    [onValuesChange],",
+            "  );",
+          ]
+        : []),
       "  return (",
-      ...shell.open(naming),
+      ...shell.open,
+      ...onSubmitAttrLines(formExpr, scaffold.live),
+      ...shell.afterSubmit,
       ...plan.rootTodos.map((todo) => `${shell.bodyIndent}${todo}`),
       ...plan.rootFields.map(
         (field) => `${shell.bodyIndent}<${field.componentName} />`,
@@ -2811,6 +2904,7 @@ const formFile = (ui: ModuleUi, naming: Naming, plan: Plan): ModuleFile => {
       ...plan.sections.map(
         (section) => `${shell.bodyIndent}<${section.componentName} />`,
       ),
+      ...(scaffold.live ? [] : shell.submitButton),
       ...shell.close,
       "  );",
       "};",
@@ -3047,6 +3141,7 @@ export const emitModuleForm = (
 ): readonly ModuleFile[] => {
   const ui = options.ui ?? "plain";
   const visual = options.visual ?? DEFAULT_VISUAL;
+  const scaffold = scaffoldOf(options);
   const root = assertObjectRoot(options.ir);
   const naming = namingFor(options.formName);
   const plan = buildPlan(root, naming);
@@ -3055,7 +3150,7 @@ export const emitModuleForm = (
   return [
     schemaFile(options.schemaImport, options.schemaSource),
     typesFile(naming, options.schemaImport),
-    hooksFile(naming, options.schemaImport, root, plan),
+    hooksFile(naming, options.schemaImport, root, plan, scaffold),
     ...(adapter === undefined ? [] : [adapter]),
     ...plan.fields.map((field) => fieldFile(ui, naming, field)),
     ...plan.sections.map((section) =>
@@ -3067,7 +3162,7 @@ export const emitModuleForm = (
             ? tupleSectionFile(ui, visual, naming, section)
             : unionSectionFile(ui, visual, naming, section),
     ),
-    formFile(ui, naming, plan),
+    formFile(ui, naming, plan, scaffold),
     indexFile(naming),
   ];
 };

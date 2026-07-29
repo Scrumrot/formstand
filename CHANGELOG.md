@@ -30,6 +30,46 @@
   unaffected — the guard's type parameter defaults to an unexported
   sentinel no inferred call can produce.
 
+## formstand-cli Unreleased
+
+### Added
+
+- **`--live` — live/no-submit scaffold mode** (config key `live`). For
+  forms nothing ever submits (a map or preview re-rendering from every
+  value change): the submit scaffold — `handleSubmit`, the submit button,
+  `useIsSubmitting` — is omitted entirely; the generated component instead
+  accepts an optional `onValuesChange?: (values) => void` prop wired
+  through `form.watchValues` in a `useEffect` (watchValues has shipped
+  since formstand 0.2 and returns its own unsubscribe, so generated output
+  keeps a low version floor; the emitted comment names `useFormValues` as
+  the post-0.12 render-side one-liner). The root element stays a `<form>`
+  (label association, the form landmark, kit chrome unchanged) with a
+  `preventDefault` `onSubmit` so the browser's implicit Enter-key
+  submission can't navigate the page. The emitted validation mode defaults
+  to `"onChange"` — a live consumer wants validity that tracks the values,
+  not the library-default `"onBlur"` lag (noted in the emitted comment).
+  Kit `Button` imports stay usage-gated: array add/remove buttons keep
+  them, an array-free live form drops them. Works with all six `--ui`
+  kits, custom `--template`s, and both layouts (`--layout module` defaults
+  the singleton's `createForm` mode and rewires the form file; the
+  pre-wired hook API is unchanged).
+- **`--form-prop` — page-owned-form scaffold mode** (config key
+  `formProp`). The generated component's props gain
+  `form: Form<typeof schema>` and it stops creating its own form; the
+  `useForm` scaffold is still emitted, as an exported `use{Name}Form()`
+  hook the page calls — so one instance can feed the generated UI and any
+  other consumer (the dogfood case: a page-level form driving a map AND
+  the form UI). In `--layout module` the component takes the same prop for
+  its shell (submit/subscription) while the field hooks stay pre-wired to
+  the module singleton — the emitted props comment says to pass that
+  exported instance. Composes with `--live`: the component becomes pure
+  rendering and `onValuesChange` subscribes to the passed form.
+- Internal: the per-kit form shells (single-file backends and the module
+  layout) are restructured into shared open/onSubmit/submit-button/close
+  pieces, so the submit and `--live` shapes are composed from one
+  production and cannot drift per kit. Default-flag output is
+  byte-identical.
+
 ## 0.12.0 — 2026-07-29
 
 ### Changed

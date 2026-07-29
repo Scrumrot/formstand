@@ -242,7 +242,7 @@ const generateKit = ({ alias, emitSingle, moduleUi, moduleExtra, probe }) => {
     return abs;
   };
 
-  const single = (formName, ir, name, visual) =>
+  const single = (formName, ir, name, visual, extra) =>
     writeFile(
       `single/${formName}.tsx`,
       emitSingle({
@@ -250,6 +250,7 @@ const generateKit = ({ alias, emitSingle, moduleUi, moduleExtra, probe }) => {
         formName,
         schemaImport: { name, from: "../boundarySchemas", kind: "named" },
         ...(visual === undefined ? {} : { visual }),
+        ...(extra ?? {}),
       }),
     );
 
@@ -276,6 +277,16 @@ const generateKit = ({ alias, emitSingle, moduleUi, moduleExtra, probe }) => {
       columns: 3,
     }),
     single("NestedArrayForm", nestedArrayIr, "nestedArrayStressSchema"),
+    // The scaffold modes (--live / --form-prop) ride ONE combined variant
+    // per kit — deliberately not the full mode × chrome × layout
+    // cross-product: the scaffold is a shared layer (the per-kit deltas are
+    // the shell strings and the Button import gating, both exercised here),
+    // and the single-mode variants are already typechecked per kit in the
+    // cli test suite (typecheck.test.ts / scaffoldModes.test.ts).
+    single("LiveOwnedForm", kitchenSinkIr, "kitchenSinkSchema", undefined, {
+      live: true,
+      formProp: true,
+    }),
     ...moduleForm(
       "KitchenSink",
       kitchenSinkIr,

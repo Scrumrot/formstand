@@ -51,7 +51,67 @@ export type EmitFormOptions = Readonly<{
   // Which @mui/material major the mui backend emits for (default: the
   // latest supported major). Ignored by every other backend.
   muiVersion?: MuiVersion;
+  // --live: a form with no submit at all (a map or preview re-renders from
+  // every value change). Omits the submit scaffold (handleSubmit, button,
+  // useIsSubmitting), adds an optional onValuesChange prop wired through
+  // form.watchValues, and defaults the emitted mode to "onChange".
+  live?: boolean;
+  // --form-prop: the page owns the form. The component takes a typed
+  // `form` prop instead of calling useForm itself; the useForm scaffold is
+  // still emitted, as an exported use{Name}Form hook the page calls.
+  formProp?: boolean;
 }>;
+
+// The scaffold modes with their defaults applied — the shape the emitters
+// and both layouts consume.
+export type ScaffoldOptions = Readonly<{ live: boolean; formProp: boolean }>;
+
+export const scaffoldOf = (
+  options: Readonly<Pick<EmitFormOptions, "live" | "formProp">>,
+): ScaffoldOptions => ({
+  live: options.live === true,
+  formProp: options.formProp === true,
+});
+
+// The emitted useForm/createForm mode. --live defaults it to "onChange":
+// with the library-default "onBlur" a live consumer would read values whose
+// errors lag a blur behind — a footgun for exactly the use case --live
+// exists for (live coordinates driving a map want live validity too).
+export const emittedMode = (scaffold: ScaffoldOptions): string =>
+  scaffold.live ? "onChange" : "onBlur";
+
+// The onSubmit attribute lines both layouts emit at the shell's attribute
+// indent (6 spaces in every backend). Submit scaffolds run the typed
+// handleSubmit; --live keeps the <form> element for its semantics (label
+// association, the form landmark, kit styling props unchanged) but must
+// still swallow the browser's implicit Enter-key submission — with no
+// submit button a lone text input would otherwise navigate the page.
+export const onSubmitAttrLines = (
+  formExpr: string,
+  live: boolean,
+): readonly string[] =>
+  live
+    ? [
+        "      onSubmit={(event) => {",
+        "        // --live: no submit. preventDefault stops the browser's",
+        "        // implicit Enter-key submission (a full page navigation);",
+        "        // values flow through onValuesChange instead.",
+        "        event.preventDefault();",
+        "      }}",
+      ]
+    : [
+        `      onSubmit={${formExpr}.handleSubmit((data) => {`,
+        `        console.log("submit", data);`,
+        "      })}",
+      ];
+
+// "ProfileForm" -> "useProfileForm": the exported owner hook --form-prop
+// emits in place of the in-component useForm call (mirrors the module
+// layout's prefix derivation: strip one trailing "Form").
+export const ownerHookName = (formName: string): string => {
+  const stripped = formName.replace(/Form$/, "");
+  return `use${stripped.length === 0 ? formName : stripped}Form`;
+};
 
 export type ObjectSpec = Extract<FieldSpec, Readonly<{ kind: "object" }>>;
 
@@ -1150,9 +1210,17 @@ type Backend = Readonly<{
   ) => readonly string[];
   // Indentation level of the top-level field list.
   bodyLevel: number;
-  // JSX between "return (" and the field list / between the field list and ")".
-  formOpen: readonly string[];
-  formClose: readonly string[];
+  // The kit's form shell in structured pieces, so emitForm can compose the
+  // submit and --live shapes from one source: `open` is the element open up
+  // to (not including) the onSubmit attribute, `afterSubmit` the remaining
+  // attributes plus ">" and any inner wrapper opens, `submitButton` the
+  // kit's submit control (omitted under --live), `close` the closing tags.
+  formShell: Readonly<{
+    open: readonly string[];
+    afterSubmit: readonly string[];
+    submitButton: readonly string[];
+    close: readonly string[];
+  }>;
 }>;
 
 // The discriminant select plus one conditional block per variant, all
@@ -1442,10 +1510,105 @@ const emitNestedRows = (
   return [`${ind(level)}<${compName} ${refAttrs} />`];
 };
 
+// The scaffold-mode blocks emitForm assembles around the component: the
+// exported owner hook (--form-prop), the props type (--form-prop and/or
+// --live), and the onValuesChange subscription effect (--live).
+//
+// Subscription-primitive choice (--live): the prop wires through
+// form.watchValues, present since formstand 0.2 and returning its own
+// unsubscribe — the lowest floor of the three candidates. useFormSelector
+// (also 0.2+) is a render-side subscription, wrong shape for a callback
+// prop; useFormValues is the nicest spelling but UNRELEASED (> 0.12), and
+// generated output must not require an unpublished library version. The
+// emitted comment names the post-release one-liner.
+const scaffoldBlocks = (
+  scaffold: ScaffoldOptions,
+  formName: string,
+  schemaName: string,
+): Readonly<{
+  beforeComponent: readonly string[];
+  componentParams: string;
+  formLines: readonly string[];
+  effectLines: readonly string[];
+}> => {
+  const propsType = `${formName}Props`;
+  const hookName = ownerHookName(formName);
+  const mode = emittedMode(scaffold);
+  const modeComment = scaffold.live
+    ? [
+        `// --live: the emitted mode is "onChange" (not the library default`,
+        `// "onBlur") so live consumers never read values whose errors lag a`,
+        "// blur behind.",
+      ]
+    : [];
+  const useFormCall = `useForm(${schemaName}, { initialValues, mode: ${q(mode)} })`;
+  const ownerHook = scaffold.formProp
+    ? [
+        "// The page owns the form: create it with this hook (or an",
+        "// equivalent useForm call) and pass it down — the same instance can",
+        "// drive this component and any other consumer of the values.",
+        ...modeComment,
+        `export const ${hookName} = () =>`,
+        `  ${useFormCall};`,
+        "",
+      ]
+    : [];
+  const propsFields = [
+    ...(scaffold.formProp ? [`  form: Form<typeof ${schemaName}>;`] : []),
+    ...(scaffold.live
+      ? [
+          "  // Fires on every value change (values are replaced immutably,",
+          "  // so reference identity tracks real changes) — drive a map, a",
+          "  // preview, or an autosave from here.",
+          "  onValuesChange?: (values: FormValues) => void;",
+        ]
+      : []),
+  ];
+  const propsBlock =
+    propsFields.length === 0
+      ? []
+      : [
+          `export type ${propsType} = Readonly<{`,
+          ...propsFields,
+          "}>;",
+          "",
+        ];
+  const params = [
+    ...(scaffold.formProp ? ["form"] : []),
+    ...(scaffold.live ? ["onValuesChange"] : []),
+  ];
+  return {
+    beforeComponent: [...ownerHook, ...propsBlock],
+    componentParams:
+      params.length === 0 ? "" : `{ ${params.join(", ")} }: ${propsType}`,
+    formLines: scaffold.formProp
+      ? []
+      : [
+          ...modeComment.map((line) => `  ${line}`),
+          `  const form = ${useFormCall};`,
+        ],
+    effectLines: scaffold.live
+      ? [
+          "  // form.watchValues (formstand >= 0.2) returns its own",
+          "  // unsubscribe. On formstand > 0.12, useFormValues(form) is the",
+          "  // render-side one-liner for the same subscription.",
+          "  useEffect(",
+          "    () =>",
+          "      onValuesChange === undefined",
+          "        ? undefined",
+          "        : form.watchValues(onValuesChange),",
+          "    [form, onValuesChange],",
+          "  );",
+        ]
+      : [],
+  };
+};
+
 const emitForm = (
   backend: Backend,
-  { ir, formName, schemaImport }: EmitFormOptions,
+  { ir, formName, schemaImport, ...rest }: EmitFormOptions,
 ): string => {
+  const scaffold = scaffoldOf(rest);
   const root = assertObjectRoot(ir);
   const usage = collectUsage(root);
   const staticUsage = collectStaticUsage(root);
@@ -1486,12 +1649,14 @@ const emitForm = (
     ...lines,
     "",
   ]);
+  const blocks = scaffoldBlocks(scaffold, formName, schemaImport.name);
   return [
     "// Generated by formstand-cli — edit freely, this file is yours.",
     ...backend.header(usage, arrays, root),
     // Child Rows components take a typed `form` prop (the main component passes
-    // its own down); the top-level component gets `form` from useForm.
-    ...(nested.components.length > 0
+    // its own down); the top-level component gets `form` from useForm — or,
+    // under --form-prop, from its own typed prop.
+    ...(nested.components.length > 0 || scaffold.formProp
       ? [`import type { Form } from "formstand";`]
       : []),
     schemaImportLine(schemaImport),
@@ -1501,18 +1666,23 @@ const emitForm = (
     "",
     ...backend.preamble(usage, staticUsage),
     ...nestedComponentLines,
-    `export const ${formName} = () => {`,
-    `  const form = useForm(${schemaImport.name}, { initialValues, mode: "onBlur" });`,
-    "  const submitting = useIsSubmitting(form);",
+    ...blocks.beforeComponent,
+    `export const ${formName} = (${blocks.componentParams}) => {`,
+    ...blocks.formLines,
+    ...(scaffold.live ? [] : ["  const submitting = useIsSubmitting(form);"]),
+    ...blocks.effectLines,
     ...(arrays.length > 0 ? [arrayHooks(arrays, 1)] : []),
     ...(unions.length > 0
       ? unionHooks(unions, 1, backend.numberPropsHook)
       : []),
     "",
     "  return (",
-    ...backend.formOpen,
+    ...backend.formShell.open,
+    ...onSubmitAttrLines("form", scaffold.live),
+    ...backend.formShell.afterSubmit,
     ...bodyLines,
-    ...backend.formClose,
+    ...(scaffold.live ? [] : backend.formShell.submitButton),
+    ...backend.formShell.close,
     "  );",
     "};",
     "",
@@ -1641,7 +1811,10 @@ const plainVariantLeaf = (
   }
 };
 
-const plainBackend = (visual: VisualOptions): Backend => {
+const plainBackend = (
+  visual: VisualOptions,
+  scaffold: ScaffoldOptions,
+): Backend => {
   const cols = visual.columns;
   // Section roots span the full row so nested sections inside a parent grid
   // never get squeezed into one column (harmless outside a grid).
@@ -1685,9 +1858,10 @@ const plainBackend = (visual: VisualOptions): Backend => {
       ...(usage.union ? ["useField"] : []),
       ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
       "useForm",
-      "useIsSubmitting",
+      ...(scaffold.live ? [] : ["useIsSubmitting"]),
     ];
     return [
+      ...reactImportLines(false, false, scaffold.live),
       `import { z } from "zod";`,
       "import {",
       ...formstandImports.map((name) => `  ${name},`),
@@ -1748,24 +1922,24 @@ const plainBackend = (visual: VisualOptions): Backend => {
     `${ind(level)}${visual.sections === "collapsible" ? "</details>" : "</section>"}`,
   ],
   bodyLevel: 3,
-  formOpen: [
-    "    <form",
-    "      onSubmit={form.handleSubmit((data) => {",
-    `        console.log("submit", data);`,
-    "      })}",
-    "    >",
-  ],
-  formClose: [
-    `      <button type="submit" disabled={submitting}>`,
-    `        {submitting ? "Submitting..." : "Submit"}`,
-    "      </button>",
-    "    </form>",
-  ],
+  formShell: {
+    open: ["    <form"],
+    afterSubmit: ["    >"],
+    submitButton: [
+      `      <button type="submit" disabled={submitting}>`,
+      `        {submitting ? "Submitting..." : "Submit"}`,
+      "      </button>",
+    ],
+    close: ["    </form>"],
+  },
   };
 };
 
 export const emitPlainForm = (options: EmitFormOptions): string =>
-  emitForm(plainBackend(options.visual ?? DEFAULT_VISUAL), options);
+  emitForm(
+    plainBackend(options.visual ?? DEFAULT_VISUAL, scaffoldOf(options)),
+    options,
+  );
 
 // ---------------------------------------------------------------------------
 // Snippets shared by the component-kit backends (MUI + shadcn)
@@ -1812,15 +1986,25 @@ export const kitScalarBinding = (
 // ChangeEvent import to a value import carrying useState. shadcn passes
 // needsNumberState: false — its number binding is the stateless
 // type="number" input.
+// `needsEffect` (--live) adds useEffect for the onValuesChange
+// subscription; number usage still promotes the whole import to a value
+// import carrying useState.
 export const reactImportLines = (
   needsChangeEvent: boolean,
   needsNumberState: boolean,
-): readonly string[] =>
-  needsNumberState
-    ? [`import { useState, type ChangeEvent } from "react";`]
-    : needsChangeEvent
+  needsEffect = false,
+): readonly string[] => {
+  const names = [
+    ...(needsEffect ? ["useEffect"] : []),
+    ...(needsNumberState ? ["useState"] : []),
+    ...(needsChangeEvent || needsNumberState ? ["type ChangeEvent"] : []),
+  ];
+  return names.length === 0
+    ? []
+    : names.every((name) => name.startsWith("type "))
       ? [`import type { ChangeEvent } from "react";`]
-      : [];
+      : [`import { ${names.join(", ")} } from "react";`];
+};
 
 // Prefixes the top-level `const` declarations of an emitted block with
 // "export " when the module layout writes them into a shared adapter file.
@@ -1984,6 +2168,7 @@ const kitFormstandImportLines = (
   usage: KindUsage,
   arrays: readonly ArrayEntry[],
   root: ObjectSpec,
+  scaffold: ScaffoldOptions,
 ): readonly string[] => {
   const hasLeaf = hasLeafUsage(usage);
   // FieldFormApi is referenced only by the Bound* components' props type:
@@ -1997,7 +2182,7 @@ const kitFormstandImportLines = (
     ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
     ...(arrays.length > 0 ? ["useFieldArray"] : []),
     "useForm",
-    "useIsSubmitting",
+    ...(scaffold.live ? [] : ["useIsSubmitting"]),
   ];
   const types = [
     ...(hasStaticLeaf ? ["FieldFormApi"] : []),
@@ -2352,7 +2537,11 @@ const anyAddressableObjectField = (spec: FieldSpec): boolean => {
   }
 };
 
-const muiBackend = (visual: VisualOptions, version: MuiVersion): Backend => {
+const muiBackend = (
+  visual: VisualOptions,
+  version: MuiVersion,
+  scaffold: ScaffoldOptions,
+): Backend => {
   const cols = visual.columns;
   // Every section container is a CSS grid (a one-column grid with gap: 2 is
   // exactly a Stack); section roots span the parent grid's full row.
@@ -2413,7 +2602,8 @@ const muiBackend = (visual: VisualOptions, version: MuiVersion): Backend => {
         ? ["Accordion", "AccordionDetails", "AccordionSummary"]
         : []),
       "Box",
-      "Button",
+      // --live drops the submit button; arrays still render add/remove.
+      ...(scaffold.live && arrays.length === 0 ? [] : ["Button"]),
       ...(hasSection && visual.sections === "panel"
         ? ["Card", "CardContent"]
         : []),
@@ -2427,11 +2617,11 @@ const muiBackend = (visual: VisualOptions, version: MuiVersion): Backend => {
       ...(hasSection ? ["Typography"] : []),
     ];
     return [
-      ...reactImportLines(true, usage.number),
+      ...reactImportLines(true, usage.number, scaffold.live),
       "import {",
       ...muiImports.map((name) => `  ${name},`),
       `} from "@mui/material";`,
-      ...kitFormstandImportLines(usage, arrays, root),
+      ...kitFormstandImportLines(usage, arrays, root, scaffold),
       `import { z } from "zod";`,
     ];
   },
@@ -2469,23 +2659,20 @@ const muiBackend = (visual: VisualOptions, version: MuiVersion): Backend => {
     ...sectionClose(level),
   ],
   bodyLevel: 4,
-  formOpen: [
-    "    <Box",
-    `      component="form"`,
-    "      onSubmit={form.handleSubmit((data) => {",
-    `        console.log("submit", data);`,
-    "      })}",
-    "      sx={{ maxWidth: 640 }}",
-    "    >",
-    "      <Stack spacing={2}>",
-  ],
-  formClose: [
-    `        <Button type="submit" variant="contained" disabled={submitting}>`,
-    `          {submitting ? "Submitting..." : "Submit"}`,
-    "        </Button>",
-    "      </Stack>",
-    "    </Box>",
-  ],
+  formShell: {
+    open: ["    <Box", `      component="form"`],
+    afterSubmit: [
+      "      sx={{ maxWidth: 640 }}",
+      "    >",
+      "      <Stack spacing={2}>",
+    ],
+    submitButton: [
+      `        <Button type="submit" variant="contained" disabled={submitting}>`,
+      `          {submitting ? "Submitting..." : "Submit"}`,
+      "        </Button>",
+    ],
+    close: ["      </Stack>", "    </Box>"],
+  },
   };
 };
 
@@ -2494,6 +2681,7 @@ export const emitMuiForm = (options: EmitFormOptions): string =>
     muiBackend(
       options.visual ?? DEFAULT_VISUAL,
       options.muiVersion ?? DEFAULT_MUI_VERSION,
+      scaffoldOf(options),
     ),
     options,
   );
@@ -2716,7 +2904,10 @@ const shadcnBoundComponents = (usage: KindUsage): string => {
 
 const shadcnLeaf = boundLeaf("BoundCheckboxField");
 
-const shadcnBackend = (visual: VisualOptions): Backend => {
+const shadcnBackend = (
+  visual: VisualOptions,
+  scaffold: ScaffoldOptions,
+): Backend => {
   const cols = visual.columns;
   // md:col-span-full keeps nested sections on their own row inside a parent
   // grid (no effect when the parent stacks).
@@ -2751,8 +2942,15 @@ const shadcnBackend = (visual: VisualOptions): Backend => {
     return [
       // shadcn's number binding stays the stateless type="number" input, so
       // no useState import here.
-      ...reactImportLines(usage.string || usage.date || usage.number, false),
-      `import { Button } from "@/components/ui/button";`,
+      ...reactImportLines(
+        usage.string || usage.date || usage.number,
+        false,
+        scaffold.live,
+      ),
+      // --live drops the submit button; arrays still render add/remove.
+      ...(scaffold.live && arrays.length === 0
+        ? []
+        : [`import { Button } from "@/components/ui/button";`]),
       ...(usage.boolean
         ? [`import { Checkbox } from "@/components/ui/checkbox";`]
         : []),
@@ -2771,7 +2969,7 @@ const shadcnBackend = (visual: VisualOptions): Backend => {
             `} from "@/components/ui/select";`,
           ]
         : []),
-      ...kitFormstandImportLines(usage, arrays, root),
+      ...kitFormstandImportLines(usage, arrays, root, scaffold),
       `import { z } from "zod";`,
     ];
   },
@@ -2825,25 +3023,24 @@ const shadcnBackend = (visual: VisualOptions): Backend => {
       : [`${ind(level)}</section>`]),
   ],
   bodyLevel: 3,
-  formOpen: [
-    "    <form",
-    `      className="grid max-w-xl gap-4"`,
-    "      onSubmit={form.handleSubmit((data) => {",
-    `        console.log("submit", data);`,
-    "      })}",
-    "    >",
-  ],
-  formClose: [
-    `      <Button type="submit" disabled={submitting}>`,
-    `        {submitting ? "Submitting..." : "Submit"}`,
-    "      </Button>",
-    "    </form>",
-  ],
+  formShell: {
+    open: ["    <form", `      className="grid max-w-xl gap-4"`],
+    afterSubmit: ["    >"],
+    submitButton: [
+      `      <Button type="submit" disabled={submitting}>`,
+      `        {submitting ? "Submitting..." : "Submit"}`,
+      "      </Button>",
+    ],
+    close: ["    </form>"],
+  },
   };
 };
 
 export const emitShadcnForm = (options: EmitFormOptions): string =>
-  emitForm(shadcnBackend(options.visual ?? DEFAULT_VISUAL), options);
+  emitForm(
+    shadcnBackend(options.visual ?? DEFAULT_VISUAL, scaffoldOf(options)),
+    options,
+  );
 
 // ---------------------------------------------------------------------------
 // Chakra UI v3 backend (@chakra-ui/react 3, compound components)
@@ -3116,7 +3313,10 @@ const chakraVariantLeaf = (
 
 const chakraLeaf = boundLeaf("BoundSwitchField");
 
-const chakraBackend = (visual: VisualOptions): Backend => {
+const chakraBackend = (
+  visual: VisualOptions,
+  scaffold: ScaffoldOptions,
+): Backend => {
   const cols = visual.columns;
   // Every section container is a CSS grid via style props (a one-column grid
   // with gap "4" is exactly a Stack); section roots span the parent grid's
@@ -3181,7 +3381,8 @@ const chakraBackend = (visual: VisualOptions): Backend => {
     const chakraImports = [
       ...(hasSection && visual.sections === "collapsible" ? ["Accordion"] : []),
       "Box",
-      "Button",
+      // --live drops the submit button; arrays still render add/remove.
+      ...(scaffold.live && arrays.length === 0 ? [] : ["Button"]),
       ...(hasSection && visual.sections === "panel" ? ["Card"] : []),
       // Field.Root/Label/ErrorText wrap every non-boolean control (static
       // Bound* components and union controls alike).
@@ -3202,11 +3403,12 @@ const chakraBackend = (visual: VisualOptions): Backend => {
       ...reactImportLines(
         usage.string || usage.date || usage.number || usage.enum,
         usage.number,
+        scaffold.live,
       ),
       "import {",
       ...chakraImports.map((name) => `  ${name},`),
       `} from "@chakra-ui/react";`,
-      ...kitFormstandImportLines(usage, arrays, root),
+      ...kitFormstandImportLines(usage, arrays, root, scaffold),
       `import { z } from "zod";`,
     ];
   },
@@ -3246,28 +3448,24 @@ const chakraBackend = (visual: VisualOptions): Backend => {
     ...sectionClose(level),
   ],
   bodyLevel: 4,
-  formOpen: [
-    "    <Box",
-    `      as="form"`,
-    "      onSubmit={form.handleSubmit((data) => {",
-    `        console.log("submit", data);`,
-    "      })}",
-    `      maxW="640px"`,
-    "    >",
-    `      <Stack gap="4">`,
-  ],
-  formClose: [
-    `        <Button type="submit" disabled={submitting}>`,
-    `          {submitting ? "Submitting..." : "Submit"}`,
-    "        </Button>",
-    "      </Stack>",
-    "    </Box>",
-  ],
+  formShell: {
+    open: ["    <Box", `      as="form"`],
+    afterSubmit: [`      maxW="640px"`, "    >", `      <Stack gap="4">`],
+    submitButton: [
+      `        <Button type="submit" disabled={submitting}>`,
+      `          {submitting ? "Submitting..." : "Submit"}`,
+      "        </Button>",
+    ],
+    close: ["      </Stack>", "    </Box>"],
+  },
   };
 };
 
 export const emitChakraForm = (options: EmitFormOptions): string =>
-  emitForm(chakraBackend(options.visual ?? DEFAULT_VISUAL), options);
+  emitForm(
+    chakraBackend(options.visual ?? DEFAULT_VISUAL, scaffoldOf(options)),
+    options,
+  );
 
 // ---------------------------------------------------------------------------
 // Mantine backend (@mantine/core 9)
@@ -3504,7 +3702,10 @@ const mantineVariantLeaf = (
 
 const mantineLeaf = boundLeaf("BoundSwitchField");
 
-const mantineBackend = (visual: VisualOptions): Backend => {
+const mantineBackend = (
+  visual: VisualOptions,
+  scaffold: ScaffoldOptions,
+): Backend => {
   const cols = visual.columns;
   // Section grids are SimpleGrid cols={N} (Mantine's idiomatic even-column
   // grid — a CSS grid underneath, so children span rows with gridColumn);
@@ -3567,7 +3768,8 @@ const mantineBackend = (visual: VisualOptions): Backend => {
     const mantineImports = [
       ...(hasSection && visual.sections === "collapsible" ? ["Accordion"] : []),
       "Box",
-      "Button",
+      // --live drops the submit button; arrays still render add/remove.
+      ...(scaffold.live && arrays.length === 0 ? [] : ["Button"]),
       ...(hasSection && visual.sections === "panel" ? ["Card"] : []),
       ...(usage.enum ? ["NativeSelect"] : []),
       // SimpleGrid appears wherever a section's fields flow into a grid:
@@ -3585,11 +3787,11 @@ const mantineBackend = (visual: VisualOptions): Backend => {
     return [
       // Every mantine adapter (the Switch's included) types its onChange
       // with a DOM ChangeEvent, so any leaf pulls the import in.
-      ...reactImportLines(hasLeaf, usage.number),
+      ...reactImportLines(hasLeaf, usage.number, scaffold.live),
       "import {",
       ...mantineImports.map((name) => `  ${name},`),
       `} from "@mantine/core";`,
-      ...kitFormstandImportLines(usage, arrays, root),
+      ...kitFormstandImportLines(usage, arrays, root, scaffold),
       `import { z } from "zod";`,
     ];
   },
@@ -3629,28 +3831,24 @@ const mantineBackend = (visual: VisualOptions): Backend => {
     ...sectionClose(level),
   ],
   bodyLevel: 4,
-  formOpen: [
-    "    <Box",
-    `      component="form"`,
-    "      onSubmit={form.handleSubmit((data) => {",
-    `        console.log("submit", data);`,
-    "      })}",
-    "      maw={640}",
-    "    >",
-    `      <Stack gap="md">`,
-  ],
-  formClose: [
-    `        <Button type="submit" disabled={submitting}>`,
-    `          {submitting ? "Submitting..." : "Submit"}`,
-    "        </Button>",
-    "      </Stack>",
-    "    </Box>",
-  ],
+  formShell: {
+    open: ["    <Box", `      component="form"`],
+    afterSubmit: ["      maw={640}", "    >", `      <Stack gap="md">`],
+    submitButton: [
+      `        <Button type="submit" disabled={submitting}>`,
+      `          {submitting ? "Submitting..." : "Submit"}`,
+      "        </Button>",
+    ],
+    close: ["      </Stack>", "    </Box>"],
+  },
   };
 };
 
 export const emitMantineForm = (options: EmitFormOptions): string =>
-  emitForm(mantineBackend(options.visual ?? DEFAULT_VISUAL), options);
+  emitForm(
+    mantineBackend(options.visual ?? DEFAULT_VISUAL, scaffoldOf(options)),
+    options,
+  );
 
 // ---------------------------------------------------------------------------
 // Ant Design backend (antd 6)
@@ -3970,7 +4168,10 @@ const antdVariantLeaf = (
 
 const antdLeaf = boundLeaf("BoundCheckboxField");
 
-const antdBackend = (visual: VisualOptions): Backend => {
+const antdBackend = (
+  visual: VisualOptions,
+  scaffold: ScaffoldOptions,
+): Backend => {
   const cols = visual.columns;
   // Section grids are style-prop CSS grids (the plain backend's
   // gridStyleProps — antd has no grid-container primitive beyond Row/Col
@@ -4037,7 +4238,8 @@ const antdBackend = (visual: VisualOptions): Backend => {
     const hasSection = arrays.length > 0 || anyAddressableObjectField(root);
     const needsError = usage.string || usage.date || usage.number || usage.enum;
     const antdImports = [
-      "Button",
+      // --live drops the submit button; arrays still render add/remove.
+      ...(scaffold.live && arrays.length === 0 ? [] : ["Button"]),
       ...(hasSection && visual.sections === "panel" ? ["Card"] : []),
       ...(usage.boolean ? ["Checkbox"] : []),
       ...(hasSection && visual.sections === "collapsible" ? ["Collapse"] : []),
@@ -4057,12 +4259,13 @@ const antdBackend = (visual: VisualOptions): Backend => {
       ...reactImportLines(
         usage.string || usage.date || usage.number,
         usage.number,
+        scaffold.live,
       ),
       "import {",
       ...antdImports.map((name) => `  ${name},`),
       ...(usage.boolean ? ["  type CheckboxChangeEvent,"] : []),
       `} from "antd";`,
-      ...kitFormstandImportLines(usage, arrays, root),
+      ...kitFormstandImportLines(usage, arrays, root, scaffold),
       `import { z } from "zod";`,
     ];
   },
@@ -4103,27 +4306,28 @@ const antdBackend = (visual: VisualOptions): Backend => {
     ...sectionClose(level),
   ],
   bodyLevel: 4,
-  formOpen: [
-    "    <form",
-    "      onSubmit={form.handleSubmit((data) => {",
-    `        console.log("submit", data);`,
-    "      })}",
-    "      style={{ maxWidth: 640 }}",
-    "    >",
-    `      <Flex vertical gap="middle">`,
-  ],
-  formClose: [
-    `        <Button htmlType="submit" type="primary" disabled={submitting}>`,
-    `          {submitting ? "Submitting..." : "Submit"}`,
-    "        </Button>",
-    "      </Flex>",
-    "    </form>",
-  ],
+  formShell: {
+    open: ["    <form"],
+    afterSubmit: [
+      "      style={{ maxWidth: 640 }}",
+      "    >",
+      `      <Flex vertical gap="middle">`,
+    ],
+    submitButton: [
+      `        <Button htmlType="submit" type="primary" disabled={submitting}>`,
+      `          {submitting ? "Submitting..." : "Submit"}`,
+      "        </Button>",
+    ],
+    close: ["      </Flex>", "    </form>"],
+  },
   };
 };
 
 export const emitAntdForm = (options: EmitFormOptions): string =>
-  emitForm(antdBackend(options.visual ?? DEFAULT_VISUAL), options);
+  emitForm(
+    antdBackend(options.visual ?? DEFAULT_VISUAL, scaffoldOf(options)),
+    options,
+  );
 
 // ---------------------------------------------------------------------------
 // Custom template backend (leaf-override for an arbitrary UI kit)
@@ -4352,8 +4556,9 @@ const templateImportLines = (
 const templateBackend = (
   template: Template,
   visual: VisualOptions,
+  scaffold: ScaffoldOptions,
 ): Backend => {
-  const plain = plainBackend(visual);
+  const plain = plainBackend(visual, scaffold);
   return {
     ...plain,
     header: (usage, arrays, root) => {
@@ -4377,11 +4582,12 @@ const templateBackend = (
         ...(hasStaticLeaf || usage.union ? ["useField"] : []),
         ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
         "useForm",
-        "useIsSubmitting",
+        ...(scaffold.live ? [] : ["useIsSubmitting"]),
       ];
       // FieldFormApi is referenced only by BoundFieldProps (the wrappers).
       const formstandTypeImports = hasStaticLeaf ? ["FieldFormApi"] : [];
       return [
+        ...reactImportLines(false, false, scaffold.live),
         `import { z } from "zod";`,
         ...templateImportLines(template.imports ?? []),
         "import {",
@@ -4404,6 +4610,10 @@ export const emitTemplateForm = (
   options: EmitFormOptions,
 ): string =>
   emitForm(
-    templateBackend(template, options.visual ?? DEFAULT_VISUAL),
+    templateBackend(
+      template,
+      options.visual ?? DEFAULT_VISUAL,
+      scaffoldOf(options),
+    ),
     options,
   );

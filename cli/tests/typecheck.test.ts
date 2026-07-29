@@ -34,7 +34,8 @@ import { nestedArraySchema } from "./fixtures/nestedArraySchema";
 type Emitter = (options: EmitFormOptions) => string;
 
 // Generate a component in `dir` bound to a named fixture schema and return
-// the written file path alongside the code.
+// the written file path alongside the code. `extra` carries the scaffold
+// modes (live/formProp) straight into the emit options.
 const generate = (
   emit: Emitter,
   schema: unknown,
@@ -42,6 +43,7 @@ const generate = (
   formName: string,
   dir: string,
   visual?: VisualOptions,
+  extra?: Readonly<Pick<EmitFormOptions, "live" | "formProp">>,
 ): Readonly<{ file: string; code: string }> => {
   const code = emit({
     ir: fromZod(schema),
@@ -52,10 +54,35 @@ const generate = (
       kind: "named",
     },
     ...(visual === undefined ? {} : { visual }),
+    ...(extra ?? {}),
   });
   const file = path.join(dir, `${formName}.tsx`);
   fs.writeFileSync(file, code, "utf8");
   return { file, code };
+};
+
+// A typecheck-only consumer for the combined --live --form-prop output: the
+// page creates the form with the exported owner hook, passes it down, and
+// subscribes — exactly the composition the modes exist for (a page feeding
+// a map AND the form UI from one instance).
+const writeScaffoldConsumer = (dir: string): string => {
+  const file = path.join(dir, "LiveOwnedPage.tsx");
+  fs.writeFileSync(
+    file,
+    [
+      `import { LiveOwnedForm, useLiveOwnedForm } from "./LiveOwnedForm";`,
+      "",
+      "export const LiveOwnedPage = () => {",
+      "  const form = useLiveOwnedForm();",
+      "  return (",
+      "    <LiveOwnedForm form={form} onValuesChange={(values) => void values} />",
+      "  );",
+      "};",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  return file;
 };
 
 // Every fixture is emitted once per backend, and each backend's outputs are
@@ -68,6 +95,10 @@ const generate = (
 const fixturesFor = (
   emit: Emitter,
   tag: string,
+  // plain + mui also ride the scaffold-mode variants (--live, --form-prop,
+  // combined + a page consumer) in their program; the other kits' scaffold
+  // is the same shared layer, so one kit suffices for the kit-side proof.
+  withScaffoldVariants = false,
 ): Readonly<{
   dir: string;
   profile: Readonly<{ file: string; code: string }>;
@@ -78,6 +109,9 @@ const fixturesFor = (
   nestedArray: Readonly<{ file: string; code: string }>;
   panel: Readonly<{ file: string; code: string }>;
   collapsible: Readonly<{ file: string; code: string }>;
+  live?: Readonly<{ file: string; code: string }>;
+  owned?: Readonly<{ file: string; code: string }>;
+  liveOwned?: Readonly<{ file: string; code: string }>;
   files: readonly string[];
 }> => {
   const dir = freshTmpDir(`typecheck-${tag}`);
@@ -107,6 +141,25 @@ const fixturesFor = (
     dir,
     { sections: "collapsible", columns: 3 },
   );
+  const scaffoldVariants = withScaffoldVariants
+    ? {
+        live: generate(emit, profileSchema, "profileSchema", "LiveForm", dir, undefined, {
+          live: true,
+        }),
+        owned: generate(emit, profileSchema, "profileSchema", "OwnedForm", dir, undefined, {
+          formProp: true,
+        }),
+        liveOwned: generate(
+          emit,
+          profileSchema,
+          "profileSchema",
+          "LiveOwnedForm",
+          dir,
+          undefined,
+          { live: true, formProp: true },
+        ),
+      }
+    : undefined;
   return {
     dir,
     profile,
@@ -117,6 +170,7 @@ const fixturesFor = (
     nestedArray,
     panel,
     collapsible,
+    ...(scaffoldVariants ?? {}),
     files: [
       profile.file,
       hostile.file,
@@ -126,12 +180,20 @@ const fixturesFor = (
       nestedArray.file,
       panel.file,
       collapsible.file,
+      ...(scaffoldVariants === undefined
+        ? []
+        : [
+            scaffoldVariants.live.file,
+            scaffoldVariants.owned.file,
+            scaffoldVariants.liveOwned.file,
+            writeScaffoldConsumer(dir),
+          ]),
     ],
   };
 };
 
-const plain = fixturesFor(emitPlainForm, "plain");
-const mui = fixturesFor(emitMuiForm, "mui");
+const plain = fixturesFor(emitPlainForm, "plain", true);
+const mui = fixturesFor(emitMuiForm, "mui", true);
 const shadcn = fixturesFor(emitShadcnForm, "shadcn");
 const chakra = fixturesFor(emitChakraForm, "chakra");
 const mantine = fixturesFor(emitMantineForm, "mantine");

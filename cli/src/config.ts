@@ -19,6 +19,12 @@ export type FormstandConfig = Readonly<{
   layout?: Layout;
   sections?: VisualOptions["sections"];
   columns?: VisualOptions["columns"];
+  // --live default: generate live/no-submit forms (no submit scaffold, an
+  // optional onValuesChange prop, emitted mode "onChange").
+  live?: boolean;
+  // --form-prop default: the component takes a typed `form` prop and the
+  // useForm scaffold is emitted as an exported hook.
+  formProp?: boolean;
   // Path to a custom template module (see defineTemplate), resolved relative
   // to the config file. A --template flag overrides it.
   template?: string;

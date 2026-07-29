@@ -102,6 +102,16 @@ Options:
   --out <file>        write the component here instead of stdout
   --schema-out <file> (type mode) where to write the generated zod schema
                       (default: <schemaName>.ts next to --out)
+  --live              live/no-submit form (a map or preview consumes values
+                      as they change): omits the submit scaffold entirely,
+                      adds an optional onValuesChange prop wired through
+                      form.watchValues, and defaults the emitted validation
+                      mode to "onChange" instead of "onBlur"
+  --form-prop         the page owns the form: the component takes a typed
+                      "form" prop instead of creating one, and the useForm
+                      scaffold is emitted as an exported use{Name}Form hook
+                      (--layout module: pass the module's exported form
+                      instance, e.g. profileForm)
   --template <file>   custom template module (default-export defineTemplate)
                       for a UI kit formstand doesn't ship — overrides the
                       per-kind field rendering, inheriting the plain form
@@ -155,6 +165,8 @@ type CliOptions = Readonly<{
   layout: Layout;
   sections: Sections;
   columns: Columns;
+  live: boolean;
+  formProp: boolean;
   name?: string;
   out?: string;
   schemaOut?: string;
@@ -176,6 +188,10 @@ export type ParsedCliOptions = Readonly<{
   layout?: Layout;
   sections?: Sections;
   columns?: Columns;
+  // Boolean scaffold modes: undefined until the flag appears, so the config
+  // file's live/formProp defaults still apply when the flag is absent.
+  live?: boolean;
+  formProp?: boolean;
   name?: string;
   out?: string;
   schemaOut?: string;
@@ -199,6 +215,8 @@ type PartialOptions = Readonly<{
   layout?: Layout;
   sections?: Sections;
   columns?: Columns;
+  live?: boolean;
+  formProp?: boolean;
   name?: string;
   out?: string;
   schemaOut?: string;
@@ -245,6 +263,10 @@ const parseRest = (
   if (head === "--help" || head === "-h") return { kind: "help" };
   if (head === "--force") return parseRest(rest, { ...acc, force: true });
   if (head === "--watch") return parseRest(rest, { ...acc, watch: true });
+  if (head === "--live") return parseRest(rest, { ...acc, live: true });
+  if (head === "--form-prop") {
+    return parseRest(rest, { ...acc, formProp: true });
+  }
   if (head === "--ui") {
     const [value, ...after] = rest;
     if (value === undefined) {
@@ -363,13 +385,21 @@ const parseConfig = (raw: unknown, from: string): LoadedConfig => {
     throw new Error(`${from}: expected a default-exported config object`);
   }
   const record = raw as Readonly<Record<string, unknown>>;
-  const known = new Set(["ui", "layout", "sections", "columns", "template"]);
+  const known = new Set([
+    "ui",
+    "layout",
+    "sections",
+    "columns",
+    "live",
+    "formProp",
+    "template",
+  ]);
   Object.keys(record)
     .filter((key) => !known.has(key))
     .forEach((key) => {
       stderr(`note: ${from}: ignoring unknown config key "${key}"`);
     });
-  const { ui, layout, sections, columns, template } = record;
+  const { ui, layout, sections, columns, live, formProp, template } = record;
   const uiTarget =
     ui === undefined
       ? undefined
@@ -400,6 +430,12 @@ const parseConfig = (raw: unknown, from: string): LoadedConfig => {
   if (columns !== undefined && columnsValue === undefined) {
     throw new Error(`${from}: columns must be 1, 2, or 3`);
   }
+  if (live !== undefined && typeof live !== "boolean") {
+    throw new Error(`${from}: live must be a boolean`);
+  }
+  if (formProp !== undefined && typeof formProp !== "boolean") {
+    throw new Error(`${from}: formProp must be a boolean`);
+  }
   if (template !== undefined && typeof template !== "string") {
     throw new Error(`${from}: template must be a path string`);
   }
@@ -408,6 +444,8 @@ const parseConfig = (raw: unknown, from: string): LoadedConfig => {
     ...(layout !== undefined ? { layout: layout as Layout } : {}),
     ...(sections !== undefined ? { sections: sections as Sections } : {}),
     ...(columnsValue !== undefined ? { columns: columnsValue } : {}),
+    ...(live !== undefined ? { live } : {}),
+    ...(formProp !== undefined ? { formProp } : {}),
     // Config-relative so `template: "./x.ts"` resolves next to the config,
     // not the cwd. An explicit --template (already cwd-absolute) wins in
     // resolveOptions.
@@ -460,6 +498,8 @@ export const resolveOptions = (
   layout: parsed.layout ?? config.layout ?? "single",
   sections: parsed.sections ?? config.sections ?? "flat",
   columns: parsed.columns ?? config.columns ?? 1,
+  live: parsed.live ?? config.live ?? false,
+  formProp: parsed.formProp ?? config.formProp ?? false,
   ...(parsed.template ?? config.template
     ? { template: parsed.template ?? config.template }
     : {}),
@@ -468,6 +508,15 @@ export const resolveOptions = (
 const visualOf = (options: CliOptions): VisualOptions => ({
   sections: options.sections,
   columns: options.columns,
+});
+
+// The scaffold-mode axes (--live / --form-prop), in EmitFormOptions shape —
+// spread into every emit call of both layouts.
+const scaffoldFlagsOf = (
+  options: CliOptions,
+): Readonly<Pick<EmitFormOptions, "live" | "formProp">> => ({
+  live: options.live,
+  formProp: options.formProp,
 });
 
 // "profileSchema" → "ProfileForm"; "Profile" → "ProfileForm".
@@ -762,6 +811,7 @@ const runZodMode = async (
         schemaImport,
         ...moduleUiOf(options.ui),
         visual: visualOf(options),
+        ...scaffoldFlagsOf(options),
       }),
       options.out,
       options.force,
@@ -770,7 +820,7 @@ const runZodMode = async (
   }
   const code = emitComponent(
     options.ui,
-    { ir, formName, schemaImport, visual: visualOf(options) },
+    { ir, formName, schemaImport, visual: visualOf(options), ...scaffoldFlagsOf(options) },
     template,
   );
   if (options.out !== undefined) {
@@ -812,6 +862,7 @@ const runTypeMode = (options: CliOptions, template?: Template): number => {
         schemaSource,
         ...moduleUiOf(options.ui),
         visual: visualOf(options),
+        ...scaffoldFlagsOf(options),
       }),
       options.out,
       options.force,
@@ -831,7 +882,7 @@ const runTypeMode = (options: CliOptions, template?: Template): number => {
     };
     const code = emitComponent(
       options.ui,
-      { ir, formName, schemaImport, visual: visualOf(options) },
+      { ir, formName, schemaImport, visual: visualOf(options), ...scaffoldFlagsOf(options) },
       template,
     );
     // Check BOTH destinations before writing either.
@@ -852,7 +903,7 @@ const runTypeMode = (options: CliOptions, template?: Template): number => {
     };
     const code = emitComponent(
       options.ui,
-      { ir, formName, schemaImport, visual: visualOf(options) },
+      { ir, formName, schemaImport, visual: visualOf(options), ...scaffoldFlagsOf(options) },
       template,
     );
     assertWritable([schemaOutAbs], options.force);
@@ -868,7 +919,7 @@ const runTypeMode = (options: CliOptions, template?: Template): number => {
   };
   const code = emitComponent(
     options.ui,
-    { ir, formName, schemaImport, visual: visualOf(options) },
+    { ir, formName, schemaImport, visual: visualOf(options), ...scaffoldFlagsOf(options) },
     template,
   );
   stdout(
