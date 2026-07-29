@@ -108,7 +108,7 @@ export const onSubmitAttrLines = (
 // "ProfileForm" -> "useProfileForm": the exported owner hook --form-prop
 // emits in place of the in-component useForm call (mirrors the module
 // layout's prefix derivation: strip one trailing "Form").
-export const ownerHookName = (formName: string): string => {
+const ownerHookName = (formName: string): string => {
   const stripped = formName.replace(/Form$/, "");
   return `use${stripped.length === 0 ? formName : stripped}Form`;
 };
@@ -1070,7 +1070,7 @@ export const collectStaticUsage = (spec: FieldSpec, count = 0): KindUsage => {
 // BoundFieldProps and the Bound components' helper-text wiring, so
 // description-free schemas keep byte-identical output. Mirrors
 // collectStaticUsage's walk (same depth boundary, unions excluded).
-export const hasStaticDescriptions = (spec: FieldSpec, count = 0): boolean => {
+const hasStaticDescriptions = (spec: FieldSpec, count = 0): boolean => {
   if (overDepthBudget(spec, count)) return false;
   switch (spec.kind) {
     case "object":

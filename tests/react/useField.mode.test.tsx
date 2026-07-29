@@ -78,4 +78,30 @@ describe("useField + validation mode", () => {
     });
     expect(result.current.name.error).toBeUndefined();
   });
+
+  it("a no-op setValue skips revalidation too (full no-op semantics)", () => {
+    // The identity guard leaves the store state untouched, and the hook's
+    // change-trigger gate is skipped with it: nothing changed, so the
+    // current error state already reflects this value. Here the field
+    // holds an INVALID value whose error has not been surfaced yet —
+    // rewriting the same value must not surface it.
+    const { result } = renderHook(() => {
+      const form = useForm(schema, {
+        initialValues: { name: "x" },
+        mode: "onChange",
+      });
+      return { form, name: useField(form, "name") };
+    });
+
+    act(() => {
+      result.current.name.setValue("x");
+    });
+    expect(result.current.name.error).toBeUndefined();
+
+    // A real change through the same gate still validates immediately.
+    act(() => {
+      result.current.name.setValue("y");
+    });
+    expect(result.current.name.error).toBeDefined();
+  });
 });

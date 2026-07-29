@@ -35,12 +35,10 @@ export type {
 
 // Per-field component overrides (formstand.config.ts `fields`): validate a
 // config block and stamp a walked IR — pure data-in/data-out, browser-safe
-// like the rest of this surface.
-export {
-  applyFieldOverrides,
-  overridablePaths,
-  parseFieldOverrides,
-} from "./overrides";
+// like the rest of this surface. (overridablePaths stays internal to
+// ./overrides — it is applyFieldOverrides' near-miss candidate walk, not a
+// public surface.)
+export { applyFieldOverrides, parseFieldOverrides } from "./overrides";
 export type { FieldOverrideConfig, FieldOverrides } from "./overrides";
 
 export { emitModuleForm, joinModuleFiles } from "./moduleLayout";

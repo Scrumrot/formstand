@@ -181,6 +181,10 @@ Selector-style subscription. Use `useFormSelectorShallow` for selectors that ret
 > ships its own (deprecated) `useFormState` and auto-imports regularly grabbed
 > the wrong one. The old names were removed in 0.4.0.
 
+### `useFormValues(form)`
+
+The whole values object, reactively — sugar for `useFormSelector(form, (s) => s.values)`, reference-compared so it re-renders exactly when some value changes (never on touched/error churn); the render-side sibling of `form.watchValues`.
+
 ### `useFormError(form)`
 
 Shortcut for the root-level error (errors at the `""` key from a schema-level `.refine`).

@@ -21,7 +21,7 @@ import type {
   PathDepth,
 } from "./fieldPath";
 import type { ValidationMode } from "./mode";
-import { getAtPath, setAtPath, slotAtPath } from "./path";
+import { getAtPath, hasOwnSlot, setAtPath, slotAtPath } from "./path";
 import type { BoolMap, ErrorMap, FormState } from "./types";
 import {
   type FieldValidationResult,
@@ -1244,6 +1244,29 @@ export const createForm = <
       });
     },
     setValue: (path: string, value: unknown) => {
+      // Identity guard: writing the value already at the path is a FULL
+      // no-op — same state reference, no values rebuild, no dirty/error
+      // recompute, no subscriber notifications. Without it, every no-op
+      // write rebuilt the values spine, so useFormValues re-rendered and
+      // watchValues/onValuesChange fired on nothing — and a two-way sync
+      // that echoes values back (form A watches form B and vice versa)
+      // recursed until the stack overflowed. Object.is matches the
+      // library's other change detectors (watchValue, useStore); note it
+      // also skips the server-error release and op-log clearing below —
+      // deliberately, since no value changed. One carve-out: an
+      // `undefined` write only no-ops when the slot actually EXISTS —
+      // writing undefined over an absent key CREATES the key (a real
+      // change: key-count dirtiness, the persisted shape), so it must
+      // still go through. A non-undefined Object.is match implies the own
+      // slot exists (reads are own-key only), so the walk runs for
+      // undefined writes alone.
+      const currentValues = store.getState().values;
+      if (
+        Object.is(getAtPath(currentValues, path), value) &&
+        (value !== undefined || hasOwnSlot(currentValues, path))
+      ) {
+        return;
+      }
       // A value write outside the array ops breaks every op chain whose
       // array it could rebuild — drop those records at the source so a
       // stale (or recurring, e.g. reset-restored) array reference can never

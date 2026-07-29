@@ -2051,19 +2051,29 @@ const adapterFile = (
   // mantine speaks DOM events everywhere (its Switch included); antd's
   // Select is value-shaped and its Checkbox speaks CheckboxChangeEvent, so
   // only the Input adapters (text/number/date) need ChangeEvent there.
+  // The chakra/shadcn autocomplete override rides those kits' TEXT adapter
+  // (Input + native datalist), so an autocomplete-only schema still emits
+  // the ChangeEvent-typed builder there; mantine's and antd's autocomplete
+  // adapters are value-shaped and mui's types SyntheticEvent (below).
   const needsChangeEvent =
     needsText ||
     usage.number ||
     (ui === "mui" && (usage.enum || usage.boolean)) ||
-    (ui === "chakra" && usage.enum) ||
+    (ui === "chakra" && (usage.enum || usage.autocomplete)) ||
+    (ui === "shadcn" && usage.autocomplete) ||
     (ui === "mantine" && (usage.enum || usage.boolean));
   // The antd adapter's own imports: Typography renders the FieldError line
-  // (gated with the error helpers on non-boolean usage), and the Checkbox
-  // adapter types its onChange with antd's own CheckboxChangeEvent.
+  // (gated with the error helpers on non-boolean usage — the autocomplete
+  // override included, mirroring antdAdapterSection's needsError), and the
+  // Checkbox adapter types its onChange with antd's own CheckboxChangeEvent.
   const antdImports =
     ui === "antd"
       ? [
-          ...(usage.string || usage.date || usage.number || usage.enum
+          ...(usage.string ||
+          usage.date ||
+          usage.number ||
+          usage.enum ||
+          usage.autocomplete
             ? [`import { Typography } from "antd";`]
             : []),
           ...(usage.boolean
@@ -3260,8 +3270,10 @@ const formFile = (
     ...(scaffold.formProp ? [naming.schemaType] : []),
     ...(scaffold.live ? [naming.valuesType] : []),
   ];
+  // --form-prop still imports the singleton — not for the shell (that runs
+  // on the prop) but for the dev-mode split-brain guard below.
   const hooksImports = scaffold.formProp
-    ? []
+    ? [naming.formConst]
     : [naming.formConst, ...(scaffold.live ? [] : [naming.hook("IsSubmitting")])];
   return {
     path: `${naming.formName}.tsx`,
@@ -3307,6 +3319,25 @@ const formFile = (
       `export const ${naming.formName} = (${
         params.length === 0 ? "" : `{ ${params.join(", ")} }: ${propsType}`
       }) => {`,
+      ...(scaffold.formProp
+        ? [
+            "  // Dev-mode split-brain guard: the field hooks are pre-wired to",
+            `  // ${naming.formConst}, so a different form of the same schema would`,
+            "  // compile but silently split state (the shell reads the prop, the",
+            "  // fields keep reading the module's own form).",
+            "  if (",
+            '    typeof process !== "undefined" &&',
+            '    process.env["NODE_ENV"] !== "production" &&',
+            `    form !== ${naming.formConst}`,
+            "  ) {",
+            "    console.warn(",
+            `      ${q(
+              `${naming.formName}: the passed form is not this module's own instance from ./hooks — fields are pre-wired to the module form, so state will split. Pass ${naming.formConst} (see ${propsType} docs).`,
+            )},`,
+            "    );",
+            "  }",
+          ]
+        : []),
       ...(scaffold.live
         ? []
         : scaffold.formProp

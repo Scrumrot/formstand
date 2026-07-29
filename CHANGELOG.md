@@ -28,11 +28,30 @@
   argument with instructions: `Argument of type '"email"' is not assignable
   to parameter of type '"Remove the explicit type argument: a schema-typed
   form infers the value type from the path"'`. Same guard on
-  `useFieldArray` (`"... infers the item type from the path"`). Inferred
-  calls, structural-form explicit generics, selector paths, and explicit
-  instantiation expressions (`typeof useField<Schema, "name">`) are all
+  `useFieldArray` (`"... infers the item type from the path"`) and
+  `useVariantField` (`"... infers the variant value from the union path
+  and field"`). Inferred calls, structural-form explicit generics,
+  selector paths, and explicit instantiation expressions
+  (`typeof useField<Schema, "name">`,
+  `typeof useVariantField<Schema, "payment", "cardNumber">`) are all
   unaffected — the guard's type parameter defaults to an unexported
   sentinel no inferred call can produce.
+- **`setValue` with the identical value is now a full no-op.** Writing the
+  value already at the path used to rebuild the values object anyway, so
+  `useFormValues` re-rendered and `watchValues`/`onValuesChange` fired on
+  writes that changed nothing — and a two-way sync that echoes values back
+  (each side writing what it just received) recursed until the stack
+  overflowed. `form.setValue` now identity-guards (`Object.is`) the write:
+  the state reference is unchanged, no dirty/error recompute runs, no
+  subscribers fire, and `useField().setValue` skips its revalidation gate
+  too (nothing changed, so the current error state already reflects the
+  value). The no-op is deliberately FULL: a no-op write also no longer
+  releases server errors on the path or clears array-op records — those
+  side effects belonged to an actual value change. One carve-out: writing
+  `undefined` over an ABSENT key is still a real write (it creates the
+  key — `{}` vs `{ nickname: undefined }` differ in key count, which
+  dirtiness and the persisted shape observe). `setValues`, `adoptValues`,
+  and `updateState` replace wholesale by design and are unchanged.
 
 ## formstand-cli Unreleased
 
@@ -166,6 +185,38 @@
   incompatible (InputAdornment / rightSection / InputElement / suffix);
   helper text covers the units case. Visible in the playground: the
   flight-search demo's `cruiseAltitude` now carries `.describe("feet MSL")`.
+
+### Fixed
+
+- **`--layout module`: autocomplete-only schemas now compile for every
+  kit.** The module adapter file's import gates missed
+  `usage.autocomplete`: a schema whose every string/enum field carries the
+  autocomplete override emitted chakra/shadcn adapters using `ChangeEvent`
+  without importing it (their override rides the kits' text adapter), and
+  the antd adapter's `FieldError` used `Typography` without importing it.
+  The single-file backends already gated these correctly; the module gates
+  now mirror them (mui/mantine/plain were already correct — mui's
+  autocomplete types `SyntheticEvent`, mantine's and antd's are
+  value-shaped).
+- **`--layout module --form-prop`: the emitted component now warns in dev
+  when the passed form is not the module singleton.** The module's field
+  hooks are pre-wired to the exported singleton; a different form of the
+  same schema compiled and rendered but silently split state (the shell on
+  the prop, the fields on the singleton). The generated component now
+  compares the prop against the singleton and `console.warn`s outside
+  production (`NODE_ENV` gate, same shape as the library's own dev
+  warnings), naming the instance to pass. Documented as an emphasized
+  contract note in the CLI README's flags section.
+- **Override near-miss suggestions no longer offer paths the validator
+  would reject.** The "did you mean ...?" candidate list for an unknown
+  `fields` path now filters out dot-containing (unaddressable) names,
+  walker-degraded leaves, and paths past the FieldPath depth budget — the
+  same predicates `applyFieldOverrides` errors on, so a suggestion can
+  always actually be used.
+- Internal: `ownerHookName` and `hasStaticDescriptions` are no longer
+  exported from codegen (no external consumer), and `overridablePaths`
+  left the `formstand-cli/codegen` public surface (it is the validator's
+  internal near-miss walk).
 
 ## 0.12.0 — 2026-07-29
 

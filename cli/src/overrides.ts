@@ -1,4 +1,5 @@
 import { pascalCase } from "./casing";
+import { isUnaddressable } from "./codegen";
 import { isScalarSpec, overDepthBudget } from "./depth";
 import type { FieldSpec, NamedField } from "./ir";
 
@@ -170,7 +171,11 @@ const matchPath = (
 
 // Every path an override COULD name: scalar leaves reachable through objects
 // and arrays ("*" marking rows) — the near-miss candidate list for unknown
-// paths, in IR order. Unions/tuples are excluded (not overridable).
+// paths, in IR order. Unions/tuples are excluded (not overridable), and so
+// is every leaf applyFieldOverrides itself would reject: dot-containing
+// names (not addressable — the emitters skip the binding), walker-degraded
+// leaves, and paths past the FieldPath depth budget. A suggestion the
+// validator then errors on would be worse than no suggestion.
 export const overridablePaths = (root: FieldSpec): readonly string[] => {
   const walk = (
     spec: FieldSpec,
@@ -178,16 +183,20 @@ export const overridablePaths = (root: FieldSpec): readonly string[] => {
   ): readonly string[] => {
     switch (spec.kind) {
       case "object":
-        return spec.fields.flatMap((field) =>
-          walk(field.spec, [...segments, field.name]),
-        );
+        return spec.fields
+          .filter((field) => !isUnaddressable(field.name))
+          .flatMap((field) => walk(field.spec, [...segments, field.name]));
       case "array":
         return walk(spec.item, [...segments, "*"]);
       case "tuple":
       case "union":
         return [];
       default:
-        return segments.length === 0 ? [] : [segments.join(".")];
+        return segments.length === 0 ||
+          spec.todo !== undefined ||
+          overDepthBudget(spec, segments.length)
+          ? []
+          : [segments.join(".")];
     }
   };
   return walk(root, []);

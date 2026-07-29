@@ -98,6 +98,28 @@ export const slotAtPath = (obj: unknown, path: string): SlotAtPath => {
   return walked.ok ? { exists: true, value: walked.current } : { exists: false };
 };
 
+// Whether the path addresses an OWN slot: every step reads a real
+// container's own key / in-range array index, the final segment included.
+// This is stricter than slotAtPath, which treats a MISSING final key on a
+// real record as an addressable (legitimately empty) slot — here it reads
+// false. The consumer is setValue's identity guard: writing `undefined`
+// over an ABSENT key is NOT a no-op (it creates the key, a real state
+// change — key-count dirtiness, persisted shape), while writing it over a
+// key that exists holding undefined is.
+export const hasOwnSlot = (obj: unknown, path: string): boolean =>
+  parsePath(path).reduce<Readonly<{ ok: boolean; current: unknown }>>(
+    (acc, segment) => {
+      const container = acc.current;
+      const owns = Array.isArray(container)
+        ? typeof segment === "number" && segment < container.length
+        : isPlainRecord(container) && Object.hasOwn(container, String(segment));
+      return !acc.ok || !owns
+        ? { ok: false, current: undefined }
+        : { ok: true, current: readSegment(container, segment) };
+    },
+    { ok: true, current: obj },
+  ).ok;
+
 const writeIntoArray = (
   arr: readonly unknown[],
   index: number,

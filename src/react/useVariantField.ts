@@ -68,6 +68,45 @@ export type UnionValueAt<TValues, P extends string> = P extends keyof TValues
       : never
     : never;
 
+// The readable-error trap-guard, mirroring useField's/useFieldArray's: an
+// explicit type argument (`useVariantField<string>(typedForm, "payment",
+// "cardNumber")`) arity-matches ONLY the one-type-parameter overloads, and
+// the structural one's `schema?: undefined` brand then rejects the Form
+// with a baffling "... not assignable to type 'undefined'". The error
+// overload below intercepts that shape — TValue defaults to this unexported
+// sentinel, which inferred calls can never escape (TValue has no inference
+// site), collapsing `unionPath` to `never`; an explicit TValue on a
+// schema-carrying form instead types `unionPath` as a string-literal
+// instruction the compiler blames the argument with.
+declare const inferredCallsOnly: unique symbol;
+interface InferredTypeArg {
+  readonly [inferredCallsOnly]: typeof inferredCallsOnly;
+}
+
+// Overload order mirrors useField (and is just as deliberate): the trap
+// guard sits before the widened structural overload, and the typed overload
+// sits LAST so a bad union path / field name on a Form<TSchema> is blamed
+// on that argument against the real union instead of on the form argument.
+export function useVariantField<TValue = InferredTypeArg>(
+  form: FieldFormApi & Readonly<{ schema: z.ZodType }>,
+  unionPath: TValue extends InferredTypeArg
+    ? never
+    : "Remove the explicit type argument: a schema-typed form infers the variant value from the union path and field",
+  field: string,
+): UseFieldReturn<TValue | undefined>;
+// Schema-less forms keep the plain-string, caller-typed shape. The
+// `schema?: undefined` brand forces a real Form past this widened overload
+// (Form has `schema: TSchema`, not undefined).
+export function useVariantField<TValue = unknown>(
+  form: FieldFormApi & { readonly schema?: undefined },
+  unionPath: string,
+  field: string,
+): UseFieldReturn<TValue | undefined>;
+// D is recovered from the form argument (the Form type's "~pathDepth"
+// marker). It sits LAST with a default, so pre-existing explicit
+// instantiation expressions like
+// `typeof useVariantField<typeof schema, "payment", "cardNumber">` keep
+// their arity.
 export function useVariantField<
   TSchema extends z.ZodType,
   P extends string,
@@ -80,12 +119,6 @@ export function useVariantField<
 ): UseFieldReturn<
   VariantFieldValue<UnionValueAt<z.input<TSchema>, P>, TField> | undefined
 >;
-// Schema-less forms keep the plain-string, caller-typed shape.
-export function useVariantField<TValue = unknown>(
-  form: FieldFormApi & { readonly schema?: undefined },
-  unionPath: string,
-  field: string,
-): UseFieldReturn<TValue | undefined>;
 export function useVariantField(
   form: FieldFormApi,
   unionPath: string,

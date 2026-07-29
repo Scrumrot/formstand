@@ -38,14 +38,14 @@ form.arrayPush("users", { email: "", age: 0 }); // item type checked
 Optional and nullable object levels stay addressable: for `profile: z.object({...}).optional()`, the path `"profile.name"` typechecks, and its `FieldValue` is widened with `| undefined` because the parent may be absent at runtime.
 
 ::: warning Don't pass explicit generics on a schema-typed form
-The path infers the value type — `useField(form, "email")` is fully typed with **no** type argument. Writing `useField<Values>(form, "email")` (or `useFieldArray<Item>(form, "users")`) instead selects the *schema-less* overload — the only shape an explicit type argument fits — and the call fails to compile. The first reported error spells out the fix:
+The path infers the value type — `useField(form, "email")` is fully typed with **no** type argument. Writing `useField<Values>(form, "email")` (or `useFieldArray<Item>(form, "users")`, or `useVariantField<V>(form, "payment", "cardNumber")`) instead selects the *schema-less* overload — the only shape an explicit type argument fits — and the call fails to compile. The first reported error spells out the fix:
 
 ```
 Argument of type '"email"' is not assignable to parameter of type
 '"Remove the explicit type argument: a schema-typed form infers the value type from the path"'.
 ```
 
-The explicit `useField<TValue>` / `useFieldArray<TItem>` forms exist only for schema-less `FieldFormApi` forms, where there is nothing to infer from.
+The explicit `useField<TValue>` / `useFieldArray<TItem>` / `useVariantField<TValue>` forms exist only for schema-less `FieldFormApi` forms, where there is nothing to infer from.
 :::
 
 ## Dynamic paths

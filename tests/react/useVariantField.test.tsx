@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { z } from "zod";
-import { useField } from "../../src/react/useField";
+import { type FieldFormApi, useField } from "../../src/react/useField";
 import { useVariantField } from "../../src/react/useVariantField";
 import { useForm } from "../../src/react/useForm";
 
@@ -119,6 +119,79 @@ describe("useVariantField", () => {
       method: "paypal",
       email: "a@b.com",
     });
+  });
+
+  it("explicit type arguments on a schema-typed form are a readable compile error", () => {
+    renderHook(() => {
+      const form = useForm(schema, {
+        initialValues: {
+          amount: 0,
+          payment: { method: "card", cardNumber: "" },
+        },
+      });
+      // The trap-guard overload blames the UNION PATH argument with
+      // instructions — the first reported overload error reads:
+      //   Argument of type '"payment"' is not assignable to parameter of
+      //   type '"Remove the explicit type argument: a schema-typed form
+      //   infers the variant value from the union path and field"'.
+      // (Not the old baffling `schema?: undefined` brand mismatch.)
+      // @ts-expect-error — explicit generics on a Form select the trap-guard
+      useVariantField<string>(form, "payment", "cardNumber");
+      // @ts-expect-error — an object-shaped explicit argument is the same trap
+      useVariantField<{ cardNumber: string }>(form, "payment", "cardNumber");
+      return null;
+    });
+  });
+
+  it("inferred calls are unaffected by the trap-guard (sentinel never inferred)", () => {
+    const { result } = setup();
+    // The guard's TValue has no inference site, so a plain call falls
+    // through to the typed overload and keeps full inference.
+    expectTypeOf(result.current.cardNumber.value).toEqualTypeOf<
+      string | undefined
+    >();
+    expect(result.current.cardNumber.path).toBe("payment.cardNumber");
+  });
+
+  it("explicit instantiation expressions keep their arity (D last, defaulted)", () => {
+    // The three-type-arg form (schema, unionPath, field) that existed before
+    // the guard must keep compiling — the guard overload has ONE type
+    // parameter, so a three-arg instantiation never matches it.
+    type ThreeArg = ReturnType<
+      typeof useVariantField<typeof schema, "payment", "cardNumber">
+    >;
+    expectTypeOf<ThreeArg["value"]>().toEqualTypeOf<string | undefined>();
+  });
+
+  it("D recovery: a pathDepth-widened form still binds variant fields", () => {
+    const { result } = renderHook(() => {
+      const form = useForm(schema, {
+        initialValues: {
+          amount: 0,
+          payment: { method: "card", cardNumber: "42" },
+        },
+        pathDepth: 12,
+      });
+      return useVariantField(form, "payment", "cardNumber");
+    });
+    expectTypeOf(result.current.value).toEqualTypeOf<string | undefined>();
+    expect(result.current.value).toBe("42");
+  });
+
+  it("a schema-less FieldFormApi keeps the explicit value type", () => {
+    const { result } = renderHook(() => {
+      const form = useForm(schema, {
+        initialValues: {
+          amount: 0,
+          payment: { method: "card", cardNumber: "4242" },
+        },
+      });
+      // The documented escape hatch for dynamic/untyped binding sites.
+      const bare: FieldFormApi = form;
+      return useVariantField<string>(bare, "payment", "cardNumber");
+    });
+    expectTypeOf(result.current.value).toEqualTypeOf<string | undefined>();
+    expect(result.current.value).toBe("4242");
   });
 
   it("works on a schema-less structural form too", () => {

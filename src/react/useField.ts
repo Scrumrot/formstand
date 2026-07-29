@@ -223,8 +223,15 @@ export function useField<TValue = unknown>(
 
   const setValue = useCallback(
     (value: TValue) => {
+      const before = form.store.getState();
       form.setValue(path, value);
       const state = form.store.getState();
+      // A no-op write (the identical value — createForm's setValue identity
+      // guard leaves the state reference untouched) skips the revalidation
+      // gate too: nothing changed, so the current error state already
+      // reflects this value. Custom FieldFormApi implementations without
+      // the guard produce a fresh state and keep the old behavior.
+      if (state === before) return;
       if (
         shouldValidateOn(
           "change",

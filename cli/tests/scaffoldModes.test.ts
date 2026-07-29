@@ -153,6 +153,10 @@ describe("--form-prop emission (single file)", () => {
     expect(code).toContain("handleSubmit");
     expect(code).toContain('type="submit"');
     expect(code).toContain("useIsSubmitting");
+    // Single file has no pre-wired singleton, so no split-brain guard: any
+    // instance of the schema's form works (the fields bind through the
+    // prop). The guard is module-layout-only.
+    expect(code).not.toContain("is not this module's own instance");
   });
 
   it("combined with --live: pure rendering over a passed form", () => {
@@ -211,9 +215,32 @@ describe("module layout scaffold modes", () => {
     );
     expect(form).toContain("  const submitting = useIsSubmitting(form);");
     expect(form).toContain("form.handleSubmit((data) => {");
-    // No pre-wired IMPORT remains in the form file (the props comment may
-    // still name the module path in prose).
-    expect(form).not.toContain('} from "./hooks";');
+    // The only ./hooks import left is the singleton — imported for the
+    // dev-mode split-brain guard, not for the shell (which runs on the
+    // prop). (This pin used to assert NO ./hooks import; the guard changed
+    // that deliberately — see the guard test below.)
+    expect(form).toContain('import { profileForm } from "./hooks";');
+    expect(form).not.toContain("useProfileIsSubmitting");
+  });
+
+  it("--form-prop: the form file emits the dev-mode split-brain guard", () => {
+    const files = emitProfileModule({ formProp: true });
+    const form = fileContent(files, "ProfileForm.tsx");
+    expect(form).toContain('process.env["NODE_ENV"] !== "production" &&');
+    expect(form).toContain("form !== profileForm");
+    expect(form).toContain(
+      "ProfileForm: the passed form is not this module's own instance from ./hooks — fields are pre-wired to the module form, so state will split. Pass profileForm (see ProfileFormProps docs).",
+    );
+    // --live --form-prop keeps the guard too (the split is the same).
+    const liveForm = fileContent(
+      emitProfileModule({ live: true, formProp: true }),
+      "ProfileForm.tsx",
+    );
+    expect(liveForm).toContain("form !== profileForm");
+    // Without --form-prop there is nothing to guard (no form prop exists).
+    expect(
+      fileContent(emitProfileModule({}), "ProfileForm.tsx"),
+    ).not.toContain("form !== profileForm");
   });
 
   it("--live --form-prop: subscription over the prop, no formstand values import", () => {

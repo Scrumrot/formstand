@@ -28,6 +28,7 @@ import {
   shadcnStubFile,
   typecheckDiagnostics,
 } from "./helpers";
+import { autocompleteOnlySchema } from "./fixtures/autocompleteOnlySchema";
 import { overridesSchema } from "./fixtures/overridesSchema";
 
 // Per-field component overrides (formstand.config.ts `fields`): validation
@@ -120,6 +121,64 @@ describe("applyFieldOverrides", () => {
     // The candidate list itself spells rows with "*".
     expect(overridablePaths(baseIr)).toContain("crew.*.role");
     expect(overridablePaths(baseIr)).toContain("tags.*");
+  });
+
+  it("suggestions never offer paths the validator itself would reject", () => {
+    // A hand-built IR with the three unacceptable leaf shapes: a
+    // dot-containing (unaddressable) name, a walker-degraded leaf, and a
+    // scalar past the FieldPath depth budget (10 segments > 9).
+    const stringLeaf: FieldSpec = {
+      kind: "string",
+      optional: false,
+      nullable: false,
+    };
+    const deep = Array.from({ length: 9 }).reduce<FieldSpec>(
+      (spec, _, i) => ({
+        kind: "object",
+        optional: false,
+        nullable: false,
+        fields: [{ name: `l${i}`, label: `L${i}`, spec }],
+      }),
+      stringLeaf,
+    );
+    const messyIr: FieldSpec = {
+      kind: "object",
+      optional: false,
+      nullable: false,
+      fields: [
+        { name: "icao", label: "Icao", spec: stringLeaf },
+        { name: "ica.o", label: "Ica O", spec: stringLeaf },
+        {
+          name: "icaq",
+          label: "Icaq",
+          spec: { ...stringLeaf, todo: "degraded by the walker" },
+        },
+        { name: "deep", label: "Deep", spec: deep },
+      ],
+    };
+    const candidates = overridablePaths(messyIr);
+    expect(candidates).toContain("icao");
+    // Unaddressable name: applyFieldOverrides could never bind it.
+    expect(candidates).not.toContain("ica.o");
+    // Degraded leaf: the validator errors on spec.todo.
+    expect(candidates).not.toContain("icaq");
+    // The 10-segment leaf is past the FieldPath budget.
+    expect(candidates.some((p) => p.startsWith("deep."))).toBe(false);
+    // End to end: the near-miss list in the error offers only "icao" —
+    // never the dotted or degraded neighbors that would themselves error.
+    const message = (() => {
+      try {
+        applyFieldOverrides(messyIr, {
+          icaz: { component: "autocomplete", optionsProp: true },
+        });
+        return "";
+      } catch (error) {
+        return (error as Error).message;
+      }
+    })();
+    expect(message).toMatch(/did you mean "icao"\?/);
+    expect(message).not.toContain("ica.o");
+    expect(message).not.toContain("icaq");
   });
 
   it("naming an array without * errors with the .* hint", () => {
@@ -584,6 +643,158 @@ describe("module-layout overrides emission", () => {
       '<Autocomplete label={label} description={"Four-letter airport code"} data={icaoOptions} {...mantineAutocompleteProps(field)} />',
     );
     expect(typecheckDiagnostics(kitWritten, mantineStubPaths)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Autocomplete-ONLY module output (the import-gate regression, per kit)
+// ---------------------------------------------------------------------------
+
+// Every string field overridden, so usage.string is FALSE while
+// usage.autocomplete is true — the exact gap the module adapter's import
+// gates missed: chakra/shadcn ride the ChangeEvent-typed text adapter and
+// antd's FieldError renders Typography, but a non-overridden string in the
+// other fixtures kept those imports alive and hid the miss.
+describe("module-layout autocomplete-only emission (import gates)", () => {
+  const AC_ONLY_OVERRIDES = {
+    origin: { component: "autocomplete", optionsProp: true },
+    destination: { component: "autocomplete", optionsProp: true },
+  } as const;
+  const acOnlyIr = applyFieldOverrides(
+    fromZod(autocompleteOnlySchema),
+    AC_ONLY_OVERRIDES,
+    "module",
+  );
+
+  const emitAcOnlyModule = (
+    ui: "plain" | "mui" | "shadcn" | "chakra" | "mantine" | "antd",
+  ): Readonly<{
+    written: readonly string[];
+    at: (p: string) => string;
+  }> => {
+    const dir = freshTmpDir(`overrides-ac-only-${ui}`);
+    const files = emitModuleForm({
+      ir: acOnlyIr,
+      formName: "RouteForm",
+      ui,
+      schemaImport: {
+        name: "autocompleteOnlySchema",
+        from: moduleSpecifier(
+          dir,
+          path.join(fixturesDir, "autocompleteOnlySchema.ts"),
+        ),
+        kind: "named",
+      },
+    });
+    const written = files.map((file) => {
+      const dest = path.join(dir, file.path);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, file.content, "utf8");
+      return dest;
+    });
+    return {
+      written,
+      at: (p: string) => files.find((f) => f.path === p)?.content ?? "",
+    };
+  };
+
+  it("chakra: the adapter imports ChangeEvent for the ridden text adapter", () => {
+    const { written, at } = emitAcOnlyModule("chakra");
+    const adapter = at("adapter.ts");
+    expect(adapter).toContain("export const chakraTextInputProps = ");
+    expect(adapter).toContain(
+      `import type { ChangeEvent } from "react";`,
+    );
+    expect(typecheckDiagnostics(written, chakraStubPaths)).toEqual([]);
+  });
+
+  it("shadcn: the adapter imports ChangeEvent for the ridden text adapter", () => {
+    const { written, at } = emitAcOnlyModule("shadcn");
+    const adapter = at("adapter.tsx");
+    expect(adapter).toContain("export const shadcnTextInputProps = ");
+    expect(adapter).toContain(
+      `import type { ChangeEvent } from "react";`,
+    );
+    expect(typecheckDiagnostics([...written, shadcnStubFile])).toEqual([]);
+  });
+
+  it("antd: the adapter imports Typography for its FieldError line", () => {
+    const { written, at } = emitAcOnlyModule("antd");
+    const adapter = at("adapter.tsx");
+    expect(adapter).toContain("export const FieldError = ");
+    expect(adapter).toContain(`import { Typography } from "antd";`);
+    // The value-shaped AutoComplete adapter pulls no ChangeEvent in.
+    expect(adapter).not.toContain("ChangeEvent");
+    expect(typecheckDiagnostics(written, antdStubPaths)).toEqual([]);
+  });
+
+  it("mui, mantine, and plain autocomplete-only modules typecheck too", () => {
+    const mui = emitAcOnlyModule("mui");
+    // mui's autocomplete types SyntheticEvent, not ChangeEvent.
+    expect(mui.at("adapter.ts")).toContain(
+      `import type { SyntheticEvent } from "react";`,
+    );
+    expect(typecheckDiagnostics(mui.written, muiStubPaths)).toEqual([]);
+    const mantine = emitAcOnlyModule("mantine");
+    expect(mantine.at("adapter.ts")).not.toContain("ChangeEvent");
+    expect(typecheckDiagnostics(mantine.written, mantineStubPaths)).toEqual(
+      [],
+    );
+    expect(typecheckDiagnostics(emitAcOnlyModule("plain").written)).toEqual(
+      [],
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Type mode end to end (fields config through the type-mode emitters)
+// ---------------------------------------------------------------------------
+
+describe("type-mode overrides end to end", () => {
+  it("a TS interface + fields config emits the override and typechecks", async () => {
+    const dir = freshTmpDir("overrides-type-mode");
+    const cfg = path.join(dir, "formstand.config.ts");
+    fs.writeFileSync(
+      cfg,
+      [
+        "export default {",
+        "  fields: {",
+        '    icao: { component: "autocomplete", optionsProp: true },',
+        '    aircraft: { component: "autocomplete" },',
+        "  },",
+        "};",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    const out = path.join(dir, "FlightPlanForm.tsx");
+    expect(
+      await main([
+        path.join(fixturesDir, "flightPlanType.ts"),
+        "--type",
+        "FlightPlan",
+        "--config",
+        cfg,
+        "--out",
+        out,
+      ]),
+    ).toBe(0);
+    const code = fs.readFileSync(out, "utf8");
+    // The overridden string takes the options prop; the JSDoc description
+    // rides along (double coverage: override + description on one member).
+    expect(code).toContain("icaoOptions: readonly string[];");
+    expect(code).toContain("const AutocompleteField = ({");
+    expect(code).toContain("options={icaoOptions}");
+    expect(code).toContain("Four-letter airport code");
+    // The enum override bakes the union's literals as suggestions (the TS
+    // checker may reorder union members, so match each literal).
+    expect(code).toMatch(/options=\{\[("C172", "SR22"|"SR22", "C172")\]\}/);
+    // The emitted zod schema stays override-free (overrides shape
+    // COMPONENTS, not validation).
+    const schemaFile = path.join(dir, "flightPlanSchema.ts");
+    const schemaSource = fs.readFileSync(schemaFile, "utf8");
+    expect(schemaSource).not.toContain("autocomplete");
+    expect(typecheckDiagnostics([out, schemaFile])).toEqual([]);
   });
 });
 

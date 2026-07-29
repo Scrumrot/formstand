@@ -57,6 +57,27 @@ describe("useFormValues", () => {
     expect(result.current.values.name).toBe("Anna");
   });
 
+  it("does NOT re-render on a no-op setValue (identity-guarded write)", () => {
+    const renders: number[] = [];
+    const { result } = renderHook(() => {
+      const form = useForm(schema, { initialValues });
+      const values = useFormValues(form);
+      renders.push(1);
+      return { form, values };
+    });
+    const before = renders.length;
+
+    // Writing the value already at the path is a full no-op: the store
+    // state reference is unchanged, so no subscriber (this hook included)
+    // ever fires.
+    act(() => {
+      result.current.form.setValue("name", "Tim");
+      result.current.form.setValue("coords.lat", 52.5);
+    });
+    expect(renders.length).toBe(before);
+    expect(result.current.values).toEqual(initialValues);
+  });
+
   it("keeps a stable reference across unrelated re-renders", () => {
     const { result, rerender } = renderHook(() => {
       const form = useForm(schema, { initialValues });
