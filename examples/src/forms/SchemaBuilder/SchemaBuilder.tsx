@@ -395,6 +395,8 @@ export const SchemaBuilder = () => {
   const layout = useField(form, "layout");
   const sectionStyle = useField(form, "sectionStyle");
   const columns = useField(form, "columns");
+  const live = useField(form, "live");
+  const formProp = useField(form, "formProp");
   const rootRows = useFieldArray(form, "rootFields");
   const sectionRows = useFieldArray(form, "sections");
 
@@ -433,6 +435,8 @@ export const SchemaBuilder = () => {
         layout: values.layout,
         sectionStyle: values.sectionStyle,
         columns: values.columns,
+        live: values.live,
+        formProp: values.formProp,
       }),
       formName: parsed.formName,
       error: undefined,
@@ -483,7 +487,14 @@ export const SchemaBuilder = () => {
           <select {...selectProps(ui)}>
             <option value="plain">plain</option>
             <option value="mui">mui</option>
+            <option value="mui@5">mui@5</option>
+            <option value="mui@6">mui@6</option>
+            <option value="mui@7">mui@7</option>
+            <option value="mui@9">mui@9</option>
             <option value="shadcn">shadcn</option>
+            <option value="chakra">chakra</option>
+            <option value="mantine">mantine</option>
+            <option value="antd">antd</option>
           </select>
         </div>
         <div className="field" style={{ flex: 1 }}>
@@ -509,6 +520,17 @@ export const SchemaBuilder = () => {
             <option value="3">3</option>
           </select>
         </div>
+      </div>
+
+      <div className="row" style={{ gap: 16 }}>
+        <label className="row" style={{ gap: 6 }}>
+          <input {...checkboxProps(live)} />
+          Live mode (--live)
+        </label>
+        <label className="row" style={{ gap: 6 }}>
+          <input {...checkboxProps(formProp)} />
+          Form as prop (--form-prop)
+        </label>
       </div>
 
       {mode === "paste" ? (

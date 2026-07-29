@@ -8,14 +8,19 @@ import {
   type FieldSpec,
   type ModuleFile,
   type NamedField,
+  type UiTarget,
   type VisualOptions,
   camelCase,
+  emitAntdForm,
+  emitChakraForm,
+  emitMantineForm,
   emitModuleForm,
   emitMuiForm,
   emitPlainForm,
   emitShadcnForm,
   emitZodSchema,
   labelFromName,
+  parseUiTarget,
 } from "../../../../cli/src/codegen-api";
 import { type BuilderValues, parseEnumOptions } from "./builderSchema";
 
@@ -66,15 +71,26 @@ export const toIr = (values: BuilderValues): FieldSpec =>
     ),
   ]);
 
-const emitComponent = (
-  ui: BuilderValues["ui"],
-  options: EmitFormOptions,
-): string => {
-  switch (ui) {
+// The builder's ui values are exactly the CLI's spellings, so the real
+// parseUiTarget maps them to a kit (+ pinned mui major). The enum keeps the
+// parse from ever failing; the fallback is only for the type system.
+const targetOf = (ui: BuilderValues["ui"]): UiTarget => {
+  const parsed = parseUiTarget(ui);
+  return parsed.kind === "ok" ? parsed.target : { kit: "plain" };
+};
+
+const emitComponent = (target: UiTarget, options: EmitFormOptions): string => {
+  switch (target.kit) {
     case "mui":
-      return emitMuiForm(options);
+      return emitMuiForm({ ...options, muiVersion: target.version });
     case "shadcn":
       return emitShadcnForm(options);
+    case "chakra":
+      return emitChakraForm(options);
+    case "mantine":
+      return emitMantineForm(options);
+    case "antd":
+      return emitAntdForm(options);
     case "plain":
       return emitPlainForm(options);
   }
@@ -86,6 +102,8 @@ export type GenerateOptions = Readonly<{
   layout: BuilderValues["layout"];
   sectionStyle: BuilderValues["sectionStyle"];
   columns: BuilderValues["columns"];
+  live: boolean;
+  formProp: boolean;
 }>;
 
 // The shared emit path: an IR + a name + the option axes -> the module files.
@@ -104,20 +122,24 @@ export const generateFilesFromIr = (
     columns: Number(options.columns) as VisualOptions["columns"],
   };
   const schemaSource = emitZodSchema(ir, schemaName);
+  const target = targetOf(options.ui);
+  const scaffold = { live: options.live, formProp: options.formProp };
   return options.layout === "module"
     ? emitModuleForm({
         ir,
         formName,
         schemaImport: { name: schemaName, from: "./schema", kind: "named" },
         schemaSource,
-        ui: options.ui,
+        ui: target.kit,
+        ...(target.kit === "mui" ? { muiVersion: target.version } : {}),
         visual,
+        ...scaffold,
       })
     : [
         { path: `${schemaName}.ts`, content: schemaSource },
         {
           path: `${formName}.tsx`,
-          content: emitComponent(options.ui, {
+          content: emitComponent(target, {
             ir,
             formName,
             schemaImport: {
@@ -126,6 +148,7 @@ export const generateFilesFromIr = (
               kind: "named",
             },
             visual,
+            ...scaffold,
           }),
         },
       ];
@@ -140,4 +163,6 @@ export const generateFiles = (
     layout: values.layout,
     sectionStyle: values.sectionStyle,
     columns: values.columns,
+    live: values.live,
+    formProp: values.formProp,
   });

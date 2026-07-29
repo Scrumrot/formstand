@@ -82,10 +82,25 @@ export const builderSchema = z
       .string()
       .min(1, "name the component")
       .regex(/^[A-Z][A-Za-z0-9]*$/, "PascalCase, e.g. ContactForm"),
-    ui: z.enum(["plain", "mui", "shadcn"]),
+    // The CLI's full --ui surface: the six kits plus the pinnable mui majors
+    // (the spelling is parsed by the real parseUiTarget in ./generate).
+    ui: z.enum([
+      "plain",
+      "mui",
+      "mui@5",
+      "mui@6",
+      "mui@7",
+      "mui@9",
+      "shadcn",
+      "chakra",
+      "mantine",
+      "antd",
+    ]),
     layout: z.enum(["single", "module"]),
     sectionStyle: z.enum(["flat", "panel", "collapsible"]),
     columns: z.enum(["1", "2", "3"]),
+    live: z.boolean(),
+    formProp: z.boolean(),
     rootFields: z.array(fieldRowSchema),
     sections: z.array(sectionRowSchema),
   })
@@ -144,6 +159,8 @@ export const initialBuilderValues: BuilderValues = {
   layout: "module",
   sectionStyle: "panel",
   columns: "2",
+  live: false,
+  formProp: false,
   rootFields: [
     { name: "fullName", kind: "string", optional: false, options: "" },
     { name: "email", kind: "string", optional: false, options: "" },
