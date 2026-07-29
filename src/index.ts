@@ -86,8 +86,13 @@ export {
   DateField,
   CheckboxField,
   SelectField,
+  // The text-preserving number binding behind NumberField — exported for
+  // custom number inputs and UI-kit adapters (a naive controlled
+  // value={String(n)} input eats "." and "-" as they're typed).
+  useNumberInput,
 } from "./react/fields";
 export type {
+  NumberInputBinding,
   TextFieldProps,
   NumberFieldProps,
   DateFieldProps,

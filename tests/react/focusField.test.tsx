@@ -132,3 +132,54 @@ describe('focusField("") — whole-form scope', () => {
     expect(document.activeElement).toBe(before);
   });
 });
+
+// The [id=path] fallback: composite widgets (antd's Select, notably) render
+// no `name` anywhere but forward id={path} to their real focusable control.
+// A path that matches NO named control tries the element whose id IS the
+// path — exact match only, with the same focusability rules.
+describe("focusField id fallback", () => {
+  it("falls back to the element whose id is exactly the path", () => {
+    render(
+      <form>
+        <input type="text" name="name" aria-label="Name" />
+        {/* antd-like combobox input: no name, id carries the path */}
+        <input type="text" id="address.region" aria-label="Region" />
+      </form>,
+    );
+    expect(focusField("address.region")).toBe(true);
+    expect(document.activeElement).toBe(screen.getByLabelText("Region"));
+  });
+
+  it("is exact-match only — no descendant semantics for ids", () => {
+    render(
+      <form>
+        <input type="text" id="address.region" aria-label="Region" />
+      </form>,
+    );
+    // The name walk would cover descendants; an id names ONE element, so
+    // the container path finds nothing here.
+    expect(focusField("address")).toBe(false);
+  });
+
+  it("never applies when a named control matches the path", () => {
+    render(
+      <form>
+        <input type="text" id="email" aria-label="Id only" />
+        <input type="text" name="email" aria-label="Named" />
+      </form>,
+    );
+    expect(focusField("email")).toBe(true);
+    expect(document.activeElement).toBe(screen.getByLabelText("Named"));
+  });
+
+  it("id candidates obey the focusability rules", () => {
+    render(
+      <div>
+        <input type="text" id="qty" aria-label="Disabled" disabled />
+      </div>,
+    );
+    const before = document.activeElement;
+    expect(focusField("qty")).toBe(false);
+    expect(document.activeElement).toBe(before);
+  });
+});

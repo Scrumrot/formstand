@@ -201,7 +201,7 @@ export type NumberFieldProps<F extends FieldFormApi = FieldFormApi> =
     ref?: FieldRef<HTMLInputElement>;
   }>;
 
-type NumberInputBinding = Readonly<{
+export type NumberInputBinding = Readonly<{
   name: string;
   value: string;
   inputMode: "decimal";
@@ -226,7 +226,11 @@ const IDLE_EDIT: NumberEditState = { raw: null, pushed: undefined };
 // the form; partial input is kept locally. On blur the display snaps back to
 // the form's canonical value, and an external value change while editing wins
 // over the local text (render-phase derived-state reset).
-const useNumberInput = (
+// Exported for custom number inputs (and the CLI's kit adapters mirror its
+// semantics): spread the binding onto an <input type="text"> — a naive
+// value={String(field.value)} controlled input eats the "." of "85000.50"
+// and the "-" of "-5" as they're typed.
+export const useNumberInput = (
   field: UseFieldReturn<number | null | undefined>,
 ): NumberInputBinding => {
   const [edit, setEdit] = useState<NumberEditState>(IDLE_EDIT);

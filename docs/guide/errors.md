@@ -95,6 +95,8 @@ Because any value write makes a form-level verdict stale, the root `""` server e
 <form onSubmit={form.handleSubmit(onValid, (errors) => focusFirstError(errors))}>
 ```
 
+An errored path that matches **no named control at all** additionally tries the element whose `id` is exactly that path (exact match only — descendant semantics stay with the name walk). That is how composite widgets that render no `name` anywhere — Ant Design's `Select`, for instance, when given `id={path}` — still receive focus on a failed submit.
+
 Matching is most-specific-first: the root `""` key falls back to focusing the first control only when no field-keyed error matches anything — a form-wide refine must not steal focus from an actually errored field. Controls that can't take focus are skipped: hidden and disabled ones (a leading `<input type="hidden" name="csrf">` won't swallow the fallback) and anything inside a closed `<dialog>`; if a candidate refuses focus anyway (e.g. `display: none`), the next match in DOM order is tried. The function returns `true` only when a control actually holds focus, and is safe to import during SSR.
 
 On a page with several forms, pass the form element as `root` (e.g. via a ref) so the search stays inside your form:

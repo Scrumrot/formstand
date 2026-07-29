@@ -230,11 +230,13 @@ generator gives you versus what you might grow it into.
 
 The **Gen: Chakra UI**, **Gen: Mantine**, and **Gen: Ant Design** tabs run
 the SAME Onboarding schema through `--ui chakra`, `--ui mantine`, and
-`--ui antd` with the same section chrome — only the backend varies, so
-flipping between the four tabs is a direct comparison of what each kit
-target emits. They're regenerated and drift-checked by CI the same way,
-and each supported kit major is typechecked against its real declarations
-by the CLI's version matrix (`cli/matrix/`).
+`--ui antd` with the same section chrome, so flipping between the four
+tabs compares what each kit target emits — with one deliberate second
+axis: the mui tab is `--layout module` (it doubles as the module-layout
+showcase), while the three kit tabs are single-file output. They're
+regenerated and drift-checked by CI the same way, and each supported kit
+major is typechecked against its real declarations by the CLI's version
+matrix (`cli/matrix/`).
 
 ## Schema builder: the generator in your browser
 

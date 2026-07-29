@@ -5,7 +5,13 @@ import { pathToFileURL } from "node:url";
 import { createJiti } from "jiti";
 import { camelCase, isReservedWord, pascalCase } from "./casing";
 import { type FormstandConfig, type Layout } from "./config";
-import { type UiTarget, UI_CHOICES, parseUiTarget } from "./uiTarget";
+import {
+  type UiTarget,
+  DEFAULT_MUI_VERSION,
+  MUI_VERSIONS,
+  UI_CHOICES,
+  parseUiTarget,
+} from "./uiTarget";
 import { type Template, isTemplate } from "./template";
 import {
   type EmitFormOptions,
@@ -36,6 +42,18 @@ import {
   joinModuleFiles,
 } from "./moduleLayout";
 
+// The --ui flag spelling and mui enumeration, derived from UI_CHOICES /
+// MUI_VERSIONS (uiTarget.ts is the single source of truth) so HELP can't
+// drift from what the parser accepts:
+// "plain, mui, mui@<5|6|7|9>, ..." -> "plain|mui[@5|6|7|9]|...".
+const UI_FLAG_CHOICES = UI_CHOICES.replace(
+  /mui, mui@<([^>]+)>/,
+  "mui[@$1]",
+).replace(/, /g, "|");
+const MUI_CHOICE_LIST = MUI_VERSIONS.map((version) => `mui@${version}`).join(
+  ", ",
+);
+
 const HELP = `formstand-gen — generate formstand form components
 
 Usage:
@@ -50,10 +68,10 @@ Options:
   --export <name>     which export holds the zod schema (default: the default
                       export, or the sole zod-schema export)
   --type <TypeName>   generate from an exported TS type/interface instead
-  --ui <plain|mui[@5|6|7|9]|shadcn|chakra|mantine|antd>
+  --ui <${UI_FLAG_CHOICES}>
                       component flavor (default: plain). mui may pin an
-                      @mui/material major: mui@5, mui@6, mui@7, mui@9; bare
-                      mui means mui@9. Only React-19-capable majors are
+                      @mui/material major: ${MUI_CHOICE_LIST}; bare
+                      mui means mui@${DEFAULT_MUI_VERSION}. Only React-19-capable majors are
                       supported (formstand peers react ^19, so MUI 4 and
                       older can't install alongside it; MUI skipped 8).
                       chakra targets @chakra-ui/react 3 (the only supported

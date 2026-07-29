@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`useNumberInput` is exported** (along with its `NumberInputBinding`
+  return type) — the text-preserving number binding behind `NumberField`.
+  It was implemented and tested (via `NumberField`) all along, just never
+  exported: local raw text while editing (partial entries like `-`, `1.`,
+  `85000.` stay visible), keystrokes that parse pushed to the form via the
+  shared `parseNumberText` rules, blur snapping the display to the
+  canonical value, and an external form-value change while editing
+  resetting the local text. Spread it onto an `<input type="text">` for
+  custom number inputs and UI-kit adapters — a naive controlled
+  `value={String(n)}` binding eats the `.` of `85000.50` and the `-` of
+  `-5` as they are typed.
+
+### Fixed
+
+- **`focusFirstError` / `focusField` gain an `[id=path]` fallback** for
+  paths that match NO named control: composite widgets that render no
+  `name` anywhere — Ant Design's `Select`, notably, which has no
+  form-posting input — were unreachable by the name walk even though they
+  forward `id={path}` to their real focusable control. When a path has no
+  name-matched control, the helpers now try the element whose `id` is
+  exactly that path (EXACT match only — descendant semantics stay with the
+  name walk, since an id names one element), with the same focusability
+  filter, post-focus verification, and DOM-order merging as name matches.
+  Paths with any named control never consult ids, so existing behavior is
+  unchanged wherever a `name` exists.
+
 ## 0.10.0 — 2026-07-28
 
 ### Breaking
@@ -198,8 +228,8 @@
   chakra style props. The generated file assumes the host app mounts
   `ChakraProvider` (same policy as the mui backend and its theme). The
   module layout gains a shared `adapter.ts` (`chakraTextInputProps` /
-  `chakraNumberInputProps` / `chakraDateInputProps` / `chakraSelectProps` /
-  `chakraSwitchProps` + `fieldError`). chakra takes no version suffix —
+  `useChakraNumberInputProps` / `chakraDateInputProps` /
+  `chakraSelectProps` / `chakraSwitchProps` + `fieldError`). chakra takes no version suffix —
   v3 is the only supported major (v2 and older lack the compound API and
   predate formstand's React 19 peer) — with `chakra@3` accepted as the
   explicit spelling and `chakra@1`/`chakra@2` failing with the scope
@@ -230,7 +260,7 @@
   use `SimpleGrid cols={N}`. The generated file assumes the host app
   mounts `MantineProvider` (same policy as the mui/chakra providers). The
   module layout gains a shared `adapter.ts` (`mantineTextInputProps` /
-  `mantineNumberInputProps` / `mantineDateInputProps` /
+  `useMantineNumberInputProps` / `mantineDateInputProps` /
   `mantineSelectProps` / `mantineSwitchProps` + `fieldError`). mantine
   takes no version suffix — v9 (the current major) is the only supported
   target, with `mantine@9` accepted as the explicit spelling. The scope is
@@ -279,9 +309,9 @@
   use the shared inline-style CSS grid. No provider is required
   (`ConfigProvider` is optional theming). The module layout gains a shared
   `adapter.tsx` (JSX for its `FieldError` line, like shadcn's):
-  `antdTextInputProps` / `antdNumberInputProps` / `antdDateInputProps` /
-  `antdSelectProps` / `antdCheckboxProps` + `fieldError` / `fieldStatus` /
-  `FieldError`. antd takes no version suffix — v6 (the current major) is
+  `antdTextInputProps` / `useAntdNumberInputProps` /
+  `antdDateInputProps` / `antdSelectProps` / `antdCheckboxProps` +
+  `fieldError` / `fieldStatus` / `FieldError`. antd takes no version suffix — v6 (the current major) is
   the only supported target, with `antd@6` accepted as the explicit
   spelling. The scope is empirical: antd 6.x peers `react >=18` (React 19
   natively in range), while antd 5 nominally peers `react >=16.9` but
@@ -301,8 +331,10 @@
   Generated tabs (**Gen: Chakra UI**, **Gen: Mantine**, **Gen: Ant
   Design**) render the SAME Onboarding schema the mui module tab uses,
   generated single-file with `--ui chakra` / `--ui mantine` / `--ui antd`
-  and the same `--sections panel --columns 2` chrome — only the backend
-  varies, so the four tabs are a direct kit comparison. Committed
+  and the same `--sections panel --columns 2` chrome — a direct kit
+  comparison across the four tabs, with one deliberate second axis: the
+  mui tab is `--layout module` (the module-layout showcase) while these
+  three are single-file. Committed
   untouched and drift-checked by CI like the other generated demos
   (`scripts/generate-cli-demos.mjs`), rendered behind scoped provider
   bridges that follow the playground's light/dark switch (ChakraProvider +
@@ -312,6 +344,55 @@
 
 ### Fixed
 
+- **Kit number adapters no longer corrupt typed numbers.** The mui, chakra,
+  mantine, and antd backends bound numbers as a controlled text input
+  (`inputMode="decimal"`) whose onChange immediately reparsed and
+  re-rendered the canonical string — so typing `85000.50` yielded
+  `8500050` (the `.` eaten as `85000.` reparsed to `85000`), `-5` yielded
+  `5`, and `0.050` yielded `50` (jsdom-verified). All four now emit an
+  inline `useNumberText` hook replicating formstand's own `useNumberInput`
+  semantics exactly (local raw text while editing, valid keystrokes pushed,
+  partial entries kept, blur snap, external-change reset) — emitted inline
+  rather than imported so generated output keeps its formstand >= 0.3.0
+  floor — and their number adapters became use-prefixed HOOKS
+  (`useMuiNumberFieldProps` / `useChakraNumberInputProps` /
+  `useMantineNumberInputProps` / `useAntdNumberInputProps`) composing kit
+  chrome over it, in both layouts. Union variant blocks are conditional
+  JSX, so number bindings there hoist
+  `const ${var}NumberProps = use...(${var})` next to the field hooks and
+  spread the const (React's rules of hooks). plain and shadcn were never
+  affected (stateless `type="number"` bindings).
+- **Single-file array sections render the array-level error.** All six
+  single-file backends dropped `useFieldArray`'s `.error`, so a
+  `z.array().min(1, "add at least one contact")` message was invisible on
+  submit; the module layout already rendered it per kit. Each backend now
+  emits the same error line its module-layout list shell uses (plain and
+  shadcn `<p role="alert">`, mui `Typography color="error"`, chakra
+  `Text color="red.500"`, mantine `Text c="red"`, antd
+  `Typography.Text role="alert" type="danger"`), between the rows and the
+  Add button.
+- **Version-matrix hardening.** (1) The stale-install gate now derives its
+  required-alias list from the job list itself and fails loudly naming
+  what's missing — it previously checked only 4 of the 7 aliases, so a
+  missing `mui6`/`mui7`/`mui9` silently typechecked against the repo
+  root's @mui/material copy. (2) Every kit gained a module-layout PANEL
+  job (`KitchenSinkPanel`, panel@2col): module-panel emitters were
+  previously typechecked nowhere (a deliberate typo in that arm shipped
+  green), so the matrix now genuinely covers all three section styles in
+  both layouts. (3) The matrix compiles under `exactOptionalPropertyTypes`
+  in addition to `strict` — the strictest consumer configuration — after
+  fixing the stale antd probe lines, which restated `status={undefined}`,
+  a shape the adapter no longer emits (it emits `""`, a member of antd's
+  `InputStatus`). (4) The four ~60-line per-kit generator copies collapsed
+  into one parameterized `generateKit` with the jobs as data.
+- **Docs corrections**: the module layout works with all six uis (the
+  README said three) and the adapter split is named (`adapter.ts` for
+  mui/chakra/mantine, `adapter.tsx` for shadcn/antd); the
+  formstand >= 0.3.0 requirement explicitly covers mantine and antd (they
+  import the same surface); and the playground/README wording about the
+  four "CLI output" tabs now acknowledges both axes — the mui tab is
+  `--layout module` (doubling as the module-layout showcase) while the
+  three kit tabs are single-file, so `--ui` is not the only variable.
 - **antd `fieldStatus` returns `""` — antd's own no-status value — instead
   of `undefined`** when a field has no error. Spreading
   `status: "error" | undefined` onto antd's `status?: InputStatus` props

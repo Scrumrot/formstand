@@ -6,7 +6,7 @@ import {
   useThemeMode,
   useThemeModeState,
 } from "./theme";
-import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
+import { ChakraProvider, createSystem, defaultConfig } from "@chakra-ui/react";
 import { MantineProvider } from "@mantine/core";
 import { ConfigProvider as AntdConfigProvider, theme as antdTheme } from "antd";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
@@ -96,13 +96,42 @@ const shadcnTab = (
 // demo content, so the kits' theming never leaks into the playground shell.
 type KitBridgeProps = Readonly<{ children: ReactNode }>;
 
-// Chakra v3 keys dark styles off a `.dark` ancestor class (defaultSystem's
-// dark condition), so the bridge is the provider plus a mode class.
-const ChakraBridge = ({ children }: KitBridgeProps) => {
+// Chakra v3's default system injects UNSCOPED global CSS (`*`/body/html
+// preflight resets plus defaultConfig's globalCss — placeholder and
+// selection colors, html color-scheme) that would restyle the whole
+// playground shell while the tab is mounted — so the bridge builds its own
+// system with BOTH layers scoped under .chakra-scope (the same scoping
+// pattern as the shadcn tabs) and puts that class on the wrapper. Root
+// selectors (html/body/:root) become the scope element itself; everything
+// else nests under it. Exported for the scoping regression test.
+const scopeSelector = (selector: string): string =>
+  selector
+    .split(",")
+    .map((part) => {
+      const trimmed = part.trim();
+      return trimmed === "html" || trimmed === "body" || trimmed === ":root"
+        ? ".chakra-scope"
+        : `.chakra-scope ${trimmed}`;
+    })
+    .join(", ");
+
+export const chakraScopedSystem = createSystem(
+  {
+    ...defaultConfig,
+    globalCss: Object.fromEntries(
+      Object.entries(defaultConfig.globalCss ?? {}).map(
+        ([selector, styles]) => [scopeSelector(selector), styles],
+      ),
+    ),
+  },
+  { preflight: { scope: ".chakra-scope" } },
+);
+
+export const ChakraBridge = ({ children }: KitBridgeProps) => {
   const mode = useThemeMode();
   return (
-    <ChakraProvider value={defaultSystem}>
-      <div className={mode}>{children}</div>
+    <ChakraProvider value={chakraScopedSystem}>
+      <div className={`chakra-scope ${mode}`}>{children}</div>
     </ChakraProvider>
   );
 };
@@ -294,11 +323,13 @@ const TABS: readonly Tab[] = [
     render: () => <GeneratedNestedArrayStressDemo />,
   },
   // The three kit demos are the SAME Onboarding schema and the same
-  // chrome (--sections panel --columns 2) as the mui module demo above —
-  // only --ui varies, so flipping between the four tabs is a direct
-  // backend comparison. Single-file layout: useForm lives inside the
-  // component, so (like genDeepNest) there is no form instance to
-  // register with useDemoForm.
+  // chrome (--sections panel --columns 2) as the mui tab above, with the
+  // --ui backend varying — but note the layouts differ too: the mui tab is
+  // --layout module (it doubles as the module-layout showcase), while
+  // these three are single-file. Flipping between the four tabs still
+  // compares the kit backends directly; just remember the file structure
+  // axis. Single-file layout: useForm lives inside the component, so (like
+  // genDeepNest) there is no form instance to register with useDemoForm.
   {
     key: "genChakra",
     label: "Gen: Chakra UI",

@@ -15,6 +15,7 @@ import { MantineProvider } from "@mantine/core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { StrictMode, type ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { focusField } from "../../src/react/focusError";
 import { AntdOnboardingForm } from "../../examples/src/generated/AntdOnboardingForm";
 import { ChakraOnboardingForm } from "../../examples/src/generated/ChakraOnboardingForm";
 import { MantineOnboardingForm } from "../../examples/src/generated/MantineOnboardingForm";
@@ -68,6 +69,52 @@ const expectOnboardingForm = (ui: ReactElement): void => {
   expect(console.error).not.toHaveBeenCalled();
 };
 
+// Simulates real typing into a controlled input: after each keystroke the
+// component re-renders the value, and the next character appends to
+// whatever the input then DISPLAYS — exactly how a value-reparsing binding
+// corrupts entries ("85000.50" → "8500050", "-5" → "5").
+const typeChars = (input: HTMLInputElement, text: string): void => {
+  text.split("").forEach((char) => {
+    fireEvent.change(input, { target: { value: input.value + char } });
+  });
+};
+
+// The raw-text number-editing contract every kit demo must satisfy (the
+// generated useNumberText hook, mirroring the library's useNumberInput):
+// intermediate text survives keystroke-by-keystroke, blur snaps to the
+// canonical parsed value, and a leading "-" is not eaten.
+const expectNumberEditing = (ui: ReactElement): void => {
+  render(<StrictMode>{ui}</StrictMode>);
+  const salary = screen.getByLabelText("Salary") as HTMLInputElement;
+
+  typeChars(salary, "85000.50");
+  expect(salary.value).toBe("85000.50");
+  fireEvent.blur(salary);
+  expect(salary.value).toBe("85000.5");
+
+  fireEvent.change(salary, { target: { value: "" } });
+  typeChars(salary, "-5");
+  expect(salary.value).toBe("-5");
+  fireEvent.blur(salary);
+  expect(salary.value).toBe("-5");
+
+  expect(console.error).not.toHaveBeenCalled();
+};
+
+// Submitting the blank form (emergencyContacts starts []) must surface the
+// ARRAY-level error (z.array().min(1, "add at least one contact")) — the
+// single-file emitters render the hook's .error like the module layout.
+const expectArrayLevelError = async (ui: ReactElement): Promise<void> => {
+  render(<StrictMode>{ui}</StrictMode>);
+  expect(screen.queryByText("add at least one contact")).toBeNull();
+  const form = document.querySelector("form");
+  expect(form).not.toBeNull();
+  fireEvent.submit(form as HTMLFormElement);
+  expect(
+    await screen.findByText("add at least one contact"),
+  ).toBeDefined();
+};
+
 describe("generated kit demos (untouched single-file output, one schema, three --ui backends)", () => {
   it("renders the Onboarding schema through --ui chakra", () => {
     expectOnboardingForm(
@@ -87,5 +134,58 @@ describe("generated kit demos (untouched single-file output, one schema, three -
 
   it("renders the Onboarding schema through --ui antd", () => {
     expectOnboardingForm(<AntdOnboardingForm />);
+  });
+
+  it("preserves typed number text through --ui chakra", () => {
+    expectNumberEditing(
+      <ChakraProvider value={defaultSystem}>
+        <ChakraOnboardingForm />
+      </ChakraProvider>,
+    );
+  });
+
+  it("preserves typed number text through --ui mantine", () => {
+    expectNumberEditing(
+      <MantineProvider>
+        <MantineOnboardingForm />
+      </MantineProvider>,
+    );
+  });
+
+  it("preserves typed number text through --ui antd", () => {
+    expectNumberEditing(<AntdOnboardingForm />);
+  });
+
+  it("shows the array-level error on submit through --ui chakra", async () => {
+    await expectArrayLevelError(
+      <ChakraProvider value={defaultSystem}>
+        <ChakraOnboardingForm />
+      </ChakraProvider>,
+    );
+  });
+
+  it("shows the array-level error on submit through --ui mantine", async () => {
+    await expectArrayLevelError(
+      <MantineProvider>
+        <MantineOnboardingForm />
+      </MantineProvider>,
+    );
+  });
+
+  it("shows the array-level error on submit through --ui antd", async () => {
+    await expectArrayLevelError(<AntdOnboardingForm />);
+  });
+
+  // antd's Select renders no `name` anywhere, so the focus helpers reach it
+  // through their [id=path] fallback (the generated markup sets id={path},
+  // forwarded to the real combobox input).
+  it("focusField reaches the antd Select via the id fallback", () => {
+    render(
+      <StrictMode>
+        <AntdOnboardingForm />
+      </StrictMode>,
+    );
+    expect(focusField("address.region")).toBe(true);
+    expect((document.activeElement as HTMLElement).id).toBe("address.region");
   });
 });

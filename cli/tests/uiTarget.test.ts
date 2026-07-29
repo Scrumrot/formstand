@@ -18,6 +18,14 @@ import { profileSchema } from "./fixtures/profileSchema";
 // reject a version. Only React-19-capable majors qualify (formstand peers
 // react ^19), and MUI skipped major 8 — hence the 5/6/7/9 set.
 
+// Parse a value expected to FAIL, asserting the error arm and returning the
+// message — one helper collapsing the repeated narrow-and-check pairs.
+const parseError = (value: string): string => {
+  const result = parseUiTarget(value);
+  expect(result.kind).toBe("error");
+  return result.kind === "error" ? result.message : "";
+};
+
 describe("parseUiTarget", () => {
   it("parses the version-free kits", () => {
     expect(parseUiTarget("plain")).toEqual({
@@ -49,38 +57,32 @@ describe("parseUiTarget", () => {
   });
 
   it("rejects mui@8 with the skipped-major explanation", () => {
-    const result = parseUiTarget("mui@8");
-    expect(result.kind).toBe("error");
-    expect(result.kind === "error" && result.message).toContain("skipped");
-    expect(result.kind === "error" && result.message).toContain('"mui@7"');
+    const message = parseError("mui@8");
+    expect(message).toContain("skipped");
+    expect(message).toContain('"mui@7"');
   });
 
   it("rejects pre-React-19 majors with the scope rationale", () => {
-    const result = parseUiTarget("mui@4");
-    expect(result.kind).toBe("error");
-    expect(result.kind === "error" && result.message).toContain("React 19");
+    const message = parseError("mui@4");
+    expect(message).toContain("React 19");
   });
 
   it("rejects unknown mui versions listing the supported set", () => {
     (["mui@10", "mui@5.1", "mui@", "mui@next"] as const).forEach((value) => {
-      const result = parseUiTarget(value);
-      expect(result.kind).toBe("error");
-      expect(result.kind === "error" && result.message).toContain('"mui@5"');
+      const message = parseError(value);
+      expect(message).toContain('"mui@5"');
     });
   });
 
   it("rejects a version on the version-free kits", () => {
-    const plain = parseUiTarget("plain@2");
-    expect(plain.kind).toBe("error");
-    expect(plain.kind === "error" && plain.message).toContain("takes no version");
+    expect(parseError("plain@2")).toContain("takes no version");
     expect(parseUiTarget("shadcn@3").kind).toBe("error");
   });
 
   it("rejects unknown kits listing the choices", () => {
     (["bootstrap", "mui5", ""] as const).forEach((value) => {
-      const result = parseUiTarget(value);
-      expect(result.kind).toBe("error");
-      expect(result.kind === "error" && result.message).toContain("plain");
+      const message = parseError(value);
+      expect(message).toContain("plain");
     });
   });
 
@@ -101,19 +103,17 @@ describe("parseUiTarget", () => {
 
   it("rejects chakra@2 and chakra@1 with the React-19 scope rationale", () => {
     (["chakra@2", "chakra@1", "chakra@0"] as const).forEach((value) => {
-      const result = parseUiTarget(value);
-      expect(result.kind).toBe("error");
-      expect(result.kind === "error" && result.message).toContain("React 19");
-      expect(result.kind === "error" && result.message).toContain('"chakra@3"');
+      const message = parseError(value);
+      expect(message).toContain("React 19");
+      expect(message).toContain('"chakra@3"');
     });
   });
 
   it("rejects other chakra versions naming the one supported major", () => {
     (["chakra@4", "chakra@", "chakra@next", "chakra@3.1"] as const).forEach(
       (value) => {
-        const result = parseUiTarget(value);
-        expect(result.kind).toBe("error");
-        expect(result.kind === "error" && result.message).toContain(
+        const message = parseError(value);
+        expect(message).toContain(
           '"chakra@3"',
         );
       },
@@ -138,10 +138,9 @@ describe("parseUiTarget", () => {
 
   it("rejects mantine@6 and older with the React-19 scope rationale", () => {
     (["mantine@6", "mantine@5", "mantine@0"] as const).forEach((value) => {
-      const result = parseUiTarget(value);
-      expect(result.kind).toBe("error");
-      expect(result.kind === "error" && result.message).toContain("React 19");
-      expect(result.kind === "error" && result.message).toContain(
+      const message = parseError(value);
+      expect(message).toContain("React 19");
+      expect(message).toContain(
         '"mantine@9"',
       );
     });
@@ -149,12 +148,11 @@ describe("parseUiTarget", () => {
 
   it("rejects mantine@7 and @8 with the current-major-only scope", () => {
     (["mantine@7", "mantine@8"] as const).forEach((value) => {
-      const result = parseUiTarget(value);
-      expect(result.kind).toBe("error");
-      expect(result.kind === "error" && result.message).toContain(
+      const message = parseError(value);
+      expect(message).toContain(
         "current @mantine/core major",
       );
-      expect(result.kind === "error" && result.message).toContain(
+      expect(message).toContain(
         '"mantine@9"',
       );
     });
@@ -163,9 +161,8 @@ describe("parseUiTarget", () => {
   it("rejects other mantine versions naming the one supported major", () => {
     (["mantine@10", "mantine@", "mantine@next", "mantine@9.1"] as const).forEach(
       (value) => {
-        const result = parseUiTarget(value);
-        expect(result.kind).toBe("error");
-        expect(result.kind === "error" && result.message).toContain(
+        const message = parseError(value);
+        expect(message).toContain(
           '"mantine@9"',
         );
       },
@@ -190,33 +187,30 @@ describe("parseUiTarget", () => {
   });
 
   it("rejects antd@5 with the current-major-only scope and the patch note", () => {
-    const result = parseUiTarget("antd@5");
-    expect(result.kind).toBe("error");
-    expect(result.kind === "error" && result.message).toContain(
+    const message = parseError("antd@5");
+    expect(message).toContain(
       "current antd major",
     );
-    expect(result.kind === "error" && result.message).toContain(
+    expect(message).toContain(
       "@ant-design/v5-patch-for-react-19",
     );
-    expect(result.kind === "error" && result.message).toContain('"antd@6"');
+    expect(message).toContain('"antd@6"');
   });
 
   it("rejects antd@4 and older with the missing-surface rationale", () => {
     (["antd@4", "antd@3", "antd@0"] as const).forEach((value) => {
-      const result = parseUiTarget(value);
-      expect(result.kind).toBe("error");
-      expect(result.kind === "error" && result.message).toContain(
+      const message = parseError(value);
+      expect(message).toContain(
         "CSS-in-JS",
       );
-      expect(result.kind === "error" && result.message).toContain('"antd@6"');
+      expect(message).toContain('"antd@6"');
     });
   });
 
   it("rejects other antd versions naming the one supported major", () => {
     (["antd@7", "antd@", "antd@next", "antd@6.5"] as const).forEach((value) => {
-      const result = parseUiTarget(value);
-      expect(result.kind).toBe("error");
-      expect(result.kind === "error" && result.message).toContain('"antd@6"');
+      const message = parseError(value);
+      expect(message).toContain('"antd@6"');
     });
   });
 });

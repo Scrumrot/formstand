@@ -199,3 +199,45 @@ describe("focusFirstError inside a shadow root", () => {
     expect(shadow.activeElement).toBe(inputs[0]);
   });
 });
+
+// The [id=path] fallback (see focusField.test.tsx): an errored path that
+// matches no named control tries the element whose id is exactly the path —
+// how antd's name-less Select still receives focus on a failed submit.
+describe("focusFirstError id fallback", () => {
+  it("focuses an id-only control for an errored path with no named match", () => {
+    render(
+      <form>
+        <input type="text" name="name" aria-label="Name" />
+        <input type="text" id="address.region" aria-label="Region" />
+      </form>,
+    );
+    expect(focusFirstError({ "address.region": ["pick a region"] })).toBe(
+      true,
+    );
+    expect(document.activeElement).toBe(screen.getByLabelText("Region"));
+  });
+
+  it("keeps DOM order across named and id-only candidates", () => {
+    render(
+      <form>
+        <input type="text" id="kind" aria-label="Kind" />
+        <input type="text" name="email" aria-label="Email" />
+      </form>,
+    );
+    expect(
+      focusFirstError({ email: ["required"], kind: ["required"] }),
+    ).toBe(true);
+    expect(document.activeElement).toBe(screen.getByLabelText("Kind"));
+  });
+
+  it("paths with a named match never consult ids", () => {
+    render(
+      <form>
+        <input type="text" id="email" aria-label="Id only" />
+        <input type="text" name="email" aria-label="Named" />
+      </form>,
+    );
+    expect(focusFirstError({ email: ["required"] })).toBe(true);
+    expect(document.activeElement).toBe(screen.getByLabelText("Named"));
+  });
+});

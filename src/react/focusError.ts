@@ -54,6 +54,59 @@ const nameMatchesAny = (
   return name !== null && paths.some((p) => isPathOrChild(name, p));
 };
 
+// CSS attribute-selector value for an arbitrary path: quoted, with the two
+// characters that are active inside a double-quoted CSS string escaped —
+// so paths with dots ("address.region") and hostile names select literally.
+const cssQuoted = (value: string): string =>
+  `"${value.replace(/[\\"]/g, (ch) => `\\${ch}`)}"`;
+
+// The id fallback for composite widgets that render no `name` at all (e.g.
+// antd's Select — no form-posting input exists in it) but DO forward
+// `id={path}` to their real focusable control, the way the CLI's antd
+// adapter emits it. EXACT id match only, by design: descendant semantics
+// ("address" covering "address.city") belong to the name walk — an id names
+// one element, and inventing prefix matching over ids would guess. Runs
+// through the same focusability filter and post-focus verification as name
+// matches.
+const idMatches = (
+  scope: ParentNode,
+  path: string,
+): readonly HTMLElement[] =>
+  path === ""
+    ? []
+    : [...scope.querySelectorAll<HTMLElement>(`[id=${cssQuoted(path)}]`)];
+
+// Document order for a merged candidate list (name matches + id fallbacks
+// come from separate queries, but "first error" means first in the DOM).
+const inDomOrder = (
+  els: readonly HTMLElement[],
+): readonly HTMLElement[] =>
+  [...els].sort((a, b) =>
+    a === b
+      ? 0
+      : (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+        ? -1
+        : 1,
+  );
+
+// The candidate walk shared by focusFirstError and focusField: name-matched
+// form controls for every path, plus — per path that matched NO named
+// control — the element whose `id` is exactly that path. Paths with a named
+// match never consult ids, so the name walk's semantics (descendants
+// included) stay authoritative wherever a `name` exists.
+const pathCandidates = (
+  scope: ParentNode,
+  paths: readonly string[],
+): readonly HTMLElement[] => {
+  const controls = namedControls(scope);
+  const named = controls.filter((el) => nameMatchesAny(el, paths));
+  const unnamedPaths = paths.filter(
+    (p) => !controls.some((el) => nameMatchesAny(el, [p])),
+  );
+  const byId = unnamedPaths.flatMap((p) => idMatches(scope, p));
+  return inDomOrder([...new Set([...named, ...byId])]);
+};
+
 // Focus the first form control (in DOM order) whose `name` attribute matches
 // an entry in the error map — either exactly, or as a descendant of an
 // errored container path, so array-level errors ("lineItems" from
@@ -61,8 +114,11 @@ const nameMatchesAny = (
 // rendered field. Most specific wins: the root "" key (a form-wide refine)
 // falls back to the first control only when no field-keyed error matches
 // anything — otherwise a root error would steal focus from the actually
-// errored field. The bound components and prop builders set name={path}, so
-// this works out of the box:
+// errored field. A path that matches NO named control at all additionally
+// tries the element whose `id` is exactly that path (see pathCandidates) —
+// how composite widgets with no `name` anywhere, like antd's Select with
+// id={path}, still get focused. The bound components and prop builders set
+// name={path}, so this works out of the box:
 //
 //   form.handleSubmit(onValid, (errors) => focusFirstError(errors))
 //
@@ -84,9 +140,9 @@ export const focusFirstError = (
   );
   const hasRootError = (errors[""]?.length ?? 0) > 0;
   const controls = namedControls(scope);
-  const fieldMatches = controls
-    .filter((el) => nameMatchesAny(el, erroredPaths))
-    .filter(isFocusCandidate);
+  const fieldMatches = pathCandidates(scope, erroredPaths).filter(
+    isFocusCandidate,
+  );
   // The root-"" fallback ("focus the first control") is only meaningful when
   // "first control" is unambiguous. With the default document scope on a
   // page holding several <form>s, the first control could belong to a form
@@ -108,7 +164,8 @@ export const focusFirstError = (
 // map: focus the first control (in DOM order) whose `name` is `path` itself
 // or a descendant of it — focusField("address") lands on the first rendered
 // address field. Same candidate walk (unfocusable controls are passed over,
-// focus is verified to have taken) and the same optional `root` scoping.
+// focus is verified to have taken, a name-less path falls back to the
+// element whose `id` is exactly the path) and the same `root` scoping.
 // This is the "setFocus" of the library — reach for it after opening a
 // dialog or appending an array row:
 //
@@ -127,14 +184,10 @@ export const focusFirstError = (
 // Returns whether a control actually received focus. Safe to import during
 // SSR — it only touches the DOM when called.
 export const focusField = (path: string, root?: ParentNode): boolean => {
-  const controls = namedControls(root ?? document);
+  const scope = root ?? document;
   return path === ""
     ? (root !== undefined ||
         document.querySelectorAll("form").length <= 1) &&
-        focusFirstOf(controls.filter(isFocusCandidate))
-    : focusFirstOf(
-        controls
-          .filter((el) => nameMatchesAny(el, [path]))
-          .filter(isFocusCandidate),
-      );
+        focusFirstOf(namedControls(scope).filter(isFocusCandidate))
+    : focusFirstOf(pathCandidates(scope, [path]).filter(isFocusCandidate));
 };

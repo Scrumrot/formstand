@@ -24,11 +24,13 @@ import {
   isScalarSpec,
   isUnaddressable,
   jsxText,
+  kitScalarBinding,
   mantineAdapterSection,
   muiAdapterSection,
   overDepthBudget,
   pathSegmentCount,
   q,
+  reactImportLines,
   shadcnAdapterSection,
   templateEscape,
   unionCommonFieldNames,
@@ -309,7 +311,7 @@ const leafImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] => {
         case "number":
           return [
             { from: "@mui/material", names: ["TextField"] },
-            { from: "../adapter", names: ["muiNumberFieldProps"] },
+            { from: "../adapter", names: [kitScalarBinding("mui", "number")] },
           ];
         case "date":
           return [
@@ -340,7 +342,10 @@ const leafImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] => {
         case "number":
           return [
             { from: "@mantine/core", names: ["TextInput"] },
-            { from: "../adapter", names: ["mantineNumberInputProps"] },
+            {
+              from: "../adapter",
+              names: [kitScalarBinding("mantine", "number")],
+            },
           ];
         case "date":
           return [
@@ -371,7 +376,10 @@ const leafImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] => {
         case "number":
           return [
             { from: "antd", names: ["Flex", "Input"] },
-            { from: "../adapter", names: ["FieldError", "antdNumberInputProps"] },
+            {
+              from: "../adapter",
+              names: ["FieldError", kitScalarBinding("antd", "number")],
+            },
           ];
         case "date":
           return [
@@ -401,7 +409,7 @@ const leafImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] => {
             { from: "@chakra-ui/react", names: ["Field", "Input"] },
             {
               from: "../adapter",
-              names: ["chakraNumberInputProps", "fieldError"],
+              names: ["fieldError", kitScalarBinding("chakra", "number")],
             },
           ];
         case "date":
@@ -469,6 +477,43 @@ const leafImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] => {
   }
 };
 
+// Kit NUMBER controls bind through a useState-backed raw-text HOOK (see
+// codegen's numberTextHook — typing "85000.50" must not reparse to
+// "8500050" mid-entry), so every component that renders one hoists
+// `const ${var}NumberProps = use<Kit>Number...Props(${var});` next to its
+// field hooks, and leafJsx spreads the hoisted const. plain and shadcn keep
+// their stateless builders (type="number" inputs).
+const numberPropsHookName = (ui: ModuleUi): string | undefined => {
+  switch (ui) {
+    case "plain":
+    case "shadcn":
+      return undefined;
+    case "mui":
+    case "chakra":
+    case "mantine":
+    case "antd":
+      return kitScalarBinding(ui, "number");
+  }
+};
+
+// The hoist lines for every number-kind var in `vars` (empty for kits with
+// stateless number builders). Callers splice these right after the field
+// hook declarations they wrap.
+const numberPropsBindings = (
+  ui: ModuleUi,
+  vars: readonly Readonly<{ varName: string; spec: FieldSpec }>[],
+): readonly string[] => {
+  const hook = numberPropsHookName(ui);
+  return hook === undefined
+    ? []
+    : vars
+        .filter(({ spec }) => spec.kind === "number")
+        .map(
+          ({ varName }) =>
+            `  const ${varName}NumberProps = ${hook}(${varName});`,
+        );
+};
+
 // The labeled control for one leaf bound to `varName`, at `indent`.
 // `labelAttr` is a JSX expression container string (e.g. `{label}` or
 // `{"Email"}`); `idAttr` likewise, or undefined where the kit needs none.
@@ -534,17 +579,19 @@ const leafJsx = (
             ),
             `${indent}</TextField>`,
           ];
+        // Spread from the hoisted `${var}NumberProps` const — the number
+        // binding is a hook (see numberPropsBindings).
         case "number":
           return [
-            `${indent}<TextField fullWidth label=${labelAttr} {...muiNumberFieldProps(${varName})} />`,
+            `${indent}<TextField fullWidth label=${labelAttr} {...${varName}NumberProps} />`,
           ];
         case "date":
           return [
-            `${indent}<TextField fullWidth label=${labelAttr} {...muiDateFieldProps(${varName})} />`,
+            `${indent}<TextField fullWidth label=${labelAttr} {...${kitScalarBinding("mui", "date")}(${varName})} />`,
           ];
         default:
           return [
-            `${indent}<TextField fullWidth label=${labelAttr} {...muiTextFieldProps(${varName})} />`,
+            `${indent}<TextField fullWidth label=${labelAttr} {...${kitScalarBinding("mui", "string")}(${varName})} />`,
           ];
       }
     case "mantine":
@@ -565,13 +612,17 @@ const leafJsx = (
             ),
             `${indent}</NativeSelect>`,
           ];
+        // Spread from the hoisted `${var}NumberProps` const — the number
+        // binding is a hook (see numberPropsBindings).
+        case "number":
+          return [
+            `${indent}<TextInput label=${labelAttr} {...${varName}NumberProps} />`,
+          ];
         default: {
-          const builder =
-            spec.kind === "number"
-              ? "mantineNumberInputProps"
-              : spec.kind === "date"
-                ? "mantineDateInputProps"
-                : "mantineTextInputProps";
+          const builder = kitScalarBinding(
+            "mantine",
+            spec.kind === "date" ? "date" : "string",
+          );
           return [
             `${indent}<TextInput label=${labelAttr} {...${builder}(${varName})} />`,
           ];
@@ -605,13 +656,21 @@ const leafJsx = (
             `${indent}  <FieldError field={${varName}} />`,
             `${indent}</Flex>`,
           ];
+        // Spread from the hoisted `${var}NumberProps` const — the number
+        // binding is a hook (see numberPropsBindings).
+        case "number":
+          return [
+            `${indent}<Flex vertical gap="small">`,
+            `${indent}  <label htmlFor=${id}>${labelAttr}</label>`,
+            `${indent}  <Input id=${id} {...${varName}NumberProps} />`,
+            `${indent}  <FieldError field={${varName}} />`,
+            `${indent}</Flex>`,
+          ];
         default: {
-          const builder =
-            spec.kind === "number"
-              ? "antdNumberInputProps"
-              : spec.kind === "date"
-                ? "antdDateInputProps"
-                : "antdTextInputProps";
+          const builder = kitScalarBinding(
+            "antd",
+            spec.kind === "date" ? "date" : "string",
+          );
           return [
             `${indent}<Flex vertical gap="small">`,
             `${indent}  <label htmlFor=${id}>${labelAttr}</label>`,
@@ -652,13 +711,21 @@ const leafJsx = (
             `${indent}  <Field.ErrorText>{fieldError(${varName})}</Field.ErrorText>`,
             `${indent}</Field.Root>`,
           ];
+        // Spread from the hoisted `${var}NumberProps` const — the number
+        // binding is a hook (see numberPropsBindings).
+        case "number":
+          return [
+            `${indent}<Field.Root invalid={fieldError(${varName}) !== undefined}>`,
+            `${indent}  <Field.Label>${labelAttr}</Field.Label>`,
+            `${indent}  <Input {...${varName}NumberProps} />`,
+            `${indent}  <Field.ErrorText>{fieldError(${varName})}</Field.ErrorText>`,
+            `${indent}</Field.Root>`,
+          ];
         default: {
-          const builder =
-            spec.kind === "number"
-              ? "chakraNumberInputProps"
-              : spec.kind === "date"
-                ? "chakraDateInputProps"
-                : "chakraTextInputProps";
+          const builder = kitScalarBinding(
+            "chakra",
+            spec.kind === "date" ? "date" : "string",
+          );
           return [
             `${indent}<Field.Root invalid={fieldError(${varName}) !== undefined}>`,
             `${indent}  <Field.Label>${labelAttr}</Field.Label>`,
@@ -704,12 +771,14 @@ const leafJsx = (
             `${indent}</div>`,
           ];
         default: {
-          const builder =
+          const builder = kitScalarBinding(
+            "shadcn",
             spec.kind === "number"
-              ? "shadcnNumberInputProps"
+              ? "number"
               : spec.kind === "date"
-                ? "shadcnDateInputProps"
-                : "shadcnTextInputProps";
+                ? "date"
+                : "string",
+          );
           return [
             `${indent}<div className="grid gap-2">`,
             `${indent}  <Label htmlFor=${id}>${labelAttr}</Label>`,
@@ -804,7 +873,6 @@ const objectShell = (
             "    </Accordion>",
           ];
       }
-      break;
     }
     case "mantine": {
       switch (visual.sections) {
@@ -855,7 +923,6 @@ const objectShell = (
             "    </Accordion>",
           ];
       }
-      break;
     }
     case "antd": {
       const grid = gridStyleProps(cols);
@@ -912,7 +979,6 @@ const objectShell = (
             "    />",
           ];
       }
-      break;
     }
     case "chakra": {
       const grid = gridChakraProps(cols);
@@ -965,7 +1031,6 @@ const objectShell = (
             "    </Accordion.Root>",
           ];
       }
-      break;
     }
     case "shadcn": {
       const colsClass = gridColsClass(cols);
@@ -992,7 +1057,6 @@ const objectShell = (
             "    </details>",
           ];
       }
-      break;
     }
     case "plain": {
       const grid = cols > 1 ? gridStyleProps(cols) : "";
@@ -1026,100 +1090,116 @@ const objectShell = (
             "    </details>",
           ];
       }
-      break;
     }
   }
-  return children;
 };
 
+// Exhaustive over ModuleUi (like every sibling site), so a future kit fails
+// to compile here instead of silently importing nothing.
 const objectSectionImports = (
   ui: ModuleUi,
   visual: VisualOptions,
 ): readonly ImportLine[] => {
-  if (ui === "chakra") {
-    switch (visual.sections) {
-      case "flat":
-        return [
-          {
-            from: "@chakra-ui/react",
-            names:
-              visual.columns === 1
-                ? ["Heading", "Stack"]
-                : ["Box", "Heading"],
-          },
-        ];
-      case "panel":
-        return [{ from: "@chakra-ui/react", names: ["Card", "Heading"] }];
-      case "collapsible":
-        return [{ from: "@chakra-ui/react", names: ["Accordion", "Heading"] }];
-    }
-  }
-  if (ui === "mantine") {
-    switch (visual.sections) {
-      case "flat":
-        return [
-          {
-            from: "@mantine/core",
-            names:
-              visual.columns === 1
-                ? ["Stack", "Title"]
-                : ["SimpleGrid", "Title"],
-          },
-        ];
-      case "panel":
-        return [
-          { from: "@mantine/core", names: ["Card", "SimpleGrid", "Title"] },
-        ];
-      case "collapsible":
-        return [
-          { from: "@mantine/core", names: ["Accordion", "SimpleGrid", "Title"] },
-        ];
-    }
-  }
-  if (ui === "antd") {
-    switch (visual.sections) {
-      case "flat":
-        // Multi-column flat sections are a plain style-prop grid <div> —
-        // only the Title needs an import there.
-        return [
-          {
-            from: "antd",
-            names:
-              visual.columns === 1 ? ["Flex", "Typography"] : ["Typography"],
-          },
-        ];
-      case "panel":
-        return [{ from: "antd", names: ["Card", "Typography"] }];
-      case "collapsible":
-        return [{ from: "antd", names: ["Collapse", "Typography"] }];
-    }
-  }
-  if (ui !== "mui") return [];
-  switch (visual.sections) {
-    case "flat":
-      return [
-        {
-          from: "@mui/material",
-          names:
-            visual.columns === 1 ? ["Stack", "Typography"] : ["Box", "Typography"],
-        },
-      ];
-    case "panel":
-      return [
-        { from: "@mui/material", names: ["Card", "CardContent", "Typography"] },
-      ];
-    case "collapsible":
-      return [
-        {
-          from: "@mui/material",
-          names: [
-            "Accordion",
-            "AccordionDetails",
-            "AccordionSummary",
-            "Typography",
-          ],
-        },
-      ];
+  switch (ui) {
+    case "plain":
+    case "shadcn":
+      // Both render their section chrome from plain elements + classes.
+      return [];
+    case "chakra":
+      switch (visual.sections) {
+        case "flat":
+          return [
+            {
+              from: "@chakra-ui/react",
+              names:
+                visual.columns === 1
+                  ? ["Heading", "Stack"]
+                  : ["Box", "Heading"],
+            },
+          ];
+        case "panel":
+          return [{ from: "@chakra-ui/react", names: ["Card", "Heading"] }];
+        case "collapsible":
+          return [
+            { from: "@chakra-ui/react", names: ["Accordion", "Heading"] },
+          ];
+      }
+      break;
+    case "mantine":
+      switch (visual.sections) {
+        case "flat":
+          return [
+            {
+              from: "@mantine/core",
+              names:
+                visual.columns === 1
+                  ? ["Stack", "Title"]
+                  : ["SimpleGrid", "Title"],
+            },
+          ];
+        case "panel":
+          return [
+            { from: "@mantine/core", names: ["Card", "SimpleGrid", "Title"] },
+          ];
+        case "collapsible":
+          return [
+            {
+              from: "@mantine/core",
+              names: ["Accordion", "SimpleGrid", "Title"],
+            },
+          ];
+      }
+      break;
+    case "antd":
+      switch (visual.sections) {
+        case "flat":
+          // Multi-column flat sections are a plain style-prop grid <div> —
+          // only the Title needs an import there.
+          return [
+            {
+              from: "antd",
+              names:
+                visual.columns === 1 ? ["Flex", "Typography"] : ["Typography"],
+            },
+          ];
+        case "panel":
+          return [{ from: "antd", names: ["Card", "Typography"] }];
+        case "collapsible":
+          return [{ from: "antd", names: ["Collapse", "Typography"] }];
+      }
+      break;
+    case "mui":
+      switch (visual.sections) {
+        case "flat":
+          return [
+            {
+              from: "@mui/material",
+              names:
+                visual.columns === 1
+                  ? ["Stack", "Typography"]
+                  : ["Box", "Typography"],
+            },
+          ];
+        case "panel":
+          return [
+            {
+              from: "@mui/material",
+              names: ["Card", "CardContent", "Typography"],
+            },
+          ];
+        case "collapsible":
+          return [
+            {
+              from: "@mui/material",
+              names: [
+                "Accordion",
+                "AccordionDetails",
+                "AccordionSummary",
+                "Typography",
+              ],
+            },
+          ];
+      }
   }
 };
 
@@ -1551,7 +1631,27 @@ const adapterFile = (
   usage: KindUsage,
   muiVersion?: MuiVersion,
 ): ModuleFile | undefined => {
-  if (ui === "plain" || !hasLeafUsage(usage)) return undefined;
+  if (!hasLeafUsage(usage)) return undefined;
+  // Exhaustive over ModuleUi (like every sibling site): a future kit fails
+  // to compile here instead of silently falling into another kit's adapter.
+  const adapterSection = ((): string | undefined => {
+    switch (ui) {
+      case "plain":
+        // plain binds through formstand's own prop builders — no adapter.
+        return undefined;
+      case "mui":
+        return muiAdapterSection(usage, "export ", muiVersion);
+      case "chakra":
+        return chakraAdapterSection(usage, "export ");
+      case "mantine":
+        return mantineAdapterSection(usage, "export ");
+      case "antd":
+        return antdAdapterSection(usage, "export ");
+      case "shadcn":
+        return shadcnAdapterSection(usage, "export ");
+    }
+  })();
+  if (adapterSection === undefined) return undefined;
   const needsText = usage.string || usage.date;
   // mui's Switch adapter also types its onChange with ChangeEvent, so a
   // boolean-only schema needs the import too; chakra's select is a native
@@ -1585,7 +1685,12 @@ const adapterFile = (
     path: ui === "shadcn" || ui === "antd" ? "adapter.tsx" : "adapter.ts",
     content: [
       HEADER,
-      ...(needsChangeEvent ? [`import type { ChangeEvent } from "react";`] : []),
+      // The stateful number hook needs useState; shadcn's number binding
+      // stays the stateless type="number" builder.
+      ...reactImportLines(
+        needsChangeEvent,
+        usage.number && ui !== "shadcn",
+      ),
       ...antdImports,
       "import {",
       ...(usage.number ? ["  numberToInputText,", "  parseNumberText,"] : []),
@@ -1593,15 +1698,7 @@ const adapterFile = (
       "  type UseFieldReturn,",
       `} from "formstand";`,
       "",
-      ui === "mui"
-        ? muiAdapterSection(usage, "export ", muiVersion)
-        : ui === "chakra"
-          ? chakraAdapterSection(usage, "export ")
-          : ui === "mantine"
-            ? mantineAdapterSection(usage, "export ")
-            : ui === "antd"
-              ? antdAdapterSection(usage, "export ")
-              : shadcnAdapterSection(usage, "export "),
+      adapterSection,
       "",
     ].join("\n"),
   };
@@ -1632,6 +1729,7 @@ const fieldFile = (
       `}: ${propsType}) => {`,
       ...todoTexts(field.spec).map((text) => `  // TODO: ${text}`),
       `  const field = ${hookName}();`,
+      ...numberPropsBindings(ui, [{ varName: "field", spec: field.spec }]),
       "  return (",
       ...leafJsx(ui, field.spec, "field", "{label}", `{${q(path)}}`, "    "),
       "  );",
@@ -1937,11 +2035,13 @@ const nestedArrayComponents = (
       ? `{\`${entry.templateBase}.\${index}\`}`
       : `{\`${entry.templateBase}.\${index}.${templateEscape(name)}\`}`;
 
-  // Per-field pieces of an object item: a scalar leaf (with its binding and
-  // import spec), an extracted <ChildRows /> (recursed), or a TODO.
+  // Per-field pieces of an object item: a scalar leaf (with its binding
+  // lines — the field hook plus, for kit numbers, the hoisted number-props
+  // hook — and import spec), an extracted <ChildRows /> (recursed), or a
+  // TODO.
   type Piece = Readonly<{
     body: readonly string[];
-    binding?: string;
+    bindings?: readonly string[];
     spec?: FieldSpec;
     part?: NestedParts;
   }>;
@@ -1988,7 +2088,10 @@ const nestedArrayComponents = (
                 dynamicId(field.name),
                 "      ",
               ),
-              binding: `  const ${varName} = ${naming.hook("Field")}(\`${entry.templateBase}.\${index}.${templateEscape(field.name)}\`);`,
+              bindings: [
+                `  const ${varName} = ${naming.hook("Field")}(\`${entry.templateBase}.\${index}.${templateEscape(field.name)}\`);`,
+                ...numberPropsBindings(ui, [{ varName, spec: field.spec }]),
+              ],
               spec: field.spec,
             };
           }
@@ -2023,7 +2126,7 @@ const nestedArrayComponents = (
   }> =
     entry.item.kind === "object"
       ? {
-          bindings: objectPieces.flatMap((p) => (p.binding ? [p.binding] : [])),
+          bindings: objectPieces.flatMap((p) => p.bindings ?? []),
           body: objectPieces.flatMap((p) => p.body),
           specs: objectPieces.flatMap((p) => (p.spec ? [p.spec] : [])),
           children: objectPieces.flatMap((p) => (p.part ? [p.part] : [])),
@@ -2044,6 +2147,9 @@ const nestedArrayComponents = (
           ? {
               bindings: [
                 `  const field = ${naming.hook("Field")}(\`${entry.templateBase}.\${index}\`);`,
+                ...numberPropsBindings(ui, [
+                  { varName: "field", spec: entry.item },
+                ]),
               ],
               body: leafControl(
                 ui,
@@ -2360,6 +2466,13 @@ const tupleSectionFile = (
       `}: ${propsType}) => {`,
       `  const { dirty, valid } = ${hookName}();`,
       ...bindings,
+      ...numberPropsBindings(
+        ui,
+        scalarElements.map(({ varName, element }) => ({
+          varName,
+          spec: element,
+        })),
+      ),
       "  return (",
       ...objectShell(ui, visual, bodyLines),
       "  );",
@@ -2582,6 +2695,17 @@ const arraySectionFile = (
       "  onRemove,",
       "}: Readonly<{ index: number; onRemove: () => void }>) => {",
       ...rowBindings,
+      ...numberPropsBindings(
+        ui,
+        spec.item.kind === "object"
+          ? rowVars.map(({ field, varName }) => ({
+              varName,
+              spec: field.spec,
+            }))
+          : scalarItem
+            ? [{ varName: "field", spec: spec.item }]
+            : [],
+      ),
       "  return (",
       ...shell.rowOpen,
       ...rowBody,
@@ -2847,6 +2971,16 @@ const unionSectionFile = (
       ...bindings.map(
         (binding) =>
           `  const ${binding.varName} = ${naming.hook("VariantField")}(${q(path)}, ${q(binding.name)});`,
+      ),
+      // Kit number bindings hoist their props hook here, unconditionally —
+      // even for a hidden variant's field — since the variant blocks below
+      // are conditional JSX (React's rules of hooks).
+      ...numberPropsBindings(
+        ui,
+        [...commonBindings, ...bindings].map((binding) => ({
+          varName: binding.varName,
+          spec: binding.spec,
+        })),
       ),
       "  return (",
       ...objectShell(ui, visual, children),

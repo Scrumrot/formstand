@@ -188,8 +188,12 @@ describe("generated components", () => {
     expect(mantine.profile.code).toContain(
       "<TextInput label={label} {...mantineTextInputProps(field)} />",
     );
+    // The number binding is the raw-text HOOK, hoisted then spread.
     expect(mantine.profile.code).toContain(
-      "<TextInput label={label} {...mantineNumberInputProps(field)} />",
+      "const numberProps = useMantineNumberInputProps(field);",
+    );
+    expect(mantine.profile.code).toContain(
+      "<TextInput label={label} {...numberProps} />",
     );
     expect(mantine.profile.code).toContain("error: fieldError(field),");
     expect(mantine.profile.code).toContain("<NativeSelect label={label}");
@@ -218,8 +222,12 @@ describe("generated components", () => {
     expect(antd.profile.code).toContain(
       "<Input id={path} {...antdTextInputProps(field)} />",
     );
+    // The number binding is the raw-text HOOK, hoisted then spread.
     expect(antd.profile.code).toContain(
-      "<Input id={path} {...antdNumberInputProps(field)} />",
+      "const numberProps = useAntdNumberInputProps(field);",
+    );
+    expect(antd.profile.code).toContain(
+      "<Input id={path} {...numberProps} />",
     );
     expect(antd.profile.code).toContain(
       "onChange: (value: string) => field.setValue(value as T),",
@@ -335,6 +343,55 @@ describe("generated components", () => {
     // ...but leafFreeSchema's blank draft is fully legal: checked, not cast.
     expect(plain.leafFree.code).toContain("const initialValues: FormValues =");
     expect(plain.leafFree.code).not.toContain("as unknown as FormValues");
+  });
+
+  // The four stateful kit backends emit the inline useNumberText hook (the
+  // raw-text number binding mirroring formstand's useNumberInput) and route
+  // their number adapters through it — a plain reparsing builder would eat
+  // the "." of "85000.50" and the "-" of "-5" as they're typed. shadcn's
+  // number input stays the stateless type="number" builder.
+  it("kit number bindings are raw-text hooks, emitted inline", () => {
+    [mui, chakra, mantine, antd].forEach(({ profile }) => {
+      expect(profile.code).toContain(
+        "const useNumberText = <T extends number | null | undefined>(",
+      );
+      expect(profile.code).toContain("...useNumberText(field),");
+      expect(profile.code).toContain(
+        "setEdit({ raw: text, pushed: parsed.value });",
+      );
+      expect(profile.code).toContain(
+        `import { useState, type ChangeEvent } from "react";`,
+      );
+    });
+    expect(shadcn.profile.code).not.toContain("useNumberText");
+    expect(shadcn.profile.code).toContain('type: "number" as const,');
+  });
+
+  // Single-file array sections render the array-level error (rows.error in
+  // the module layout; here the hook const) — a z.array().min(1) message
+  // must not be invisible. profileSchema's array is `contacts`.
+  it("single-file array sections render the array-level error per kit", () => {
+    expect(plain.profile.code).toContain(
+      '{contactsArray.error ? <p role="alert">{contactsArray.error[0]}</p> : null}',
+    );
+    expect(mui.profile.code).toContain(
+      '<Typography color="error">{contactsArray.error[0]}</Typography>',
+    );
+    expect(shadcn.profile.code).toContain(
+      '{contactsArray.error ? <p role="alert">{contactsArray.error[0]}</p> : null}',
+    );
+    expect(chakra.profile.code).toContain(
+      '<Text color="red.500">{contactsArray.error[0]}</Text>',
+    );
+    expect(mantine.profile.code).toContain(
+      '<Text c="red">{contactsArray.error[0]}</Text>',
+    );
+    expect(antd.profile.code).toContain(
+      "{contactsArray.error ? (",
+    );
+    expect(antd.profile.code).toContain(
+      '<Typography.Text role="alert" type="danger">',
+    );
   });
 
   // Leaf-free output must not reference usage-gated helpers/types whose

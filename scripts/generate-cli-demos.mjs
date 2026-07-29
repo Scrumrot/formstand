@@ -9,10 +9,12 @@ const boundarySchemas = "examples/src/generated/boundarySchemas.ts";
 const onboardingSchema = "examples/src/forms/OnboardingForm/schema.ts";
 
 // The three kit demos share ONE schema (Onboarding) and ONE chrome
-// (--sections panel --columns 2, matching the mui module demo above) so the
-// only variable across the four "CLI output" tabs is the --ui backend —
-// the comparison is the point. Single-file layout keeps each one a
-// one-file diff.
+// (--sections panel --columns 2, matching the mui demo above), varying the
+// --ui backend — but note the LAYOUTS differ too: the mui tab is
+// --layout module (it doubles as the module-layout showcase), while these
+// three are single-file, keeping each one a one-file diff. So two axes
+// vary across the four "CLI output" tabs: the kit backend, and
+// module-vs-single file layout.
 const kitDemo = (ui, name) => [
   onboardingSchema,
   "--ui",

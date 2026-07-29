@@ -2,7 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { main, moduleSpecifier } from "../src/cli";
-import { emitModuleForm, joinModuleFiles } from "../src/moduleLayout";
+import {
+  type ModuleUi,
+  emitModuleForm,
+  joinModuleFiles,
+} from "../src/moduleLayout";
 import { fromZod } from "../src/fromZod";
 import {
   antdStubPaths,
@@ -28,7 +32,7 @@ const generateModule = (
   schemaName: string,
   formName: string,
   dir: string,
-  ui: "plain" | "mui" | "shadcn" | "chakra" | "mantine" | "antd" = "plain",
+  ui: ModuleUi = "plain",
   visual?: Readonly<{ sections: "flat" | "panel" | "collapsible"; columns: 1 | 2 | 3 }>,
 ) => {
   const files = emitModuleForm({

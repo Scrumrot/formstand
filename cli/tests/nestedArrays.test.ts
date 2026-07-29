@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { emitZodSchema } from "../src/codegen";
-import { emitModuleForm } from "../src/moduleLayout";
+import { type ModuleUi, emitModuleForm } from "../src/moduleLayout";
 import { fromZod } from "../src/fromZod";
 import { freshTmpDir, muiStubPaths, typecheckDiagnostics } from "./helpers";
 
@@ -64,7 +64,7 @@ const generateModule = (
   schemaName: string,
   formName: string,
   dir: string,
-  ui: "plain" | "mui" | "shadcn" = "plain",
+  ui: ModuleUi = "plain",
 ) => {
   const ir = fromZod(schema);
   const files = emitModuleForm({

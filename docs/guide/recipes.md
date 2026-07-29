@@ -187,7 +187,7 @@ const addUser = () => {
 };
 ```
 
-A container path works too — `focusField("address")` lands on the first rendered `address.*` control — and the root `""` path means whole-form scope: `focusField("", formEl)` focuses the form's first focusable control. Pass your `<form>` element as `root` on multi-form pages, exactly like `focusFirstError` (with the default `document` scope and several forms, `focusField("")` refuses to guess and returns `false`).
+A container path works too — `focusField("address")` lands on the first rendered `address.*` control — and a path that matches no named control falls back to the element whose `id` is exactly the path (how name-less composite widgets like Ant Design's `Select` with `id={path}` stay reachable; exact id match only). The root `""` path means whole-form scope: `focusField("", formEl)` focuses the form's first focusable control. Pass your `<form>` element as `root` on multi-form pages, exactly like `focusFirstError` (with the default `document` scope and several forms, `focusField("")` refuses to guess and returns `false`).
 
 ## Rebase after save
 

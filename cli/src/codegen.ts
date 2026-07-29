@@ -854,9 +854,14 @@ const collectUnions = (
   ).entries;
 
 // The discriminant + variant hook declarations for the component body.
+// `numberPropsHook` (kit backends) additionally hoists the number-props
+// hook call for every number binding — common and variant-only alike, and
+// unconditionally even for fields of a currently-hidden variant, exactly
+// like the useVariantField calls above them (React's rules of hooks).
 const unionHooks = (
   unions: readonly UnionEntry[],
   level: number,
+  numberPropsHook?: string,
 ): readonly string[] =>
   unions.flatMap((entry) => [
     `${ind(level)}const ${entry.discriminantVar} = useField(form, ${q(entry.discriminantPath)});`,
@@ -868,6 +873,14 @@ const unionHooks = (
       (binding) =>
         `${ind(level)}const ${binding.varName} = useVariantField(form, ${q(entry.path)}, ${q(binding.name)});`,
     ),
+    ...(numberPropsHook === undefined
+      ? []
+      : [...entry.commonBindings, ...entry.bindings]
+          .filter((binding) => binding.spec.kind === "number")
+          .map(
+            (binding) =>
+              `${ind(level)}const ${binding.varName}NumberProps = ${numberPropsHook}(${binding.varName});`,
+          )),
   ]);
 
 // The KindUsage of union CONTROLS only (discriminant select + variant field
@@ -1083,6 +1096,14 @@ type Backend = Readonly<{
     label: string,
     level: number,
   ) => readonly string[];
+  // The emitted number-props HOOK name (kit backends only): number controls
+  // bind through useState-backed raw-text state, so union NUMBER bindings
+  // hoist `const ${var}NumberProps = ${hook}(${var});` next to the field
+  // hooks (unionHooks) and the variant leaf spreads the hoisted const —
+  // hooks can't be called inside the conditional variant blocks. Absent for
+  // plain/shadcn/template backends, whose number bindings are stateless
+  // builders called inline.
+  numberPropsHook?: string;
   // Wrapper around a nested object's fields.
   objectSection: (
     label: string,
@@ -1452,7 +1473,9 @@ const emitForm = (
     `  const form = useForm(${schemaImport.name}, { initialValues, mode: "onBlur" });`,
     "  const submitting = useIsSubmitting(form);",
     ...(arrays.length > 0 ? [arrayHooks(arrays, 1)] : []),
-    ...(unions.length > 0 ? unionHooks(unions, 1) : []),
+    ...(unions.length > 0
+      ? unionHooks(unions, 1, backend.numberPropsHook)
+      : []),
     "",
     "  return (",
     ...backend.formOpen,
@@ -1684,6 +1707,9 @@ const plainBackend = (visual: VisualOptions): Backend => {
     `${ind(level + 3)}</button>`,
     `${ind(level + 2)}</fieldset>`,
     `${ind(level + 1)}))}`,
+    // The array-level error (z.array().min(...) etc.) — the same line the
+    // module layout's list shell renders.
+    `${ind(level + 1)}{${entry.hookName}.error ? <p role="alert">{${entry.hookName}.error[0]}</p> : null}`,
     `${ind(level + 1)}<button type="button" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
     `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
     `${ind(level + 1)}</button>`,
@@ -1729,6 +1755,41 @@ export const gridColsClass = (columns: number): string =>
 export const hasLeafUsage = (usage: KindUsage): boolean =>
   usage.string || usage.date || usage.number || usage.boolean || usage.enum;
 
+// The kit backends the shared snippet helpers below parameterize over
+// (everything but plain and custom templates).
+export type KitUi = "mui" | "shadcn" | "chakra" | "mantine" | "antd";
+
+// The emitted builder/hook name for a text-shaped scalar binding, per kit —
+// one production for every site that used to restate these as ternaries.
+// Kit NUMBER bindings are use-prefixed HOOKS (they hold raw-text state; see
+// numberTextHook below) — except shadcn's, which stays a stateless
+// type="number" builder.
+export const kitScalarBinding = (
+  ui: KitUi,
+  kind: "string" | "number" | "date",
+): string => {
+  const stem = kind === "number" ? "Number" : kind === "date" ? "Date" : "Text";
+  const base = `${ui}${stem}${ui === "mui" ? "Field" : "Input"}Props`;
+  return kind === "number" && ui !== "shadcn"
+    ? `use${base.charAt(0).toUpperCase()}${base.slice(1)}`
+    : base;
+};
+
+// The react import for a kit header or module adapter: the number hook holds
+// useState-backed raw-text state, so number usage promotes the type-only
+// ChangeEvent import to a value import carrying useState. shadcn passes
+// needsNumberState: false — its number binding is the stateless
+// type="number" input.
+export const reactImportLines = (
+  needsChangeEvent: boolean,
+  needsNumberState: boolean,
+): readonly string[] =>
+  needsNumberState
+    ? [`import { useState, type ChangeEvent } from "react";`]
+    : needsChangeEvent
+      ? [`import type { ChangeEvent } from "react";`]
+      : [];
+
 // Prefixes the top-level `const` declarations of an emitted block with
 // "export " when the module layout writes them into a shared adapter file.
 const withExportPrefix = (
@@ -1750,6 +1811,75 @@ const FIELD_ERROR_HELPER: readonly string[] = [
   "  field.error !== undefined && field.error.length > 0",
   "    ? field.error[0]",
   "    : undefined;",
+];
+
+// The emitted raw-text number-editing hook, shared verbatim by the four
+// stateful kit adapters (only the ChangeEvent element type differs). It
+// REPLICATES formstand's own useNumberInput (src/react/fields.tsx)
+// semantics exactly — emitted INLINE instead of imported because generated
+// output keeps its formstand >= 0.3.0 floor (the library only exports
+// useNumberInput after 0.10.0): local raw text while editing, keystrokes that parse (shared
+// parseNumberText rules) pushed to the form, partial entries ("-", "1.",
+// "1e") kept locally, blur snapping the display to the canonical value, and
+// an external form-value change while editing dropping the raw text
+// (render-phase derived-state reset). Kit chrome (labels, error props,
+// inputMode) stays in each kit's number hook.
+const numberTextHook = (eventTarget: string): readonly string[] => [
+  "",
+  "type NumberEditState = Readonly<{",
+  "  raw: string | null;",
+  "  // The form value the hook last wrote (or observed when it kept a",
+  "  // partial entry). When field.value diverges, an external writer",
+  "  // (reset/adoptValues/another field) changed it — drop the raw text so",
+  "  // the input shows it.",
+  "  pushed: number | null | undefined;",
+  "}>;",
+  "",
+  "const IDLE_NUMBER_EDIT: NumberEditState = { raw: null, pushed: undefined };",
+  "",
+  "// Holds the raw text while editing so intermediate, not-yet-valid numbers",
+  '// ("-", "1.", "1e") stay visible instead of being reparsed away (a naive',
+  '// controlled value={String(n)} binding eats the "." of "85000.50" and the',
+  '// "-" of "-5" as they are typed). Mirrors formstand\'s own useNumberInput.',
+  "const useNumberText = <T extends number | null | undefined>(",
+  "  field: UseFieldReturn<T>,",
+  ") => {",
+  "  const [edit, setEdit] = useState<NumberEditState>(IDLE_NUMBER_EDIT);",
+  "  const externallyChanged =",
+  "    edit.raw !== null && !Object.is(field.value, edit.pushed);",
+  "  if (externallyChanged) {",
+  "    setEdit(IDLE_NUMBER_EDIT);",
+  "  }",
+  "  const raw = externallyChanged ? null : edit.raw;",
+  "  return {",
+  "    value: raw ?? numberToInputText(field.value),",
+  `    onChange: (e: ChangeEvent<${eventTarget}>) => {`,
+  "      const text = e.target.value;",
+  "      const parsed = parseNumberText(text);",
+  "      switch (parsed.kind) {",
+  '        case "empty": {',
+  "          const empty = field.emptyValue;",
+  "          setEdit({ raw: text, pushed: empty });",
+  "          field.setValue(empty as T);",
+  "          return;",
+  "        }",
+  '        case "number":',
+  "          setEdit({ raw: text, pushed: parsed.value });",
+  "          field.setValue(parsed.value as T);",
+  "          return;",
+  '        case "invalid":',
+  "          // Partial entry: keep the text, remember the untouched form",
+  "          // value so it doesn't read as an external change.",
+  "          setEdit({ raw: text, pushed: field.value });",
+  "          return;",
+  "      }",
+  "    },",
+  "    onBlur: () => {",
+  "      setEdit(IDLE_NUMBER_EDIT);",
+  "      field.onBlur();",
+  "    },",
+  "  };",
+  "};",
 ];
 
 // Gated like the components that use it: BoundFieldProps references
@@ -1815,6 +1945,53 @@ const boundLeaf =
     }
   };
 
+// The formstand import block shared verbatim by the five kit backends:
+// value imports (the shared text rules + hooks) and the type imports the
+// emitted adapters/components reference.
+const kitFormstandImportLines = (
+  usage: KindUsage,
+  arrays: readonly ArrayEntry[],
+  root: ObjectSpec,
+): readonly string[] => {
+  const hasLeaf = hasLeafUsage(usage);
+  // FieldFormApi is referenced only by the Bound* components' props type:
+  // union controls render raw kit elements from hoisted hooks, so static-leaf
+  // usage gates it.
+  const hasStaticLeaf = hasLeafUsage(collectStaticUsage(root));
+  const values = [
+    ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
+    ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
+    ...(hasLeaf ? ["useField"] : []),
+    ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
+    ...(arrays.length > 0 ? ["useFieldArray"] : []),
+    "useForm",
+    "useIsSubmitting",
+  ];
+  const types = [
+    ...(hasStaticLeaf ? ["FieldFormApi"] : []),
+    ...(hasLeaf ? ["UseFieldReturn"] : []),
+  ];
+  return [
+    "import {",
+    ...values.map((name) => `  ${name},`),
+    ...types.map((name) => `  type ${name},`),
+    `} from "formstand";`,
+  ];
+};
+
+// The objectSection production every kit backend shares: wrap the body in
+// the kit's sectionOpen/sectionClose pair.
+const wrapSection =
+  (
+    sectionOpen: (label: string, level: number) => readonly string[],
+    sectionClose: (level: number) => readonly string[],
+  ): Backend["objectSection"] =>
+  (label, level, body) => [
+    ...sectionOpen(label, level),
+    ...body,
+    ...sectionClose(level),
+  ];
+
 // A control rendered from a bound field variable, using the in-file MUI
 // adapter builders — the discriminant select and each variant field of a
 // union (the path-typed Bound* components can't reach variant paths).
@@ -1841,17 +2018,20 @@ const muiVariantLeaf = (
         ),
         `${ind(level)}</TextField>`,
       ];
+    // Number props come from the hoisted `${var}NumberProps` const (see
+    // unionHooks): the number binding is a STATE-holding hook, and hooks
+    // can't be called inside the conditional variant blocks.
     case "number":
       return [
-        `${ind(level)}<TextField fullWidth ${jsxAttr("label", label)} {...muiNumberFieldProps(${fieldVar})} />`,
+        `${ind(level)}<TextField fullWidth ${jsxAttr("label", label)} {...${fieldVar}NumberProps} />`,
       ];
     case "date":
       return [
-        `${ind(level)}<TextField fullWidth ${jsxAttr("label", label)} {...muiDateFieldProps(${fieldVar})} />`,
+        `${ind(level)}<TextField fullWidth ${jsxAttr("label", label)} {...${kitScalarBinding("mui", "date")}(${fieldVar})} />`,
       ];
     case "string":
       return [
-        `${ind(level)}<TextField fullWidth ${jsxAttr("label", label)} {...muiTextFieldProps(${fieldVar})} />`,
+        `${ind(level)}<TextField fullWidth ${jsxAttr("label", label)} {...${kitScalarBinding("mui", "string")}(${fieldVar})} />`,
       ];
     case "object":
     case "array":
@@ -1904,12 +2084,7 @@ const shadcnVariantLeaf = (
     case "string":
     case "number":
     case "date": {
-      const builder =
-        spec.kind === "number"
-          ? "shadcnNumberInputProps"
-          : spec.kind === "date"
-            ? "shadcnDateInputProps"
-            : "shadcnTextInputProps";
+      const builder = kitScalarBinding("shadcn", spec.kind);
       return [
         `${ind(level)}<div className="grid gap-2">`,
         `${ind(level + 1)}<Label htmlFor=${id}>${jsxText(label)}</Label>`,
@@ -1939,7 +2114,8 @@ const shadcnVariantLeaf = (
 // backend emits typechecks identically against every major (verified
 // empirically by the cli/matrix harness against each major's .d.ts).
 
-export type MuiVersionConfig = Readonly<{
+// Internal-only (no external consumers): the per-major emission deltas.
+type MuiVersionConfig = Readonly<{
   // v6+ TextField takes slot overrides via `slotProps.{input,inputLabel}`;
   // v5 has only the legacy `InputProps` / `InputLabelProps` component
   // props (v9 REMOVED those, v6–7 keep them deprecated — so the modern
@@ -1954,7 +2130,7 @@ const MUI_VERSION_CONFIGS: Readonly<Record<MuiVersion, MuiVersionConfig>> = {
   9: { textFieldSlotProps: true },
 };
 
-export const muiVersionConfig = (
+const muiVersionConfig = (
   version: MuiVersion = DEFAULT_MUI_VERSION,
 ): MuiVersionConfig => MUI_VERSION_CONFIGS[version];
 
@@ -1981,23 +2157,22 @@ export const muiAdapterSection = (
     "  onBlur: field.onBlur,",
     "});",
   ];
+  // A HOOK, not a builder: value/onChange/onBlur come from the raw-text
+  // editing state (useNumberText), so typing "85000.50" or "-5" is never
+  // reparsed into "8500050"/"5" mid-entry.
   const numberAdapter = [
+    ...numberTextHook("HTMLInputElement | HTMLTextAreaElement"),
     "",
-    `${exp}const muiNumberFieldProps = <T extends number | null | undefined>(`,
+    `${exp}const useMuiNumberFieldProps = <T extends number | null | undefined>(`,
     "  field: UseFieldReturn<T>,",
     ") => ({",
     "  name: field.path,",
-    "  value: numberToInputText(field.value),",
     "  error: fieldError(field) !== undefined,",
     "  helperText: fieldError(field),",
     textFieldSlotProps
       ? '  slotProps: { input: { inputMode: "decimal" as const } },'
       : '  InputProps: { inputMode: "decimal" as const },',
-    "  onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {",
-    "    const parsed = parseNumberText(e.target.value);",
-    '    field.setValue((parsed.kind === "number" ? parsed.value : field.emptyValue) as T);',
-    "  },",
-    "  onBlur: field.onBlur,",
+    "  ...useNumberText(field),",
     "});",
   ];
   const selectAdapter = [
@@ -2072,7 +2247,8 @@ const muiBoundComponents = (usage: KindUsage): string => {
     "",
     "const BoundNumberField = ({ form, path, label }: BoundFieldProps) => {",
     "  const field = useField<number | null | undefined>(form, path);",
-    "  return <TextField fullWidth label={label} {...muiNumberFieldProps(field)} />;",
+    "  const numberProps = useMuiNumberFieldProps(field);",
+    "  return <TextField fullWidth label={label} {...numberProps} />;",
     "};",
   ];
   const date = [
@@ -2199,11 +2375,6 @@ const muiBackend = (visual: VisualOptions, version: MuiVersion): Backend => {
 
   return {
   header: (usage, arrays, root) => {
-    const hasLeaf = hasLeafUsage(usage);
-    // Static-leaf usage gates the Bound* components (and their FieldFormApi
-    // type): union controls render raw MUI elements from hoisted hooks, so a
-    // union-only kind needs no Bound* wrapper.
-    const hasStaticLeaf = hasLeafUsage(collectStaticUsage(root));
     const hasSection = arrays.length > 0 || anyAddressableObjectField(root);
     const muiImports = [
       ...(hasSection && visual.sections === "collapsible"
@@ -2223,29 +2394,12 @@ const muiBackend = (visual: VisualOptions, version: MuiVersion): Backend => {
         : []),
       ...(hasSection ? ["Typography"] : []),
     ];
-    const formstandValueImports = [
-      ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
-      ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
-      ...(hasLeaf ? ["useField"] : []),
-      ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
-      ...(arrays.length > 0 ? ["useFieldArray"] : []),
-      "useForm",
-      "useIsSubmitting",
-    ];
-    const formstandTypeImports = [
-      // FieldFormApi is referenced only by the Bound* components' props type.
-      ...(hasStaticLeaf ? ["FieldFormApi"] : []),
-      ...(hasLeaf ? ["UseFieldReturn"] : []),
-    ];
     return [
-      `import type { ChangeEvent } from "react";`,
+      ...reactImportLines(true, usage.number),
       "import {",
       ...muiImports.map((name) => `  ${name},`),
       `} from "@mui/material";`,
-      "import {",
-      ...formstandValueImports.map((name) => `  ${name},`),
-      ...formstandTypeImports.map((name) => `  type ${name},`),
-      `} from "formstand";`,
+      ...kitFormstandImportLines(usage, arrays, root),
       `import { z } from "zod";`,
     ];
   },
@@ -2256,11 +2410,8 @@ const muiBackend = (visual: VisualOptions, version: MuiVersion): Backend => {
   ],
   leaf: muiLeaf,
   variantLeaf: muiVariantLeaf,
-  objectSection: (label, level, body) => [
-    ...sectionOpen(label, level),
-    ...body,
-    ...sectionClose(level),
-  ],
+  numberPropsHook: kitScalarBinding("mui", "number"),
+  objectSection: wrapSection(sectionOpen, sectionClose),
   arraySection: (entry, level, rowBody) => [
     ...sectionOpen(entry.label, level),
     `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
@@ -2275,6 +2426,11 @@ const muiBackend = (visual: VisualOptions, version: MuiVersion): Backend => {
     `${ind(level + 3)}</Button>`,
     `${ind(level + 2)}</Stack>`,
     `${ind(level + 1)}))}`,
+    // The array-level error (z.array().min(...) etc.) — the same per-kit
+    // line the module layout's list shell renders.
+    `${ind(level + 1)}{${entry.hookName}.error ? (`,
+    `${ind(level + 2)}<Typography color="error">{${entry.hookName}.error[0]}</Typography>`,
+    `${ind(level + 1)}) : null}`,
     `${ind(level + 1)}<Button type="button" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
     `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
     `${ind(level + 1)}</Button>`,
@@ -2560,27 +2716,10 @@ const shadcnBackend = (visual: VisualOptions): Backend => {
   return {
   header: (usage, arrays, root) => {
     const hasLeaf = hasLeafUsage(usage);
-    // Static-leaf usage gates the Bound* components (and FieldFormApi): union
-    // controls render raw shadcn elements from hoisted hooks.
-    const hasStaticLeaf = hasLeafUsage(collectStaticUsage(root));
-    const formstandValueImports = [
-      ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
-      ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
-      ...(hasLeaf ? ["useField"] : []),
-      ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
-      ...(arrays.length > 0 ? ["useFieldArray"] : []),
-      "useForm",
-      "useIsSubmitting",
-    ];
-    const formstandTypeImports = [
-      // FieldFormApi is referenced only by the Bound* components' props type.
-      ...(hasStaticLeaf ? ["FieldFormApi"] : []),
-      ...(hasLeaf ? ["UseFieldReturn"] : []),
-    ];
     return [
-      ...(usage.string || usage.date || usage.number
-        ? [`import type { ChangeEvent } from "react";`]
-        : []),
+      // shadcn's number binding stays the stateless type="number" input, so
+      // no useState import here.
+      ...reactImportLines(usage.string || usage.date || usage.number, false),
       `import { Button } from "@/components/ui/button";`,
       ...(usage.boolean
         ? [`import { Checkbox } from "@/components/ui/checkbox";`]
@@ -2600,10 +2739,7 @@ const shadcnBackend = (visual: VisualOptions): Backend => {
             `} from "@/components/ui/select";`,
           ]
         : []),
-      "import {",
-      ...formstandValueImports.map((name) => `  ${name},`),
-      ...formstandTypeImports.map((name) => `  type ${name},`),
-      `} from "formstand";`,
+      ...kitFormstandImportLines(usage, arrays, root),
       `import { z } from "zod";`,
     ];
   },
@@ -2614,11 +2750,7 @@ const shadcnBackend = (visual: VisualOptions): Backend => {
   ],
   leaf: shadcnLeaf,
   variantLeaf: shadcnVariantLeaf,
-  objectSection: (label, level, body) => [
-    ...sectionOpen(label, level),
-    ...body,
-    ...sectionClose(level),
-  ],
+  objectSection: wrapSection(sectionOpen, sectionClose),
   arraySection: (entry, level, rowBody) => [
     ...(visual.sections === "collapsible"
       ? [
@@ -2644,6 +2776,9 @@ const shadcnBackend = (visual: VisualOptions): Backend => {
     `${ind(level + 3)}</Button>`,
     `${ind(level + 2)}</div>`,
     `${ind(level + 1)}))}`,
+    // The array-level error — the same line the module layout's list shell
+    // renders.
+    `${ind(level + 1)}{${entry.hookName}.error ? <p role="alert">{${entry.hookName}.error[0]}</p> : null}`,
     `${ind(level + 1)}<Button`,
     `${ind(level + 2)}type="button"`,
     `${ind(level + 2)}variant="outline"`,
@@ -2718,19 +2853,18 @@ export const chakraAdapterSection = (usage: KindUsage, exp = ""): string => {
     "  onBlur: field.onBlur,",
     "});",
   ];
+  // A HOOK, not a builder: value/onChange/onBlur come from the raw-text
+  // editing state (useNumberText), so typing "85000.50" or "-5" is never
+  // reparsed into "8500050"/"5" mid-entry.
   const numberAdapter = [
+    ...numberTextHook("HTMLInputElement"),
     "",
-    `${exp}const chakraNumberInputProps = <T extends number | null | undefined>(`,
+    `${exp}const useChakraNumberInputProps = <T extends number | null | undefined>(`,
     "  field: UseFieldReturn<T>,",
     ") => ({",
     '  inputMode: "decimal" as const,',
     "  name: field.path,",
-    "  value: numberToInputText(field.value),",
-    "  onChange: (e: ChangeEvent<HTMLInputElement>) => {",
-    "    const parsed = parseNumberText(e.target.value);",
-    '    field.setValue((parsed.kind === "number" ? parsed.value : field.emptyValue) as T);',
-    "  },",
-    "  onBlur: field.onBlur,",
+    "  ...useNumberText(field),",
     "});",
   ];
   const dateAdapter = [
@@ -2794,12 +2928,28 @@ const chakraBoundComponents = (usage: KindUsage): string => {
   const propsType = boundFieldProps(usage);
   const input = (builder: string, fieldType: string): readonly string[] => [
     "",
-    `const Bound${builder === "chakraNumberInputProps" ? "Number" : builder === "chakraDateInputProps" ? "Date" : "Text"}Field = ({ form, path, label }: BoundFieldProps) => {`,
+    `const Bound${builder === "chakraDateInputProps" ? "Date" : "Text"}Field = ({ form, path, label }: BoundFieldProps) => {`,
     `  const field = useField<${fieldType}>(form, path);`,
     "  return (",
     "    <Field.Root invalid={fieldError(field) !== undefined}>",
     "      <Field.Label>{label}</Field.Label>",
     `      <Input {...${builder}(field)} />`,
+    "      <Field.ErrorText>{fieldError(field)}</Field.ErrorText>",
+    "    </Field.Root>",
+    "  );",
+    "};",
+  ];
+  // Number binds through the STATE-holding number hook, hoisted like any
+  // other hook call.
+  const number = [
+    "",
+    "const BoundNumberField = ({ form, path, label }: BoundFieldProps) => {",
+    "  const field = useField<number | null | undefined>(form, path);",
+    "  const numberProps = useChakraNumberInputProps(field);",
+    "  return (",
+    "    <Field.Root invalid={fieldError(field) !== undefined}>",
+    "      <Field.Label>{label}</Field.Label>",
+    "      <Input {...numberProps} />",
     "      <Field.ErrorText>{fieldError(field)}</Field.ErrorText>",
     "    </Field.Root>",
     "  );",
@@ -2855,9 +3005,7 @@ const chakraBoundComponents = (usage: KindUsage): string => {
     ...(usage.string
       ? input("chakraTextInputProps", "string | null | undefined")
       : []),
-    ...(usage.number
-      ? input("chakraNumberInputProps", "number | null | undefined")
-      : []),
+    ...(usage.number ? number : []),
     ...(usage.date
       ? input("chakraDateInputProps", "Date | null | undefined")
       : []),
@@ -2902,15 +3050,20 @@ const chakraVariantLeaf = (
         `${ind(level + 1)}<Field.ErrorText>{fieldError(${fieldVar})}</Field.ErrorText>`,
         `${ind(level)}</Field.Root>`,
       ];
-    case "string":
+    // Number props come from the hoisted `${var}NumberProps` const (see
+    // unionHooks): the number binding is a STATE-holding hook, and hooks
+    // can't be called inside the conditional variant blocks.
     case "number":
+      return [
+        `${ind(level)}<Field.Root invalid={fieldError(${fieldVar}) !== undefined}>`,
+        `${ind(level + 1)}<Field.Label>${jsxText(label)}</Field.Label>`,
+        `${ind(level + 1)}<Input {...${fieldVar}NumberProps} />`,
+        `${ind(level + 1)}<Field.ErrorText>{fieldError(${fieldVar})}</Field.ErrorText>`,
+        `${ind(level)}</Field.Root>`,
+      ];
+    case "string":
     case "date": {
-      const builder =
-        spec.kind === "number"
-          ? "chakraNumberInputProps"
-          : spec.kind === "date"
-            ? "chakraDateInputProps"
-            : "chakraTextInputProps";
+      const builder = kitScalarBinding("chakra", spec.kind);
       return [
         `${ind(level)}<Field.Root invalid={fieldError(${fieldVar}) !== undefined}>`,
         `${ind(level + 1)}<Field.Label>${jsxText(label)}</Field.Label>`,
@@ -2992,10 +3145,6 @@ const chakraBackend = (visual: VisualOptions): Backend => {
 
   return {
   header: (usage, arrays, root) => {
-    const hasLeaf = hasLeafUsage(usage);
-    // Static-leaf usage gates the Bound* components (and their FieldFormApi
-    // type): union controls render raw chakra elements from hoisted hooks.
-    const hasStaticLeaf = hasLeafUsage(collectStaticUsage(root));
     const hasSection = arrays.length > 0 || anyAddressableObjectField(root);
     const chakraImports = [
       ...(hasSection && visual.sections === "collapsible" ? ["Accordion"] : []),
@@ -3012,34 +3161,20 @@ const chakraBackend = (visual: VisualOptions): Backend => {
       ...(usage.enum ? ["NativeSelect"] : []),
       "Stack",
       ...(usage.boolean ? ["Switch"] : []),
-    ];
-    const formstandValueImports = [
-      ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
-      ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
-      ...(hasLeaf ? ["useField"] : []),
-      ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
-      ...(arrays.length > 0 ? ["useFieldArray"] : []),
-      "useForm",
-      "useIsSubmitting",
-    ];
-    const formstandTypeImports = [
-      // FieldFormApi is referenced only by the Bound* components' props type.
-      ...(hasStaticLeaf ? ["FieldFormApi"] : []),
-      ...(hasLeaf ? ["UseFieldReturn"] : []),
+      // Text renders each array's list-level error line.
+      ...(arrays.length > 0 ? ["Text"] : []),
     ];
     return [
       // The Switch adapter's onCheckedChange is a details callback, so only
       // the DOM-event adapters need ChangeEvent.
-      ...(usage.string || usage.date || usage.number || usage.enum
-        ? [`import type { ChangeEvent } from "react";`]
-        : []),
+      ...reactImportLines(
+        usage.string || usage.date || usage.number || usage.enum,
+        usage.number,
+      ),
       "import {",
       ...chakraImports.map((name) => `  ${name},`),
       `} from "@chakra-ui/react";`,
-      "import {",
-      ...formstandValueImports.map((name) => `  ${name},`),
-      ...formstandTypeImports.map((name) => `  type ${name},`),
-      `} from "formstand";`,
+      ...kitFormstandImportLines(usage, arrays, root),
       `import { z } from "zod";`,
     ];
   },
@@ -3050,11 +3185,8 @@ const chakraBackend = (visual: VisualOptions): Backend => {
   ],
   leaf: chakraLeaf,
   variantLeaf: chakraVariantLeaf,
-  objectSection: (label, level, body) => [
-    ...sectionOpen(label, level),
-    ...body,
-    ...sectionClose(level),
-  ],
+  numberPropsHook: kitScalarBinding("chakra", "number"),
+  objectSection: wrapSection(sectionOpen, sectionClose),
   arraySection: (entry, level, rowBody) => [
     ...sectionOpen(entry.label, level),
     `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
@@ -3071,6 +3203,11 @@ const chakraBackend = (visual: VisualOptions): Backend => {
     `${ind(level + 3)}</Button>`,
     `${ind(level + 2)}</Stack>`,
     `${ind(level + 1)}))}`,
+    // The array-level error — the same per-kit line the module layout's
+    // list shell renders.
+    `${ind(level + 1)}{${entry.hookName}.error ? (`,
+    `${ind(level + 2)}<Text color="red.500">{${entry.hookName}.error[0]}</Text>`,
+    `${ind(level + 1)}) : null}`,
     `${ind(level + 1)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
     `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
     `${ind(level + 1)}</Button>`,
@@ -3141,21 +3278,20 @@ export const mantineAdapterSection = (usage: KindUsage, exp = ""): string => {
   ];
   // TextInput with inputMode="decimal": the native binding. Mantine's
   // NumberInput widget is not DOM-shaped (onChange: (value: number | string))
-  // — the plain input keeps the adapter identical in spirit to the other kits.
+  // — the plain input keeps the adapter identical in spirit to the other
+  // kits. A HOOK, not a builder: value/onChange/onBlur come from the
+  // raw-text editing state (useNumberText), so typing "85000.50" or "-5" is
+  // never reparsed into "8500050"/"5" mid-entry.
   const numberAdapter = [
+    ...numberTextHook("HTMLInputElement | HTMLTextAreaElement"),
     "",
-    `${exp}const mantineNumberInputProps = <T extends number | null | undefined>(`,
+    `${exp}const useMantineNumberInputProps = <T extends number | null | undefined>(`,
     "  field: UseFieldReturn<T>,",
     ") => ({",
     '  inputMode: "decimal" as const,',
     "  name: field.path,",
-    "  value: numberToInputText(field.value),",
     "  error: fieldError(field),",
-    "  onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {",
-    "    const parsed = parseNumberText(e.target.value);",
-    '    field.setValue((parsed.kind === "number" ? parsed.value : field.emptyValue) as T);',
-    "  },",
-    "  onBlur: field.onBlur,",
+    "  ...useNumberText(field),",
     "});",
   ];
   const dateAdapter = [
@@ -3254,14 +3390,22 @@ const mantineBoundComponents = (usage: KindUsage): string => {
     "  return <Switch label={label} {...mantineSwitchProps(field)} />;",
     "};",
   ];
+  // Number binds through the STATE-holding number hook, hoisted like any
+  // other hook call.
+  const number = [
+    "",
+    "const BoundNumberField = ({ form, path, label }: BoundFieldProps) => {",
+    "  const field = useField<number | null | undefined>(form, path);",
+    "  const numberProps = useMantineNumberInputProps(field);",
+    "  return <TextInput label={label} {...numberProps} />;",
+    "};",
+  ];
   return [
     ...propsType,
     ...(usage.string
       ? input("BoundTextField", "mantineTextInputProps", "string | null | undefined")
       : []),
-    ...(usage.number
-      ? input("BoundNumberField", "mantineNumberInputProps", "number | null | undefined")
-      : []),
+    ...(usage.number ? number : []),
     ...(usage.date
       ? input("BoundDateField", "mantineDateInputProps", "Date | null | undefined")
       : []),
@@ -3294,15 +3438,16 @@ const mantineVariantLeaf = (
         ),
         `${ind(level)}</NativeSelect>`,
       ];
-    case "string":
+    // Number props come from the hoisted `${var}NumberProps` const (see
+    // unionHooks): the number binding is a STATE-holding hook, and hooks
+    // can't be called inside the conditional variant blocks.
     case "number":
+      return [
+        `${ind(level)}<TextInput ${jsxAttr("label", label)} {...${fieldVar}NumberProps} />`,
+      ];
+    case "string":
     case "date": {
-      const builder =
-        spec.kind === "number"
-          ? "mantineNumberInputProps"
-          : spec.kind === "date"
-            ? "mantineDateInputProps"
-            : "mantineTextInputProps";
+      const builder = kitScalarBinding("mantine", spec.kind);
       return [
         `${ind(level)}<TextInput ${jsxAttr("label", label)} {...${builder}(${fieldVar})} />`,
       ];
@@ -3378,9 +3523,6 @@ const mantineBackend = (visual: VisualOptions): Backend => {
   return {
   header: (usage, arrays, root) => {
     const hasLeaf = hasLeafUsage(usage);
-    // Static-leaf usage gates the Bound* components (and their FieldFormApi
-    // type): union controls render raw mantine elements from hoisted hooks.
-    const hasStaticLeaf = hasLeafUsage(collectStaticUsage(root));
     const hasSection = arrays.length > 0 || anyAddressableObjectField(root);
     const mantineImports = [
       ...(hasSection && visual.sections === "collapsible" ? ["Accordion"] : []),
@@ -3395,34 +3537,19 @@ const mantineBackend = (visual: VisualOptions): Backend => {
         : []),
       "Stack",
       ...(usage.boolean ? ["Switch"] : []),
+      // Text renders each array's list-level error line.
+      ...(arrays.length > 0 ? ["Text"] : []),
       ...(usage.string || usage.date || usage.number ? ["TextInput"] : []),
       ...(hasSection ? ["Title"] : []),
-    ];
-    const formstandValueImports = [
-      ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
-      ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
-      ...(hasLeaf ? ["useField"] : []),
-      ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
-      ...(arrays.length > 0 ? ["useFieldArray"] : []),
-      "useForm",
-      "useIsSubmitting",
-    ];
-    const formstandTypeImports = [
-      // FieldFormApi is referenced only by the Bound* components' props type.
-      ...(hasStaticLeaf ? ["FieldFormApi"] : []),
-      ...(hasLeaf ? ["UseFieldReturn"] : []),
     ];
     return [
       // Every mantine adapter (the Switch's included) types its onChange
       // with a DOM ChangeEvent, so any leaf pulls the import in.
-      ...(hasLeaf ? [`import type { ChangeEvent } from "react";`] : []),
+      ...reactImportLines(hasLeaf, usage.number),
       "import {",
       ...mantineImports.map((name) => `  ${name},`),
       `} from "@mantine/core";`,
-      "import {",
-      ...formstandValueImports.map((name) => `  ${name},`),
-      ...formstandTypeImports.map((name) => `  type ${name},`),
-      `} from "formstand";`,
+      ...kitFormstandImportLines(usage, arrays, root),
       `import { z } from "zod";`,
     ];
   },
@@ -3433,11 +3560,8 @@ const mantineBackend = (visual: VisualOptions): Backend => {
   ],
   leaf: mantineLeaf,
   variantLeaf: mantineVariantLeaf,
-  objectSection: (label, level, body) => [
-    ...sectionOpen(label, level),
-    ...body,
-    ...sectionClose(level),
-  ],
+  numberPropsHook: kitScalarBinding("mantine", "number"),
+  objectSection: wrapSection(sectionOpen, sectionClose),
   arraySection: (entry, level, rowBody) => [
     ...sectionOpen(entry.label, level),
     `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
@@ -3454,6 +3578,11 @@ const mantineBackend = (visual: VisualOptions): Backend => {
     `${ind(level + 3)}</Button>`,
     `${ind(level + 2)}</Stack>`,
     `${ind(level + 1)}))}`,
+    // The array-level error — the same per-kit line the module layout's
+    // list shell renders.
+    `${ind(level + 1)}{${entry.hookName}.error ? (`,
+    `${ind(level + 2)}<Text c="red">{${entry.hookName}.error[0]}</Text>`,
+    `${ind(level + 1)}) : null}`,
     `${ind(level + 1)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
     `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
     `${ind(level + 1)}</Button>`,
@@ -3565,21 +3694,20 @@ export const antdAdapterSection = (usage: KindUsage, exp = ""): string => {
   ];
   // Input with inputMode="decimal": the native binding. antd's InputNumber
   // widget is not DOM-shaped (onChange: (value: number | null)) — the plain
-  // input keeps the adapter identical in spirit to the other kits.
+  // input keeps the adapter identical in spirit to the other kits. A HOOK,
+  // not a builder: value/onChange/onBlur come from the raw-text editing
+  // state (useNumberText), so typing "85000.50" or "-5" is never reparsed
+  // into "8500050"/"5" mid-entry.
   const numberAdapter = [
+    ...numberTextHook("HTMLInputElement"),
     "",
-    `${exp}const antdNumberInputProps = <T extends number | null | undefined>(`,
+    `${exp}const useAntdNumberInputProps = <T extends number | null | undefined>(`,
     "  field: UseFieldReturn<T>,",
     ") => ({",
     '  inputMode: "decimal" as const,',
     "  name: field.path,",
-    "  value: numberToInputText(field.value),",
     "  status: fieldStatus(field),",
-    "  onChange: (e: ChangeEvent<HTMLInputElement>) => {",
-    "    const parsed = parseNumberText(e.target.value);",
-    '    field.setValue((parsed.kind === "number" ? parsed.value : field.emptyValue) as T);',
-    "  },",
-    "  onBlur: field.onBlur,",
+    "  ...useNumberText(field),",
     "});",
   ];
   const dateAdapter = [
@@ -3602,8 +3730,18 @@ export const antdAdapterSection = (usage: KindUsage, exp = ""): string => {
   // <select> exists in antd), so onChange receives the value directly.
   // value ?? null (not "") keeps the placeholder visible when empty, and
   // there is no `name` — antd's Select renders no form-posting input.
+  // Because of that, formstand's focus helpers can't reach it through their
+  // name walk: on formstand > 0.10.0, focusField/focusFirstError fall back
+  // to the element whose `id` is exactly the path (the generated markup
+  // sets id={path}, which antd forwards to its real combobox input); on
+  // 0.10.0 and older, selects are simply skipped by the focus helpers.
   const selectAdapter = [
     "",
+    "// No `name`: antd's Select renders no form-posting input. formstand's",
+    "// focus helpers reach it anyway on formstand > 0.10.0 — their [id=path]",
+    "// fallback finds the combobox through the id={path} the markup sets",
+    "// (antd forwards it to the real input); on 0.10.0 and older,",
+    "// focusField/focusFirstError skip selects.",
     `${exp}const antdSelectProps = <T extends string | null | undefined>(`,
     "  field: UseFieldReturn<T>,",
     ") => ({",
@@ -3687,14 +3825,28 @@ const antdBoundComponents = (usage: KindUsage): string => {
     "  return <Checkbox {...antdCheckboxProps(field)}>{label}</Checkbox>;",
     "};",
   ];
+  // Number binds through the STATE-holding number hook, hoisted like any
+  // other hook call.
+  const number = [
+    "",
+    "const BoundNumberField = ({ form, path, label }: BoundFieldProps) => {",
+    "  const field = useField<number | null | undefined>(form, path);",
+    "  const numberProps = useAntdNumberInputProps(field);",
+    "  return (",
+    '    <Flex vertical gap="small">',
+    "      <label htmlFor={path}>{label}</label>",
+    "      <Input id={path} {...numberProps} />",
+    "      <FieldError field={field} />",
+    "    </Flex>",
+    "  );",
+    "};",
+  ];
   return [
     ...propsType,
     ...(usage.string
       ? input("BoundTextField", "antdTextInputProps", "string | null | undefined")
       : []),
-    ...(usage.number
-      ? input("BoundNumberField", "antdNumberInputProps", "number | null | undefined")
-      : []),
+    ...(usage.number ? number : []),
     ...(usage.date
       ? input("BoundDateField", "antdDateInputProps", "Date | null | undefined")
       : []),
@@ -3736,15 +3888,20 @@ const antdVariantLeaf = (
         `${ind(level + 1)}<FieldError field={${fieldVar}} />`,
         `${ind(level)}</Flex>`,
       ];
-    case "string":
+    // Number props come from the hoisted `${var}NumberProps` const (see
+    // unionHooks): the number binding is a STATE-holding hook, and hooks
+    // can't be called inside the conditional variant blocks.
     case "number":
+      return [
+        `${ind(level)}<Flex vertical gap="small">`,
+        `${ind(level + 1)}<label htmlFor=${id}>${jsxText(label)}</label>`,
+        `${ind(level + 1)}<Input id=${id} {...${fieldVar}NumberProps} />`,
+        `${ind(level + 1)}<FieldError field={${fieldVar}} />`,
+        `${ind(level)}</Flex>`,
+      ];
+    case "string":
     case "date": {
-      const builder =
-        spec.kind === "number"
-          ? "antdNumberInputProps"
-          : spec.kind === "date"
-            ? "antdDateInputProps"
-            : "antdTextInputProps";
+      const builder = kitScalarBinding("antd", spec.kind);
       return [
         `${ind(level)}<Flex vertical gap="small">`,
         `${ind(level + 1)}<label htmlFor=${id}>${jsxText(label)}</label>`,
@@ -3829,10 +3986,6 @@ const antdBackend = (visual: VisualOptions): Backend => {
 
   return {
   header: (usage, arrays, root) => {
-    const hasLeaf = hasLeafUsage(usage);
-    // Static-leaf usage gates the Bound* components (and their FieldFormApi
-    // type): union controls render raw antd elements from hoisted hooks.
-    const hasStaticLeaf = hasLeafUsage(collectStaticUsage(root));
     const hasSection = arrays.length > 0 || anyAddressableObjectField(root);
     const needsError = usage.string || usage.date || usage.number || usage.enum;
     const antdImports = [
@@ -3846,37 +3999,22 @@ const antdBackend = (visual: VisualOptions): Backend => {
       ...(usage.string || usage.date || usage.number ? ["Input"] : []),
       ...(usage.enum ? ["Select"] : []),
       // Typography.Title heads sections; Typography.Text renders the
-      // explicit error line (no Form.Item means no built-in error slot).
+      // explicit error line (no Form.Item means no built-in error slot)
+      // and each array's list-level error.
       ...(hasSection || needsError ? ["Typography"] : []),
-    ];
-    const formstandValueImports = [
-      ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
-      ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
-      ...(hasLeaf ? ["useField"] : []),
-      ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
-      ...(arrays.length > 0 ? ["useFieldArray"] : []),
-      "useForm",
-      "useIsSubmitting",
-    ];
-    const formstandTypeImports = [
-      // FieldFormApi is referenced only by the Bound* components' props type.
-      ...(hasStaticLeaf ? ["FieldFormApi"] : []),
-      ...(hasLeaf ? ["UseFieldReturn"] : []),
     ];
     return [
       // Select's adapter is value-shaped and Checkbox speaks antd's own
       // CheckboxChangeEvent, so only the Input adapters need ChangeEvent.
-      ...(usage.string || usage.date || usage.number
-        ? [`import type { ChangeEvent } from "react";`]
-        : []),
+      ...reactImportLines(
+        usage.string || usage.date || usage.number,
+        usage.number,
+      ),
       "import {",
       ...antdImports.map((name) => `  ${name},`),
       ...(usage.boolean ? ["  type CheckboxChangeEvent,"] : []),
       `} from "antd";`,
-      "import {",
-      ...formstandValueImports.map((name) => `  ${name},`),
-      ...formstandTypeImports.map((name) => `  type ${name},`),
-      `} from "formstand";`,
+      ...kitFormstandImportLines(usage, arrays, root),
       `import { z } from "zod";`,
     ];
   },
@@ -3887,11 +4025,8 @@ const antdBackend = (visual: VisualOptions): Backend => {
   ],
   leaf: antdLeaf,
   variantLeaf: antdVariantLeaf,
-  objectSection: (label, level, body) => [
-    ...sectionOpen(label, level),
-    ...body,
-    ...sectionClose(level),
-  ],
+  numberPropsHook: kitScalarBinding("antd", "number"),
+  objectSection: wrapSection(sectionOpen, sectionClose),
   arraySection: (entry, level, rowBody) => [
     ...sectionOpen(entry.label, level),
     `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
@@ -3907,6 +4042,13 @@ const antdBackend = (visual: VisualOptions): Backend => {
     `${ind(level + 3)}</Button>`,
     `${ind(level + 2)}</Flex>`,
     `${ind(level + 1)}))}`,
+    // The array-level error — the same per-kit line the module layout's
+    // list shell renders.
+    `${ind(level + 1)}{${entry.hookName}.error ? (`,
+    `${ind(level + 2)}<Typography.Text role="alert" type="danger">`,
+    `${ind(level + 3)}{${entry.hookName}.error[0]}`,
+    `${ind(level + 2)}</Typography.Text>`,
+    `${ind(level + 1)}) : null}`,
     `${ind(level + 1)}<Button htmlType="button" size="small" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
     `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
     `${ind(level + 1)}</Button>`,

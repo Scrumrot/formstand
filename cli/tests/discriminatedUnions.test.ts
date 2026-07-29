@@ -11,7 +11,7 @@ import {
   emitShadcnForm,
   emitZodSchema,
 } from "../src/codegen";
-import { emitModuleForm } from "../src/moduleLayout";
+import { type ModuleUi, emitModuleForm } from "../src/moduleLayout";
 import { fromZod } from "../src/fromZod";
 import {
   fixturesDir,
@@ -137,7 +137,7 @@ const generateSingle = (
   return file;
 };
 
-const generateModule = (dir: string, ui: "plain" | "mui" | "shadcn") => {
+const generateModule = (dir: string, ui: ModuleUi) => {
   const files = emitModuleForm({
     ir: fromZod(unionSchema),
     formName: "PaymentForm",
@@ -244,7 +244,7 @@ const emitModuleFor = (
   schema: UnionSchema,
   schemaName: string,
   fixture: string,
-  ui: "plain" | "mui" | "shadcn",
+  ui: ModuleUi,
   dir: string,
 ): readonly string[] => {
   const files = emitModuleForm({

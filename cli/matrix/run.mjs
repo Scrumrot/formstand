@@ -34,18 +34,6 @@ const requireFromCli = createRequire(path.join(cliDir, "package.json"));
 const ts = requireFromCli("typescript");
 const { createJiti } = requireFromCli("jiti");
 
-if (
-  !fs.existsSync(path.join(matrixDir, "node_modules", "mui5")) ||
-  !fs.existsSync(path.join(matrixDir, "node_modules", "chakra3")) ||
-  !fs.existsSync(path.join(matrixDir, "node_modules", "mantine9")) ||
-  !fs.existsSync(path.join(matrixDir, "node_modules", "antd6"))
-) {
-  process.stderr.write(
-    "matrix: node_modules missing or stale — run `npm install` in cli/matrix first (a chunky, isolated install)\n",
-  );
-  process.exit(1);
-}
-
 const jiti = createJiti(import.meta.url);
 const api = await jiti.import(
   pathToFileURL(path.join(cliDir, "src", "codegen-api.ts")).href,
@@ -70,12 +58,17 @@ const nm = (p) => posix(path.join(matrixDir, "node_modules", p));
 
 // `kitPaths` maps the kit's bare specifier onto its aliased install (e.g.
 // { "@mui/material": [nm("mui5")] } or { "@chakra-ui/react": [nm("chakra3")] }).
+// exactOptionalPropertyTypes is deliberately ON: several kits type their
+// optional props without `| undefined` (antd's `status?: InputStatus`,
+// mantine's `error?`), so emitted output must never write an explicit
+// undefined into them — the strictest consumers compile with the flag.
 const compilerOptions = (kitPaths) => ({
   target: ts.ScriptTarget.ES2022,
   module: ts.ModuleKind.ESNext,
   moduleResolution: ts.ModuleResolutionKind.Bundler,
   jsx: ts.JsxEmit.ReactJSX,
   strict: true,
+  exactOptionalPropertyTypes: true,
   skipLibCheck: true,
   noEmit: true,
   esModuleInterop: true,
@@ -88,9 +81,9 @@ const compilerOptions = (kitPaths) => ({
   },
 });
 
-// The literal-attribute restatement of the adapter's TextField props style
-// (see the header comment for why spreads alone can't catch this).
-const probeSource = (usesSlotProps) =>
+// The literal-attribute restatement of the mui adapter's TextField props
+// style (see the header comment for why spreads alone can't catch this).
+const muiProbeSource = (usesSlotProps) =>
   [
     'import { TextField } from "@mui/material";',
     "",
@@ -109,79 +102,6 @@ const probeSource = (usesSlotProps) =>
     ");",
     "",
   ].join("\n");
-
-const generateVersion = (version) => {
-  const dir = path.join(outRoot, `mui${version}`);
-  const files = [];
-  const write = (rel, content) => {
-    const abs = path.join(dir, rel);
-    fs.mkdirSync(path.dirname(abs), { recursive: true });
-    fs.writeFileSync(abs, content, "utf8");
-    files.push(abs);
-  };
-
-  fs.mkdirSync(dir, { recursive: true });
-  fs.copyFileSync(fixtureFile, path.join(dir, "boundarySchemas.ts"));
-
-  const single = (formName, ir, name, visual) =>
-    write(
-      `single/${formName}.tsx`,
-      api.emitMuiForm({
-        ir,
-        formName,
-        muiVersion: version,
-        schemaImport: { name, from: "../boundarySchemas", kind: "named" },
-        ...(visual === undefined ? {} : { visual }),
-      }),
-    );
-
-  // Single-file layout: the default chrome plus every non-default section
-  // wrapper and grid (panel + 2 columns, collapsible + 3 columns).
-  single("KitchenSinkForm", kitchenSinkIr, "kitchenSinkSchema");
-  single("KitchenSinkPanel", kitchenSinkIr, "kitchenSinkSchema", {
-    sections: "panel",
-    columns: 2,
-  });
-  single("KitchenSinkCollapsible", kitchenSinkIr, "kitchenSinkSchema", {
-    sections: "collapsible",
-    columns: 3,
-  });
-  single("NestedArrayForm", nestedArrayIr, "nestedArrayStressSchema");
-
-  // Module layout: the shared adapter file plus section/field files.
-  const moduleForm = (folder, ir, name, formName, visual) =>
-    api
-      .emitModuleForm({
-        ir,
-        formName,
-        muiVersion: version,
-        ui: "mui",
-        schemaImport: { name, from: "../../boundarySchemas", kind: "named" },
-        ...(visual === undefined ? {} : { visual }),
-      })
-      .forEach((file) =>
-        write(path.join("module", folder, file.path), file.content),
-      );
-
-  moduleForm("KitchenSink", kitchenSinkIr, "kitchenSinkSchema", "KitchenSinkForm", {
-    sections: "collapsible",
-    columns: 2,
-  });
-  moduleForm(
-    "NestedArrays",
-    nestedArrayIr,
-    "nestedArrayStressSchema",
-    "NestedArrayForm",
-  );
-
-  const adapter = fs.readFileSync(
-    path.join(dir, "single", "KitchenSinkForm.tsx"),
-    "utf8",
-  );
-  write("Probe.tsx", probeSource(adapter.includes("slotProps: {")));
-
-  return files;
-};
 
 // The chakra probe: literal-attribute restatement of every prop surface the
 // chakra adapters SPREAD onto the compound parts (Input text/number/date
@@ -219,78 +139,15 @@ const CHAKRA_PROBE = [
   "",
 ].join("\n");
 
-const generateChakra = () => {
-  const dir = path.join(outRoot, "chakra3");
-  const files = [];
-  const write = (rel, content) => {
-    const abs = path.join(dir, rel);
-    fs.mkdirSync(path.dirname(abs), { recursive: true });
-    fs.writeFileSync(abs, content, "utf8");
-    files.push(abs);
-  };
-
-  fs.mkdirSync(dir, { recursive: true });
-  fs.copyFileSync(fixtureFile, path.join(dir, "boundarySchemas.ts"));
-
-  const single = (formName, ir, name, visual) =>
-    write(
-      `single/${formName}.tsx`,
-      api.emitChakraForm({
-        ir,
-        formName,
-        schemaImport: { name, from: "../boundarySchemas", kind: "named" },
-        ...(visual === undefined ? {} : { visual }),
-      }),
-    );
-
-  // Single-file layout: the default chrome plus every non-default section
-  // wrapper and grid (panel + 2 columns, collapsible + 3 columns).
-  single("KitchenSinkForm", kitchenSinkIr, "kitchenSinkSchema");
-  single("KitchenSinkPanel", kitchenSinkIr, "kitchenSinkSchema", {
-    sections: "panel",
-    columns: 2,
-  });
-  single("KitchenSinkCollapsible", kitchenSinkIr, "kitchenSinkSchema", {
-    sections: "collapsible",
-    columns: 3,
-  });
-  single("NestedArrayForm", nestedArrayIr, "nestedArrayStressSchema");
-
-  // Module layout: the shared adapter file plus section/field files.
-  const moduleForm = (folder, ir, name, formName, visual) =>
-    api
-      .emitModuleForm({
-        ir,
-        formName,
-        ui: "chakra",
-        schemaImport: { name, from: "../../boundarySchemas", kind: "named" },
-        ...(visual === undefined ? {} : { visual }),
-      })
-      .forEach((file) =>
-        write(path.join("module", folder, file.path), file.content),
-      );
-
-  moduleForm("KitchenSink", kitchenSinkIr, "kitchenSinkSchema", "KitchenSinkForm", {
-    sections: "collapsible",
-    columns: 2,
-  });
-  moduleForm(
-    "NestedArrays",
-    nestedArrayIr,
-    "nestedArrayStressSchema",
-    "NestedArrayForm",
-  );
-
-  write("Probe.tsx", CHAKRA_PROBE);
-
-  return files;
-};
-
 // The mantine probe: literal-attribute restatement of every prop surface the
 // mantine adapters SPREAD onto the controls (TextInput text/number/date
 // bindings with the built-in error prop, the NativeSelect select binding
 // with option children, Switch's DOM checked/onChange) — spreads bypass
-// excess-property checks, literals don't.
+// excess-property checks, literals don't. No-error states restate what the
+// emitted fieldError helper actually produces (a string | undefined VALUE,
+// legal under exactOptionalPropertyTypes because mantine declares the prop
+// with `| undefined`) — never a hand-written shape the adapter stopped
+// emitting.
 const MANTINE_PROBE = [
   'import { NativeSelect, Switch, TextInput } from "@mantine/core";',
   "",
@@ -316,73 +173,6 @@ const MANTINE_PROBE = [
   "",
 ].join("\n");
 
-const generateMantine = () => {
-  const dir = path.join(outRoot, "mantine9");
-  const files = [];
-  const write = (rel, content) => {
-    const abs = path.join(dir, rel);
-    fs.mkdirSync(path.dirname(abs), { recursive: true });
-    fs.writeFileSync(abs, content, "utf8");
-    files.push(abs);
-  };
-
-  fs.mkdirSync(dir, { recursive: true });
-  fs.copyFileSync(fixtureFile, path.join(dir, "boundarySchemas.ts"));
-
-  const single = (formName, ir, name, visual) =>
-    write(
-      `single/${formName}.tsx`,
-      api.emitMantineForm({
-        ir,
-        formName,
-        schemaImport: { name, from: "../boundarySchemas", kind: "named" },
-        ...(visual === undefined ? {} : { visual }),
-      }),
-    );
-
-  // Single-file layout: the default chrome plus every non-default section
-  // wrapper and grid (panel + 2 columns, collapsible + 3 columns).
-  single("KitchenSinkForm", kitchenSinkIr, "kitchenSinkSchema");
-  single("KitchenSinkPanel", kitchenSinkIr, "kitchenSinkSchema", {
-    sections: "panel",
-    columns: 2,
-  });
-  single("KitchenSinkCollapsible", kitchenSinkIr, "kitchenSinkSchema", {
-    sections: "collapsible",
-    columns: 3,
-  });
-  single("NestedArrayForm", nestedArrayIr, "nestedArrayStressSchema");
-
-  // Module layout: the shared adapter file plus section/field files.
-  const moduleForm = (folder, ir, name, formName, visual) =>
-    api
-      .emitModuleForm({
-        ir,
-        formName,
-        ui: "mantine",
-        schemaImport: { name, from: "../../boundarySchemas", kind: "named" },
-        ...(visual === undefined ? {} : { visual }),
-      })
-      .forEach((file) =>
-        write(path.join("module", folder, file.path), file.content),
-      );
-
-  moduleForm("KitchenSink", kitchenSinkIr, "kitchenSinkSchema", "KitchenSinkForm", {
-    sections: "collapsible",
-    columns: 2,
-  });
-  moduleForm(
-    "NestedArrays",
-    nestedArrayIr,
-    "nestedArrayStressSchema",
-    "NestedArrayForm",
-  );
-
-  write("Probe.tsx", MANTINE_PROBE);
-
-  return files;
-};
-
 // The antd probe: literal-attribute restatement of every prop surface the
 // antd adapters SPREAD onto the controls — the DOM-shaped Input bindings
 // (text/number/date with the status prop), the VALUE-shaped Select binding
@@ -390,7 +180,10 @@ const generateMantine = () => {
 // may be null for the placeholder), and Checkbox's CheckboxChangeEvent
 // (e.target.checked) — spreads bypass excess-property checks, literals
 // don't. The inline-adapter shapes (the value-shaped onChange signatures)
-// are restated with their explicit parameter types.
+// are restated with their explicit parameter types. The no-status lines
+// restate fieldStatus's actual no-error value, "" (a member of antd's
+// InputStatus union) — status={undefined} is a shape the adapter no longer
+// emits, and exactOptionalPropertyTypes rightly rejects it.
 const ANTD_PROBE = [
   'import type { ChangeEvent } from "react";',
   'import { Checkbox, Input, Select, type CheckboxChangeEvent } from "antd";',
@@ -405,8 +198,8 @@ const ANTD_PROBE = [
   "      onChange={(e: ChangeEvent<HTMLInputElement>) => void e.target.value}",
   "      onBlur={() => {}}",
   "    />",
-  '    <Input inputMode="decimal" name="n" value="" status={undefined} onChange={() => {}} onBlur={() => {}} />',
-  '    <Input type="date" name="n" value="" status={undefined} onChange={() => {}} onBlur={() => {}} />',
+  '    <Input inputMode="decimal" name="n" value="" status="" onChange={() => {}} onBlur={() => {}} />',
+  '    <Input type="date" name="n" value="" status="" onChange={() => {}} onBlur={() => {}} />',
   "    <Select",
   '      id="p"',
   '      placeholder="Select role"',
@@ -429,23 +222,30 @@ const ANTD_PROBE = [
   "",
 ].join("\n");
 
-const generateAntd = () => {
-  const dir = path.join(outRoot, "antd6");
-  const files = [];
-  const write = (rel, content) => {
-    const abs = path.join(dir, rel);
-    fs.mkdirSync(path.dirname(abs), { recursive: true });
-    fs.writeFileSync(abs, content, "utf8");
-    files.push(abs);
-  };
-
+// ONE parameterized generator for every kit job: the fixture copy, the
+// single-file variants (default chrome plus every non-default section
+// wrapper and grid), the module-layout variants (flat default, collapsible,
+// and PANEL — the panel job exists because module-panel emitters were once
+// typechecked nowhere and a deliberate typo shipped green), and the
+// literal-attribute probe. Returns the file list functionally — no
+// in-place mutation.
+const generateKit = ({ alias, emitSingle, moduleUi, moduleExtra, probe }) => {
+  // The output folder is named after the alias the job typechecks against.
+  const dir = path.join(outRoot, alias);
   fs.mkdirSync(dir, { recursive: true });
   fs.copyFileSync(fixtureFile, path.join(dir, "boundarySchemas.ts"));
 
+  const writeFile = (rel, content) => {
+    const abs = path.join(dir, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, content, "utf8");
+    return abs;
+  };
+
   const single = (formName, ir, name, visual) =>
-    write(
+    writeFile(
       `single/${formName}.tsx`,
-      api.emitAntdForm({
+      emitSingle({
         ir,
         formName,
         schemaImport: { name, from: "../boundarySchemas", kind: "named" },
@@ -453,48 +253,117 @@ const generateAntd = () => {
       }),
     );
 
-  // Single-file layout: the default chrome plus every non-default section
-  // wrapper and grid (panel + 2 columns, collapsible + 3 columns).
-  single("KitchenSinkForm", kitchenSinkIr, "kitchenSinkSchema");
-  single("KitchenSinkPanel", kitchenSinkIr, "kitchenSinkSchema", {
-    sections: "panel",
-    columns: 2,
-  });
-  single("KitchenSinkCollapsible", kitchenSinkIr, "kitchenSinkSchema", {
-    sections: "collapsible",
-    columns: 3,
-  });
-  single("NestedArrayForm", nestedArrayIr, "nestedArrayStressSchema");
-
-  // Module layout: the shared adapter file plus section/field files.
   const moduleForm = (folder, ir, name, formName, visual) =>
     api
       .emitModuleForm({
         ir,
         formName,
-        ui: "antd",
+        ui: moduleUi,
         schemaImport: { name, from: "../../boundarySchemas", kind: "named" },
+        ...(moduleExtra ?? {}),
         ...(visual === undefined ? {} : { visual }),
       })
-      .forEach((file) =>
-        write(path.join("module", folder, file.path), file.content),
-      );
+      .map((file) => writeFile(path.join("module", folder, file.path), file.content));
 
-  moduleForm("KitchenSink", kitchenSinkIr, "kitchenSinkSchema", "KitchenSinkForm", {
-    sections: "collapsible",
-    columns: 2,
-  });
-  moduleForm(
-    "NestedArrays",
-    nestedArrayIr,
-    "nestedArrayStressSchema",
-    "NestedArrayForm",
-  );
-
-  write("Probe.tsx", ANTD_PROBE);
-
-  return files;
+  const files = [
+    single("KitchenSinkForm", kitchenSinkIr, "kitchenSinkSchema"),
+    single("KitchenSinkPanel", kitchenSinkIr, "kitchenSinkSchema", {
+      sections: "panel",
+      columns: 2,
+    }),
+    single("KitchenSinkCollapsible", kitchenSinkIr, "kitchenSinkSchema", {
+      sections: "collapsible",
+      columns: 3,
+    }),
+    single("NestedArrayForm", nestedArrayIr, "nestedArrayStressSchema"),
+    ...moduleForm(
+      "KitchenSink",
+      kitchenSinkIr,
+      "kitchenSinkSchema",
+      "KitchenSinkForm",
+      { sections: "collapsible", columns: 2 },
+    ),
+    ...moduleForm(
+      "KitchenSinkPanel",
+      kitchenSinkIr,
+      "kitchenSinkSchema",
+      "KitchenSinkPanelForm",
+      { sections: "panel", columns: 2 },
+    ),
+    ...moduleForm(
+      "NestedArrays",
+      nestedArrayIr,
+      "nestedArrayStressSchema",
+      "NestedArrayForm",
+    ),
+  ];
+  const readGenerated = (rel) => fs.readFileSync(path.join(dir, rel), "utf8");
+  return [...files, writeFile("Probe.tsx", probe(readGenerated))];
 };
+
+// One job per kit/version, as data: mui@5..9 against the aliased
+// @mui/material majors, chakra@3 against the aliased @chakra-ui/react v3,
+// mantine@9 against the aliased @mantine/core v9, antd@6 against the
+// aliased antd v6. `alias` is the installed node_modules name the job
+// typechecks against — the staleness gate below derives from it, so a new
+// job can't silently typecheck against the repo root's copy.
+const jobs = [
+  ...api.MUI_VERSIONS.map((version) => ({
+    label: `mui@${version}`,
+    alias: `mui${version}`,
+    kitPaths: { "@mui/material": [nm(`mui${version}`)] },
+    emitSingle: (options) => api.emitMuiForm({ ...options, muiVersion: version }),
+    moduleUi: "mui",
+    moduleExtra: { muiVersion: version },
+    // The mui probe restates the emitted slot-props style, read back from
+    // the generated adapter (v5 legacy InputProps vs v6+ slotProps).
+    probe: (readGenerated) =>
+      muiProbeSource(
+        readGenerated("single/KitchenSinkForm.tsx").includes("slotProps: {"),
+      ),
+  })),
+  {
+    label: "chakra@3",
+    alias: "chakra3",
+    kitPaths: { "@chakra-ui/react": [nm("chakra3")] },
+    emitSingle: api.emitChakraForm,
+    moduleUi: "chakra",
+    probe: () => CHAKRA_PROBE,
+  },
+  {
+    label: "mantine@9",
+    alias: "mantine9",
+    kitPaths: { "@mantine/core": [nm("mantine9")] },
+    emitSingle: api.emitMantineForm,
+    moduleUi: "mantine",
+    probe: () => MANTINE_PROBE,
+  },
+  {
+    label: "antd@6",
+    alias: "antd6",
+    kitPaths: { antd: [nm("antd6")] },
+    emitSingle: api.emitAntdForm,
+    moduleUi: "antd",
+    probe: () => ANTD_PROBE,
+  },
+];
+
+// The stale-install gate, derived from the jobs themselves (single source
+// of truth): EVERY alias a job typechecks against must be installed, or the
+// missing kit would resolve node-style to the repo root's copy (e.g.
+// @mui/material v9 for a missing mui6/mui7 alias) and "prove" the wrong
+// major. Fail loudly, naming what's missing.
+const missingAliases = [...new Set(jobs.map((job) => job.alias))].filter(
+  (alias) => !fs.existsSync(path.join(matrixDir, "node_modules", alias)),
+);
+if (missingAliases.length > 0) {
+  process.stderr.write(
+    `matrix: node_modules missing or stale — aliases not installed: ${missingAliases.join(
+      ", ",
+    )}; run \`npm install\` in cli/matrix first (a chunky, isolated install)\n`,
+  );
+  process.exit(1);
+}
 
 const formatDiagnostic = (d) => {
   const message = ts.flattenDiagnosticMessageText(d.messageText, " | ");
@@ -505,36 +374,10 @@ const formatDiagnostic = (d) => {
 
 fs.rmSync(outRoot, { recursive: true, force: true });
 
-// One job per kit/version: mui@5..9 against the aliased @mui/material
-// majors, chakra@3 against the aliased @chakra-ui/react v3, mantine@9
-// against the aliased @mantine/core v9, antd@6 against the aliased antd v6.
-const jobs = [
-  ...api.MUI_VERSIONS.map((version) => ({
-    label: `mui@${version}`,
-    generate: () => generateVersion(version),
-    kitPaths: { "@mui/material": [nm(`mui${version}`)] },
-  })),
-  {
-    label: "chakra@3",
-    generate: generateChakra,
-    kitPaths: { "@chakra-ui/react": [nm("chakra3")] },
-  },
-  {
-    label: "mantine@9",
-    generate: generateMantine,
-    kitPaths: { "@mantine/core": [nm("mantine9")] },
-  },
-  {
-    label: "antd@6",
-    generate: generateAntd,
-    kitPaths: { antd: [nm("antd6")] },
-  },
-];
-
-const results = jobs.map(({ label, generate, kitPaths }) => {
-  const files = generate();
+const results = jobs.map((job) => {
+  const files = generateKit(job);
   const started = Date.now();
-  const program = ts.createProgram(files, compilerOptions(kitPaths));
+  const program = ts.createProgram(files, compilerOptions(job.kitPaths));
   const diagnostics = [
     ...program.getSyntacticDiagnostics(),
     ...program.getGlobalDiagnostics(),
@@ -542,7 +385,7 @@ const results = jobs.map(({ label, generate, kitPaths }) => {
   ].map(formatDiagnostic);
   const seconds = ((Date.now() - started) / 1000).toFixed(1);
   process.stderr.write(
-    `${label} (${files.length} files, ${seconds}s): ${
+    `${job.label} (${files.length} files, ${seconds}s): ${
       diagnostics.length === 0 ? "clean" : `${diagnostics.length} diagnostics`
     }\n`,
   );

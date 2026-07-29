@@ -57,9 +57,9 @@ export type Ui =
   | "antd"
   | "antd@6";
 
-// The list HELP and error messages show.
-export const UI_CHOICES =
-  'plain, mui, mui@<5|6|7|9>, shadcn, chakra, mantine, antd';
+// The list HELP and error messages show — the mui enumeration derives from
+// MUI_VERSIONS so a new major can't leave this stale.
+export const UI_CHOICES = `plain, mui, mui@<${MUI_VERSIONS.join("|")}>, shadcn, chakra, mantine, antd`;
 
 export type ParseUiResult =
   | Readonly<{ kind: "ok"; target: UiTarget }>
@@ -69,6 +69,34 @@ const err = (message: string): ParseUiResult => ({ kind: "error", message });
 
 const muiVersionOf = (text: string): MuiVersion | undefined =>
   MUI_VERSIONS.find((version) => String(version) === text);
+
+// A version rule for a single-major kit: `matches` picks the rule, and its
+// message is returned verbatim (tests pin the exact texts, so the
+// kit-specific rationale strings stay data — the helper only owns the
+// shared parse SHAPE).
+type VersionRule = Readonly<{
+  matches: (versionText: string) => boolean;
+  message: (versionText: string) => string;
+}>;
+
+// The single-major kits (chakra/mantine/antd) share one parse shape: bare
+// `kit` and `kit@<major>` are the same ok target; the first matching rule
+// gives an out-of-scope version its kit-specific rationale; anything else
+// gets the kit's fallback text naming the one supported spelling.
+const singleMajorKit = (
+  target: UiTarget,
+  major: string,
+  versionText: string | undefined,
+  rules: readonly VersionRule[],
+  fallback: (versionText: string) => string,
+): ParseUiResult =>
+  versionText === undefined || versionText === major
+    ? { kind: "ok", target }
+    : err(
+        (rules.find((rule) => rule.matches(versionText))?.message ?? fallback)(
+          versionText,
+        ),
+      );
 
 // Parse a `--ui` / config `ui` value. The message comes back without a flag
 // or file prefix — callers prepend their own context ("--ui ...",
@@ -85,49 +113,53 @@ export const parseUiTarget = (value: string): ParseUiResult => {
         : err(
             `"${kit}" takes no version (only mui, chakra, mantine, and antd are versioned), got "${value}"`,
           );
-    case "chakra": {
+    case "chakra":
       // Bare "chakra" IS v3; "chakra@3" is the explicit spelling of the same
       // target. Older majors can't be targeted: the backend emits the v3
       // compound-component API (Field.Root/NativeSelect/Switch.Root), which
       // v2 and older do not have — and formstand peers react ^19, which the
       // pre-v3 architecture predates.
-      if (versionText === undefined || versionText === "3") {
-        return { kind: "ok", target: { kit: "chakra" } };
-      }
-      if (/^[0-2]$/.test(versionText)) {
-        return err(
-          `chakra@${versionText} is not supported: formstand requires React 19, and the backend emits the @chakra-ui/react 3 compound-component API, which older majors do not have; supported: "chakra" (v3, also spelled "chakra@3")`,
-        );
-      }
-      return err(
-        `unsupported chakra version "${versionText}"; v3 is the only supported major — use "chakra" or "chakra@3"`,
+      return singleMajorKit(
+        { kit: "chakra" },
+        "3",
+        versionText,
+        [
+          {
+            matches: (v) => /^[0-2]$/.test(v),
+            message: (v) =>
+              `chakra@${v} is not supported: formstand requires React 19, and the backend emits the @chakra-ui/react 3 compound-component API, which older majors do not have; supported: "chakra" (v3, also spelled "chakra@3")`,
+          },
+        ],
+        (v) =>
+          `unsupported chakra version "${v}"; v3 is the only supported major — use "chakra" or "chakra@3"`,
       );
-    }
-    case "mantine": {
+    case "mantine":
       // Bare "mantine" IS v9 (the current major); "mantine@9" is the explicit
       // spelling. Only the current major is a target: majors 6 and older
       // predate both formstand's react ^19 peer and the v7 styling rewrite
       // (emotion -> CSS modules); majors 7–8 do accept React 19 — and the
       // emitted surface even compiles there — but the backend is verified
       // against v9 only, so they error rather than silently claim support.
-      if (versionText === undefined || versionText === "9") {
-        return { kind: "ok", target: { kit: "mantine" } };
-      }
-      if (/^[0-6]$/.test(versionText)) {
-        return err(
-          `mantine@${versionText} is not supported: formstand requires React 19, and @mantine/core 7 rewrote styling (emotion → CSS modules) — majors 6 and older predate both; supported: "mantine" (v9, also spelled "mantine@9")`,
-        );
-      }
-      if (versionText === "7" || versionText === "8") {
-        return err(
-          `mantine@${versionText} is not supported: the backend targets the current @mantine/core major only — Mantine ${versionText} does accept React 19, but generated output is verified against v9 only; use "mantine" (or its explicit spelling "mantine@9")`,
-        );
-      }
-      return err(
-        `unsupported mantine version "${versionText}"; v9 is the only supported major — use "mantine" or "mantine@9"`,
+      return singleMajorKit(
+        { kit: "mantine" },
+        "9",
+        versionText,
+        [
+          {
+            matches: (v) => /^[0-6]$/.test(v),
+            message: (v) =>
+              `mantine@${v} is not supported: formstand requires React 19, and @mantine/core 7 rewrote styling (emotion → CSS modules) — majors 6 and older predate both; supported: "mantine" (v9, also spelled "mantine@9")`,
+          },
+          {
+            matches: (v) => v === "7" || v === "8",
+            message: (v) =>
+              `mantine@${v} is not supported: the backend targets the current @mantine/core major only — Mantine ${v} does accept React 19, but generated output is verified against v9 only; use "mantine" (or its explicit spelling "mantine@9")`,
+          },
+        ],
+        (v) =>
+          `unsupported mantine version "${v}"; v9 is the only supported major — use "mantine" or "mantine@9"`,
       );
-    }
-    case "antd": {
+    case "antd":
       // Bare "antd" IS v6 (the current major); "antd@6" is the explicit
       // spelling. Only the current major is a target: antd 6 peers
       // react >=18, so React 19 is natively in range; antd 5 nominally
@@ -137,23 +169,25 @@ export const parseUiTarget = (value: string): ParseUiResult => {
       // claim support; 4 and older predate the v5 CSS-in-JS rewrite and
       // parts of the emitted surface (Flex, the Collapse items API, the
       // `status` prop).
-      if (versionText === undefined || versionText === "6") {
-        return { kind: "ok", target: { kit: "antd" } };
-      }
-      if (/^[0-4]$/.test(versionText)) {
-        return err(
-          `antd@${versionText} is not supported: the backend emits the antd 5+ surface (Flex, the Collapse items API, status props), which antd ${versionText} does not have — and antd 4 and older predate the v5 CSS-in-JS rewrite; supported: "antd" (v6, also spelled "antd@6")`,
-        );
-      }
-      if (versionText === "5") {
-        return err(
-          `antd@5 is not supported: the backend targets the current antd major only — antd 5 can run on React 19 (host apps need the @ant-design/v5-patch-for-react-19 import), but generated output is verified against v6 only; use "antd" (or its explicit spelling "antd@6")`,
-        );
-      }
-      return err(
-        `unsupported antd version "${versionText}"; v6 is the only supported major — use "antd" or "antd@6"`,
+      return singleMajorKit(
+        { kit: "antd" },
+        "6",
+        versionText,
+        [
+          {
+            matches: (v) => /^[0-4]$/.test(v),
+            message: (v) =>
+              `antd@${v} is not supported: the backend emits the antd 5+ surface (Flex, the Collapse items API, status props), which antd ${v} does not have — and antd 4 and older predate the v5 CSS-in-JS rewrite; supported: "antd" (v6, also spelled "antd@6")`,
+          },
+          {
+            matches: (v) => v === "5",
+            message: () =>
+              `antd@5 is not supported: the backend targets the current antd major only — antd 5 can run on React 19 (host apps need the @ant-design/v5-patch-for-react-19 import), but generated output is verified against v6 only; use "antd" (or its explicit spelling "antd@6")`,
+          },
+        ],
+        (v) =>
+          `unsupported antd version "${v}"; v6 is the only supported major — use "antd" or "antd@6"`,
       );
-    }
     case "mui": {
       if (versionText === undefined) {
         return {
