@@ -5,6 +5,7 @@ import { main, moduleSpecifier } from "../src/cli";
 import { emitModuleForm, joinModuleFiles } from "../src/moduleLayout";
 import { fromZod } from "../src/fromZod";
 import {
+  antdStubPaths,
   chakraStubPaths,
   fixturesDir,
   freshTmpDir,
@@ -27,7 +28,7 @@ const generateModule = (
   schemaName: string,
   formName: string,
   dir: string,
-  ui: "plain" | "mui" | "shadcn" | "chakra" | "mantine" = "plain",
+  ui: "plain" | "mui" | "shadcn" | "chakra" | "mantine" | "antd" = "plain",
   visual?: Readonly<{ sections: "flat" | "panel" | "collapsible"; columns: 1 | 2 | 3 }>,
 ) => {
   const files = emitModuleForm({
@@ -240,6 +241,38 @@ describe("emitModuleForm kit uis", () => {
     expect(typecheckDiagnostics(written, mantineStubPaths)).toEqual([]);
   });
 
+  it("antd modules share one adapter file and typecheck against the antd stub", () => {
+    const dir = freshTmpDir("module-antd");
+    const { files, written } = generateModule(
+      profileSchema,
+      "profileSchema",
+      "ProfileForm",
+      dir,
+      "antd",
+    );
+    const paths = files.map((f) => f.path);
+    // The antd adapter renders JSX (its FieldError component) — adapter.tsx,
+    // like shadcn's.
+    expect(paths).toContain("adapter.tsx");
+    const adapter = files.find((f) => f.path === "adapter.tsx");
+    expect(adapter?.content).toContain("export const antdTextInputProps");
+    expect(adapter?.content).toContain("export const antdCheckboxProps");
+    // The one value-shaped adapter: antd has no native <select>.
+    expect(adapter?.content).toContain(
+      "onChange: (value: string) => field.setValue(value as T),",
+    );
+    expect(adapter?.content).toContain("export const FieldError");
+    const field = files.find((f) => f.path === "fields/FirstNameField.tsx");
+    expect(field?.content).toContain('from "antd"');
+    expect(field?.content).toContain(
+      "<Input id={\"firstName\"} {...antdTextInputProps(field)} />",
+    );
+    const role = files.find((f) => f.path === "fields/RoleField.tsx");
+    expect(role?.content).toContain("{...antdSelectProps(field)}");
+    expect(role?.content).not.toContain("Form.Item");
+    expect(typecheckDiagnostics(written, antdStubPaths)).toEqual([]);
+  });
+
   it("leaf-free kit modules omit the adapter and still typecheck", () => {
     const dir = freshTmpDir("module-mui-leaf-free");
     const { files, written } = generateModule(
@@ -328,6 +361,29 @@ describe("emitModuleForm visual options", () => {
     expect(section?.content).toContain("<SimpleGrid cols={2}>");
     expect(section?.content).toContain('} from "@mantine/core";');
     expect(typecheckDiagnostics(written, mantineStubPaths)).toEqual([]);
+  });
+
+  it("antd collapsible sections use the Collapse items API and typecheck", () => {
+    const dir = freshTmpDir("module-antd-collapsible");
+    const { files, written } = generateModule(
+      profileSchema,
+      "profileSchema",
+      "ProfileForm",
+      dir,
+      "antd",
+      { sections: "collapsible", columns: 2 },
+    );
+    const section = files.find((f) => f.path.startsWith("sections/"));
+    expect(section?.content).toContain("<Collapse");
+    expect(section?.content).toContain('defaultActiveKey={["section"]}');
+    // items API, not the deprecated children-panels.
+    expect(section?.content).toContain("items={[");
+    expect(section?.content).not.toContain("Collapse.Panel");
+    expect(section?.content).toContain(
+      'gridTemplateColumns: "repeat(2, minmax(0, 1fr))"',
+    );
+    expect(section?.content).toContain('} from "antd";');
+    expect(typecheckDiagnostics(written, antdStubPaths)).toEqual([]);
   });
 
   it("plain collapsible sections use details/summary and typecheck", () => {

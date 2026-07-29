@@ -5,6 +5,7 @@ import { moduleSpecifier } from "../src/cli";
 import {
   type EmitFormOptions,
   type VisualOptions,
+  emitAntdForm,
   emitChakraForm,
   emitMantineForm,
   emitMuiForm,
@@ -13,6 +14,7 @@ import {
 } from "../src/codegen";
 import { fromZod } from "../src/fromZod";
 import {
+  antdStubPaths,
   chakraStubPaths,
   fixturesDir,
   freshTmpDir,
@@ -133,6 +135,7 @@ const mui = fixturesFor(emitMuiForm, "mui");
 const shadcn = fixturesFor(emitShadcnForm, "shadcn");
 const chakra = fixturesFor(emitChakraForm, "chakra");
 const mantine = fixturesFor(emitMantineForm, "mantine");
+const antd = fixturesFor(emitAntdForm, "antd");
 
 describe("generated components", () => {
   // THE BIG ONE: every plain-backend output must typecheck against the real
@@ -199,6 +202,38 @@ describe("generated components", () => {
     expect(mantine.profile.code).not.toContain("onCheckedChange");
   });
 
+  it("antd outputs typecheck against the library source and the antd stub", () => {
+    expect(typecheckDiagnostics(antd.files, antdStubPaths)).toEqual([]);
+    // The antd conventions the emitter promises: formstand owns state, so
+    // antd's Form/Form.Item never appears; error display is the explicit
+    // status + Typography.Text line; text/number/date bind through the
+    // DOM-shaped Input (InputNumber's onChange is (value: number | null) —
+    // rejected, like Mantine's NumberInput); the enum is antd's Select with
+    // the one value-shaped adapter (no native <select> exists in antd); and
+    // booleans bind Checkbox, NOT Switch (Switch has no onBlur and a
+    // value-shaped onChange).
+    expect(antd.profile.code).toContain('} from "antd";');
+    expect(antd.profile.code).toContain("status: fieldStatus(field),");
+    expect(antd.profile.code).toContain('<Typography.Text role="alert" type="danger">');
+    expect(antd.profile.code).toContain(
+      "<Input id={path} {...antdTextInputProps(field)} />",
+    );
+    expect(antd.profile.code).toContain(
+      "<Input id={path} {...antdNumberInputProps(field)} />",
+    );
+    expect(antd.profile.code).toContain(
+      "onChange: (value: string) => field.setValue(value as T),",
+    );
+    expect(antd.profile.code).toContain(
+      "<Checkbox {...antdCheckboxProps(field)}>{label}</Checkbox>",
+    );
+    expect(antd.profile.code).not.toContain("Form.Item");
+    expect(antd.profile.code).not.toContain("<InputNumber");
+    expect(antd.profile.code).not.toContain("<Switch");
+    expect(antd.profile.code).not.toContain("DatePicker");
+    expect(antd.profile.code).not.toContain("helperText");
+  });
+
   // The stub is typed with the emitter's shapes, so it can only prove
   // self-consistency; this run typechecks the same output against the repo's
   // real Radix-based components, so a shadcn/Radix prop-contract change
@@ -247,6 +282,8 @@ describe("generated components", () => {
     );
     expect(mantine.panel.code).toContain("<Card withBorder");
     expect(mantine.panel.code).toContain("<SimpleGrid cols={2}>");
+    expect(antd.panel.code).toContain('<Card variant="outlined"');
+    expect(antd.panel.code).toContain('gridTemplateColumns: "repeat(2, minmax(0, 1fr))"');
   });
 
   it("collapsible renders details/summary (Accordion on mui and chakra)", () => {
@@ -263,6 +300,12 @@ describe("generated components", () => {
     );
     expect(mantine.collapsible.code).toContain("<Accordion.Control>");
     expect(mantine.collapsible.code).toContain("<SimpleGrid cols={3}>");
+    // antd's Collapse must use the items API — children-panels are
+    // deprecated in 5.x+.
+    expect(antd.collapsible.code).toContain("<Collapse");
+    expect(antd.collapsible.code).toContain("items={[");
+    expect(antd.collapsible.code).toContain('defaultActiveKey={["section"]}');
+    expect(antd.collapsible.code).not.toContain("Collapse.Panel");
   });
 
   it("the flat default keeps the historical output and gates the imports", () => {
@@ -277,6 +320,9 @@ describe("generated components", () => {
     expect(mantine.profile.code).not.toContain("Card");
     expect(mantine.profile.code).not.toContain("Accordion");
     expect(mantine.profile.code).not.toContain("SimpleGrid");
+    expect(antd.profile.code).toContain('<Flex vertical gap="middle">');
+    expect(antd.profile.code).not.toContain("Card");
+    expect(antd.profile.code).not.toContain("Collapse");
   });
 
   // The blank-draft cast is emitted only when the draft genuinely can't
@@ -300,5 +346,6 @@ describe("generated components", () => {
     expect(shadcn.leafFree.code).not.toContain("BoundFieldProps");
     expect(chakra.leafFree.code).not.toContain("BoundFieldProps");
     expect(mantine.leafFree.code).not.toContain("BoundFieldProps");
+    expect(antd.leafFree.code).not.toContain("BoundFieldProps");
   });
 });

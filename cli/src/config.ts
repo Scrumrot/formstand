@@ -12,8 +12,9 @@ export type Layout = "single" | "module";
 export type FormstandConfig = Readonly<{
   // Same spellings as --ui: "plain", "shadcn", "mui" (current major), a
   // pinned "mui@5" | "mui@6" | "mui@7" | "mui@9", "chakra" (v3 — the only
-  // supported major, also spelled "chakra@3"), or "mantine" (v9 — the
-  // current major, also spelled "mantine@9").
+  // supported major, also spelled "chakra@3"), "mantine" (v9 — the current
+  // major, also spelled "mantine@9"), or "antd" (v6 — the current major,
+  // also spelled "antd@6").
   ui?: Ui;
   layout?: Layout;
   sections?: VisualOptions["sections"];

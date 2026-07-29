@@ -244,6 +244,56 @@
   literal-attribute probe for the TextInput/NativeSelect/Switch spread
   surfaces — so `npm run matrix` now proves six kit targets against their
   real .d.ts.
+- **First-class `--ui antd`: an Ant Design v6 backend** — both layouts, the
+  full field-kind surface the other kit backends cover (strings/numbers/
+  dates/enums/booleans, nested objects, arrays with add/remove and
+  recursive nested-row extraction, tuples, discriminated unions, TODO
+  degradations), and every `--sections` / `--columns` variant. The one
+  hard rule: antd's own `Form`/`Form.Item` (name-based bindings, its own
+  state store) is NEVER emitted — formstand owns the form state, so the
+  generated code binds antd's input components as plain controlled
+  components. The bindings, decided empirically against the installed
+  6.5 declarations: `Input` binds text/number/date natively (it extends
+  the DOM input props — `inputMode="decimal"`, `type="date"`; antd's
+  `InputNumber` is rejected on evidence, its `onChange` is
+  `(value: number | null)`, not an event, and the dayjs-value-based
+  `DatePicker` is not used — the CLI pulls no date library); enums bind
+  antd's `Select`, the backend's ONE value-shaped adapter — antd has no
+  native-`<select>` component anywhere, so `onChange` receives the
+  selected value directly, `value ?? null` keeps the placeholder visible,
+  and there is no `name` (antd's Select renders no form-posting input);
+  booleans bind `Checkbox` (its `onChange` is antd's DOM-ish
+  `CheckboxChangeEvent` with `e.target.checked`, and it has a real
+  `onBlur`) — NOT `Switch`, which has no `onBlur` prop at all and a
+  value-shaped `(checked, event)` callback (both rejections verified as
+  failing compiles against the real .d.ts). With no `Form.Item` there is
+  no built-in error slot: every non-boolean control paints
+  `status="error"` (`fieldStatus`) and renders an explicit
+  `Typography.Text type="danger" role="alert"` error line, with a plain
+  `<label htmlFor>`/`id` pair. Sections render `Flex`/`Typography.Title`
+  (flat), `Card variant="outlined"` (panel), or `Collapse` via the items
+  API (collapsible — children-panels are deprecated in antd 5+); columns
+  use the shared inline-style CSS grid. No provider is required
+  (`ConfigProvider` is optional theming). The module layout gains a shared
+  `adapter.tsx` (JSX for its `FieldError` line, like shadcn's):
+  `antdTextInputProps` / `antdNumberInputProps` / `antdDateInputProps` /
+  `antdSelectProps` / `antdCheckboxProps` + `fieldError` / `fieldStatus` /
+  `FieldError`. antd takes no version suffix — v6 (the current major) is
+  the only supported target, with `antd@6` accepted as the explicit
+  spelling. The scope is empirical: antd 6.x peers `react >=18` (React 19
+  natively in range), while antd 5 nominally peers `react >=16.9` but
+  needs the `@ant-design/v5-patch-for-react-19` import in the HOST app on
+  React 19 — so `antd@5` fails with a precise
+  verified-against-v6-only message (naming the patch, no false
+  incompatibility claim) and `antd@0`–`4` fail with the missing-surface
+  rationale (no `Flex`, no Collapse items API, no `status` props; 4 and
+  older predate the v5 CSS-in-JS rewrite). The config file's `ui` key
+  accepts the same spellings, and the matrix harness gained an `antd6`
+  alias (`npm:antd@^6.5`) and an antd job — both schemas, both layouts,
+  all section styles, and a literal-attribute probe for the
+  Input/Select/Checkbox spread surfaces, restating the value-shaped
+  Select `onChange` with its explicit parameter type — so
+  `npm run matrix` now proves seven kit targets against their real .d.ts.
 
 ## formstand-cli 0.8.0 — 2026-07-28
 

@@ -1,12 +1,13 @@
 {
   "name": "formstand-cli-ui-matrix",
   "private": true,
-  "description": "Isolated typecheck matrix for the kit backends: every supported @mui/material major plus @chakra-ui/react v3 and @mantine/core v9 installed side by side under npm aliases. Not part of the root or cli installs — run `npm install` here, then `npm run matrix` from cli/.",
+  "description": "Isolated typecheck matrix for the kit backends: every supported @mui/material major plus @chakra-ui/react v3, @mantine/core v9, and antd v6 installed side by side under npm aliases. Not part of the root or cli installs — run `npm install` here, then `npm run matrix` from cli/.",
   "devDependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mantine/hooks": "^9.5.0",
     "@types/react": "^19.0.0",
+    "antd6": "npm:antd@^6.5.0",
     "chakra3": "npm:@chakra-ui/react@^3.36.0",
     "mantine9": "npm:@mantine/core@^9.5.0",
     "mui5": "npm:@mui/material@^5.18.0",

@@ -1,0 +1,118 @@
+// Minimal structural stand-in for antd (v6), mapped in via `paths` by the
+// --ui antd backend tests (the real package is not a dependency here; the
+// REAL 6.x declarations are exercised by the cli/matrix harness).
+// Deliberately narrow: exactly the controls the antd backend emits, each
+// prop typed to the adapter's output — including the two decisions the
+// backend encodes: Select's onChange is VALUE-shaped (antd has no native
+// <select>; a DOM ChangeEvent handler must not compile against it), and
+// Checkbox's onChange takes antd's own CheckboxChangeEvent (e.target.checked)
+// — so the generated output is structurally typechecked, not merely parsed.
+import type {
+  CSSProperties,
+  ChangeEvent,
+  FocusEventHandler,
+  ReactElement,
+  ReactNode,
+} from "react";
+
+export declare const Input: (
+  props: Readonly<{
+    id?: string;
+    name?: string;
+    value?: string;
+    type?: string;
+    inputMode?: "decimal";
+    status?: "error" | "warning" | "" | undefined;
+    onChange?: (event: ChangeEvent<HTMLInputElement>) => void;
+    onBlur?: () => void;
+  }>,
+) => ReactElement;
+
+// antd's own change event: DOM-ish (target.checked), but not a React
+// ChangeEvent — mirrors antd/es/checkbox's CheckboxChangeEvent.
+export type CheckboxChangeEvent = Readonly<{
+  target: Readonly<{ checked: boolean }>;
+  stopPropagation: () => void;
+  preventDefault: () => void;
+}>;
+
+export declare const Checkbox: (
+  props: Readonly<{
+    name?: string;
+    checked?: boolean;
+    onChange?: (event: CheckboxChangeEvent) => void;
+    onBlur?: FocusEventHandler<HTMLInputElement>;
+    children?: ReactNode;
+  }>,
+) => ReactElement;
+
+// Value-shaped, like the real combobox: no DOM event, no `name` prop (antd's
+// Select renders no form-posting input), value may be null (placeholder).
+export declare const Select: (
+  props: Readonly<{
+    id?: string;
+    placeholder?: ReactNode;
+    options?: readonly Readonly<{ value: string; label: ReactNode }>[];
+    value?: string | null;
+    status?: "error" | "warning" | "" | undefined;
+    onChange?: (value: string) => void;
+    onBlur?: FocusEventHandler<HTMLElement>;
+  }>,
+) => ReactElement;
+
+export declare const Typography: Readonly<{
+  Title: (
+    props: Readonly<{
+      level?: 1 | 2 | 3 | 4 | 5;
+      style?: CSSProperties;
+      children?: ReactNode;
+    }>,
+  ) => ReactElement;
+  Text: (
+    props: Readonly<{
+      type?: "secondary" | "success" | "warning" | "danger";
+      role?: string;
+      children?: ReactNode;
+    }>,
+  ) => ReactElement;
+}>;
+
+export declare const Flex: (
+  props: Readonly<{
+    vertical?: boolean;
+    gap?: "small" | "middle" | "large" | number;
+    style?: CSSProperties;
+    children?: ReactNode;
+  }>,
+) => ReactElement;
+
+export declare const Card: (
+  props: Readonly<{
+    variant?: "outlined" | "borderless";
+    style?: CSSProperties;
+    children?: ReactNode;
+  }>,
+) => ReactElement;
+
+export declare const Collapse: (
+  props: Readonly<{
+    defaultActiveKey?: readonly string[];
+    style?: CSSProperties;
+    items?: readonly Readonly<{
+      key: string;
+      label?: ReactNode;
+      children?: ReactNode;
+    }>[];
+  }>,
+) => ReactElement;
+
+export declare const Button: (
+  props: Readonly<{
+    htmlType?: "button" | "submit" | "reset";
+    type?: "default" | "primary" | "dashed" | "link" | "text";
+    size?: "small" | "middle" | "large";
+    disabled?: boolean;
+    onClick?: () => void;
+    children?: ReactNode;
+  }>,
+) => ReactElement;

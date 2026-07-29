@@ -1,11 +1,12 @@
 // The UI-kit version matrix: PROVES the CLI's kit output compiles against
 // the real installed type declarations — every supported @mui/material
 // major (5, 6, 7, 9 — MUI skipped 8) for --ui mui@N, @chakra-ui/react 3
-// for --ui chakra, and @mantine/core 9 for --ui mantine — in BOTH layouts,
-// by typechecking freshly generated forms against each package's real
-// .d.ts (installed side by side in this folder under npm aliases
-// mui5/mui6/mui7/mui9/chakra3/mantine9; @mantine/hooks installs under its
-// real name — mantine9's .d.ts resolves it node-style).
+// for --ui chakra, @mantine/core 9 for --ui mantine, and antd 6 for
+// --ui antd — in BOTH layouts, by typechecking freshly generated forms
+// against each package's real .d.ts (installed side by side in this folder
+// under npm aliases mui5/mui6/mui7/mui9/chakra3/mantine9/antd6;
+// @mantine/hooks installs under its real name — mantine9's .d.ts resolves
+// it node-style).
 //
 // Opt-in: `npm install` in cli/matrix once (a chunky, isolated install — not
 // part of the root or cli installs), then `npm run matrix` from cli/. Not
@@ -36,7 +37,8 @@ const { createJiti } = requireFromCli("jiti");
 if (
   !fs.existsSync(path.join(matrixDir, "node_modules", "mui5")) ||
   !fs.existsSync(path.join(matrixDir, "node_modules", "chakra3")) ||
-  !fs.existsSync(path.join(matrixDir, "node_modules", "mantine9"))
+  !fs.existsSync(path.join(matrixDir, "node_modules", "mantine9")) ||
+  !fs.existsSync(path.join(matrixDir, "node_modules", "antd6"))
 ) {
   process.stderr.write(
     "matrix: node_modules missing or stale — run `npm install` in cli/matrix first (a chunky, isolated install)\n",
@@ -381,6 +383,119 @@ const generateMantine = () => {
   return files;
 };
 
+// The antd probe: literal-attribute restatement of every prop surface the
+// antd adapters SPREAD onto the controls — the DOM-shaped Input bindings
+// (text/number/date with the status prop), the VALUE-shaped Select binding
+// (antd has no native <select>; onChange receives the value directly, value
+// may be null for the placeholder), and Checkbox's CheckboxChangeEvent
+// (e.target.checked) — spreads bypass excess-property checks, literals
+// don't. The inline-adapter shapes (the value-shaped onChange signatures)
+// are restated with their explicit parameter types.
+const ANTD_PROBE = [
+  'import type { ChangeEvent } from "react";',
+  'import { Checkbox, Input, Select, type CheckboxChangeEvent } from "antd";',
+  "",
+  "export const Probe = () => (",
+  "  <>",
+  "    <Input",
+  '      id="p"',
+  '      name="n"',
+  '      value=""',
+  '      status={"error" as const}',
+  "      onChange={(e: ChangeEvent<HTMLInputElement>) => void e.target.value}",
+  "      onBlur={() => {}}",
+  "    />",
+  '    <Input inputMode="decimal" name="n" value="" status={undefined} onChange={() => {}} onBlur={() => {}} />',
+  '    <Input type="date" name="n" value="" status={undefined} onChange={() => {}} onBlur={() => {}} />',
+  "    <Select",
+  '      id="p"',
+  '      placeholder="Select role"',
+  '      options={[{ value: "a", label: "A" }]}',
+  "      value={null as string | null}",
+  '      status={"error" as const}',
+  "      onChange={(value: string) => void value}",
+  "      onBlur={() => {}}",
+  "    />",
+  "    <Checkbox",
+  '      name="n"',
+  "      checked",
+  "      onChange={(e: CheckboxChangeEvent) => void e.target.checked}",
+  "      onBlur={() => {}}",
+  "    >",
+  '      {"On"}',
+  "    </Checkbox>",
+  "  </>",
+  ");",
+  "",
+].join("\n");
+
+const generateAntd = () => {
+  const dir = path.join(outRoot, "antd6");
+  const files = [];
+  const write = (rel, content) => {
+    const abs = path.join(dir, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, content, "utf8");
+    files.push(abs);
+  };
+
+  fs.mkdirSync(dir, { recursive: true });
+  fs.copyFileSync(fixtureFile, path.join(dir, "boundarySchemas.ts"));
+
+  const single = (formName, ir, name, visual) =>
+    write(
+      `single/${formName}.tsx`,
+      api.emitAntdForm({
+        ir,
+        formName,
+        schemaImport: { name, from: "../boundarySchemas", kind: "named" },
+        ...(visual === undefined ? {} : { visual }),
+      }),
+    );
+
+  // Single-file layout: the default chrome plus every non-default section
+  // wrapper and grid (panel + 2 columns, collapsible + 3 columns).
+  single("KitchenSinkForm", kitchenSinkIr, "kitchenSinkSchema");
+  single("KitchenSinkPanel", kitchenSinkIr, "kitchenSinkSchema", {
+    sections: "panel",
+    columns: 2,
+  });
+  single("KitchenSinkCollapsible", kitchenSinkIr, "kitchenSinkSchema", {
+    sections: "collapsible",
+    columns: 3,
+  });
+  single("NestedArrayForm", nestedArrayIr, "nestedArrayStressSchema");
+
+  // Module layout: the shared adapter file plus section/field files.
+  const moduleForm = (folder, ir, name, formName, visual) =>
+    api
+      .emitModuleForm({
+        ir,
+        formName,
+        ui: "antd",
+        schemaImport: { name, from: "../../boundarySchemas", kind: "named" },
+        ...(visual === undefined ? {} : { visual }),
+      })
+      .forEach((file) =>
+        write(path.join("module", folder, file.path), file.content),
+      );
+
+  moduleForm("KitchenSink", kitchenSinkIr, "kitchenSinkSchema", "KitchenSinkForm", {
+    sections: "collapsible",
+    columns: 2,
+  });
+  moduleForm(
+    "NestedArrays",
+    nestedArrayIr,
+    "nestedArrayStressSchema",
+    "NestedArrayForm",
+  );
+
+  write("Probe.tsx", ANTD_PROBE);
+
+  return files;
+};
+
 const formatDiagnostic = (d) => {
   const message = ts.flattenDiagnosticMessageText(d.messageText, " | ");
   if (d.file === undefined || d.start === undefined) return `TS${d.code} ${message}`;
@@ -392,7 +507,7 @@ fs.rmSync(outRoot, { recursive: true, force: true });
 
 // One job per kit/version: mui@5..9 against the aliased @mui/material
 // majors, chakra@3 against the aliased @chakra-ui/react v3, mantine@9
-// against the aliased @mantine/core v9.
+// against the aliased @mantine/core v9, antd@6 against the aliased antd v6.
 const jobs = [
   ...api.MUI_VERSIONS.map((version) => ({
     label: `mui@${version}`,
@@ -408,6 +523,11 @@ const jobs = [
     label: "mantine@9",
     generate: generateMantine,
     kitPaths: { "@mantine/core": [nm("mantine9")] },
+  },
+  {
+    label: "antd@6",
+    generate: generateAntd,
+    kitPaths: { antd: [nm("antd6")] },
   },
 ];
 
@@ -433,7 +553,7 @@ const results = jobs.map(({ label, generate, kitPaths }) => {
 const failures = results.filter((count) => count > 0).length;
 process.stderr.write(
   failures === 0
-    ? `matrix: all ${results.length} kit targets (mui majors + chakra 3 + mantine 9) typecheck both layouts\n`
+    ? `matrix: all ${results.length} kit targets (mui majors + chakra 3 + mantine 9 + antd 6) typecheck both layouts\n`
     : `matrix: ${failures} target(s) FAILED\n`,
 );
 process.exit(failures === 0 ? 0 : 1);

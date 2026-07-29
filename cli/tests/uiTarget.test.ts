@@ -171,6 +171,54 @@ describe("parseUiTarget", () => {
       },
     );
   });
+
+  // antd is UNVERSIONED like chakra/mantine: v6 (the current major, which
+  // peers react >=18 — React 19 natively in range) is the only target;
+  // "antd@6" is the explicit spelling. antd@5 — which CAN run on React 19
+  // via the @ant-design/v5-patch-for-react-19 host patch — errors with the
+  // current-major-only scope (no false incompatibility claim); 4 and older
+  // error with the missing-surface rationale.
+  it("antd parses versionless, with antd@6 as an explicit alias", () => {
+    expect(parseUiTarget("antd")).toEqual({
+      kind: "ok",
+      target: { kit: "antd" },
+    });
+    expect(parseUiTarget("antd@6")).toEqual({
+      kind: "ok",
+      target: { kit: "antd" },
+    });
+  });
+
+  it("rejects antd@5 with the current-major-only scope and the patch note", () => {
+    const result = parseUiTarget("antd@5");
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toContain(
+      "current antd major",
+    );
+    expect(result.kind === "error" && result.message).toContain(
+      "@ant-design/v5-patch-for-react-19",
+    );
+    expect(result.kind === "error" && result.message).toContain('"antd@6"');
+  });
+
+  it("rejects antd@4 and older with the missing-surface rationale", () => {
+    (["antd@4", "antd@3", "antd@0"] as const).forEach((value) => {
+      const result = parseUiTarget(value);
+      expect(result.kind).toBe("error");
+      expect(result.kind === "error" && result.message).toContain(
+        "CSS-in-JS",
+      );
+      expect(result.kind === "error" && result.message).toContain('"antd@6"');
+    });
+  });
+
+  it("rejects other antd versions naming the one supported major", () => {
+    (["antd@7", "antd@", "antd@next", "antd@6.5"] as const).forEach((value) => {
+      const result = parseUiTarget(value);
+      expect(result.kind).toBe("error");
+      expect(result.kind === "error" && result.message).toContain('"antd@6"');
+    });
+  });
 });
 
 // The one empirical prop-surface delta across the supported majors is
@@ -338,5 +386,48 @@ describe("--ui mantine end to end", () => {
     ).toBe(0);
     const adapter = fs.readFileSync(path.join(out, "adapter.ts"), "utf8");
     expect(adapter).toContain("export const mantineTextInputProps");
+  });
+});
+
+describe("--ui antd end to end", () => {
+  it("--ui antd reaches the emitted component in both spellings", async () => {
+    const dir = freshTmpDir("ui-target-antd");
+    const bare = path.join(dir, "Bare.tsx");
+    const pinned = path.join(dir, "Pinned.tsx");
+    expect(await main([zodFixture, "--ui", "antd", "--out", bare])).toBe(0);
+    expect(
+      await main([zodFixture, "--ui", "antd@6", "--out", pinned]),
+    ).toBe(0);
+    const code = fs.readFileSync(bare, "utf8");
+    expect(code).toContain('} from "antd";');
+    expect(code).toContain("{...antdTextInputProps(field)}");
+    // formstand owns state: antd's Form/Form.Item never appears.
+    expect(code).not.toContain("Form.Item");
+    // antd@6 IS antd — byte-identical output.
+    expect(fs.readFileSync(pinned, "utf8")).toBe(code);
+  });
+
+  it("unsupported antd versions fail loudly", async () => {
+    expect(await main([zodFixture, "--ui", "antd@5"])).toBe(1);
+    expect(await main([zodFixture, "--ui", "antd@4"])).toBe(1);
+  });
+
+  it("--ui antd --layout module writes the antd adapter (with JSX)", async () => {
+    const dir = freshTmpDir("ui-target-antd-module");
+    const out = path.join(dir, "ProfileForm");
+    expect(
+      await main([
+        zodFixture,
+        "--ui",
+        "antd",
+        "--layout",
+        "module",
+        "--out",
+        out,
+      ]),
+    ).toBe(0);
+    // The antd adapter renders JSX (its FieldError line) — adapter.tsx.
+    const adapter = fs.readFileSync(path.join(out, "adapter.tsx"), "utf8");
+    expect(adapter).toContain("export const antdTextInputProps");
   });
 });

@@ -15,8 +15,7 @@ export const MUI_VERSIONS: readonly MuiVersion[] = [5, 6, 7, 9];
 export const DEFAULT_MUI_VERSION: MuiVersion = 9;
 
 // The discriminated target the CLI threads to the emitters. Future phases
-// add more kits here (mantine, antd) — extend the union, do not widen `kit`
-// to string.
+// add more kits here — extend the union, do not widen `kit` to string.
 //
 // chakra carries no version: @chakra-ui/react 3 is the only major the
 // backend targets (v2 and older predate the compound-component API the
@@ -29,11 +28,19 @@ export const DEFAULT_MUI_VERSION: MuiVersion = 9;
 // 8.x (verified empirically; the one delta found is the `bdrs` style prop,
 // absent in 7) — but 9 is the only major the matrix verifies, so it is the
 // only accepted target. "mantine@9" is the explicit spelling.
+//
+// antd carries no version either: the backend targets antd 6 (the current
+// major, which peers react >=18 — React 19 natively in range). antd 5 also
+// runs on React 19 but only via the @ant-design/v5-patch-for-react-19 host
+// patch, and the emitted surface is verified against the v6 .d.ts only, so
+// 5 errors honestly rather than claiming support. "antd@6" is the explicit
+// spelling.
 export type UiTarget =
   | Readonly<{ kit: "plain" }>
   | Readonly<{ kit: "shadcn" }>
   | Readonly<{ kit: "chakra" }>
   | Readonly<{ kit: "mantine" }>
+  | Readonly<{ kit: "antd" }>
   | Readonly<{ kit: "mui"; version: MuiVersion }>;
 
 // The flag/config spelling of a target — what `--ui` and the config file's
@@ -46,10 +53,13 @@ export type Ui =
   | "chakra"
   | "chakra@3"
   | "mantine"
-  | "mantine@9";
+  | "mantine@9"
+  | "antd"
+  | "antd@6";
 
 // The list HELP and error messages show.
-export const UI_CHOICES = 'plain, mui, mui@<5|6|7|9>, shadcn, chakra, mantine';
+export const UI_CHOICES =
+  'plain, mui, mui@<5|6|7|9>, shadcn, chakra, mantine, antd';
 
 export type ParseUiResult =
   | Readonly<{ kind: "ok"; target: UiTarget }>
@@ -73,7 +83,7 @@ export const parseUiTarget = (value: string): ParseUiResult => {
       return versionText === undefined
         ? { kind: "ok", target: { kit } }
         : err(
-            `"${kit}" takes no version (only mui, chakra, and mantine are versioned), got "${value}"`,
+            `"${kit}" takes no version (only mui, chakra, mantine, and antd are versioned), got "${value}"`,
           );
     case "chakra": {
       // Bare "chakra" IS v3; "chakra@3" is the explicit spelling of the same
@@ -115,6 +125,33 @@ export const parseUiTarget = (value: string): ParseUiResult => {
       }
       return err(
         `unsupported mantine version "${versionText}"; v9 is the only supported major — use "mantine" or "mantine@9"`,
+      );
+    }
+    case "antd": {
+      // Bare "antd" IS v6 (the current major); "antd@6" is the explicit
+      // spelling. Only the current major is a target: antd 6 peers
+      // react >=18, so React 19 is natively in range; antd 5 nominally
+      // peers react >=16.9 but needs the @ant-design/v5-patch-for-react-19
+      // host patch on React 19 — and the emitted surface is verified
+      // against the v6 .d.ts only — so it errors rather than silently
+      // claim support; 4 and older predate the v5 CSS-in-JS rewrite and
+      // parts of the emitted surface (Flex, the Collapse items API, the
+      // `status` prop).
+      if (versionText === undefined || versionText === "6") {
+        return { kind: "ok", target: { kit: "antd" } };
+      }
+      if (/^[0-4]$/.test(versionText)) {
+        return err(
+          `antd@${versionText} is not supported: the backend emits the antd 5+ surface (Flex, the Collapse items API, status props), which antd ${versionText} does not have — and antd 4 and older predate the v5 CSS-in-JS rewrite; supported: "antd" (v6, also spelled "antd@6")`,
+        );
+      }
+      if (versionText === "5") {
+        return err(
+          `antd@5 is not supported: the backend targets the current antd major only — antd 5 can run on React 19 (host apps need the @ant-design/v5-patch-for-react-19 import), but generated output is verified against v6 only; use "antd" (or its explicit spelling "antd@6")`,
+        );
+      }
+      return err(
+        `unsupported antd version "${versionText}"; v6 is the only supported major — use "antd" or "antd@6"`,
       );
     }
     case "mui": {

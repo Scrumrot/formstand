@@ -12,6 +12,7 @@ import {
   type ObjectSpec,
   type SchemaImport,
   type VisualOptions,
+  antdAdapterSection,
   assertObjectRoot,
   chakraAdapterSection,
   collectUsage,
@@ -55,7 +56,7 @@ import type { MuiVersion } from "./uiTarget";
 // Requires formstand >= 0.7 (createFormHooks). Everything is a pure string
 // builder over the IR, like the single-file backends.
 
-export type ModuleUi = "plain" | "mui" | "shadcn" | "chakra" | "mantine";
+export type ModuleUi = "plain" | "mui" | "shadcn" | "chakra" | "mantine" | "antd";
 
 export type ModuleFile = Readonly<{
   // Forward-slash relative path inside the module folder.
@@ -352,6 +353,37 @@ const leafImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] => {
             { from: "../adapter", names: ["mantineTextInputProps"] },
           ];
       }
+    case "antd":
+      // No Form.Item (formstand owns state), so every non-boolean leaf is a
+      // Flex column of label + control + explicit FieldError line; the
+      // boolean Checkbox carries its label as children and no error line.
+      switch (spec.kind) {
+        case "boolean":
+          return [
+            { from: "antd", names: ["Checkbox"] },
+            { from: "../adapter", names: ["antdCheckboxProps"] },
+          ];
+        case "enum":
+          return [
+            { from: "antd", names: ["Flex", "Select"] },
+            { from: "../adapter", names: ["FieldError", "antdSelectProps"] },
+          ];
+        case "number":
+          return [
+            { from: "antd", names: ["Flex", "Input"] },
+            { from: "../adapter", names: ["FieldError", "antdNumberInputProps"] },
+          ];
+        case "date":
+          return [
+            { from: "antd", names: ["Flex", "Input"] },
+            { from: "../adapter", names: ["FieldError", "antdDateInputProps"] },
+          ];
+        default:
+          return [
+            { from: "antd", names: ["Flex", "Input"] },
+            { from: "../adapter", names: ["FieldError", "antdTextInputProps"] },
+          ];
+      }
     case "chakra":
       switch (spec.kind) {
         case "boolean":
@@ -545,6 +577,51 @@ const leafJsx = (
           ];
         }
       }
+    case "antd": {
+      // antd's error slot lives in Form.Item, which the generated code
+      // never uses (formstand owns state) — so leaves render an explicit
+      // label/control/FieldError column; ids wire the plain <label>.
+      const id = idAttr ?? `{${q("")}}`;
+      switch (spec.kind) {
+        case "boolean":
+          return [
+            `${indent}<Checkbox {...antdCheckboxProps(${varName})}>${labelAttr}</Checkbox>`,
+          ];
+        case "enum":
+          return [
+            `${indent}<Flex vertical gap="small">`,
+            `${indent}  <label htmlFor=${id}>${labelAttr}</label>`,
+            `${indent}  <Select`,
+            `${indent}    id=${id}`,
+            `${indent}    placeholder=${labelAttr}`,
+            `${indent}    options={[`,
+            ...spec.options.map(
+              (option) =>
+                `${indent}      { value: ${q(option)}, label: ${q(labelFromName(option))} },`,
+            ),
+            `${indent}    ]}`,
+            `${indent}    {...antdSelectProps(${varName})}`,
+            `${indent}  />`,
+            `${indent}  <FieldError field={${varName}} />`,
+            `${indent}</Flex>`,
+          ];
+        default: {
+          const builder =
+            spec.kind === "number"
+              ? "antdNumberInputProps"
+              : spec.kind === "date"
+                ? "antdDateInputProps"
+                : "antdTextInputProps";
+          return [
+            `${indent}<Flex vertical gap="small">`,
+            `${indent}  <label htmlFor=${id}>${labelAttr}</label>`,
+            `${indent}  <Input id=${id} {...${builder}(${varName})} />`,
+            `${indent}  <FieldError field={${varName}} />`,
+            `${indent}</Flex>`,
+          ];
+        }
+      }
+    }
     case "chakra":
       // Chakra 3 compound parts: Field.Root wires ids/aria between Label,
       // control, and ErrorText via context, so no id attribute is needed.
@@ -780,6 +857,63 @@ const objectShell = (
       }
       break;
     }
+    case "antd": {
+      const grid = gridStyleProps(cols);
+      switch (visual.sections) {
+        case "flat":
+          return cols === 1
+            ? [
+                `    <Flex vertical gap="middle">`,
+                "      <Typography.Title level={5}>",
+                ...headingLines("        "),
+                "      </Typography.Title>",
+                ...children,
+                "    </Flex>",
+              ]
+            : [
+                `    <div style={{ ${grid} }}>`,
+                `      <Typography.Title level={5} style={{ gridColumn: "1 / -1" }}>`,
+                ...headingLines("        "),
+                "      </Typography.Title>",
+                ...children,
+                "    </div>",
+              ];
+        case "panel":
+          return [
+            `    <Card variant="outlined">`,
+            `      <div style={{ ${grid} }}>`,
+            `        <Typography.Title level={5}${cols > 1 ? ` style={{ gridColumn: "1 / -1" }}` : ""}>`,
+            ...headingLines("          "),
+            "        </Typography.Title>",
+            ...children,
+            "      </div>",
+            "    </Card>",
+          ];
+        case "collapsible":
+          // The items API — children-panels are deprecated in antd 5.x+.
+          return [
+            "    <Collapse",
+            `      defaultActiveKey={["section"]}`,
+            "      items={[",
+            "        {",
+            `          key: "section",`,
+            "          label: (",
+            "            <Typography.Title level={5}>",
+            ...headingLines("              "),
+            "            </Typography.Title>",
+            "          ),",
+            "          children: (",
+            `            <div style={{ ${grid} }}>`,
+            ...children,
+            "            </div>",
+            "          ),",
+            "        },",
+            "      ]}",
+            "    />",
+          ];
+      }
+      break;
+    }
     case "chakra": {
       const grid = gridChakraProps(cols);
       switch (visual.sections) {
@@ -942,6 +1076,24 @@ const objectSectionImports = (
         ];
     }
   }
+  if (ui === "antd") {
+    switch (visual.sections) {
+      case "flat":
+        // Multi-column flat sections are a plain style-prop grid <div> —
+        // only the Title needs an import there.
+        return [
+          {
+            from: "antd",
+            names:
+              visual.columns === 1 ? ["Flex", "Typography"] : ["Typography"],
+          },
+        ];
+      case "panel":
+        return [{ from: "antd", names: ["Card", "Typography"] }];
+      case "collapsible":
+        return [{ from: "antd", names: ["Collapse", "Typography"] }];
+    }
+  }
   if (ui !== "mui") return [];
   switch (visual.sections) {
     case "flat":
@@ -981,6 +1133,33 @@ type ArrayShellParts = Readonly<{
 
 const arrayShell = (ui: ModuleUi, sectionLabel: string): ArrayShellParts => {
   switch (ui) {
+    case "antd":
+      return {
+        imports: [
+          { from: "antd", names: ["Button", "Flex", "Typography"] },
+        ],
+        rowOpen: [
+          `    <Flex vertical gap="middle" style={{ border: "1px solid #d9d9d9", borderRadius: 8, padding: 16 }}>`,
+        ],
+        rowClose: (removeExpr) => [
+          `      <Button htmlType="button" size="small" onClick={${removeExpr}}>`,
+          "        Remove",
+          "      </Button>",
+          "    </Flex>",
+        ],
+        listError: [
+          "      {rows.error ? (",
+          `        <Typography.Text role="alert" type="danger">`,
+          "          {rows.error[0]}",
+          "        </Typography.Text>",
+          "      ) : null}",
+        ],
+        addButton: (pushExpr, addLabel) => [
+          `      <Button htmlType="button" size="small" onClick={${pushExpr}}>`,
+          `        ${jsxText(addLabel)}`,
+          "      </Button>",
+        ],
+      };
     case "mantine":
       return {
         imports: [
@@ -1120,6 +1299,27 @@ type FormShell = Readonly<{
 
 const formShell = (ui: ModuleUi): FormShell => {
   switch (ui) {
+    case "antd":
+      return {
+        imports: [{ from: "antd", names: ["Button", "Flex"] }],
+        open: (naming) => [
+          "    <form",
+          `      onSubmit={${naming.formConst}.handleSubmit((data) => {`,
+          `        console.log("submit", data);`,
+          "      })}",
+          "      style={{ maxWidth: 640 }}",
+          "    >",
+          `      <Flex vertical gap="middle">`,
+        ],
+        close: [
+          `        <Button htmlType="submit" type="primary" disabled={submitting}>`,
+          `          {submitting ? "Submitting..." : "Submit"}`,
+          "        </Button>",
+          "      </Flex>",
+          "    </form>",
+        ],
+        bodyIndent: "        ",
+      };
     case "mantine":
       return {
         imports: [
@@ -1356,26 +1556,40 @@ const adapterFile = (
   // mui's Switch adapter also types its onChange with ChangeEvent, so a
   // boolean-only schema needs the import too; chakra's select is a native
   // <select> (ChangeEvent), but its Switch takes a details callback;
-  // mantine speaks DOM events everywhere (its Switch included).
+  // mantine speaks DOM events everywhere (its Switch included); antd's
+  // Select is value-shaped and its Checkbox speaks CheckboxChangeEvent, so
+  // only the Input adapters (text/number/date) need ChangeEvent there.
   const needsChangeEvent =
     needsText ||
     usage.number ||
     (ui === "mui" && (usage.enum || usage.boolean)) ||
     (ui === "chakra" && usage.enum) ||
     (ui === "mantine" && (usage.enum || usage.boolean));
-  const formstandValues = [
-    ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
-    ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
-  ];
+  // The antd adapter's own imports: Typography renders the FieldError line
+  // (gated with the error helpers on non-boolean usage), and the Checkbox
+  // adapter types its onChange with antd's own CheckboxChangeEvent.
+  const antdImports =
+    ui === "antd"
+      ? [
+          ...(usage.string || usage.date || usage.number || usage.enum
+            ? [`import { Typography } from "antd";`]
+            : []),
+          ...(usage.boolean
+            ? [`import type { CheckboxChangeEvent } from "antd";`]
+            : []),
+        ]
+      : [];
   return {
-    // Only the shadcn adapter renders JSX (its FieldError component); the
-    // mui and chakra adapters are prop builders.
-    path: ui === "shadcn" ? "adapter.tsx" : "adapter.ts",
+    // Only the shadcn and antd adapters render JSX (their FieldError
+    // components); the other kit adapters are prop builders.
+    path: ui === "shadcn" || ui === "antd" ? "adapter.tsx" : "adapter.ts",
     content: [
       HEADER,
       ...(needsChangeEvent ? [`import type { ChangeEvent } from "react";`] : []),
+      ...antdImports,
       "import {",
-      ...formstandValues.map((name) => `  ${name},`),
+      ...(usage.number ? ["  numberToInputText,", "  parseNumberText,"] : []),
+      ...(usage.date ? ["  dateToInputText,", "  parseDateText,"] : []),
       "  type UseFieldReturn,",
       `} from "formstand";`,
       "",
@@ -1385,7 +1599,9 @@ const adapterFile = (
           ? chakraAdapterSection(usage, "export ")
           : ui === "mantine"
             ? mantineAdapterSection(usage, "export ")
-            : shadcnAdapterSection(usage, "export "),
+            : ui === "antd"
+              ? antdAdapterSection(usage, "export ")
+              : shadcnAdapterSection(usage, "export "),
       "",
     ].join("\n"),
   };
@@ -1582,6 +1798,15 @@ const nestedListShell = (
   close: readonly string[];
 }> => {
   switch (ui) {
+    case "antd":
+      return {
+        imports: [{ from: "antd", names: ["Flex", "Typography"] }],
+        open: [
+          `    <Flex vertical gap="middle">`,
+          `      <Typography.Title level={5}>${jsxText(label)}</Typography.Title>`,
+        ],
+        close: ["    </Flex>"],
+      };
     case "mantine":
       return {
         imports: [{ from: "@mantine/core", names: ["Stack", "Title"] }],

@@ -38,6 +38,13 @@ export const mantineStubPaths: Readonly<Record<string, readonly string[]>> = {
   "@mantine/core": [posix(path.join(testsDir, "stubs", "mantine-core.d.ts"))],
 };
 
+// Maps "antd" onto the hand-written structural stub so antd output is
+// typechecked (not just parsed) without the real package installed (the
+// real 6.x .d.ts is exercised by the cli/matrix harness).
+export const antdStubPaths: Readonly<Record<string, readonly string[]>> = {
+  antd: [posix(path.join(testsDir, "stubs", "antd.d.ts"))],
+};
+
 // The shadcn stub declares ambient "@/components/ui/*" modules, so it joins
 // the program as an extra root file instead of a paths mapping.
 export const shadcnStubFile = path.join(testsDir, "stubs", "shadcn-ui.d.ts");

@@ -16,7 +16,8 @@ import type {
 
 // Code emitters: zod schema source, initial values, and the component
 // backends (plain HTML inputs bound via formstand's components; MUI,
-// shadcn/ui, Chakra UI v3, and Mantine 9 variants with inlined adapters).
+// shadcn/ui, Chakra UI v3, Mantine 9, and Ant Design 6 variants with
+// inlined adapters).
 // All backends share one IR walk
 // and one form scaffold (emitForm); a Backend supplies the leaf renderers,
 // section wrappers, and header imports, and the two kit backends also share
@@ -3481,6 +3482,454 @@ const mantineBackend = (visual: VisualOptions): Backend => {
 
 export const emitMantineForm = (options: EmitFormOptions): string =>
   emitForm(mantineBackend(options.visual ?? DEFAULT_VISUAL), options);
+
+// ---------------------------------------------------------------------------
+// Ant Design backend (antd 6)
+// ---------------------------------------------------------------------------
+
+// Emits against antd 6 (verified against the installed 6.5 .d.ts in
+// cli/matrix). The one hard rule: antd's own Form (Form.Item, name-based
+// bindings, its own store) is never emitted — formstand owns state, so the
+// generated code binds antd's INPUT components as controlled components:
+//
+// - Input is DOM-shaped (it extends InputHTMLAttributes), so text/number/
+//   date bind natively — number as Input inputMode="decimal" (antd's
+//   InputNumber is rejected on evidence: its onChange is
+//   (value: number | null), not an event) and date as Input type="date"
+//   (antd's DatePicker is dayjs-value-based, and the generated code pulls
+//   no date library).
+// - Select is a combobox with NO native-<select> sibling anywhere in antd,
+//   so the enum binding is the backend's one value-shaped adapter:
+//   onChange receives the selected value directly, value ?? null shows the
+//   placeholder, and there is no `name` (antd's Select renders no
+//   form-posting input).
+// - Checkbox binds booleans: its onChange is antd's own DOM-ish
+//   CheckboxChangeEvent (e.target.checked) and it has a real onBlur —
+//   unlike antd's Switch, which has NO onBlur prop at all and a
+//   value-shaped (checked, event) onChange, so Switch is rejected.
+// - Without Form.Item there is no built-in error slot: every non-boolean
+//   control paints `status="error"` and renders an explicit
+//   Typography.Text type="danger" line (the plain backend's error line, in
+//   antd's dialect), with a plain <label htmlFor>/id pair for the label.
+//
+// Sections render Flex/Typography.Title (flat), Card variant="outlined"
+// (panel), or Collapse via the items API (collapsible — children-panels
+// are deprecated in 5.x+); grids are style-prop CSS grids (gridStyleProps,
+// like the plain backend). No provider is required (ConfigProvider is
+// optional theming), and antd 6 peers react >=18 — no React-19 patch.
+
+export const antdAdapterSection = (usage: KindUsage, exp = ""): string => {
+  // Error text renders through the explicit FieldError line and `status`
+  // paints the control; both read fieldError, so every non-boolean leaf
+  // needs the helpers (Checkbox renders no error line, like the other
+  // backends' booleans).
+  const needsError = usage.string || usage.date || usage.number || usage.enum;
+  const errorHelper = [
+    ...FIELD_ERROR_HELPER,
+    "",
+    `${exp}const fieldStatus = (`,
+    "  field: Readonly<{ error: readonly string[] | undefined }>,",
+    '): "error" | undefined => (fieldError(field) !== undefined ? "error" : undefined);',
+    "",
+    `${exp}const FieldError = ({`,
+    "  field,",
+    "}: Readonly<{",
+    "  field: Readonly<{ error: readonly string[] | undefined }>;",
+    "}>) => {",
+    "  const message = fieldError(field);",
+    "  return message !== undefined ? (",
+    '    <Typography.Text role="alert" type="danger">',
+    "      {message}",
+    "    </Typography.Text>",
+    "  ) : null;",
+    "};",
+  ];
+  const textAdapter = [
+    "",
+    `${exp}const antdTextInputProps = <T extends string | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
+    "  name: field.path,",
+    '  value: field.value ?? "",',
+    "  status: fieldStatus(field),",
+    "  onChange: (e: ChangeEvent<HTMLInputElement>) => {",
+    "    const text = e.target.value;",
+    '    field.setValue((text === "" && field.emptyValue === null ? null : text) as T);',
+    "  },",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
+  // Input with inputMode="decimal": the native binding. antd's InputNumber
+  // widget is not DOM-shaped (onChange: (value: number | null)) — the plain
+  // input keeps the adapter identical in spirit to the other kits.
+  const numberAdapter = [
+    "",
+    `${exp}const antdNumberInputProps = <T extends number | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
+    '  inputMode: "decimal" as const,',
+    "  name: field.path,",
+    "  value: numberToInputText(field.value),",
+    "  status: fieldStatus(field),",
+    "  onChange: (e: ChangeEvent<HTMLInputElement>) => {",
+    "    const parsed = parseNumberText(e.target.value);",
+    '    field.setValue((parsed.kind === "number" ? parsed.value : field.emptyValue) as T);',
+    "  },",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
+  const dateAdapter = [
+    "",
+    `${exp}const antdDateInputProps = <T extends Date | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
+    '  type: "date" as const,',
+    "  name: field.path,",
+    "  value: dateToInputText(field.value),",
+    "  status: fieldStatus(field),",
+    "  onChange: (e: ChangeEvent<HTMLInputElement>) => {",
+    "    const parsed = parseDateText(e.target.value);",
+    '    field.setValue((parsed.kind === "date" ? parsed.value : field.emptyValue) as T);',
+    "  },",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
+  // The one value-shaped adapter: antd's Select is a combobox (no native
+  // <select> exists in antd), so onChange receives the value directly.
+  // value ?? null (not "") keeps the placeholder visible when empty, and
+  // there is no `name` — antd's Select renders no form-posting input.
+  const selectAdapter = [
+    "",
+    `${exp}const antdSelectProps = <T extends string | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
+    "  value: field.value ?? null,",
+    "  status: fieldStatus(field),",
+    "  onChange: (value: string) => field.setValue(value as T),",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
+  // Checkbox, not Switch: antd's Switch has no onBlur prop and a
+  // value-shaped (checked, event) onChange; Checkbox speaks antd's DOM-ish
+  // CheckboxChangeEvent (e.target.checked) and blurs like an input.
+  const checkboxAdapter = [
+    "",
+    `${exp}const antdCheckboxProps = <T extends boolean | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
+    "  name: field.path,",
+    "  checked: field.value ?? false,",
+    "  onChange: (e: CheckboxChangeEvent) => field.setValue(e.target.checked as T),",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
+  return [
+    "// ---- formstand → Ant Design adapter ----------------------------------------",
+    ...(needsError ? withExportPrefix(errorHelper, exp) : []),
+    ...(usage.string ? textAdapter : []),
+    ...(usage.number ? numberAdapter : []),
+    ...(usage.date ? dateAdapter : []),
+    ...(usage.enum ? selectAdapter : []),
+    ...(usage.boolean ? checkboxAdapter : []),
+  ].join("\n");
+};
+
+const antdBoundComponents = (usage: KindUsage): string => {
+  const propsType = boundFieldProps(usage);
+  const input = (
+    name: string,
+    builder: string,
+    fieldType: string,
+  ): readonly string[] => [
+    "",
+    `const ${name} = ({ form, path, label }: BoundFieldProps) => {`,
+    `  const field = useField<${fieldType}>(form, path);`,
+    "  return (",
+    '    <Flex vertical gap="small">',
+    "      <label htmlFor={path}>{label}</label>",
+    `      <Input id={path} {...${builder}(field)} />`,
+    "      <FieldError field={field} />",
+    "    </Flex>",
+    "  );",
+    "};",
+  ];
+  const select = [
+    "",
+    "const BoundSelectField = ({",
+    "  form,",
+    "  path,",
+    "  label,",
+    "  options,",
+    "}: BoundFieldProps & Readonly<{ options: readonly string[] }>) => {",
+    "  const field = useField<string | null | undefined>(form, path);",
+    "  return (",
+    '    <Flex vertical gap="small">',
+    "      <label htmlFor={path}>{label}</label>",
+    "      <Select",
+    "        id={path}",
+    "        placeholder={`Select ${label.toLowerCase()}`}",
+    "        options={options.map((option) => ({ value: option, label: option }))}",
+    "        {...antdSelectProps(field)}",
+    "      />",
+    "      <FieldError field={field} />",
+    "    </Flex>",
+    "  );",
+    "};",
+  ];
+  const checkbox = [
+    "",
+    "const BoundCheckboxField = ({ form, path, label }: BoundFieldProps) => {",
+    "  const field = useField<boolean | null | undefined>(form, path);",
+    "  return <Checkbox {...antdCheckboxProps(field)}>{label}</Checkbox>;",
+    "};",
+  ];
+  return [
+    ...propsType,
+    ...(usage.string
+      ? input("BoundTextField", "antdTextInputProps", "string | null | undefined")
+      : []),
+    ...(usage.number
+      ? input("BoundNumberField", "antdNumberInputProps", "number | null | undefined")
+      : []),
+    ...(usage.date
+      ? input("BoundDateField", "antdDateInputProps", "Date | null | undefined")
+      : []),
+    ...(usage.enum ? select : []),
+    ...(usage.boolean ? checkbox : []),
+  ].join("\n");
+};
+
+// A control rendered from a bound field variable, using the in-file antd
+// adapter builders — the discriminant select and each variant field of a
+// union (the path-typed Bound* components can't reach variant paths).
+const antdVariantLeaf = (
+  spec: FieldSpec,
+  fieldVar: string,
+  label: string,
+  level: number,
+): readonly string[] => {
+  const id = `{${fieldVar}.path}`;
+  switch (spec.kind) {
+    case "boolean":
+      return [
+        `${ind(level)}<Checkbox {...antdCheckboxProps(${fieldVar})}>${jsxText(label)}</Checkbox>`,
+      ];
+    case "enum":
+      return [
+        `${ind(level)}<Flex vertical gap="small">`,
+        `${ind(level + 1)}<label htmlFor=${id}>${jsxText(label)}</label>`,
+        `${ind(level + 1)}<Select`,
+        `${ind(level + 2)}id=${id}`,
+        `${ind(level + 2)}${jsxAttr("placeholder", `Select ${label.toLowerCase()}`)}`,
+        `${ind(level + 2)}options={[`,
+        ...spec.options.map(
+          (option) =>
+            `${ind(level + 3)}{ value: ${q(option)}, label: ${q(labelFromName(option))} },`,
+        ),
+        `${ind(level + 2)}]}`,
+        `${ind(level + 2)}{...antdSelectProps(${fieldVar})}`,
+        `${ind(level + 1)}/>`,
+        `${ind(level + 1)}<FieldError field={${fieldVar}} />`,
+        `${ind(level)}</Flex>`,
+      ];
+    case "string":
+    case "number":
+    case "date": {
+      const builder =
+        spec.kind === "number"
+          ? "antdNumberInputProps"
+          : spec.kind === "date"
+            ? "antdDateInputProps"
+            : "antdTextInputProps";
+      return [
+        `${ind(level)}<Flex vertical gap="small">`,
+        `${ind(level + 1)}<label htmlFor=${id}>${jsxText(label)}</label>`,
+        `${ind(level + 1)}<Input id=${id} {...${builder}(${fieldVar})} />`,
+        `${ind(level + 1)}<FieldError field={${fieldVar}} />`,
+        `${ind(level)}</Flex>`,
+      ];
+    }
+    case "object":
+    case "array":
+    case "tuple":
+    case "union":
+      return [
+        `${ind(level)}{/* unreachable: containers never bind as a variant field */}`,
+      ];
+  }
+};
+
+const antdLeaf = boundLeaf("BoundCheckboxField");
+
+const antdBackend = (visual: VisualOptions): Backend => {
+  const cols = visual.columns;
+  // Section grids are style-prop CSS grids (the plain backend's
+  // gridStyleProps — antd has no grid-container primitive beyond Row/Col
+  // span math); section roots span the parent grid's full row.
+  const grid = gridStyleProps(cols);
+  const span = cols > 1 ? ` style={{ gridColumn: "1 / -1" }}` : "";
+  const sectionOpen = (label: string, level: number): readonly string[] => {
+    switch (visual.sections) {
+      case "flat":
+        // The 1-column default reads as a vertical Flex; multi-column flows
+        // a grid.
+        return cols === 1
+          ? [
+              `${ind(level)}<Flex vertical gap="middle">`,
+              `${ind(level + 1)}<Typography.Title level={5}>${jsxText(label)}</Typography.Title>`,
+            ]
+          : [
+              `${ind(level)}<div style={{ ${grid}, gridColumn: "1 / -1" }}>`,
+              `${ind(level + 1)}<Typography.Title level={5} style={{ gridColumn: "1 / -1" }}>${jsxText(label)}</Typography.Title>`,
+            ];
+      case "panel":
+        return [
+          `${ind(level)}<Card variant="outlined"${span}>`,
+          `${ind(level + 1)}<div style={{ ${grid} }}>`,
+          `${ind(level + 2)}<Typography.Title level={5}${cols > 1 ? ` style={{ gridColumn: "1 / -1" }}` : ""}>${jsxText(label)}</Typography.Title>`,
+        ];
+      case "collapsible":
+        // One Collapse per section (mirroring the MUI backend), via the
+        // items API — children-panels are deprecated in antd 5.x+.
+        return [
+          `${ind(level)}<Collapse`,
+          `${ind(level + 1)}defaultActiveKey={["section"]}`,
+          ...(cols > 1
+            ? [`${ind(level + 1)}style={{ gridColumn: "1 / -1" }}`]
+            : []),
+          `${ind(level + 1)}items={[`,
+          `${ind(level + 2)}{`,
+          `${ind(level + 3)}key: "section",`,
+          `${ind(level + 3)}label: <Typography.Title level={5}>${jsxText(label)}</Typography.Title>,`,
+          `${ind(level + 3)}children: (`,
+          `${ind(level + 4)}<div style={{ ${grid} }}>`,
+        ];
+    }
+  };
+  const sectionClose = (level: number): readonly string[] => {
+    switch (visual.sections) {
+      case "flat":
+        return [`${ind(level)}${cols === 1 ? "</Flex>" : "</div>"}`];
+      case "panel":
+        return [`${ind(level + 1)}</div>`, `${ind(level)}</Card>`];
+      case "collapsible":
+        return [
+          `${ind(level + 4)}</div>`,
+          `${ind(level + 3)}),`,
+          `${ind(level + 2)}},`,
+          `${ind(level + 1)}]}`,
+          `${ind(level)}/>`,
+        ];
+    }
+  };
+
+  return {
+  header: (usage, arrays, root) => {
+    const hasLeaf = hasLeafUsage(usage);
+    // Static-leaf usage gates the Bound* components (and their FieldFormApi
+    // type): union controls render raw antd elements from hoisted hooks.
+    const hasStaticLeaf = hasLeafUsage(collectStaticUsage(root));
+    const hasSection = arrays.length > 0 || anyAddressableObjectField(root);
+    const needsError = usage.string || usage.date || usage.number || usage.enum;
+    const antdImports = [
+      "Button",
+      ...(hasSection && visual.sections === "panel" ? ["Card"] : []),
+      ...(usage.boolean ? ["Checkbox"] : []),
+      ...(hasSection && visual.sections === "collapsible" ? ["Collapse"] : []),
+      // Flex is the stack primitive: the form body always, non-boolean
+      // leaves for their label/control/error column.
+      "Flex",
+      ...(usage.string || usage.date || usage.number ? ["Input"] : []),
+      ...(usage.enum ? ["Select"] : []),
+      // Typography.Title heads sections; Typography.Text renders the
+      // explicit error line (no Form.Item means no built-in error slot).
+      ...(hasSection || needsError ? ["Typography"] : []),
+    ];
+    const formstandValueImports = [
+      ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
+      ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
+      ...(hasLeaf ? ["useField"] : []),
+      ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
+      ...(arrays.length > 0 ? ["useFieldArray"] : []),
+      "useForm",
+      "useIsSubmitting",
+    ];
+    const formstandTypeImports = [
+      // FieldFormApi is referenced only by the Bound* components' props type.
+      ...(hasStaticLeaf ? ["FieldFormApi"] : []),
+      ...(hasLeaf ? ["UseFieldReturn"] : []),
+    ];
+    return [
+      // Select's adapter is value-shaped and Checkbox speaks antd's own
+      // CheckboxChangeEvent, so only the Input adapters need ChangeEvent.
+      ...(usage.string || usage.date || usage.number
+        ? [`import type { ChangeEvent } from "react";`]
+        : []),
+      "import {",
+      ...antdImports.map((name) => `  ${name},`),
+      ...(usage.boolean ? ["  type CheckboxChangeEvent,"] : []),
+      `} from "antd";`,
+      "import {",
+      ...formstandValueImports.map((name) => `  ${name},`),
+      ...formstandTypeImports.map((name) => `  type ${name},`),
+      `} from "formstand";`,
+      `import { z } from "zod";`,
+    ];
+  },
+  preamble: (usage, staticUsage) => [
+    antdAdapterSection(usage),
+    antdBoundComponents(staticUsage),
+    "",
+  ],
+  leaf: antdLeaf,
+  variantLeaf: antdVariantLeaf,
+  objectSection: (label, level, body) => [
+    ...sectionOpen(label, level),
+    ...body,
+    ...sectionClose(level),
+  ],
+  arraySection: (entry, level, rowBody) => [
+    ...sectionOpen(entry.label, level),
+    `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
+    `${ind(level + 2)}<Flex`,
+    `${ind(level + 3)}key={row.id}`,
+    `${ind(level + 3)}vertical`,
+    `${ind(level + 3)}gap="middle"`,
+    `${ind(level + 3)}style={{ border: "1px solid #d9d9d9", borderRadius: 8, padding: 16 }}`,
+    `${ind(level + 2)}>`,
+    ...rowBody,
+    `${ind(level + 3)}<Button htmlType="button" size="small" onClick={() => ${entry.hookName}.remove(index)}>`,
+    `${ind(level + 4)}Remove`,
+    `${ind(level + 3)}</Button>`,
+    `${ind(level + 2)}</Flex>`,
+    `${ind(level + 1)}))}`,
+    `${ind(level + 1)}<Button htmlType="button" size="small" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
+    `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
+    `${ind(level + 1)}</Button>`,
+    ...sectionClose(level),
+  ],
+  bodyLevel: 4,
+  formOpen: [
+    "    <form",
+    "      onSubmit={form.handleSubmit((data) => {",
+    `        console.log("submit", data);`,
+    "      })}",
+    "      style={{ maxWidth: 640 }}",
+    "    >",
+    `      <Flex vertical gap="middle">`,
+  ],
+  formClose: [
+    `        <Button htmlType="submit" type="primary" disabled={submitting}>`,
+    `          {submitting ? "Submitting..." : "Submit"}`,
+    "        </Button>",
+    "      </Flex>",
+    "    </form>",
+  ],
+  };
+};
+
+export const emitAntdForm = (options: EmitFormOptions): string =>
+  emitForm(antdBackend(options.visual ?? DEFAULT_VISUAL), options);
 
 // ---------------------------------------------------------------------------
 // Custom template backend (leaf-override for an arbitrary UI kit)
