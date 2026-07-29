@@ -15,8 +15,10 @@ import type {
   FieldValue,
   PathDepth,
 } from "../core/fieldPath";
+import { shouldValidateOn } from "../core/mode";
 import { getAtPath } from "../core/path";
 import type { FormState } from "../core/types";
+import type { FieldValidationResult } from "../core/validation";
 import type { FieldPathArg } from "./useField";
 
 type ReadonlyStore<T> = Pick<
@@ -38,6 +40,13 @@ export type FieldArrayFormApi = Readonly<{
   arrayInsert(path: string, index: number, item: unknown): void;
   arrayMove(path: string, from: number, to: number): void;
   arraySwap(path: string, a: number, b: number): void;
+  // OPTIONAL, probed before use: when present (createForm always provides
+  // it), the hook's op wrappers revalidate the array path after an op under
+  // the same change-trigger gate useField.setValue applies — so a visible
+  // array-level error (z.array().min()) tracks push/remove instead of going
+  // stale. NOTE for custom implementations: a hand-rolled FieldArrayFormApi
+  // without this member still works — the ops simply skip revalidation.
+  validateField?(path: string): FieldValidationResult;
 }>;
 
 export type FieldArrayEntry<TItem> = Readonly<{
@@ -356,29 +365,68 @@ export function useFieldArray<TItem = unknown>(
   // can never disagree.
   const ids = deriveIds(form.store, path, items).ids;
 
+  // After every op, revalidate the ARRAY path under the exact change-trigger
+  // gate useField.setValue applies (same shouldValidateOn call), so a visible
+  // array-level error (z.array().min()) tracks push/remove instead of going
+  // stale. The result is deliberately unhandled — the core self-routes async
+  // schemas (validateField returns { kind: "pending" } having already started
+  // the async pass). validateField is probed: a hand-rolled FieldArrayFormApi
+  // without it skips revalidation instead of crashing. The IMPERATIVE
+  // form.arrayPush/arrayRemove stay non-revalidating on purpose — the same
+  // layering as form.setValue (raw write) vs useField.setValue (write + gate).
+  const revalidate = useCallback(() => {
+    const state = form.store.getState();
+    if (
+      shouldValidateOn(
+        "change",
+        state.mode,
+        state.reValidateMode,
+        state.submitCount > 0,
+        state.touched[path] ?? false,
+      )
+    ) {
+      form.validateField?.(path);
+    }
+  }, [form, path]);
+
   const push = useCallback(
-    (item: TItem) => form.arrayPush(path, item),
-    [form, path],
+    (item: TItem) => {
+      form.arrayPush(path, item);
+      revalidate();
+    },
+    [form, path, revalidate],
   );
 
   const remove = useCallback(
-    (index: number) => form.arrayRemove(path, index),
-    [form, path],
+    (index: number) => {
+      form.arrayRemove(path, index);
+      revalidate();
+    },
+    [form, path, revalidate],
   );
 
   const insert = useCallback(
-    (index: number, item: TItem) => form.arrayInsert(path, index, item),
-    [form, path],
+    (index: number, item: TItem) => {
+      form.arrayInsert(path, index, item);
+      revalidate();
+    },
+    [form, path, revalidate],
   );
 
   const move = useCallback(
-    (from: number, to: number) => form.arrayMove(path, from, to),
-    [form, path],
+    (from: number, to: number) => {
+      form.arrayMove(path, from, to);
+      revalidate();
+    },
+    [form, path, revalidate],
   );
 
   const swap = useCallback(
-    (a: number, b: number) => form.arraySwap(path, a, b),
-    [form, path],
+    (a: number, b: number) => {
+      form.arraySwap(path, a, b);
+      revalidate();
+    },
+    [form, path, revalidate],
   );
 
   const fields = useMemo<readonly FieldArrayEntry<TItem>[]>(

@@ -9,16 +9,23 @@
 // is no module singleton to reset — every render is a fresh form. The
 // chakra and mantine outputs assume the host mounts their provider (same
 // policy as the generated code documents), so the tests wrap them exactly
-// as the playground's bridges do; antd needs no provider.
+// as the playground's bridges do; antd needs no provider. The mui MODULE
+// demo (the fourth backend, --layout module) joins the number-typing and
+// array-error runs below — it IS a module singleton (createForm at module
+// scope), so it gets reset between tests; MUI needs no provider either.
 import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
 import { MantineProvider } from "@mantine/core";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { StrictMode, type ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { focusField } from "../../src/react/focusError";
 import { AntdOnboardingForm } from "../../examples/src/generated/AntdOnboardingForm";
 import { ChakraOnboardingForm } from "../../examples/src/generated/ChakraOnboardingForm";
 import { MantineOnboardingForm } from "../../examples/src/generated/MantineOnboardingForm";
+import {
+  OnboardingForm,
+  onboardingForm,
+} from "../../examples/src/generated/OnboardingForm";
 
 // Any console.error — a React key warning, a controlled/uncontrolled flip,
 // an act() violation — is a generated-output bug; fail loudly on it.
@@ -27,6 +34,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  cleanup();
+  onboardingForm.reset();
   vi.restoreAllMocks();
 });
 
@@ -103,16 +112,26 @@ const expectNumberEditing = (ui: ReactElement): void => {
 
 // Submitting the blank form (emergencyContacts starts []) must surface the
 // ARRAY-level error (z.array().min(1, "add at least one contact")) — the
-// single-file emitters render the hook's .error like the module layout.
+// single-file emitters render the hook's .error like the module layout —
+// announced via role="alert" in every kit. And the error must not go STALE:
+// after the failed submit the revalidate gate is open (submitCount > 0,
+// reValidateMode onChange), so adding + filling a contact row clears the
+// line through useFieldArray's op revalidation, with no second submit.
 const expectArrayLevelError = async (ui: ReactElement): Promise<void> => {
   render(<StrictMode>{ui}</StrictMode>);
   expect(screen.queryByText("add at least one contact")).toBeNull();
   const form = document.querySelector("form");
   expect(form).not.toBeNull();
   fireEvent.submit(form as HTMLFormElement);
-  expect(
-    await screen.findByText("add at least one contact"),
-  ).toBeDefined();
+  const error = await screen.findByText("add at least one contact");
+  expect(error.closest('[role="alert"]')).not.toBeNull();
+
+  fireEvent.click(
+    screen.getByRole("button", { name: "Add emergency contacts" }),
+  );
+  const name = screen.getAllByLabelText("Name")[0] as HTMLInputElement;
+  fireEvent.change(name, { target: { value: "Grace" } });
+  expect(screen.queryByText("add at least one contact")).toBeNull();
 };
 
 describe("generated kit demos (untouched single-file output, one schema, three --ui backends)", () => {
@@ -174,6 +193,17 @@ describe("generated kit demos (untouched single-file output, one schema, three -
 
   it("shows the array-level error on submit through --ui antd", async () => {
     await expectArrayLevelError(<AntdOnboardingForm />);
+  });
+
+  // The mui MODULE demo (--layout module) must satisfy the same number-
+  // editing contract as the single-file kits — its adapter file inlines the
+  // same useNumberText hook the single-file emitters embed.
+  it("preserves typed number text through the mui module demo", () => {
+    expectNumberEditing(<OnboardingForm />);
+  });
+
+  it("shows the array-level error on submit through the mui module demo", async () => {
+    await expectArrayLevelError(<OnboardingForm />);
   });
 
   // antd's Select renders no `name` anywhere, so the focus helpers reach it

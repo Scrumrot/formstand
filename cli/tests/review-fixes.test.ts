@@ -229,3 +229,74 @@ describe("single-file and module emitters agree on panel chrome", () => {
     expect(moduleOut).not.toContain("CardHeader");
   });
 });
+
+describe("hoisted NumberProps consts respect the identifier registry (0.11 cycle)", () => {
+  // A schema engineered so a real field's binding var lands exactly on the
+  // DERIVED `${var}NumberProps` const the kit backends hoist next to a
+  // number binding: without paired reservation, the generated file declares
+  // the same const twice and fails tsc.
+  const collisionSchema = z.object({
+    items: z.array(
+      z.object({ price: z.number(), priceNumberProps: z.string() }),
+    ),
+    payment: z.discriminatedUnion("method", [
+      z.object({
+        method: z.literal("card"),
+        price: z.number(),
+        priceNumberProps: z.string(),
+      }),
+      z.object({ method: z.literal("cash") }),
+    ]),
+  });
+
+  it("single-file union hoists dodge a field named like the derived const", () => {
+    const dir = freshTmpDir("review-numberprops-single");
+    const schemaFile = path.join(dir, "schema.ts");
+    fs.writeFileSync(
+      schemaFile,
+      emitZodSchema(fromZod(collisionSchema), "s"),
+      "utf8",
+    );
+    const code = emitMuiForm({
+      ir: fromZod(collisionSchema),
+      formName: "CollisionForm",
+      schemaImport: { name: "s", from: "./schema", kind: "named" },
+    });
+    const file = path.join(dir, "CollisionForm.tsx");
+    fs.writeFileSync(file, code, "utf8");
+
+    // The number binding reserved BOTH paymentPrice and the derived
+    // paymentPriceNumberProps, so the sibling string field suffixes to
+    // paymentPriceNumberProps2 instead of redeclaring the hoisted const.
+    expect(code).toContain(
+      "const paymentPriceNumberProps = useMuiNumberFieldProps(paymentPrice);",
+    );
+    expect(code).toContain("paymentPriceNumberProps2");
+    expect(typecheckDiagnostics([file], muiStubPaths)).toEqual([]);
+  });
+
+  it("module rows and union sections dodge a field named like the derived const", () => {
+    const files = emitModuleForm({
+      ir: fromZod(collisionSchema),
+      formName: "CollisionForm",
+      ui: "mui",
+      schemaImport: { name: "s", from: "./schema", kind: "named" },
+      schemaSource: emitZodSchema(fromZod(collisionSchema), "s"),
+    });
+
+    const items = files.find((f) => f.path === "sections/ItemsSection.tsx");
+    expect(items?.content).toContain(
+      "const priceNumberProps = useMuiNumberFieldProps(price);",
+    );
+    expect(items?.content).toContain("priceNumberProps2");
+
+    const dir = freshTmpDir("review-numberprops-module");
+    const written = files.map((file) => {
+      const dest = path.join(dir, file.path);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, file.content, "utf8");
+      return dest;
+    });
+    expect(typecheckDiagnostics(written, muiStubPaths)).toEqual([]);
+  });
+});

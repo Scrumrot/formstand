@@ -103,7 +103,9 @@ type KitBridgeProps = Readonly<{ children: ReactNode }>;
 // system with BOTH layers scoped under .chakra-scope (the same scoping
 // pattern as the shadcn tabs) and puts that class on the wrapper. Root
 // selectors (html/body/:root) become the scope element itself; everything
-// else nests under it. Exported for the scoping regression test.
+// else nests under it. The scoping regression test asserts this through
+// ChakraBridge (rendering it and inspecting the injected CSS), so nothing
+// here needs exporting beyond the bridge itself.
 const scopeSelector = (selector: string): string =>
   selector
     .split(",")
@@ -115,7 +117,7 @@ const scopeSelector = (selector: string): string =>
     })
     .join(", ");
 
-export const chakraScopedSystem = createSystem(
+const chakraScopedSystem = createSystem(
   {
     ...defaultConfig,
     globalCss: Object.fromEntries(

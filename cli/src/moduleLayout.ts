@@ -9,9 +9,11 @@ import {
   gridStyleProps,
   hasLeafUsage,
   type KindUsage,
+  type KitUi,
   type ObjectSpec,
   type SchemaImport,
   type VisualOptions,
+  allocateBindingVar,
   antdAdapterSection,
   assertObjectRoot,
   chakraAdapterSection,
@@ -58,7 +60,10 @@ import type { MuiVersion } from "./uiTarget";
 // Requires formstand >= 0.7 (createFormHooks). Everything is a pure string
 // builder over the IR, like the single-file backends.
 
-export type ModuleUi = "plain" | "mui" | "shadcn" | "chakra" | "mantine" | "antd";
+// "plain" plus the kit backends — KitUi is the shared parameter type of the
+// kit snippet helpers (kitScalarBinding et al.), so the module layout's ui
+// axis derives from it instead of restating the kit list.
+export type ModuleUi = "plain" | KitUi;
 
 export type ModuleFile = Readonly<{
   // Forward-slash relative path inside the module folder.
@@ -316,12 +321,12 @@ const leafImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] => {
         case "date":
           return [
             { from: "@mui/material", names: ["TextField"] },
-            { from: "../adapter", names: ["muiDateFieldProps"] },
+            { from: "../adapter", names: [kitScalarBinding("mui", "date")] },
           ];
         default:
           return [
             { from: "@mui/material", names: ["TextField"] },
-            { from: "../adapter", names: ["muiTextFieldProps"] },
+            { from: "../adapter", names: [kitScalarBinding("mui", "string")] },
           ];
       }
     case "mantine":
@@ -350,12 +355,15 @@ const leafImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] => {
         case "date":
           return [
             { from: "@mantine/core", names: ["TextInput"] },
-            { from: "../adapter", names: ["mantineDateInputProps"] },
+            { from: "../adapter", names: [kitScalarBinding("mantine", "date")] },
           ];
         default:
           return [
             { from: "@mantine/core", names: ["TextInput"] },
-            { from: "../adapter", names: ["mantineTextInputProps"] },
+            {
+              from: "../adapter",
+              names: [kitScalarBinding("mantine", "string")],
+            },
           ];
       }
     case "antd":
@@ -384,12 +392,18 @@ const leafImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] => {
         case "date":
           return [
             { from: "antd", names: ["Flex", "Input"] },
-            { from: "../adapter", names: ["FieldError", "antdDateInputProps"] },
+            {
+              from: "../adapter",
+              names: ["FieldError", kitScalarBinding("antd", "date")],
+            },
           ];
         default:
           return [
             { from: "antd", names: ["Flex", "Input"] },
-            { from: "../adapter", names: ["FieldError", "antdTextInputProps"] },
+            {
+              from: "../adapter",
+              names: ["FieldError", kitScalarBinding("antd", "string")],
+            },
           ];
       }
     case "chakra":
@@ -415,12 +429,18 @@ const leafImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] => {
         case "date":
           return [
             { from: "@chakra-ui/react", names: ["Field", "Input"] },
-            { from: "../adapter", names: ["chakraDateInputProps", "fieldError"] },
+            {
+              from: "../adapter",
+              names: [kitScalarBinding("chakra", "date"), "fieldError"],
+            },
           ];
         default:
           return [
             { from: "@chakra-ui/react", names: ["Field", "Input"] },
-            { from: "../adapter", names: ["chakraTextInputProps", "fieldError"] },
+            {
+              from: "../adapter",
+              names: [kitScalarBinding("chakra", "string"), "fieldError"],
+            },
           ];
       }
     case "shadcn":
@@ -455,7 +475,7 @@ const leafImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] => {
             { from: "@/components/ui/label", names: ["Label"] },
             {
               from: "../adapter",
-              names: ["FieldError", "shadcnNumberInputProps"],
+              names: ["FieldError", kitScalarBinding("shadcn", "number")],
             },
           ];
         case "date":
@@ -464,14 +484,17 @@ const leafImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] => {
             { from: "@/components/ui/label", names: ["Label"] },
             {
               from: "../adapter",
-              names: ["FieldError", "shadcnDateInputProps"],
+              names: ["FieldError", kitScalarBinding("shadcn", "date")],
             },
           ];
         default:
           return [
             { from: "@/components/ui/input", names: ["Input"] },
             { from: "@/components/ui/label", names: ["Label"] },
-            { from: "../adapter", names: ["FieldError", "shadcnTextInputProps"] },
+            {
+              from: "../adapter",
+              names: ["FieldError", kitScalarBinding("shadcn", "string")],
+            },
           ];
       }
   }
@@ -1254,7 +1277,7 @@ const arrayShell = (ui: ModuleUi, sectionLabel: string): ArrayShellParts => {
         ],
         listError: [
           "      {rows.error ? (",
-          `        <Text c="red">{rows.error[0]}</Text>`,
+          `        <Text role="alert" c="red">{rows.error[0]}</Text>`,
           "      ) : null}",
         ],
         addButton: (pushExpr, addLabel) => [
@@ -1277,7 +1300,7 @@ const arrayShell = (ui: ModuleUi, sectionLabel: string): ArrayShellParts => {
         ],
         listError: [
           "      {rows.error ? (",
-          `        <Text color="red.500">{rows.error[0]}</Text>`,
+          `        <Text role="alert" color="red.500">{rows.error[0]}</Text>`,
           "      ) : null}",
         ],
         addButton: (pushExpr, addLabel) => [
@@ -1305,7 +1328,7 @@ const arrayShell = (ui: ModuleUi, sectionLabel: string): ArrayShellParts => {
         ],
         listError: [
           "      {rows.error ? (",
-          `        <Typography color="error">{rows.error[0]}</Typography>`,
+          `        <Typography role="alert" color="error">{rows.error[0]}</Typography>`,
           "      ) : null}",
         ],
         addButton: (pushExpr, addLabel) => [
@@ -2052,12 +2075,18 @@ const nestedArrayComponents = (
     "field",
     "rows",
   ]);
-  const leafVar = (name: string): string => {
+  const leafVar = (name: string, spec: FieldSpec): string => {
     // camelIdent, not camelCase: a field named "new"/"delete" would otherwise
-    // emit a reserved-word const declaration.
+    // emit a reserved-word const declaration. Number leaves reserve their
+    // hoisted `${var}NumberProps` const too (numberPropsBindings emits it),
+    // so a sibling field named like the derived const can't collide.
     const base = camelIdent(name).length === 0 ? "value" : camelIdent(name);
-    const varName = `${base}${identifierSuffix(base, rowVarUsed)}`;
-    rowVarUsed.add(varName);
+    const { varName, reserved } = allocateBindingVar(
+      base,
+      spec.kind === "number",
+      rowVarUsed,
+    );
+    reserved.forEach((n) => rowVarUsed.add(n));
     return varName;
   };
   const objectPieces: readonly Piece[] =
@@ -2078,7 +2107,7 @@ const nestedArrayComponents = (
             return { body: overBudgetFieldBody(field.name) };
           }
           if (isScalarSpec(field.spec)) {
-            const varName = leafVar(field.name);
+            const varName = leafVar(field.name, field.spec);
             return {
               body: leafControl(
                 ui,
@@ -2414,8 +2443,14 @@ const tupleSectionFile = (
   const used = new Set<string>(["dirty", "valid", "heading"]);
   const elements = spec.elements.map((element, index) => {
     const base = `element${index}`;
-    const varName = `${base}${identifierSuffix(base, used)}`;
-    used.add(varName);
+    // Number elements reserve their hoisted `${var}NumberProps` const too
+    // (numberPropsBindings emits it next to the field hooks).
+    const { varName, reserved } = allocateBindingVar(
+      base,
+      element.kind === "number",
+      used,
+    );
+    reserved.forEach((n) => used.add(n));
     return { element, index, varName, scalar: isScalarSpec(element) };
   });
   const scalarElements = elements.filter((e) => e.scalar);
@@ -2573,11 +2608,17 @@ const arraySectionFile = (
   const rowVars = itemLeaves.map((field) => {
     // camelIdent, not camelCase: these become const bindings, and a field
     // named "new"/"delete" would otherwise emit a reserved-word declaration.
+    // Number leaves reserve their hoisted `${var}NumberProps` const too
+    // (numberPropsBindings emits it next to the field hooks).
     const base =
       camelIdent(field.name).length === 0 ? "value" : camelIdent(field.name);
-    const name = `${base}${identifierSuffix(base, used)}`;
-    used.add(name);
-    return { field, varName: name };
+    const { varName, reserved } = allocateBindingVar(
+      base,
+      field.spec.kind === "number",
+      used,
+    );
+    reserved.forEach((n) => used.add(n));
+    return { field, varName };
   });
 
   // A discriminated-union item can't be bound at a dynamic array-row path
@@ -2836,7 +2877,13 @@ const unionSectionFile = (
         if (acc.seen.has(field.name)) return acc;
         const base =
           camelIdent(field.name).length === 0 ? "value" : camelIdent(field.name);
-        const varName = `${base}${identifierSuffix(base, acc.used)}`;
+        // Number bindings reserve their hoisted `${var}NumberProps` const
+        // too (numberPropsBindings emits it next to the field hooks).
+        const { varName, reserved } = allocateBindingVar(
+          base,
+          field.spec.kind === "number",
+          acc.used,
+        );
         const binding = {
           name: field.name,
           label: field.label,
@@ -2845,7 +2892,7 @@ const unionSectionFile = (
         };
         const isCommon = commonNames.has(field.name);
         return {
-          used: new Set([...acc.used, varName]),
+          used: new Set([...acc.used, ...reserved]),
           seen: new Set([...acc.seen, field.name]),
           common: isCommon ? [...acc.common, binding] : acc.common,
           variant: isCommon ? acc.variant : [...acc.variant, binding],

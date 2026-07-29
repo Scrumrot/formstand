@@ -10,6 +10,7 @@ import {
   DEFAULT_MUI_VERSION,
   MUI_VERSIONS,
   UI_CHOICES,
+  UI_KITS,
   parseUiTarget,
 } from "./uiTarget";
 import { type Template, isTemplate } from "./template";
@@ -42,14 +43,13 @@ import {
   joinModuleFiles,
 } from "./moduleLayout";
 
-// The --ui flag spelling and mui enumeration, derived from UI_CHOICES /
-// MUI_VERSIONS (uiTarget.ts is the single source of truth) so HELP can't
-// drift from what the parser accepts:
-// "plain, mui, mui@<5|6|7|9>, ..." -> "plain|mui[@5|6|7|9]|...".
-const UI_FLAG_CHOICES = UI_CHOICES.replace(
-  /mui, mui@<([^>]+)>/,
-  "mui[@$1]",
-).replace(/, /g, "|");
+// The --ui flag spelling and mui enumeration, built from UI_KITS /
+// MUI_VERSIONS directly (uiTarget.ts is the single source of truth) so HELP
+// can't drift from what the parser accepts — no regex surgery on the prose
+// UI_CHOICES string: "plain|mui[@5|6|7|9]|shadcn|...".
+const UI_FLAG_CHOICES = UI_KITS.map((kit) =>
+  kit === "mui" ? `mui[@${MUI_VERSIONS.join("|")}]` : kit,
+).join("|");
 const MUI_CHOICE_LIST = MUI_VERSIONS.map((version) => `mui@${version}`).join(
   ", ",
 );

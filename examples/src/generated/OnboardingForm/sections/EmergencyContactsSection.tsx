@@ -68,7 +68,7 @@ export const EmergencyContactsSection = ({
         />
       ))}
       {rows.error ? (
-        <Typography color="error">{rows.error[0]}</Typography>
+        <Typography role="alert" color="error">{rows.error[0]}</Typography>
       ) : null}
       <Button type="button" onClick={() => rows.push(emptyEmergencyContactsItem)}>
         {"Add emergency contacts"}

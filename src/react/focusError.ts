@@ -57,8 +57,17 @@ const nameMatchesAny = (
 // CSS attribute-selector value for an arbitrary path: quoted, with the two
 // characters that are active inside a double-quoted CSS string escaped —
 // so paths with dots ("address.region") and hostile names select literally.
+// Control characters (a stray "\n" in a computed path, DEL) are additionally
+// hex-escaped (`\a `, with CSS's required trailing space): a raw newline
+// inside a quoted CSS string is a parse error, and querySelectorAll on an
+// invalid selector THROWS instead of matching nothing.
 const cssQuoted = (value: string): string =>
-  `"${value.replace(/[\\"]/g, (ch) => `\\${ch}`)}"`;
+  `"${value
+    .replace(/[\\"]/g, (ch) => `\\${ch}`)
+    .replace(
+      /[\x00-\x1f\x7f]/g,
+      (ch) => `\\${ch.codePointAt(0)!.toString(16)} `,
+    )}"`;
 
 // The id fallback for composite widgets that render no `name` at all (e.g.
 // antd's Select — no form-posting input exists in it) but DO forward
@@ -100,8 +109,15 @@ const pathCandidates = (
 ): readonly HTMLElement[] => {
   const controls = namedControls(scope);
   const named = controls.filter((el) => nameMatchesAny(el, paths));
+  // "Has a named match" is judged against focus-CANDIDATE controls only: a
+  // hidden name-carrier (react-select's <input type="hidden" name={path}>
+  // value input, notably) can never take focus, so letting it claim the
+  // path would suppress the id fallback and leave the real, id={path}
+  // focusable control unreachable. The `named` list itself stays
+  // pre-filter — callers apply isFocusCandidate to the merged result.
+  const focusableControls = controls.filter(isFocusCandidate);
   const unnamedPaths = paths.filter(
-    (p) => !controls.some((el) => nameMatchesAny(el, [p])),
+    (p) => !focusableControls.some((el) => nameMatchesAny(el, [p])),
   );
   const byId = unnamedPaths.flatMap((p) => idMatches(scope, p));
   return inDomOrder([...new Set([...named, ...byId])]);

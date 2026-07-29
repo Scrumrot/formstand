@@ -329,7 +329,7 @@ export const MantineOnboardingForm = () => {
             </Stack>
           ))}
           {emergencyContactsArray.error ? (
-            <Text c="red">{emergencyContactsArray.error[0]}</Text>
+            <Text role="alert" c="red">{emergencyContactsArray.error[0]}</Text>
           ) : null}
           <Button type="button" variant="outline" size="sm" onClick={() => emergencyContactsArray.push(emptyEmergencyContactsItem)}>
             {"Add emergency contacts"}

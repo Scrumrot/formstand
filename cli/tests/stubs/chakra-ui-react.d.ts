@@ -38,7 +38,8 @@ export declare const Heading: (
 ) => ReactElement;
 
 export declare const Text: (
-  props: StyleProps & Readonly<{ color?: string; children?: ReactNode }>,
+  props: StyleProps &
+    Readonly<{ color?: string; role?: string; children?: ReactNode }>,
 ) => ReactElement;
 
 export declare const Button: (

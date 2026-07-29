@@ -1,5 +1,71 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **`useFieldArray` ops revalidate the array path** — push/remove/insert/
+  move/swap now re-run field validation on the array's own path after the
+  op, under the exact change-trigger gate `useField.setValue` applies
+  (`shouldValidateOn` over mode/reValidateMode/submitCount/touched). A
+  visible array-level error (`z.array().min(1)` after a failed submit) used
+  to go stale: adding the row didn't clear the message, and removing below
+  `.min` raised nothing until the next submit. The gate means `onSubmit`
+  forms stay silent before the first submit, exactly like typing in a
+  field. `FieldArrayFormApi` gains an OPTIONAL `validateField` member
+  (probed before use) — hand-rolled implementations without it keep
+  working, their ops simply skip revalidation. The IMPERATIVE
+  `form.arrayPush`/`arrayRemove` stay non-revalidating on purpose, matching
+  the `form.setValue` vs `useField.setValue` layering.
+- **`focusFirstError` / `focusField`: a hidden name-carrier no longer
+  suppresses the `[id=path]` fallback.** Composite widgets like
+  react-select render a hidden `<input name={path}>` for form posting next
+  to a focusable control carrying `id={path}`; the hidden input claimed the
+  path as "named" even though it can never take focus, so the id element
+  was never tried. Whether a path counts as name-matched is now judged
+  against focus-CANDIDATE controls only.
+- **`focusFirstError` / `focusField` harden against control characters in
+  paths** — the CSS-string escaping behind the `[id=path]` fallback now
+  hex-escapes control characters (`\n`, DEL, ...), so a hostile or
+  accidental newline in a path builds a valid selector that matches
+  nothing instead of making `querySelectorAll` throw.
+
+## formstand-cli Unreleased
+
+### Fixed
+
+- **Hoisted `${var}NumberProps` consts respect the identifier registry.** A
+  schema field literally named like the derived const of a kit number
+  binding (`price` + `priceNumberProps`) generated a duplicate `const`
+  declaration — the file failed tsc — in single-file union bodies AND
+  module-layout rows/tuple/union sections. Number bindings now reserve BOTH
+  their own var and the derived `${var}NumberProps` name through the
+  identifier-suffix machinery at allocation time, so the colliding field
+  suffixes (`priceNumberProps2`) instead.
+- **Array-level error lines announce in every kit**: the mui / chakra /
+  mantine array errors (both the single-file emitters and the module
+  layout's list shells) now carry `role="alert"`, matching plain, shadcn,
+  and antd — a `z.array().min()` message is announced to assistive tech,
+  not just painted.
+- **Version-floor wording updated for the shipped release**: the emitted
+  antd comment, its non-emitted twin, the inline `useNumberText` note, and
+  the README now say "formstand >= 0.11.0" for the focus-helper `[id=path]`
+  fallback (previously "formstand > 0.10.0", written before 0.11.0 had a
+  number).
+
+### Changed
+
+- **HELP's `--ui` line is built from structure, not regex surgery**: the
+  flag spelling derives from the new `UI_KITS` list plus `MUI_VERSIONS`
+  (exported from `uiTarget.ts`, which `UI_CHOICES` also derives from), so a
+  new kit or MUI major updates every listing at once. The rendered text is
+  unchanged.
+- Internal consolidation: the string/date adapter names at the module
+  layout's import sites and the single-file Bound* component bodies now
+  route through `kitScalarBinding` — one production feeds both the import
+  and JSX spellings per kit — and `ModuleUi` derives from the exported
+  `KitUi` union instead of restating the kit list.
+
 ## 0.11.0 — 2026-07-29
 
 ### Added

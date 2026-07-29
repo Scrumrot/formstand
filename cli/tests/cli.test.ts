@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { isInvokedAsScript, main } from "../src/cli";
+import { MUI_VERSIONS } from "../src/uiTarget";
 import {
   defaultExportFixture,
   freshTmpDir,
@@ -108,6 +109,31 @@ describe("cli main", () => {
     expect(await main([zodFixture, "--columns"])).toBe(1);
     expect(await main([zodFixture, "--export", "nope", "--out", "x.tsx"])).toBe(1);
     expect(await main(["--help"])).toBe(0);
+  });
+
+  it("HELP renders the derived --ui choices and every mui@N spelling", async () => {
+    const chunks: string[] = [];
+    const spy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation((chunk) => {
+        chunks.push(String(chunk));
+        return true;
+      });
+    const code = await main(["--help"]);
+    spy.mockRestore();
+    expect(code).toBe(0);
+    const help = chunks.join("");
+
+    // The flag spelling is built from UI_KITS/MUI_VERSIONS directly — the
+    // kit list is pinned here on purpose (a dropped kit should fail), while
+    // the mui enumeration tracks MUI_VERSIONS so a new major can't go stale.
+    expect(help).toContain(
+      `--ui <plain|mui[@${MUI_VERSIONS.join("|")}]|shadcn|chakra|mantine|antd>`,
+    );
+    // ...and the prose enumerates each pinnable major.
+    MUI_VERSIONS.forEach((version) => {
+      expect(help).toContain(`mui@${version}`);
+    });
   });
 
   it("--sections/--columns reach the emitted component", async () => {

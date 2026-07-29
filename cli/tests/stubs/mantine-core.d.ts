@@ -83,7 +83,7 @@ export declare const Title: (
 ) => ReactElement;
 
 export declare const Text: (
-  props: Readonly<{ c?: string; children?: ReactNode }>,
+  props: Readonly<{ c?: string; role?: string; children?: ReactNode }>,
 ) => ReactElement;
 
 export declare const Button: (

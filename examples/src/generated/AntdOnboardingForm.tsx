@@ -175,10 +175,10 @@ const useAntdNumberInputProps = <T extends number | null | undefined>(
 });
 
 // No `name`: antd's Select renders no form-posting input. formstand's
-// focus helpers reach it anyway on formstand > 0.10.0 — their [id=path]
-// fallback finds the combobox through the id={path} the markup sets
-// (antd forwards it to the real input); on 0.10.0 and older,
-// focusField/focusFirstError skip selects.
+// focus helpers reach it anyway on formstand >= 0.11.0 — their
+// [id=path] fallback finds the combobox through the id={path} the
+// markup sets (antd forwards it to the real input); on 0.10.x and
+// older, focusField/focusFirstError skip selects.
 const antdSelectProps = <T extends string | null | undefined>(
   field: UseFieldReturn<T>,
 ) => ({

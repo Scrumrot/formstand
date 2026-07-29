@@ -369,22 +369,23 @@ describe("generated components", () => {
 
   // Single-file array sections render the array-level error (rows.error in
   // the module layout; here the hook const) — a z.array().min(1) message
-  // must not be invisible. profileSchema's array is `contacts`.
+  // must not be invisible, and every kit's line carries role="alert" so the
+  // message is announced, not just painted.
   it("single-file array sections render the array-level error per kit", () => {
     expect(plain.profile.code).toContain(
       '{contactsArray.error ? <p role="alert">{contactsArray.error[0]}</p> : null}',
     );
     expect(mui.profile.code).toContain(
-      '<Typography color="error">{contactsArray.error[0]}</Typography>',
+      '<Typography role="alert" color="error">{contactsArray.error[0]}</Typography>',
     );
     expect(shadcn.profile.code).toContain(
       '{contactsArray.error ? <p role="alert">{contactsArray.error[0]}</p> : null}',
     );
     expect(chakra.profile.code).toContain(
-      '<Text color="red.500">{contactsArray.error[0]}</Text>',
+      '<Text role="alert" color="red.500">{contactsArray.error[0]}</Text>',
     );
     expect(mantine.profile.code).toContain(
-      '<Text c="red">{contactsArray.error[0]}</Text>',
+      '<Text role="alert" c="red">{contactsArray.error[0]}</Text>',
     );
     expect(antd.profile.code).toContain(
       "{contactsArray.error ? (",

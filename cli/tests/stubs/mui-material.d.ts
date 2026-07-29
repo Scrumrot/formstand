@@ -43,6 +43,7 @@ export declare const Typography: (
   props: Readonly<{
     variant?: string;
     color?: string;
+    role?: string;
     sx?: SxProps;
     children?: ReactNode;
   }>,

@@ -57,9 +57,23 @@ export type Ui =
   | "antd"
   | "antd@6";
 
+// The kits in presentation order — the one structured source both choice
+// strings below (and HELP's flag spelling in cli.ts) derive from, so adding
+// a kit updates every listing at once.
+export const UI_KITS: readonly UiTarget["kit"][] = [
+  "plain",
+  "mui",
+  "shadcn",
+  "chakra",
+  "mantine",
+  "antd",
+];
+
 // The list HELP and error messages show — the mui enumeration derives from
-// MUI_VERSIONS so a new major can't leave this stale.
-export const UI_CHOICES = `plain, mui, mui@<${MUI_VERSIONS.join("|")}>, shadcn, chakra, mantine, antd`;
+// UI_KITS/MUI_VERSIONS so a new kit or major can't leave this stale.
+export const UI_CHOICES = UI_KITS.map((kit) =>
+  kit === "mui" ? `mui, mui@<${MUI_VERSIONS.join("|")}>` : kit,
+).join(", ");
 
 export type ParseUiResult =
   | Readonly<{ kind: "ok"; target: UiTarget }>

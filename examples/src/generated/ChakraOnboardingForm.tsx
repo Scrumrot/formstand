@@ -356,7 +356,7 @@ export const ChakraOnboardingForm = () => {
             </Stack>
           ))}
           {emergencyContactsArray.error ? (
-            <Text color="red.500">{emergencyContactsArray.error[0]}</Text>
+            <Text role="alert" color="red.500">{emergencyContactsArray.error[0]}</Text>
           ) : null}
           <Button type="button" variant="outline" size="sm" onClick={() => emergencyContactsArray.push(emptyEmergencyContactsItem)}>
             {"Add emergency contacts"}

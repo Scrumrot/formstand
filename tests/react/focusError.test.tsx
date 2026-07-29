@@ -240,4 +240,23 @@ describe("focusFirstError id fallback", () => {
     expect(focusFirstError({ email: ["required"] })).toBe(true);
     expect(document.activeElement).toBe(screen.getByLabelText("Named"));
   });
+
+  it("a hidden name-carrier does not suppress the id fallback (react-select composite)", () => {
+    // react-select's shape: a hidden input carries name={path} for form
+    // posting while the focusable combobox input carries id={path}. The
+    // hidden carrier can never take focus, so it must not claim the path
+    // as "named" and starve the id fallback.
+    render(
+      <form>
+        <input type="hidden" name="address.region" defaultValue="west" />
+        <input type="text" id="address.region" aria-label="Region combobox" />
+      </form>,
+    );
+    expect(focusFirstError({ "address.region": ["pick a region"] })).toBe(
+      true,
+    );
+    expect(document.activeElement).toBe(
+      screen.getByLabelText("Region combobox"),
+    );
+  });
 });

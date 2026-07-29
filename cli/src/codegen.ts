@@ -660,6 +660,31 @@ export const identifierSuffix = (base: string, used: ReadonlySet<string>): strin
   return used.has(base) ? next(2) : "";
 };
 
+// Allocate a field-binding var through the identifierSuffix used-set
+// machinery, reserving the DERIVED `${varName}NumberProps` const alongside a
+// number binding's own name (kit number bindings hoist that const next to
+// the field hook): the chosen suffix must leave BOTH names free, and both
+// are registered — so a schema field literally named "priceNumberProps" can
+// collide with neither the hoisted const of a "price" number field
+// (whichever allocates first) nor vice versa. Non-number vars reserve just
+// themselves. Callers add every name in `reserved` to their used set.
+export const allocateBindingVar = (
+  base: string,
+  isNumber: boolean,
+  used: ReadonlySet<string>,
+): Readonly<{ varName: string; reserved: readonly string[] }> => {
+  if (!isNumber) {
+    const varName = `${base}${identifierSuffix(base, used)}`;
+    return { varName, reserved: [varName] };
+  }
+  const free = (candidate: string): boolean =>
+    !used.has(candidate) && !used.has(`${candidate}NumberProps`);
+  const next = (n: number): string =>
+    free(`${base}${n}`) ? `${n}` : next(n + 1);
+  const varName = `${base}${free(base) ? "" : next(2)}`;
+  return { varName, reserved: [varName, `${varName}NumberProps`] };
+};
+
 const arrayEntry = (raw: RawArrayEntry, suffix: string): ArrayEntry => {
   const pascal = pascalJoin(raw.segments);
   return {
@@ -806,11 +831,18 @@ const unionEntry = (
     .reduce((acc, field) => {
       if (acc.seen.has(field.name)) return acc;
       const base = camelJoin([...raw.segments, field.name]);
-      const varName = `${base}${identifierSuffix(base, acc.used)}`;
+      // Number bindings reserve their hoisted `${var}NumberProps` const too
+      // (kit backends emit it next to the hooks; see unionHooks) so a field
+      // literally named like a derived const can't collide with it.
+      const { varName, reserved } = allocateBindingVar(
+        base,
+        field.spec.kind === "number",
+        acc.used,
+      );
       const binding = { ...field, varName };
       const isCommon = commonNames.has(field.name);
       return {
-        used: new Set([...acc.used, varName]),
+        used: new Set([...acc.used, ...reserved]),
         commonBindings: isCommon
           ? [...acc.commonBindings, binding]
           : acc.commonBindings,
@@ -1818,7 +1850,7 @@ const FIELD_ERROR_HELPER: readonly string[] = [
 // REPLICATES formstand's own useNumberInput (src/react/fields.tsx)
 // semantics exactly — emitted INLINE instead of imported because generated
 // output keeps its formstand >= 0.3.0 floor (the library only exports
-// useNumberInput after 0.10.0): local raw text while editing, keystrokes that parse (shared
+// useNumberInput from 0.11.0): local raw text while editing, keystrokes that parse (shared
 // parseNumberText rules) pushed to the form, partial entries ("-", "1.",
 // "1e") kept locally, blur snapping the display to the canonical value, and
 // an external form-value change while editing dropping the raw text
@@ -2240,7 +2272,7 @@ const muiBoundComponents = (usage: KindUsage): string => {
     "",
     "const BoundTextField = ({ form, path, label }: BoundFieldProps) => {",
     "  const field = useField<string | null | undefined>(form, path);",
-    "  return <TextField fullWidth label={label} {...muiTextFieldProps(field)} />;",
+    `  return <TextField fullWidth label={label} {...${kitScalarBinding("mui", "string")}(field)} />;`,
     "};",
   ];
   const number = [
@@ -2255,7 +2287,7 @@ const muiBoundComponents = (usage: KindUsage): string => {
     "",
     "const BoundDateField = ({ form, path, label }: BoundFieldProps) => {",
     "  const field = useField<Date | null | undefined>(form, path);",
-    "  return <TextField fullWidth label={label} {...muiDateFieldProps(field)} />;",
+    `  return <TextField fullWidth label={label} {...${kitScalarBinding("mui", "date")}(field)} />;`,
     "};",
   ];
   const select = [
@@ -2429,7 +2461,7 @@ const muiBackend = (visual: VisualOptions, version: MuiVersion): Backend => {
     // The array-level error (z.array().min(...) etc.) — the same per-kit
     // line the module layout's list shell renders.
     `${ind(level + 1)}{${entry.hookName}.error ? (`,
-    `${ind(level + 2)}<Typography color="error">{${entry.hookName}.error[0]}</Typography>`,
+    `${ind(level + 2)}<Typography role="alert" color="error">{${entry.hookName}.error[0]}</Typography>`,
     `${ind(level + 1)}) : null}`,
     `${ind(level + 1)}<Button type="button" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
     `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
@@ -2592,7 +2624,7 @@ const shadcnBoundComponents = (usage: KindUsage): string => {
     "  return (",
     '    <div className="grid gap-2">',
     "      <Label htmlFor={path}>{label}</Label>",
-    "      <Input id={path} {...shadcnTextInputProps(field)} />",
+    `      <Input id={path} {...${kitScalarBinding("shadcn", "string")}(field)} />`,
     "      <FieldError field={field} />",
     "    </div>",
     "  );",
@@ -2605,7 +2637,7 @@ const shadcnBoundComponents = (usage: KindUsage): string => {
     "  return (",
     '    <div className="grid gap-2">',
     "      <Label htmlFor={path}>{label}</Label>",
-    "      <Input id={path} {...shadcnNumberInputProps(field)} />",
+    `      <Input id={path} {...${kitScalarBinding("shadcn", "number")}(field)} />`,
     "      <FieldError field={field} />",
     "    </div>",
     "  );",
@@ -2618,7 +2650,7 @@ const shadcnBoundComponents = (usage: KindUsage): string => {
     "  return (",
     '    <div className="grid gap-2">',
     "      <Label htmlFor={path}>{label}</Label>",
-    "      <Input id={path} {...shadcnDateInputProps(field)} />",
+    `      <Input id={path} {...${kitScalarBinding("shadcn", "date")}(field)} />`,
     "      <FieldError field={field} />",
     "    </div>",
     "  );",
@@ -3003,11 +3035,11 @@ const chakraBoundComponents = (usage: KindUsage): string => {
   return [
     ...propsType,
     ...(usage.string
-      ? input("chakraTextInputProps", "string | null | undefined")
+      ? input(kitScalarBinding("chakra", "string"), "string | null | undefined")
       : []),
     ...(usage.number ? number : []),
     ...(usage.date
-      ? input("chakraDateInputProps", "Date | null | undefined")
+      ? input(kitScalarBinding("chakra", "date"), "Date | null | undefined")
       : []),
     ...(usage.enum ? select : []),
     ...(usage.boolean ? switchField : []),
@@ -3206,7 +3238,7 @@ const chakraBackend = (visual: VisualOptions): Backend => {
     // The array-level error — the same per-kit line the module layout's
     // list shell renders.
     `${ind(level + 1)}{${entry.hookName}.error ? (`,
-    `${ind(level + 2)}<Text color="red.500">{${entry.hookName}.error[0]}</Text>`,
+    `${ind(level + 2)}<Text role="alert" color="red.500">{${entry.hookName}.error[0]}</Text>`,
     `${ind(level + 1)}) : null}`,
     `${ind(level + 1)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
     `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
@@ -3403,11 +3435,19 @@ const mantineBoundComponents = (usage: KindUsage): string => {
   return [
     ...propsType,
     ...(usage.string
-      ? input("BoundTextField", "mantineTextInputProps", "string | null | undefined")
+      ? input(
+          "BoundTextField",
+          kitScalarBinding("mantine", "string"),
+          "string | null | undefined",
+        )
       : []),
     ...(usage.number ? number : []),
     ...(usage.date
-      ? input("BoundDateField", "mantineDateInputProps", "Date | null | undefined")
+      ? input(
+          "BoundDateField",
+          kitScalarBinding("mantine", "date"),
+          "Date | null | undefined",
+        )
       : []),
     ...(usage.enum ? select : []),
     ...(usage.boolean ? switchField : []),
@@ -3581,7 +3621,7 @@ const mantineBackend = (visual: VisualOptions): Backend => {
     // The array-level error — the same per-kit line the module layout's
     // list shell renders.
     `${ind(level + 1)}{${entry.hookName}.error ? (`,
-    `${ind(level + 2)}<Text c="red">{${entry.hookName}.error[0]}</Text>`,
+    `${ind(level + 2)}<Text role="alert" c="red">{${entry.hookName}.error[0]}</Text>`,
     `${ind(level + 1)}) : null}`,
     `${ind(level + 1)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
     `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
@@ -3731,17 +3771,17 @@ export const antdAdapterSection = (usage: KindUsage, exp = ""): string => {
   // value ?? null (not "") keeps the placeholder visible when empty, and
   // there is no `name` — antd's Select renders no form-posting input.
   // Because of that, formstand's focus helpers can't reach it through their
-  // name walk: on formstand > 0.10.0, focusField/focusFirstError fall back
+  // name walk: on formstand >= 0.11.0, focusField/focusFirstError fall back
   // to the element whose `id` is exactly the path (the generated markup
   // sets id={path}, which antd forwards to its real combobox input); on
-  // 0.10.0 and older, selects are simply skipped by the focus helpers.
+  // 0.10.x and older, selects are simply skipped by the focus helpers.
   const selectAdapter = [
     "",
     "// No `name`: antd's Select renders no form-posting input. formstand's",
-    "// focus helpers reach it anyway on formstand > 0.10.0 — their [id=path]",
-    "// fallback finds the combobox through the id={path} the markup sets",
-    "// (antd forwards it to the real input); on 0.10.0 and older,",
-    "// focusField/focusFirstError skip selects.",
+    "// focus helpers reach it anyway on formstand >= 0.11.0 — their",
+    "// [id=path] fallback finds the combobox through the id={path} the",
+    "// markup sets (antd forwards it to the real input); on 0.10.x and",
+    "// older, focusField/focusFirstError skip selects.",
     `${exp}const antdSelectProps = <T extends string | null | undefined>(`,
     "  field: UseFieldReturn<T>,",
     ") => ({",
@@ -3844,11 +3884,19 @@ const antdBoundComponents = (usage: KindUsage): string => {
   return [
     ...propsType,
     ...(usage.string
-      ? input("BoundTextField", "antdTextInputProps", "string | null | undefined")
+      ? input(
+          "BoundTextField",
+          kitScalarBinding("antd", "string"),
+          "string | null | undefined",
+        )
       : []),
     ...(usage.number ? number : []),
     ...(usage.date
-      ? input("BoundDateField", "antdDateInputProps", "Date | null | undefined")
+      ? input(
+          "BoundDateField",
+          kitScalarBinding("antd", "date"),
+          "Date | null | undefined",
+        )
       : []),
     ...(usage.enum ? select : []),
     ...(usage.boolean ? checkbox : []),
