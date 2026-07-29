@@ -18,6 +18,10 @@ export const flightSearchSchema = z.object({
   cruiseAltitude: z
     .int("whole feet")
     .min(1000, "min 1000 ft")
-    .max(45000, "max FL450"),
+    .max(45000, "max FL450")
+    // The units-bearing helper text (the CLI maps .describe()/.meta
+    // descriptions onto each kit's helper slot — plain renders a muted
+    // .zf-help line under the control).
+    .describe("feet MSL"),
   instrumentFlight: z.boolean(),
 });

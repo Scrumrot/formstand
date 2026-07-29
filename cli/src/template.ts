@@ -44,6 +44,14 @@ export type TemplateLeafContext = Readonly<{
   // (a prop reference or an array literal). `""` for non-enum kinds.
   // Build your kit's option markup from it, e.g. Mantine `data={${options}}`.
   options: string;
+  // The field's captured description (zod `.describe()` / `.meta`, or the
+  // member's JSDoc in type mode), as a JS EXPRESSION evaluating to
+  // `string | undefined` — a prop reference inside the generated Bound
+  // wrapper, a quoted literal inside a union block. `""` when the schema
+  // carries no description for this position: gate your markup on it
+  // (`ctx.description === "" ? ... : ...`) so undescribed schemas stay
+  // clean. The plain fallback renders it as a muted helper line.
+  description: string;
 }>;
 
 export type TemplateImport = Readonly<{

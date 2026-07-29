@@ -30,6 +30,7 @@ import { collidingSchema } from "./fixtures/collidingSchema";
 import { leafFreeSchema } from "./fixtures/leafFreeSchema";
 import { tupleSchema } from "./fixtures/tupleSchema";
 import { nestedArraySchema } from "./fixtures/nestedArraySchema";
+import { describedSchema } from "./fixtures/describedSchema";
 
 type Emitter = (options: EmitFormOptions) => string;
 
@@ -107,6 +108,7 @@ const fixturesFor = (
   leafFree: Readonly<{ file: string; code: string }>;
   tuple: Readonly<{ file: string; code: string }>;
   nestedArray: Readonly<{ file: string; code: string }>;
+  described: Readonly<{ file: string; code: string }>;
   panel: Readonly<{ file: string; code: string }>;
   collapsible: Readonly<{ file: string; code: string }>;
   live?: Readonly<{ file: string; code: string }>;
@@ -125,6 +127,16 @@ const fixturesFor = (
     nestedArraySchema,
     "nestedArraySchema",
     "NestedArrayForm",
+    dir,
+  );
+  // The .describe()/.meta() helper-text fixture: every kit's description
+  // slot (Bound props, inline variant literals, tuple elements) compiles in
+  // the same per-backend program.
+  const described = generate(
+    emit,
+    describedSchema,
+    "describedSchema",
+    "DescribedForm",
     dir,
   );
   // The visual axes ride in the same program: panel + 2 columns and
@@ -168,6 +180,7 @@ const fixturesFor = (
     leafFree,
     tuple,
     nestedArray,
+    described,
     panel,
     collapsible,
     ...(scaffoldVariants ?? {}),
@@ -178,6 +191,7 @@ const fixturesFor = (
       leafFree.file,
       tuple.file,
       nestedArray.file,
+      described.file,
       panel.file,
       collapsible.file,
       ...(scaffoldVariants === undefined

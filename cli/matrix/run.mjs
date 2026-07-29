@@ -53,6 +53,39 @@ const schemas = await jiti.import(pathToFileURL(fixtureFile).href);
 const kitchenSinkIr = api.fromZod(schemas.kitchenSinkSchema);
 const nestedArrayIr = api.fromZod(schemas.nestedArrayStressSchema);
 
+// A described twin of the kitchen sink: a description on every scalar leaf
+// (containers recursed, union variant fields and tuple elements included),
+// so each kit's helper-text slot — Bound component props, inline union
+// literals, module-layout field files, mantine's native `description` prop,
+// chakra's Field.HelperText, antd's Typography.Text line — typechecks
+// against the real installed .d.ts in BOTH layouts. The text carries quotes
+// to exercise the emitters' escaping. Derived from the IR (plain data), so
+// the shared playground fixture stays untouched.
+const withDescriptions = (spec) => {
+  switch (spec.kind) {
+    case "object":
+      return {
+        ...spec,
+        fields: spec.fields.map((f) => ({ ...f, spec: withDescriptions(f.spec) })),
+      };
+    case "array":
+      return { ...spec, item: withDescriptions(spec.item) };
+    case "tuple":
+      return { ...spec, elements: spec.elements.map(withDescriptions) };
+    case "union":
+      return {
+        ...spec,
+        variants: spec.variants.map((v) => ({
+          ...v,
+          fields: v.fields.map((f) => ({ ...f, spec: withDescriptions(f.spec) })),
+        })),
+      };
+    default:
+      return { ...spec, description: 'helper "text" — 1,000 lbs' };
+  }
+};
+const describedIr = withDescriptions(kitchenSinkIr);
+
 const posix = (p) => p.replace(/\\/g, "/");
 const nm = (p) => posix(path.join(matrixDir, "node_modules", p));
 
@@ -277,6 +310,7 @@ const generateKit = ({ alias, emitSingle, moduleUi, moduleExtra, probe }) => {
       columns: 3,
     }),
     single("NestedArrayForm", nestedArrayIr, "nestedArrayStressSchema"),
+    single("KitchenSinkDescribed", describedIr, "kitchenSinkSchema"),
     // The scaffold modes (--live / --form-prop) ride ONE combined variant
     // per kit — deliberately not the full mode × chrome × layout
     // cross-product: the scaffold is a shared layer (the per-kit deltas are
@@ -306,6 +340,12 @@ const generateKit = ({ alias, emitSingle, moduleUi, moduleExtra, probe }) => {
       nestedArrayIr,
       "nestedArrayStressSchema",
       "NestedArrayForm",
+    ),
+    ...moduleForm(
+      "KitchenSinkDescribed",
+      describedIr,
+      "kitchenSinkSchema",
+      "KitchenSinkDescribedForm",
     ),
   ];
   const readGenerated = (rel) => fs.readFileSync(path.join(dir, rel), "utf8");

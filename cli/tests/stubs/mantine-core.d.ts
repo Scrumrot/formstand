@@ -18,6 +18,7 @@ type StyleAttr = Readonly<{
 export declare const TextInput: (
   props: Readonly<{
     label?: ReactNode;
+    description?: ReactNode;
     error?: ReactNode;
     name?: string;
     value?: string;
@@ -34,6 +35,7 @@ export declare const TextInput: (
 export declare const NativeSelect: (
   props: Readonly<{
     label?: ReactNode;
+    description?: ReactNode;
     error?: ReactNode;
     name?: string;
     value?: string;
@@ -46,6 +48,7 @@ export declare const NativeSelect: (
 export declare const Switch: (
   props: Readonly<{
     label?: ReactNode;
+    description?: ReactNode;
     name?: string;
     checked?: boolean;
     onChange?: (event: ChangeEvent<HTMLInputElement>) => void;

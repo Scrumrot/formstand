@@ -46,6 +46,13 @@ describe("generated --live --form-prop demo (FlightSearchForm + consumer page)",
     fireEvent.change(passengers, { target: { value: "4" } });
     expect(panel.textContent).toContain('"passengers": 4');
 
+    // cruiseAltitude's zod .describe("feet MSL") flows into the generated
+    // helper line — the CLI's description mapping, visible in the DOM as
+    // plain's muted zf-help paragraph under the control.
+    const help = screen.getByText("feet MSL");
+    expect(help.tagName).toBe("P");
+    expect(help.className).toBe("zf-help");
+
     expect(console.error).not.toHaveBeenCalled();
   });
 

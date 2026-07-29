@@ -84,6 +84,20 @@ const isCallable = (type: ts.Type): boolean =>
   type.getCallSignatures().length > 0 ||
   type.getConstructSignatures().length > 0;
 
+// The TS analogue of zod's `.describe()`: the member's leading JSDoc
+// description (the free text before any @tags), straight off the property
+// symbol the checker already has — no extra AST walk. Whitespace-only
+// comments read as absent, mirroring fromZod's empty-describe rule.
+const jsdocDescription = (
+  checker: ts.TypeChecker,
+  prop: ts.Symbol,
+): string | undefined => {
+  const text = ts
+    .displayPartsToString(prop.getDocumentationComment(checker))
+    .trim();
+  return text === "" ? undefined : text;
+};
+
 const objectFields = (
   checker: ts.TypeChecker,
   type: ts.Type,
@@ -96,11 +110,16 @@ const objectFields = (
     const spec = walkType(checker, propType, NO_FLAGS, depth - 1);
     const optional =
       spec.optional || (prop.flags & ts.SymbolFlags.Optional) !== 0;
+    const description = jsdocDescription(checker, prop);
     return [
       {
         name: prop.getName(),
         label: labelFromName(prop.getName()),
-        spec: { ...spec, optional },
+        spec: {
+          ...spec,
+          optional,
+          ...(description === undefined ? {} : { description }),
+        },
       },
     ];
   });

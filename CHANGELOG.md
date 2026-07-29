@@ -83,6 +83,34 @@
   `onValuesChange` delivers — updating per keystroke, the map-driven case
   in miniature. Smoke-tested in the root suite (mount, type, assert the
   panel reflects the keystroke; no submit scaffold in the output).
+- **zod `.describe()` / `.meta({ description })` → generated helper text.**
+  The walkers capture a field's description into the IR — zod v4 stores
+  both spellings in ONE registry entry (`z.globalRegistry`, surfaced by the
+  schema's `description` getter; nothing on `def`), so the rule is simply
+  "the last `.describe()`/`.meta()` call wins", and across wrappers
+  (`z.number().describe("x").optional()` vs `.optional().describe("x")`)
+  the outermost entry present wins. Type mode captures the member's leading
+  JSDoc description the same way (and the generated zod schema re-emits it
+  as `.describe()`, outermost, so it round-trips). Emission per kit, both
+  layouts, union variant fields and tuple elements included: mui routes it
+  into `helperText` as `fieldError(field) ?? description` (the error keeps
+  the one slot while present), shadcn a muted
+  `<p className="text-sm text-muted-foreground">` and antd a
+  `Typography.Text type="secondary"` line — each rendered only while the
+  error line is not — chakra a `Field.HelperText` under the same guard,
+  mantine the native `description` prop (its own slot, coexists with
+  `error`), and plain an always-visible `<p className="zf-help">` line
+  (formstand's built-in components own the error slot internally).
+  Booleans are skipped where the control has no slot (MUI's
+  FormControlLabel/Switch, chakra's Switch.Root, antd's bare Checkbox);
+  shadcn/mantine/plain booleans render it. Custom templates receive the
+  description as `ctx.description` (an expression like `ctx.label`; `""`
+  when absent). Description-free schemas emit byte-identical output.
+  Adornments from `.meta` (unit prefixes/suffixes) are deliberately NOT
+  generated — the four kits' adornment APIs are value-shaped and mutually
+  incompatible (InputAdornment / rightSection / InputElement / suffix);
+  helper text covers the units case. Visible in the playground: the
+  flight-search demo's `cruiseAltitude` now carries `.describe("feet MSL")`.
 
 ## 0.12.0 — 2026-07-29
 

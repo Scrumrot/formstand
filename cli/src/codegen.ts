@@ -570,7 +570,12 @@ const zodExpr = (spec: FieldSpec, level: number): string => {
     }
   })();
   const withNullable = spec.nullable ? `${base}.nullable()` : base;
-  return spec.optional ? `${withNullable}.optional()` : withNullable;
+  const withOptional = spec.optional ? `${withNullable}.optional()` : withNullable;
+  // Outermost, after the wrappers — where fromZod's outermost-wins capture
+  // reads it back, so a type-mode JSDoc description round-trips.
+  return spec.description === undefined
+    ? withOptional
+    : `${withOptional}.describe(${q(spec.description)})`;
 };
 
 export const emitZodSchema = (ir: FieldSpec, schemaName = "schema"): string =>
@@ -1030,6 +1035,32 @@ export const collectStaticUsage = (spec: FieldSpec, count = 0): KindUsage => {
   }
 };
 
+// Whether any STATIC scalar leaf (one rendered through a Bound* component —
+// union controls render inline from hoisted hooks and carry their literal
+// inline) has a captured description. Gates the `description` prop on
+// BoundFieldProps and the Bound components' helper-text wiring, so
+// description-free schemas keep byte-identical output. Mirrors
+// collectStaticUsage's walk (same depth boundary, unions excluded).
+export const hasStaticDescriptions = (spec: FieldSpec, count = 0): boolean => {
+  if (overDepthBudget(spec, count)) return false;
+  switch (spec.kind) {
+    case "object":
+      return spec.fields.some((field) =>
+        hasStaticDescriptions(field.spec, count + 1),
+      );
+    case "array":
+      return hasStaticDescriptions(spec.item, count + 1);
+    case "tuple":
+      return spec.elements
+        .filter(isScalarSpec)
+        .some((el) => hasStaticDescriptions(el, count + 1));
+    case "union":
+      return false;
+    default:
+      return spec.description !== undefined;
+  }
+};
+
 // Whether any union in the tree has a variant-ONLY scalar field — the sole
 // source of a useVariantField call. Common fields (present in every variant,
 // including every field of a single-variant union) bind with useField, so a
@@ -1170,8 +1201,13 @@ type Backend = Readonly<{
     root: ObjectSpec,
   ) => readonly string[];
   // Module-level sections between the array decls and the component. Gets
-  // total usage (adapters/builders) and static-leaf usage (Bound* components).
-  preamble: (usage: KindUsage, staticUsage: KindUsage) => readonly string[];
+  // total usage (adapters/builders), static-leaf usage (Bound* components),
+  // and the root (the kit backends derive the description-slot gate from it).
+  preamble: (
+    usage: KindUsage,
+    staticUsage: KindUsage,
+    root: ObjectSpec,
+  ) => readonly string[];
   // One bound control (or a todo fallback) for a scalar field.
   leaf: (
     spec: FieldSpec,
@@ -1664,7 +1700,7 @@ const emitForm = (
     valuesTypeAndInitials(root, schemaImport.name),
     arrayItemDecls(arrays),
     "",
-    ...backend.preamble(usage, staticUsage),
+    ...backend.preamble(usage, staticUsage, root),
     ...nestedComponentLines,
     ...blocks.beforeComponent,
     `export const ${formName} = (${blocks.componentParams}) => {`,
@@ -1700,26 +1736,39 @@ const plainLeaf = (
   level: number,
 ): readonly string[] => {
   const todo = todoComment(spec, level);
+  // A described field renders an always-visible muted helper line under the
+  // control (className "zf-help" as the styling hook, like "zf-field"):
+  // formstand's built-in field components own the error line internally, so
+  // the description keeps its own separate slot — coexisting with the error
+  // like Mantine's native description slot does — rather than swapping.
+  const desc =
+    spec.description !== undefined
+      ? [`${ind(level)}<p className="zf-help">${jsxText(spec.description)}</p>`]
+      : [];
   switch (spec.kind) {
     case "string":
       return [
         ...todo,
         `${ind(level)}<TextField form={form} ${attr} ${jsxAttr("label", label)} />`,
+        ...desc,
       ];
     case "date":
       return [
         ...todo,
         `${ind(level)}<DateField form={form} ${attr} ${jsxAttr("label", label)} />`,
+        ...desc,
       ];
     case "number":
       return [
         ...todo,
         `${ind(level)}<NumberField form={form} ${attr} ${jsxAttr("label", label)} />`,
+        ...desc,
       ];
     case "boolean":
       return [
         ...todo,
         `${ind(level)}<CheckboxField form={form} ${attr} ${jsxAttr("label", label)} />`,
+        ...desc,
       ];
     case "enum":
       return [
@@ -1736,6 +1785,7 @@ const plainLeaf = (
         ),
         `${ind(level + 1)}]}`,
         `${ind(level)}/>`,
+        ...desc,
       ];
     case "object":
     case "array":
@@ -1767,6 +1817,14 @@ const plainVariantLeaf = (
     `${ind(level + 2)}<p role="alert">{${fieldVar}.error?.[0]}</p>`,
     `${ind(level + 1)}) : null}`,
   ];
+  // The always-visible muted helper line — plain keeps the description in
+  // its own slot next to the error line (see plainLeaf).
+  const desc =
+    spec.description !== undefined
+      ? [
+          `${ind(level + 1)}<p className="zf-help">${jsxText(spec.description)}</p>`,
+        ]
+      : [];
   switch (spec.kind) {
     case "boolean":
       return [
@@ -1774,6 +1832,7 @@ const plainVariantLeaf = (
         `${ind(level + 1)}<label className="zf-label">`,
         `${ind(level + 2)}<input {...checkboxProps(${fieldVar})} /> ${jsxText(label)}`,
         `${ind(level + 1)}</label>`,
+        ...desc,
         ...error,
         `${ind(level)}</div>`,
       ];
@@ -1788,6 +1847,7 @@ const plainVariantLeaf = (
             `${ind(level + 2)}<option value=${jsxText(option)}>${jsxText(labelFromName(option))}</option>`,
         ),
         `${ind(level + 1)}</select>`,
+        ...desc,
         ...error,
         `${ind(level)}</div>`,
       ];
@@ -1798,6 +1858,7 @@ const plainVariantLeaf = (
         `${ind(level)}<div className="zf-field">`,
         `${ind(level + 1)}<label className="zf-label">${jsxText(label)}</label>`,
         `${ind(level + 1)}<input {...${PLAIN_BUILDER[spec.kind]}(${fieldVar})} />`,
+        ...desc,
         ...error,
         `${ind(level)}</div>`,
       ];
@@ -2101,7 +2162,10 @@ const numberTextHook = (eventTarget: string): readonly string[] => [
 // Gated like the components that use it: BoundFieldProps references
 // FieldFormApi, whose import only exists when some leaf renders — an
 // unconditional type would emit non-compiling code for leaf-free schemas.
-const boundFieldProps = (usage: KindUsage): readonly string[] =>
+const boundFieldProps = (
+  usage: KindUsage,
+  withDescription = false,
+): readonly string[] =>
   hasLeafUsage(usage)
     ? [
         "",
@@ -2109,37 +2173,70 @@ const boundFieldProps = (usage: KindUsage): readonly string[] =>
         "  form: FieldFormApi;",
         "  path: string;",
         "  label: string;",
+        ...(withDescription ? ["  description?: string;"] : []),
         "}>;",
       ]
     : [];
 
+// The scalar kinds whose emitted control has a natural helper-text slot for
+// a captured description, per kit. Booleans are skipped where the boolean
+// control has no slot: MUI's FormControlLabel/Switch, chakra's Switch.Root,
+// and antd's bare Checkbox render label + control only, while shadcn's
+// checkbox row sits in a grid wrapper with room for the muted line, mantine's
+// Switch has a native `description` prop, and plain's markup renders an
+// explicit helper line. (plain here also stands in for the custom-template
+// fallback, which reuses plain's markup.)
+export const describedLeafKinds = (
+  ui: KitUi | "plain",
+): ReadonlySet<FieldSpec["kind"]> => {
+  switch (ui) {
+    case "mui":
+    case "chakra":
+    case "antd":
+      return new Set(["string", "number", "date", "enum"]);
+    case "plain":
+    case "shadcn":
+    case "mantine":
+      return new Set(["string", "number", "date", "enum", "boolean"]);
+  }
+};
+
 // Both kit backends emit identical Bound* elements per leaf kind; they
 // differ only in which component binds a boolean (MUI renders a Switch,
-// shadcn a Checkbox).
+// shadcn a Checkbox) and in which kinds forward a captured description
+// (`describedKinds` — the Bound component owns the kit's helper-text slot,
+// the leaf just passes the literal through).
 const boundLeaf =
-  (booleanField: string): Backend["leaf"] =>
+  (
+    booleanField: string,
+    describedKinds: ReadonlySet<FieldSpec["kind"]>,
+  ): Backend["leaf"] =>
   (spec, attr, label, level) => {
     const todo = todoComment(spec, level);
+    const desc =
+      spec.description !== undefined && describedKinds.has(spec.kind)
+        ? ` ${jsxAttr("description", spec.description)}`
+        : "";
     switch (spec.kind) {
       case "string":
         return [
           ...todo,
-          `${ind(level)}<BoundTextField form={form} ${attr} ${jsxAttr("label", label)} />`,
+          `${ind(level)}<BoundTextField form={form} ${attr} ${jsxAttr("label", label)}${desc} />`,
         ];
       case "date":
         return [
           ...todo,
-          `${ind(level)}<BoundDateField form={form} ${attr} ${jsxAttr("label", label)} />`,
+          `${ind(level)}<BoundDateField form={form} ${attr} ${jsxAttr("label", label)}${desc} />`,
         ];
       case "number":
         return [
           ...todo,
-          `${ind(level)}<BoundNumberField form={form} ${attr} ${jsxAttr("label", label)} />`,
+          `${ind(level)}<BoundNumberField form={form} ${attr} ${jsxAttr("label", label)}${desc} />`,
         ];
       case "boolean":
         return [
           ...todo,
-          `${ind(level)}<${booleanField} form={form} ${attr} ${jsxAttr("label", label)} />`,
+          `${ind(level)}<${booleanField} form={form} ${attr} ${jsxAttr("label", label)}${desc} />`,
         ];
       case "enum":
         return [
@@ -2148,6 +2245,9 @@ const boundLeaf =
           `${ind(level + 1)}form={form}`,
           `${ind(level + 1)}${attr}`,
           `${ind(level + 1)}${jsxAttr("label", label)}`,
+          ...(desc === ""
+            ? []
+            : [`${ind(level + 1)}${desc.trimStart()}`]),
           `${ind(level + 1)}options={[${spec.options.map(q).join(", ")}]}`,
           `${ind(level)}/>`,
         ];
@@ -2218,6 +2318,13 @@ const muiVariantLeaf = (
   label: string,
   level: number,
 ): readonly string[] => {
+  // A described variant field inlines its literal into MUI's one helper-text
+  // slot, after the adapter spread — same swap rule as the Bound components
+  // (error keeps the slot while present).
+  const helper =
+    spec.description !== undefined
+      ? ` helperText={fieldError(${fieldVar}) ?? ${q(spec.description)}}`
+      : "";
   switch (spec.kind) {
     case "boolean":
       return [
@@ -2228,7 +2335,7 @@ const muiVariantLeaf = (
       ];
     case "enum":
       return [
-        `${ind(level)}<TextField select fullWidth ${jsxAttr("label", label)} {...muiSelectProps(${fieldVar})}>`,
+        `${ind(level)}<TextField select fullWidth ${jsxAttr("label", label)} {...muiSelectProps(${fieldVar})}${helper}>`,
         ...spec.options.map(
           (option) =>
             `${ind(level + 1)}<MenuItem value=${jsxText(option)}>${jsxText(labelFromName(option))}</MenuItem>`,
@@ -2240,15 +2347,15 @@ const muiVariantLeaf = (
     // can't be called inside the conditional variant blocks.
     case "number":
       return [
-        `${ind(level)}<TextField fullWidth ${jsxAttr("label", label)} {...${fieldVar}NumberProps} />`,
+        `${ind(level)}<TextField fullWidth ${jsxAttr("label", label)} {...${fieldVar}NumberProps}${helper} />`,
       ];
     case "date":
       return [
-        `${ind(level)}<TextField fullWidth ${jsxAttr("label", label)} {...${kitScalarBinding("mui", "date")}(${fieldVar})} />`,
+        `${ind(level)}<TextField fullWidth ${jsxAttr("label", label)} {...${kitScalarBinding("mui", "date")}(${fieldVar})}${helper} />`,
       ];
     case "string":
       return [
-        `${ind(level)}<TextField fullWidth ${jsxAttr("label", label)} {...${kitScalarBinding("mui", "string")}(${fieldVar})} />`,
+        `${ind(level)}<TextField fullWidth ${jsxAttr("label", label)} {...${kitScalarBinding("mui", "string")}(${fieldVar})}${helper} />`,
       ];
     case "object":
     case "array":
@@ -2269,6 +2376,16 @@ const shadcnVariantLeaf = (
   level: number,
 ): readonly string[] => {
   const id = `{${fieldVar}.path}`;
+  // The muted description line, rendered only while the error line is not —
+  // the two share the one slot under the control.
+  const descLines =
+    spec.description !== undefined
+      ? [
+          `${ind(level + 1)}{fieldError(${fieldVar}) === undefined ? (`,
+          `${ind(level + 2)}<p className="text-sm text-muted-foreground">${jsxText(spec.description)}</p>`,
+          `${ind(level + 1)}) : null}`,
+        ]
+      : [];
   switch (spec.kind) {
     case "boolean":
       return [
@@ -2277,6 +2394,7 @@ const shadcnVariantLeaf = (
         `${ind(level + 2)}<Checkbox id=${id} {...shadcnCheckboxProps(${fieldVar})} />`,
         `${ind(level + 2)}<Label htmlFor=${id}>${jsxText(label)}</Label>`,
         `${ind(level + 1)}</div>`,
+        ...descLines,
         `${ind(level + 1)}<FieldError field={${fieldVar}} />`,
         `${ind(level)}</div>`,
       ];
@@ -2295,6 +2413,7 @@ const shadcnVariantLeaf = (
         ),
         `${ind(level + 2)}</SelectContent>`,
         `${ind(level + 1)}</Select>`,
+        ...descLines,
         `${ind(level + 1)}<FieldError field={${fieldVar}} />`,
         `${ind(level)}</div>`,
       ];
@@ -2306,6 +2425,7 @@ const shadcnVariantLeaf = (
         `${ind(level)}<div className="grid gap-2">`,
         `${ind(level + 1)}<Label htmlFor=${id}>${jsxText(label)}</Label>`,
         `${ind(level + 1)}<Input id=${id} {...${builder}(${fieldVar})} />`,
+        ...descLines,
         `${ind(level + 1)}<FieldError field={${fieldVar}} />`,
         `${ind(level)}</div>`,
       ];
@@ -2451,41 +2571,87 @@ export const muiAdapterSection = (
   ].join("\n");
 };
 
-const muiBoundComponents = (usage: KindUsage): string => {
-  const propsType = boundFieldProps(usage);
-  const text = [
-    "",
-    "const BoundTextField = ({ form, path, label }: BoundFieldProps) => {",
-    "  const field = useField<string | null | undefined>(form, path);",
-    `  return <TextField fullWidth label={label} {...${kitScalarBinding("mui", "string")}(field)} />;`,
-    "};",
-  ];
-  const number = [
-    "",
-    "const BoundNumberField = ({ form, path, label }: BoundFieldProps) => {",
-    "  const field = useField<number | null | undefined>(form, path);",
-    "  const numberProps = useMuiNumberFieldProps(field);",
-    "  return <TextField fullWidth label={label} {...numberProps} />;",
-    "};",
-  ];
-  const date = [
-    "",
-    "const BoundDateField = ({ form, path, label }: BoundFieldProps) => {",
-    "  const field = useField<Date | null | undefined>(form, path);",
-    `  return <TextField fullWidth label={label} {...${kitScalarBinding("mui", "date")}(field)} />;`,
-    "};",
-  ];
+const muiBoundComponents = (
+  usage: KindUsage,
+  withDescription = false,
+): string => {
+  const propsType = boundFieldProps(usage, withDescription);
+  // With descriptions in play, the component takes over MUI's ONE helper-text
+  // slot: the explicit helperText AFTER the adapter spread widens its
+  // error-only value to `fieldError(field) ?? description` — the error keeps
+  // the slot while present, the description shows otherwise.
+  const spreadInput = (
+    name: string,
+    spread: string,
+    fieldType: string,
+    hoist: readonly string[],
+  ): readonly string[] =>
+    withDescription
+      ? [
+          "",
+          `const ${name} = ({ form, path, label, description }: BoundFieldProps) => {`,
+          `  const field = useField<${fieldType}>(form, path);`,
+          ...hoist,
+          "  return (",
+          "    <TextField",
+          "      fullWidth",
+          "      label={label}",
+          `      {...${spread}}`,
+          "      helperText={fieldError(field) ?? description}",
+          "    />",
+          "  );",
+          "};",
+        ]
+      : [
+          "",
+          `const ${name} = ({ form, path, label }: BoundFieldProps) => {`,
+          `  const field = useField<${fieldType}>(form, path);`,
+          ...hoist,
+          `  return <TextField fullWidth label={label} {...${spread}} />;`,
+        "};",
+        ];
+  const text = spreadInput(
+    "BoundTextField",
+    `${kitScalarBinding("mui", "string")}(field)`,
+    "string | null | undefined",
+    [],
+  );
+  const number = spreadInput(
+    "BoundNumberField",
+    "numberProps",
+    "number | null | undefined",
+    ["  const numberProps = useMuiNumberFieldProps(field);"],
+  );
+  const date = spreadInput(
+    "BoundDateField",
+    `${kitScalarBinding("mui", "date")}(field)`,
+    "Date | null | undefined",
+    [],
+  );
   const select = [
     "",
     "const BoundSelectField = ({",
     "  form,",
     "  path,",
     "  label,",
+    ...(withDescription ? ["  description,"] : []),
     "  options,",
     "}: BoundFieldProps & Readonly<{ options: readonly string[] }>) => {",
     "  const field = useField<string | null | undefined>(form, path);",
     "  return (",
-    "    <TextField select fullWidth label={label} {...muiSelectProps(field)}>",
+    ...(withDescription
+      ? [
+          "    <TextField",
+          "      select",
+          "      fullWidth",
+          "      label={label}",
+          "      {...muiSelectProps(field)}",
+          "      helperText={fieldError(field) ?? description}",
+          "    >",
+        ]
+      : [
+          "    <TextField select fullWidth label={label} {...muiSelectProps(field)}>",
+        ]),
     "      {options.map((option) => (",
     "        <MenuItem key={option} value={option}>",
     "          {option}",
@@ -2517,7 +2683,7 @@ const muiBoundComponents = (usage: KindUsage): string => {
   ].join("\n");
 };
 
-const muiLeaf = boundLeaf("BoundSwitchField");
+const muiLeaf = boundLeaf("BoundSwitchField", describedLeafKinds("mui"));
 
 // Typography renders section headings: any addressable object field at any
 // depth needs it (array sections are covered by the arrays.length check).
@@ -2625,9 +2791,9 @@ const muiBackend = (
       `import { z } from "zod";`,
     ];
   },
-  preamble: (usage, staticUsage) => [
+  preamble: (usage, staticUsage, root) => [
     muiAdapterSection(usage, "", version),
-    muiBoundComponents(staticUsage),
+    muiBoundComponents(staticUsage, hasStaticDescriptions(root)),
     "",
   ],
   leaf: muiLeaf,
@@ -2803,16 +2969,33 @@ export const shadcnAdapterSection = (usage: KindUsage, exp = ""): string => {
   ].join("\n");
 };
 
-const shadcnBoundComponents = (usage: KindUsage): string => {
-  const propsType = boundFieldProps(usage);
+const shadcnBoundComponents = (
+  usage: KindUsage,
+  withDescription = false,
+): string => {
+  const propsType = boundFieldProps(usage, withDescription);
+  // The muted description line shares the under-control slot with the error
+  // line — the error wins it while present (and an undescribed field renders
+  // neither line, not an empty <p>).
+  const params = withDescription
+    ? "{ form, path, label, description }"
+    : "{ form, path, label }";
+  const descLines = withDescription
+    ? [
+        "      {fieldError(field) === undefined && description !== undefined ? (",
+        '        <p className="text-sm text-muted-foreground">{description}</p>',
+        "      ) : null}",
+      ]
+    : [];
   const text = [
     "",
-    "const BoundTextField = ({ form, path, label }: BoundFieldProps) => {",
+    `const BoundTextField = (${params}: BoundFieldProps) => {`,
     "  const field = useField<string | null | undefined>(form, path);",
     "  return (",
     '    <div className="grid gap-2">',
     "      <Label htmlFor={path}>{label}</Label>",
     `      <Input id={path} {...${kitScalarBinding("shadcn", "string")}(field)} />`,
+    ...descLines,
     "      <FieldError field={field} />",
     "    </div>",
     "  );",
@@ -2820,12 +3003,13 @@ const shadcnBoundComponents = (usage: KindUsage): string => {
   ];
   const number = [
     "",
-    "const BoundNumberField = ({ form, path, label }: BoundFieldProps) => {",
+    `const BoundNumberField = (${params}: BoundFieldProps) => {`,
     "  const field = useField<number | null | undefined>(form, path);",
     "  return (",
     '    <div className="grid gap-2">',
     "      <Label htmlFor={path}>{label}</Label>",
     `      <Input id={path} {...${kitScalarBinding("shadcn", "number")}(field)} />`,
+    ...descLines,
     "      <FieldError field={field} />",
     "    </div>",
     "  );",
@@ -2833,12 +3017,13 @@ const shadcnBoundComponents = (usage: KindUsage): string => {
   ];
   const date = [
     "",
-    "const BoundDateField = ({ form, path, label }: BoundFieldProps) => {",
+    `const BoundDateField = (${params}: BoundFieldProps) => {`,
     "  const field = useField<Date | null | undefined>(form, path);",
     "  return (",
     '    <div className="grid gap-2">',
     "      <Label htmlFor={path}>{label}</Label>",
     `      <Input id={path} {...${kitScalarBinding("shadcn", "date")}(field)} />`,
+    ...descLines,
     "      <FieldError field={field} />",
     "    </div>",
     "  );",
@@ -2850,6 +3035,7 @@ const shadcnBoundComponents = (usage: KindUsage): string => {
     "  form,",
     "  path,",
     "  label,",
+    ...(withDescription ? ["  description,"] : []),
     "  options,",
     "}: BoundFieldProps & Readonly<{ options: readonly string[] }>) => {",
     "  const field = useField<string | null | undefined>(form, path);",
@@ -2872,6 +3058,7 @@ const shadcnBoundComponents = (usage: KindUsage): string => {
     "          ))}",
     "        </SelectContent>",
     "      </Select>",
+    ...descLines,
     "      <FieldError field={field} />",
     "    </div>",
     "  );",
@@ -2879,7 +3066,7 @@ const shadcnBoundComponents = (usage: KindUsage): string => {
   ];
   const checkbox = [
     "",
-    "const BoundCheckboxField = ({ form, path, label }: BoundFieldProps) => {",
+    `const BoundCheckboxField = (${params}: BoundFieldProps) => {`,
     "  const field = useField<boolean | null | undefined>(form, path);",
     "  return (",
     '    <div className="grid gap-2">',
@@ -2887,6 +3074,7 @@ const shadcnBoundComponents = (usage: KindUsage): string => {
     "        <Checkbox id={path} {...shadcnCheckboxProps(field)} />",
     "        <Label htmlFor={path}>{label}</Label>",
     "      </div>",
+    ...descLines,
     "      <FieldError field={field} />",
     "    </div>",
     "  );",
@@ -2902,7 +3090,7 @@ const shadcnBoundComponents = (usage: KindUsage): string => {
   ].join("\n");
 };
 
-const shadcnLeaf = boundLeaf("BoundCheckboxField");
+const shadcnLeaf = boundLeaf("BoundCheckboxField", describedLeafKinds("shadcn"));
 
 const shadcnBackend = (
   visual: VisualOptions,
@@ -2973,9 +3161,9 @@ const shadcnBackend = (
       `import { z } from "zod";`,
     ];
   },
-  preamble: (usage, staticUsage) => [
+  preamble: (usage, staticUsage, root) => [
     shadcnAdapterSection(usage),
-    shadcnBoundComponents(staticUsage),
+    shadcnBoundComponents(staticUsage, hasStaticDescriptions(root)),
     "",
   ],
   leaf: shadcnLeaf,
@@ -3153,16 +3341,33 @@ export const chakraAdapterSection = (usage: KindUsage, exp = ""): string => {
   ].join("\n");
 };
 
-const chakraBoundComponents = (usage: KindUsage): string => {
-  const propsType = boundFieldProps(usage);
+const chakraBoundComponents = (
+  usage: KindUsage,
+  withDescription = false,
+): string => {
+  const propsType = boundFieldProps(usage, withDescription);
+  // Field.HelperText fills the under-control slot only while Field.ErrorText
+  // does not (chakra shows both otherwise — the swap is explicit), and an
+  // undescribed field renders no empty helper element.
+  const params = withDescription
+    ? "{ form, path, label, description }"
+    : "{ form, path, label }";
+  const descLines = withDescription
+    ? [
+        "      {fieldError(field) === undefined && description !== undefined ? (",
+        "        <Field.HelperText>{description}</Field.HelperText>",
+        "      ) : null}",
+      ]
+    : [];
   const input = (builder: string, fieldType: string): readonly string[] => [
     "",
-    `const Bound${builder === "chakraDateInputProps" ? "Date" : "Text"}Field = ({ form, path, label }: BoundFieldProps) => {`,
+    `const Bound${builder === "chakraDateInputProps" ? "Date" : "Text"}Field = (${params}: BoundFieldProps) => {`,
     `  const field = useField<${fieldType}>(form, path);`,
     "  return (",
     "    <Field.Root invalid={fieldError(field) !== undefined}>",
     "      <Field.Label>{label}</Field.Label>",
     `      <Input {...${builder}(field)} />`,
+    ...descLines,
     "      <Field.ErrorText>{fieldError(field)}</Field.ErrorText>",
     "    </Field.Root>",
     "  );",
@@ -3172,13 +3377,14 @@ const chakraBoundComponents = (usage: KindUsage): string => {
   // other hook call.
   const number = [
     "",
-    "const BoundNumberField = ({ form, path, label }: BoundFieldProps) => {",
+    `const BoundNumberField = (${params}: BoundFieldProps) => {`,
     "  const field = useField<number | null | undefined>(form, path);",
     "  const numberProps = useChakraNumberInputProps(field);",
     "  return (",
     "    <Field.Root invalid={fieldError(field) !== undefined}>",
     "      <Field.Label>{label}</Field.Label>",
     "      <Input {...numberProps} />",
+    ...descLines,
     "      <Field.ErrorText>{fieldError(field)}</Field.ErrorText>",
     "    </Field.Root>",
     "  );",
@@ -3190,6 +3396,7 @@ const chakraBoundComponents = (usage: KindUsage): string => {
     "  form,",
     "  path,",
     "  label,",
+    ...(withDescription ? ["  description,"] : []),
     "  options,",
     "}: BoundFieldProps & Readonly<{ options: readonly string[] }>) => {",
     "  const field = useField<string | null | undefined>(form, path);",
@@ -3209,6 +3416,7 @@ const chakraBoundComponents = (usage: KindUsage): string => {
     "        </NativeSelect.Field>",
     "        <NativeSelect.Indicator />",
     "      </NativeSelect.Root>",
+    ...descLines,
     "      <Field.ErrorText>{fieldError(field)}</Field.ErrorText>",
     "    </Field.Root>",
     "  );",
@@ -3252,6 +3460,16 @@ const chakraVariantLeaf = (
   label: string,
   level: number,
 ): readonly string[] => {
+  // The inline Field.HelperText for a described variant field — rendered
+  // only while Field.ErrorText is not (chakra shows both otherwise).
+  const descLines =
+    spec.description !== undefined
+      ? [
+          `${ind(level + 1)}{fieldError(${fieldVar}) === undefined ? (`,
+          `${ind(level + 2)}<Field.HelperText>${jsxText(spec.description)}</Field.HelperText>`,
+          `${ind(level + 1)}) : null}`,
+        ]
+      : [];
   switch (spec.kind) {
     case "boolean":
       return [
@@ -3276,6 +3494,7 @@ const chakraVariantLeaf = (
         `${ind(level + 2)}</NativeSelect.Field>`,
         `${ind(level + 2)}<NativeSelect.Indicator />`,
         `${ind(level + 1)}</NativeSelect.Root>`,
+        ...descLines,
         `${ind(level + 1)}<Field.ErrorText>{fieldError(${fieldVar})}</Field.ErrorText>`,
         `${ind(level)}</Field.Root>`,
       ];
@@ -3287,6 +3506,7 @@ const chakraVariantLeaf = (
         `${ind(level)}<Field.Root invalid={fieldError(${fieldVar}) !== undefined}>`,
         `${ind(level + 1)}<Field.Label>${jsxText(label)}</Field.Label>`,
         `${ind(level + 1)}<Input {...${fieldVar}NumberProps} />`,
+        ...descLines,
         `${ind(level + 1)}<Field.ErrorText>{fieldError(${fieldVar})}</Field.ErrorText>`,
         `${ind(level)}</Field.Root>`,
       ];
@@ -3297,6 +3517,7 @@ const chakraVariantLeaf = (
         `${ind(level)}<Field.Root invalid={fieldError(${fieldVar}) !== undefined}>`,
         `${ind(level + 1)}<Field.Label>${jsxText(label)}</Field.Label>`,
         `${ind(level + 1)}<Input {...${builder}(${fieldVar})} />`,
+        ...descLines,
         `${ind(level + 1)}<Field.ErrorText>{fieldError(${fieldVar})}</Field.ErrorText>`,
         `${ind(level)}</Field.Root>`,
       ];
@@ -3311,7 +3532,7 @@ const chakraVariantLeaf = (
   }
 };
 
-const chakraLeaf = boundLeaf("BoundSwitchField");
+const chakraLeaf = boundLeaf("BoundSwitchField", describedLeafKinds("chakra"));
 
 const chakraBackend = (
   visual: VisualOptions,
@@ -3412,9 +3633,9 @@ const chakraBackend = (
       `import { z } from "zod";`,
     ];
   },
-  preamble: (usage, staticUsage) => [
+  preamble: (usage, staticUsage, root) => [
     chakraAdapterSection(usage),
-    chakraBoundComponents(staticUsage),
+    chakraBoundComponents(staticUsage, hasStaticDescriptions(root)),
     "",
   ],
   leaf: chakraLeaf,
@@ -3579,17 +3800,27 @@ export const mantineAdapterSection = (usage: KindUsage, exp = ""): string => {
   ].join("\n");
 };
 
-const mantineBoundComponents = (usage: KindUsage): string => {
-  const propsType = boundFieldProps(usage);
+const mantineBoundComponents = (
+  usage: KindUsage,
+  withDescription = false,
+): string => {
+  const propsType = boundFieldProps(usage, withDescription);
+  // Mantine's native `description` slot: its own element, separate from the
+  // `error` slot the adapter builders fill — Mantine renders both when both
+  // exist, so no swap is emitted (the kit-idiomatic behavior).
+  const params = withDescription
+    ? "{ form, path, label, description }"
+    : "{ form, path, label }";
+  const descAttr = withDescription ? " description={description}" : "";
   const input = (
     name: string,
     builder: string,
     fieldType: string,
   ): readonly string[] => [
     "",
-    `const ${name} = ({ form, path, label }: BoundFieldProps) => {`,
+    `const ${name} = (${params}: BoundFieldProps) => {`,
     `  const field = useField<${fieldType}>(form, path);`,
-    `  return <TextInput label={label} {...${builder}(field)} />;`,
+    `  return <TextInput label={label}${descAttr} {...${builder}(field)} />;`,
     "};",
   ];
   const select = [
@@ -3598,11 +3829,12 @@ const mantineBoundComponents = (usage: KindUsage): string => {
     "  form,",
     "  path,",
     "  label,",
+    ...(withDescription ? ["  description,"] : []),
     "  options,",
     "}: BoundFieldProps & Readonly<{ options: readonly string[] }>) => {",
     "  const field = useField<string | null | undefined>(form, path);",
     "  return (",
-    "    <NativeSelect label={label} {...mantineSelectProps(field)}>",
+    `    <NativeSelect label={label}${descAttr} {...mantineSelectProps(field)}>`,
     "      <option value=\"\">{`Select ${label.toLowerCase()}`}</option>",
     "      {options.map((option) => (",
     "        <option key={option} value={option}>",
@@ -3615,19 +3847,19 @@ const mantineBoundComponents = (usage: KindUsage): string => {
   ];
   const switchField = [
     "",
-    "const BoundSwitchField = ({ form, path, label }: BoundFieldProps) => {",
+    `const BoundSwitchField = (${params}: BoundFieldProps) => {`,
     "  const field = useField<boolean | null | undefined>(form, path);",
-    "  return <Switch label={label} {...mantineSwitchProps(field)} />;",
+    `  return <Switch label={label}${descAttr} {...mantineSwitchProps(field)} />;`,
     "};",
   ];
   // Number binds through the STATE-holding number hook, hoisted like any
   // other hook call.
   const number = [
     "",
-    "const BoundNumberField = ({ form, path, label }: BoundFieldProps) => {",
+    `const BoundNumberField = (${params}: BoundFieldProps) => {`,
     "  const field = useField<number | null | undefined>(form, path);",
     "  const numberProps = useMantineNumberInputProps(field);",
-    "  return <TextInput label={label} {...numberProps} />;",
+    `  return <TextInput label={label}${descAttr} {...numberProps} />;`,
     "};",
   ];
   return [
@@ -3661,14 +3893,20 @@ const mantineVariantLeaf = (
   label: string,
   level: number,
 ): readonly string[] => {
+  // Mantine's native description slot, inlined as a literal — separate from
+  // the error slot, so no swap (see mantineBoundComponents).
+  const descAttr =
+    spec.description !== undefined
+      ? ` ${jsxAttr("description", spec.description)}`
+      : "";
   switch (spec.kind) {
     case "boolean":
       return [
-        `${ind(level)}<Switch ${jsxAttr("label", label)} {...mantineSwitchProps(${fieldVar})} />`,
+        `${ind(level)}<Switch ${jsxAttr("label", label)}${descAttr} {...mantineSwitchProps(${fieldVar})} />`,
       ];
     case "enum":
       return [
-        `${ind(level)}<NativeSelect ${jsxAttr("label", label)} {...mantineSelectProps(${fieldVar})}>`,
+        `${ind(level)}<NativeSelect ${jsxAttr("label", label)}${descAttr} {...mantineSelectProps(${fieldVar})}>`,
         `${ind(level + 1)}<option value="">${jsxText(`Select ${label.toLowerCase()}`)}</option>`,
         ...spec.options.map(
           (option) =>
@@ -3681,13 +3919,13 @@ const mantineVariantLeaf = (
     // can't be called inside the conditional variant blocks.
     case "number":
       return [
-        `${ind(level)}<TextInput ${jsxAttr("label", label)} {...${fieldVar}NumberProps} />`,
+        `${ind(level)}<TextInput ${jsxAttr("label", label)}${descAttr} {...${fieldVar}NumberProps} />`,
       ];
     case "string":
     case "date": {
       const builder = kitScalarBinding("mantine", spec.kind);
       return [
-        `${ind(level)}<TextInput ${jsxAttr("label", label)} {...${builder}(${fieldVar})} />`,
+        `${ind(level)}<TextInput ${jsxAttr("label", label)}${descAttr} {...${builder}(${fieldVar})} />`,
       ];
     }
     case "object":
@@ -3700,7 +3938,7 @@ const mantineVariantLeaf = (
   }
 };
 
-const mantineLeaf = boundLeaf("BoundSwitchField");
+const mantineLeaf = boundLeaf("BoundSwitchField", describedLeafKinds("mantine"));
 
 const mantineBackend = (
   visual: VisualOptions,
@@ -3795,9 +4033,9 @@ const mantineBackend = (
       `import { z } from "zod";`,
     ];
   },
-  preamble: (usage, staticUsage) => [
+  preamble: (usage, staticUsage, root) => [
     mantineAdapterSection(usage),
-    mantineBoundComponents(staticUsage),
+    mantineBoundComponents(staticUsage, hasStaticDescriptions(root)),
     "",
   ],
   leaf: mantineLeaf,
@@ -4014,20 +4252,37 @@ export const antdAdapterSection = (usage: KindUsage, exp = ""): string => {
   ].join("\n");
 };
 
-const antdBoundComponents = (usage: KindUsage): string => {
-  const propsType = boundFieldProps(usage);
+const antdBoundComponents = (
+  usage: KindUsage,
+  withDescription = false,
+): string => {
+  const propsType = boundFieldProps(usage, withDescription);
+  // The muted Typography.Text description line shares the under-control slot
+  // with the explicit FieldError line — the error wins it while present (and
+  // an undescribed field renders neither).
+  const params = withDescription
+    ? "{ form, path, label, description }"
+    : "{ form, path, label }";
+  const descLines = withDescription
+    ? [
+        "      {fieldError(field) === undefined && description !== undefined ? (",
+        '        <Typography.Text type="secondary">{description}</Typography.Text>',
+        "      ) : null}",
+      ]
+    : [];
   const input = (
     name: string,
     builder: string,
     fieldType: string,
   ): readonly string[] => [
     "",
-    `const ${name} = ({ form, path, label }: BoundFieldProps) => {`,
+    `const ${name} = (${params}: BoundFieldProps) => {`,
     `  const field = useField<${fieldType}>(form, path);`,
     "  return (",
     '    <Flex vertical gap="small">',
     "      <label htmlFor={path}>{label}</label>",
     `      <Input id={path} {...${builder}(field)} />`,
+    ...descLines,
     "      <FieldError field={field} />",
     "    </Flex>",
     "  );",
@@ -4039,6 +4294,7 @@ const antdBoundComponents = (usage: KindUsage): string => {
     "  form,",
     "  path,",
     "  label,",
+    ...(withDescription ? ["  description,"] : []),
     "  options,",
     "}: BoundFieldProps & Readonly<{ options: readonly string[] }>) => {",
     "  const field = useField<string | null | undefined>(form, path);",
@@ -4051,6 +4307,7 @@ const antdBoundComponents = (usage: KindUsage): string => {
     "        options={options.map((option) => ({ value: option, label: option }))}",
     "        {...antdSelectProps(field)}",
     "      />",
+    ...descLines,
     "      <FieldError field={field} />",
     "    </Flex>",
     "  );",
@@ -4067,13 +4324,14 @@ const antdBoundComponents = (usage: KindUsage): string => {
   // other hook call.
   const number = [
     "",
-    "const BoundNumberField = ({ form, path, label }: BoundFieldProps) => {",
+    `const BoundNumberField = (${params}: BoundFieldProps) => {`,
     "  const field = useField<number | null | undefined>(form, path);",
     "  const numberProps = useAntdNumberInputProps(field);",
     "  return (",
     '    <Flex vertical gap="small">',
     "      <label htmlFor={path}>{label}</label>",
     "      <Input id={path} {...numberProps} />",
+    ...descLines,
     "      <FieldError field={field} />",
     "    </Flex>",
     "  );",
@@ -4111,6 +4369,16 @@ const antdVariantLeaf = (
   level: number,
 ): readonly string[] => {
   const id = `{${fieldVar}.path}`;
+  // The muted description line for a described variant field — rendered only
+  // while the FieldError line is not (the two share the one slot).
+  const descLines =
+    spec.description !== undefined
+      ? [
+          `${ind(level + 1)}{fieldError(${fieldVar}) === undefined ? (`,
+          `${ind(level + 2)}<Typography.Text type="secondary">${jsxText(spec.description)}</Typography.Text>`,
+          `${ind(level + 1)}) : null}`,
+        ]
+      : [];
   switch (spec.kind) {
     case "boolean":
       return [
@@ -4131,6 +4399,7 @@ const antdVariantLeaf = (
         `${ind(level + 2)}]}`,
         `${ind(level + 2)}{...antdSelectProps(${fieldVar})}`,
         `${ind(level + 1)}/>`,
+        ...descLines,
         `${ind(level + 1)}<FieldError field={${fieldVar}} />`,
         `${ind(level)}</Flex>`,
       ];
@@ -4142,6 +4411,7 @@ const antdVariantLeaf = (
         `${ind(level)}<Flex vertical gap="small">`,
         `${ind(level + 1)}<label htmlFor=${id}>${jsxText(label)}</label>`,
         `${ind(level + 1)}<Input id=${id} {...${fieldVar}NumberProps} />`,
+        ...descLines,
         `${ind(level + 1)}<FieldError field={${fieldVar}} />`,
         `${ind(level)}</Flex>`,
       ];
@@ -4152,6 +4422,7 @@ const antdVariantLeaf = (
         `${ind(level)}<Flex vertical gap="small">`,
         `${ind(level + 1)}<label htmlFor=${id}>${jsxText(label)}</label>`,
         `${ind(level + 1)}<Input id=${id} {...${builder}(${fieldVar})} />`,
+        ...descLines,
         `${ind(level + 1)}<FieldError field={${fieldVar}} />`,
         `${ind(level)}</Flex>`,
       ];
@@ -4166,7 +4437,7 @@ const antdVariantLeaf = (
   }
 };
 
-const antdLeaf = boundLeaf("BoundCheckboxField");
+const antdLeaf = boundLeaf("BoundCheckboxField", describedLeafKinds("antd"));
 
 const antdBackend = (
   visual: VisualOptions,
@@ -4269,9 +4540,9 @@ const antdBackend = (
       `import { z } from "zod";`,
     ];
   },
-  preamble: (usage, staticUsage) => [
+  preamble: (usage, staticUsage, root) => [
     antdAdapterSection(usage),
-    antdBoundComponents(staticUsage),
+    antdBoundComponents(staticUsage, hasStaticDescriptions(root)),
     "",
   ],
   leaf: antdLeaf,
@@ -4381,6 +4652,17 @@ const plainTemplateLeaf = (ctx: TemplateLeafContext): readonly string[] => {
     `    <p role="alert">{${ctx.field}.error?.[0]}</p>`,
     `  ) : null}`,
   ];
+  // The always-visible muted helper line (plain's separate-slot policy — see
+  // plainLeaf). ctx.description may be a per-field-optional prop reference,
+  // so the emitted markup guards undefined at runtime.
+  const desc =
+    ctx.description === ""
+      ? []
+      : [
+          `  {${ctx.description} !== undefined ? (`,
+          `    <p className="zf-help">{${ctx.description}}</p>`,
+          `  ) : null}`,
+        ];
   switch (ctx.kind) {
     case "boolean":
       return [
@@ -4388,6 +4670,7 @@ const plainTemplateLeaf = (ctx: TemplateLeafContext): readonly string[] => {
         `  <label className="zf-label">`,
         `    <input {...${ctx.bind}} /> {${ctx.label}}`,
         `  </label>`,
+        ...desc,
         ...error,
         `</div>`,
       ];
@@ -4403,6 +4686,7 @@ const plainTemplateLeaf = (ctx: TemplateLeafContext): readonly string[] => {
         `      </option>`,
         `    ))}`,
         `  </select>`,
+        ...desc,
         ...error,
         `</div>`,
       ];
@@ -4411,6 +4695,7 @@ const plainTemplateLeaf = (ctx: TemplateLeafContext): readonly string[] => {
         `<div className="zf-field">`,
         `  <label className="zf-label">{${ctx.label}}</label>`,
         `  <input {...${ctx.bind}} />`,
+        ...desc,
         ...error,
         `</div>`,
       ];
@@ -4436,6 +4721,7 @@ const templateLeafBody = (
 const templateBoundComponent = (
   template: Template,
   kind: TemplateLeafKind,
+  withDescription: boolean,
 ): readonly string[] => {
   const ctx: TemplateLeafContext = {
     kind,
@@ -4443,7 +4729,13 @@ const templateBoundComponent = (
     bind: `${PLAIN_BUILDER[kind]}(field)`,
     label: "label",
     options: kind === "enum" ? "options" : "",
+    // Inside the wrapper the description is the (optional) prop — present on
+    // BoundFieldProps only when the schema carries static descriptions.
+    description: withDescription ? "description" : "",
   };
+  const params = withDescription
+    ? "{ form, path, label, description }"
+    : "{ form, path, label }";
   const signature =
     kind === "enum"
       ? [
@@ -4451,11 +4743,12 @@ const templateBoundComponent = (
           "  form,",
           "  path,",
           "  label,",
+          ...(withDescription ? ["  description,"] : []),
           "  options,",
           "}: BoundFieldProps & Readonly<{ options: readonly string[] }>) => {",
         ]
       : [
-          `const ${TEMPLATE_BOUND_COMPONENT[kind]} = ({ form, path, label }: BoundFieldProps) => {`,
+          `const ${TEMPLATE_BOUND_COMPONENT[kind]} = (${params}: BoundFieldProps) => {`,
         ];
   return [
     "",
@@ -4474,14 +4767,25 @@ const templateBoundComponent = (
 const templateBoundComponents = (
   template: Template,
   staticUsage: KindUsage,
+  withDescription: boolean,
 ): string =>
   [
-    ...boundFieldProps(staticUsage),
-    ...(staticUsage.string ? templateBoundComponent(template, "string") : []),
-    ...(staticUsage.number ? templateBoundComponent(template, "number") : []),
-    ...(staticUsage.date ? templateBoundComponent(template, "date") : []),
-    ...(staticUsage.enum ? templateBoundComponent(template, "enum") : []),
-    ...(staticUsage.boolean ? templateBoundComponent(template, "boolean") : []),
+    ...boundFieldProps(staticUsage, withDescription),
+    ...(staticUsage.string
+      ? templateBoundComponent(template, "string", withDescription)
+      : []),
+    ...(staticUsage.number
+      ? templateBoundComponent(template, "number", withDescription)
+      : []),
+    ...(staticUsage.date
+      ? templateBoundComponent(template, "date", withDescription)
+      : []),
+    ...(staticUsage.enum
+      ? templateBoundComponent(template, "enum", withDescription)
+      : []),
+    ...(staticUsage.boolean
+      ? templateBoundComponent(template, "boolean", withDescription)
+      : []),
   ].join("\n");
 
 // A variant control (the discriminant select or a union variant field):
@@ -4509,6 +4813,8 @@ const templateVariantLeaf =
       label: q(label),
       options:
         spec.kind === "enum" ? `[${spec.options.map(q).join(", ")}]` : "",
+      // Inside a union block the description is its quoted literal.
+      description: spec.description === undefined ? "" : q(spec.description),
     };
     return templateLeafBody(template, ctx).map(
       (line) => `${ind(level)}${line}`,
@@ -4596,11 +4902,11 @@ const templateBackend = (
         `} from "formstand";`,
       ];
     },
-    preamble: (_usage, staticUsage) => [
-      templateBoundComponents(template, staticUsage),
+    preamble: (_usage, staticUsage, root) => [
+      templateBoundComponents(template, staticUsage, hasStaticDescriptions(root)),
       "",
     ],
-    leaf: boundLeaf("BoundBooleanField"),
+    leaf: boundLeaf("BoundBooleanField", describedLeafKinds("plain")),
     variantLeaf: templateVariantLeaf(template),
   };
 };

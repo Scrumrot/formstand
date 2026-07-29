@@ -50,6 +50,27 @@ export const isZodSchema = (value: unknown): boolean =>
   defOf(value) !== null &&
   typeof (value as Readonly<{ safeParse?: unknown }>).safeParse === "function";
 
+// The schema's registered description, duck-typed. In zod v4, `.describe(text)`
+// is sugar for `.meta({ description: text })`: both write ONE registry entry
+// (z.globalRegistry, keyed by schema object identity — nothing lands on
+// `def`), surfaced by the `description` getter on the schema itself. Reading
+// the getter consults the USER's registry through their own schema object, so
+// the dual-package hazard doesn't apply. Precedence is therefore simply "the
+// last .describe()/.meta() call on that schema object wins"; other .meta()
+// keys (title, examples, ...) are ignored. A wrapper (.optional() etc.) is a
+// NEW schema object with its own (usually absent) entry — walk() prefers the
+// outermost entry present. The getter can be user code (registries are
+// extensible), so a throwing read means "no description"; an empty or
+// whitespace-only string is treated as absent.
+const descriptionOf = (schema: unknown): string | undefined => {
+  try {
+    const value = (schema as Readonly<{ description?: unknown }>).description;
+    return typeof value === "string" && value.trim() !== "" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const stringValues = (values: unknown): readonly string[] | null => {
   if (!Array.isArray(values)) return null;
   return values.every((v): v is string => typeof v === "string")
@@ -165,7 +186,26 @@ const fallback = (flags: Flags, todo: string): FieldSpec => ({
 // zod v4's recursion idiom (`get children() { return z.array(Category); }`)
 // makes the schema graph cyclic: track visited schema objects by identity so
 // a cycle degrades to a todo string field instead of a stack overflow.
+//
+// Description capture wraps the node walk: the recursion attaches the inner
+// schema's description first, then each unwinding wrapper level overrides
+// with its own entry when present — so for both
+// `z.number().describe("x").optional()` (entry on the inner number) and
+// `z.number().optional().describe("x")` (entry on the outer optional) the
+// OUTERMOST entry present wins.
 const walk = (
+  schema: unknown,
+  flags: Flags,
+  depth: number,
+  seen: ReadonlySet<unknown>,
+): FieldSpec => {
+  const spec = walkNode(schema, flags, depth, seen);
+  const description =
+    defOf(schema) !== null ? descriptionOf(schema) : undefined;
+  return description === undefined ? spec : { ...spec, description };
+};
+
+const walkNode = (
   schema: unknown,
   flags: Flags,
   depth: number,

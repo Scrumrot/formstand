@@ -81,6 +81,7 @@ export const FlightSearchForm = ({ form, onValuesChange }: FlightSearchFormProps
       />
       <NumberField form={form} path={"passengers"} label={"Passengers"} />
       <NumberField form={form} path={"cruiseAltitude"} label={"Cruise Altitude"} />
+      <p className="zf-help">{"feet MSL"}</p>
       <CheckboxField form={form} path={"instrumentFlight"} label={"Instrument Flight"} />
     </form>
   );

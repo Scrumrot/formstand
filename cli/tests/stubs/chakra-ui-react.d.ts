@@ -69,6 +69,7 @@ export declare const Field: Readonly<{
     props: Readonly<{ invalid?: boolean; children?: ReactNode }>,
   ) => ReactElement;
   Label: (props: Readonly<{ children?: ReactNode }>) => ReactElement;
+  HelperText: (props: Readonly<{ children?: ReactNode }>) => ReactElement;
   ErrorText: (props: Readonly<{ children?: ReactNode }>) => ReactElement;
 }>;
 

@@ -632,6 +632,14 @@ button.secondary.active {
   color: var(--pending);
   font-size: 12px;
 }
+/* The generated helper line: formstand-cli's plain output renders a
+ * zod .describe()/.meta description as <p class="zf-help"> under the
+ * control (see the Gen: live + form prop demo's cruiseAltitude). */
+.zf-help {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin: 2px 0 0;
+}
 .row {
   display: flex;
   gap: 12px;

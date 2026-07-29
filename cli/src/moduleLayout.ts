@@ -23,6 +23,7 @@ import {
   chakraAdapterSection,
   collectUsage,
   commentText,
+  describedLeafKinds,
   emitInitialValues,
   gridChakraProps,
   hasVariantFieldUsage,
@@ -291,6 +292,39 @@ const mergeImports = (lines: readonly ImportLine[]): readonly string[] => {
 // What one leaf control needs imported, per kit. Builder names double as
 // the adapter's exports for the kit uis.
 const leafImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] => {
+  const base = baseLeafImports(ui, spec);
+  // A described leaf's helper-text line adds its own needs: mui and shadcn
+  // read fieldError inline (mui's ?? fallback, shadcn's swap guard), antd
+  // additionally renders the muted Typography.Text line. chakra's described
+  // kinds already import fieldError, mantine's native description prop and
+  // plain's bare <p> need nothing.
+  if (
+    spec.description === undefined ||
+    !describedLeafKinds(ui).has(spec.kind)
+  ) {
+    return base;
+  }
+  switch (ui) {
+    case "mui":
+    case "shadcn":
+      return [...base, { from: "../adapter", names: ["fieldError"] }];
+    case "antd":
+      return [
+        ...base,
+        { from: "antd", names: ["Typography"] },
+        { from: "../adapter", names: ["fieldError"] },
+      ];
+    case "plain":
+    case "chakra":
+    case "mantine":
+      return base;
+  }
+};
+
+const baseLeafImports = (
+  ui: ModuleUi,
+  spec: FieldSpec,
+): readonly ImportLine[] => {
   switch (ui) {
     case "plain": {
       const builder =
@@ -576,19 +610,37 @@ const leafJsx = (
                       : "textInputProps"
               }(${varName})} />`,
             ];
+      // The always-visible muted helper line — plain keeps the description
+      // in its own slot next to the error line (mirrors the single-file
+      // backend's plainLeaf policy and its "zf-help" styling hook).
+      const desc =
+        spec.description !== undefined
+          ? [
+              `${indent}  <p className="zf-help">${jsxText(spec.description)}</p>`,
+            ]
+          : [];
       return [
         `${indent}<div>`,
         `${indent}  <label>`,
         `${indent}    ${labelAttr}`,
         ...control,
         `${indent}  </label>`,
+        ...desc,
         `${indent}  {${varName}.error?.[0] !== undefined ? (`,
         `${indent}    <p role="alert">{${varName}.error?.[0]}</p>`,
         `${indent}  ) : null}`,
         `${indent}</div>`,
       ];
     }
-    case "mui":
+    case "mui": {
+      // A described leaf inlines its literal into MUI's one helper-text slot
+      // after the adapter spread — the error keeps the slot while present
+      // (same swap as the single-file backend).
+      const helper =
+        spec.description !== undefined &&
+        describedLeafKinds("mui").has(spec.kind)
+          ? ` helperText={fieldError(${varName}) ?? ${q(spec.description)}}`
+          : "";
       switch (spec.kind) {
         case "boolean":
           return [
@@ -599,7 +651,7 @@ const leafJsx = (
           ];
         case "enum":
           return [
-            `${indent}<TextField select fullWidth label=${labelAttr} {...muiSelectProps(${varName})}>`,
+            `${indent}<TextField select fullWidth label=${labelAttr} {...muiSelectProps(${varName})}${helper}>`,
             ...spec.options.map(
               (option) =>
                 `${indent}  <MenuItem value=${jsxText(option)}>${jsxText(labelFromName(option))}</MenuItem>`,
@@ -610,28 +662,35 @@ const leafJsx = (
         // binding is a hook (see numberPropsBindings).
         case "number":
           return [
-            `${indent}<TextField fullWidth label=${labelAttr} {...${varName}NumberProps} />`,
+            `${indent}<TextField fullWidth label=${labelAttr} {...${varName}NumberProps}${helper} />`,
           ];
         case "date":
           return [
-            `${indent}<TextField fullWidth label=${labelAttr} {...${kitScalarBinding("mui", "date")}(${varName})} />`,
+            `${indent}<TextField fullWidth label=${labelAttr} {...${kitScalarBinding("mui", "date")}(${varName})}${helper} />`,
           ];
         default:
           return [
-            `${indent}<TextField fullWidth label=${labelAttr} {...${kitScalarBinding("mui", "string")}(${varName})} />`,
+            `${indent}<TextField fullWidth label=${labelAttr} {...${kitScalarBinding("mui", "string")}(${varName})}${helper} />`,
           ];
       }
-    case "mantine":
+    }
+    case "mantine": {
       // Mantine controls wire their own label/error/ids internally (error
-      // rides in the adapter builders), so no id attribute is needed.
+      // rides in the adapter builders), so no id attribute is needed. A
+      // described leaf fills the native `description` slot — its own
+      // element, separate from the error slot, so no swap is emitted.
+      const descAttr =
+        spec.description !== undefined
+          ? ` description=${jsxText(spec.description)}`
+          : "";
       switch (spec.kind) {
         case "boolean":
           return [
-            `${indent}<Switch label=${labelAttr} {...mantineSwitchProps(${varName})} />`,
+            `${indent}<Switch label=${labelAttr}${descAttr} {...mantineSwitchProps(${varName})} />`,
           ];
         case "enum":
           return [
-            `${indent}<NativeSelect label=${labelAttr} {...mantineSelectProps(${varName})}>`,
+            `${indent}<NativeSelect label=${labelAttr}${descAttr} {...mantineSelectProps(${varName})}>`,
             `${indent}  <option value="">{"Select…"}</option>`,
             ...spec.options.map(
               (option) =>
@@ -643,7 +702,7 @@ const leafJsx = (
         // binding is a hook (see numberPropsBindings).
         case "number":
           return [
-            `${indent}<TextInput label=${labelAttr} {...${varName}NumberProps} />`,
+            `${indent}<TextInput label=${labelAttr}${descAttr} {...${varName}NumberProps} />`,
           ];
         default: {
           const builder = kitScalarBinding(
@@ -651,15 +710,27 @@ const leafJsx = (
             spec.kind === "date" ? "date" : "string",
           );
           return [
-            `${indent}<TextInput label=${labelAttr} {...${builder}(${varName})} />`,
+            `${indent}<TextInput label=${labelAttr}${descAttr} {...${builder}(${varName})} />`,
           ];
         }
       }
+    }
     case "antd": {
       // antd's error slot lives in Form.Item, which the generated code
       // never uses (formstand owns state) — so leaves render an explicit
-      // label/control/FieldError column; ids wire the plain <label>.
+      // label/control/FieldError column; ids wire the plain <label>. A
+      // described leaf adds the muted Typography.Text line, rendered only
+      // while the FieldError line is not (the two share the one slot).
       const id = idAttr ?? `{${q("")}}`;
+      const descLines =
+        spec.description !== undefined &&
+        describedLeafKinds("antd").has(spec.kind)
+          ? [
+              `${indent}  {fieldError(${varName}) === undefined ? (`,
+              `${indent}    <Typography.Text type="secondary">${jsxText(spec.description)}</Typography.Text>`,
+              `${indent}  ) : null}`,
+            ]
+          : [];
       switch (spec.kind) {
         case "boolean":
           return [
@@ -680,6 +751,7 @@ const leafJsx = (
             `${indent}    ]}`,
             `${indent}    {...antdSelectProps(${varName})}`,
             `${indent}  />`,
+            ...descLines,
             `${indent}  <FieldError field={${varName}} />`,
             `${indent}</Flex>`,
           ];
@@ -690,6 +762,7 @@ const leafJsx = (
             `${indent}<Flex vertical gap="small">`,
             `${indent}  <label htmlFor=${id}>${labelAttr}</label>`,
             `${indent}  <Input id=${id} {...${varName}NumberProps} />`,
+            ...descLines,
             `${indent}  <FieldError field={${varName}} />`,
             `${indent}</Flex>`,
           ];
@@ -702,15 +775,27 @@ const leafJsx = (
             `${indent}<Flex vertical gap="small">`,
             `${indent}  <label htmlFor=${id}>${labelAttr}</label>`,
             `${indent}  <Input id=${id} {...${builder}(${varName})} />`,
+            ...descLines,
             `${indent}  <FieldError field={${varName}} />`,
             `${indent}</Flex>`,
           ];
         }
       }
     }
-    case "chakra":
+    case "chakra": {
       // Chakra 3 compound parts: Field.Root wires ids/aria between Label,
-      // control, and ErrorText via context, so no id attribute is needed.
+      // control, and ErrorText via context, so no id attribute is needed. A
+      // described leaf renders Field.HelperText only while Field.ErrorText
+      // does not (chakra shows both otherwise — the swap is explicit).
+      const descLines =
+        spec.description !== undefined &&
+        describedLeafKinds("chakra").has(spec.kind)
+          ? [
+              `${indent}  {fieldError(${varName}) === undefined ? (`,
+              `${indent}    <Field.HelperText>${jsxText(spec.description)}</Field.HelperText>`,
+              `${indent}  ) : null}`,
+            ]
+          : [];
       switch (spec.kind) {
         case "boolean":
           return [
@@ -735,6 +820,7 @@ const leafJsx = (
             `${indent}    </NativeSelect.Field>`,
             `${indent}    <NativeSelect.Indicator />`,
             `${indent}  </NativeSelect.Root>`,
+            ...descLines,
             `${indent}  <Field.ErrorText>{fieldError(${varName})}</Field.ErrorText>`,
             `${indent}</Field.Root>`,
           ];
@@ -745,6 +831,7 @@ const leafJsx = (
             `${indent}<Field.Root invalid={fieldError(${varName}) !== undefined}>`,
             `${indent}  <Field.Label>${labelAttr}</Field.Label>`,
             `${indent}  <Input {...${varName}NumberProps} />`,
+            ...descLines,
             `${indent}  <Field.ErrorText>{fieldError(${varName})}</Field.ErrorText>`,
             `${indent}</Field.Root>`,
           ];
@@ -757,13 +844,25 @@ const leafJsx = (
             `${indent}<Field.Root invalid={fieldError(${varName}) !== undefined}>`,
             `${indent}  <Field.Label>${labelAttr}</Field.Label>`,
             `${indent}  <Input {...${builder}(${varName})} />`,
+            ...descLines,
             `${indent}  <Field.ErrorText>{fieldError(${varName})}</Field.ErrorText>`,
             `${indent}</Field.Root>`,
           ];
         }
       }
+    }
     case "shadcn": {
+      // The muted description line shares the under-control slot with the
+      // FieldError line — the error wins it while present.
       const id = idAttr ?? `{${q("")}}`;
+      const descLines =
+        spec.description !== undefined
+          ? [
+              `${indent}  {fieldError(${varName}) === undefined ? (`,
+              `${indent}    <p className="text-sm text-muted-foreground">${jsxText(spec.description)}</p>`,
+              `${indent}  ) : null}`,
+            ]
+          : [];
       switch (spec.kind) {
         case "boolean":
           return [
@@ -772,6 +871,7 @@ const leafJsx = (
             `${indent}    <Checkbox id=${id} {...shadcnCheckboxProps(${varName})} />`,
             `${indent}    <Label htmlFor=${id}>${labelAttr}</Label>`,
             `${indent}  </div>`,
+            ...descLines,
             `${indent}  <FieldError field={${varName}} />`,
             `${indent}</div>`,
           ];
@@ -794,6 +894,7 @@ const leafJsx = (
             ),
             `${indent}    </SelectContent>`,
             `${indent}  </Select>`,
+            ...descLines,
             `${indent}  <FieldError field={${varName}} />`,
             `${indent}</div>`,
           ];
@@ -810,6 +911,7 @@ const leafJsx = (
             `${indent}<div className="grid gap-2">`,
             `${indent}  <Label htmlFor=${id}>${labelAttr}</Label>`,
             `${indent}  <Input id=${id} {...${builder}(${varName})} />`,
+            ...descLines,
             `${indent}  <FieldError field={${varName}} />`,
             `${indent}</div>`,
           ];

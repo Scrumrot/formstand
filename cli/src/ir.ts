@@ -23,6 +23,13 @@ export type SharedSpecProps = Readonly<{
   // fallback), are detected off `defaultValue` instead — see codegen's
   // droppedDefaultFieldPaths, which mirrors both as stderr warnings.
   droppedDefault?: true;
+  // Human helper text for the field, captured from zod's `.describe()` /
+  // `.meta({ description })` (one registry store in zod v4 — see fromZod's
+  // capture note for the wrapper-precedence rule) or, in type mode, from the
+  // member's leading JSDoc description. Emitters surface it in each kit's
+  // helper-text slot; where the kit shares one slot with the error line, the
+  // error wins while present.
+  description?: string;
 }>;
 
 export type NamedField = Readonly<{
