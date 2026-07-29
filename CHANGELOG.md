@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.0 — 2026-07-29
 
 ### Added
 
@@ -167,7 +167,7 @@
 - `FieldPathArg` is now actually used by the `useField` / `useFieldArray`
   overloads it describes (it was exported dead).
 
-## formstand-cli Unreleased
+## formstand-cli 0.9.0 — 2026-07-29
 
 ### Added
 
