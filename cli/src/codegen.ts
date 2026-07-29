@@ -3529,7 +3529,11 @@ export const antdAdapterSection = (usage: KindUsage, exp = ""): string => {
     "",
     `${exp}const fieldStatus = (`,
     "  field: Readonly<{ error: readonly string[] | undefined }>,",
-    '): "error" | undefined => (fieldError(field) !== undefined ? "error" : undefined);',
+    // "" (not undefined) is antd's own no-status value in the InputStatus
+    // union — returning undefined would fail host apps compiled with
+    // exactOptionalPropertyTypes, where `status?: InputStatus` rejects an
+    // explicit undefined.
+    '): "error" | "" => (fieldError(field) !== undefined ? "error" : "");',
     "",
     `${exp}const FieldError = ({`,
     "  field,",

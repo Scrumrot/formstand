@@ -15,7 +15,12 @@ const TAB_COUNT = Object.keys(DEMO_SOURCES).length;
 // creates its form inside the component (useForm) and exports nothing to
 // hand useDemoForm, so the shell's View state button stays disabled there
 // — asserted as such below instead of exempted silently.
-const NO_REGISTERED_FORM: ReadonlySet<string> = new Set(["Gen: deep nesting"]);
+const NO_REGISTERED_FORM: ReadonlySet<string> = new Set([
+  "Gen: deep nesting",
+  "Gen: Chakra UI",
+  "Gen: Mantine",
+  "Gen: Ant Design",
+]);
 
 // The sidebar is a tree view: demo leaves carry the nav-tab class and switch
 // tabs when their content row is clicked.

@@ -8,7 +8,10 @@ import autosaveSrc from "../forms/AutosaveForm.tsx?raw";
 import basicSrc from "../forms/BasicForm.tsx?raw";
 import boundSrc from "../forms/BoundFieldsForm.tsx?raw";
 import cliCommandSrc from "../forms/CliCommandBuilder.tsx?raw";
+import antdOnboardingSrc from "../generated/AntdOnboardingForm.tsx?raw";
+import chakraOnboardingSrc from "../generated/ChakraOnboardingForm.tsx?raw";
 import deepBoundarySrc from "../generated/DeepBoundaryForm.tsx?raw";
+import mantineOnboardingSrc from "../generated/MantineOnboardingForm.tsx?raw";
 import schemaBuilderSrc from "../forms/SchemaBuilder/SchemaBuilder.tsx?raw";
 import schemaBuilderSchemaSrc from "../forms/SchemaBuilder/builderSchema.ts?raw";
 import schemaBuilderGenerateSrc from "../forms/SchemaBuilder/generate.ts?raw";
@@ -182,6 +185,11 @@ const sources = {
   // leaf exceeds it — the CLI degrades that subtree to a `// TODO`.
   genDeepNest: single("DeepBoundaryForm.tsx", deepBoundarySrc),
   genArrayStress: nestedArrayStressFiles,
+  // The three kit demos: one schema (Onboarding), one chrome, three
+  // --ui backends — each an untouched single-file output.
+  genChakra: single("ChakraOnboardingForm.tsx", chakraOnboardingSrc),
+  genMantine: single("MantineOnboardingForm.tsx", mantineOnboardingSrc),
+  genAntd: single("AntdOnboardingForm.tsx", antdOnboardingSrc),
   cliCommand: single("CliCommandBuilder.tsx", cliCommandSrc),
   // Explicit order (not the module glob): the component leads so the code
   // panel opens on the useForm call, then the schema and the emitter bridge.

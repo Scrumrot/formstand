@@ -6,6 +6,27 @@ import { execFileSync } from "node:child_process";
 
 const boundarySchemas = "examples/src/generated/boundarySchemas.ts";
 
+const onboardingSchema = "examples/src/forms/OnboardingForm/schema.ts";
+
+// The three kit demos share ONE schema (Onboarding) and ONE chrome
+// (--sections panel --columns 2, matching the mui module demo above) so the
+// only variable across the four "CLI output" tabs is the --ui backend —
+// the comparison is the point. Single-file layout keeps each one a
+// one-file diff.
+const kitDemo = (ui, name) => [
+  onboardingSchema,
+  "--ui",
+  ui,
+  "--sections",
+  "panel",
+  "--columns",
+  "2",
+  "--name",
+  name,
+  "--out",
+  `examples/src/generated/${name}.tsx`,
+];
+
 const commands = [
   [
     "examples/src/forms/OnboardingForm/schema.ts",
@@ -60,6 +81,9 @@ const commands = [
     "--out",
     "examples/src/generated/NestedArrayStressForm",
   ],
+  kitDemo("chakra", "ChakraOnboardingForm"),
+  kitDemo("mantine", "MantineOnboardingForm"),
+  kitDemo("antd", "AntdOnboardingForm"),
 ];
 
 commands.forEach((args) =>

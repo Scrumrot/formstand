@@ -161,7 +161,7 @@
   v6–7 accept both and get the modern one). Custom `--template` modules
   compose with a versioned `--ui` exactly as they did with bare `mui`
   (a template still overrides the ui entirely, `--layout single` only).
-- **`cli/matrix/`: the MUI version-matrix typecheck harness** — an isolated
+- **`cli/matrix/`: the UI-kit version-matrix typecheck harness** — an isolated
   workspace (own `package.json` + lockfile; not part of the root or cli
   installs) with every supported `@mui/material` major installed side by
   side under npm aliases (`mui5` … `mui9`). `npm run matrix` (from `cli/`)
@@ -173,7 +173,10 @@
   adapter's TextField props style outside a JSX spread (spreads bypass
   TypeScript's excess-property checks), so a wrong per-version config
   fails the matrix instead of compiling silently. Run it before releasing
-  any MUI-backend change; it is deliberately not part of `npm test`.
+  any UI-kit backend change; it is deliberately not part of `npm test`.
+  (The chakra, mantine, and antd entries below each extend the harness
+  with their kit's alias and job — it ends this cycle proving seven
+  targets: four mui majors, chakra 3, mantine 9, antd 6.)
 - **First-class `--ui chakra`: a Chakra UI v3 backend** — both layouts
   (single-file and `--layout module`), the full field-kind surface the mui
   backend covers (strings/numbers/dates/enums/booleans, nested objects,
@@ -294,6 +297,29 @@
   Input/Select/Checkbox spread surfaces, restating the value-shaped
   Select `onChange` with its explicit parameter type — so
   `npm run matrix` now proves seven kit targets against their real .d.ts.
+- **Playground: the new kit backends as living demos** — three new
+  Generated tabs (**Gen: Chakra UI**, **Gen: Mantine**, **Gen: Ant
+  Design**) render the SAME Onboarding schema the mui module tab uses,
+  generated single-file with `--ui chakra` / `--ui mantine` / `--ui antd`
+  and the same `--sections panel --columns 2` chrome — only the backend
+  varies, so the four tabs are a direct kit comparison. Committed
+  untouched and drift-checked by CI like the other generated demos
+  (`scripts/generate-cli-demos.mjs`), rendered behind scoped provider
+  bridges that follow the playground's light/dark switch (ChakraProvider +
+  a mode class, MantineProvider `forceColorScheme`, antd `ConfigProvider`
+  algorithm — antd needs no provider to function), and smoke-tested in
+  the root suite (mount, label association, array add/remove per kit).
+
+### Fixed
+
+- **antd `fieldStatus` returns `""` — antd's own no-status value — instead
+  of `undefined`** when a field has no error. Spreading
+  `status: "error" | undefined` onto antd's `status?: InputStatus` props
+  fails to compile in host apps built with `exactOptionalPropertyTypes`
+  (which rejects explicit `undefined` for optional properties); `""` sits
+  in antd's `InputStatus` union precisely for "no status". Caught by
+  wiring the playground demo — the examples package compiles with
+  `exactOptionalPropertyTypes` on.
 
 ## formstand-cli 0.8.0 — 2026-07-28
 

@@ -17,3 +17,18 @@ afterEach(() => {
 globalThis.ResizeObserver ??= function ResizeObserver(): ResizeObserver {
   return { observe: () => {}, unobserve: () => {}, disconnect: () => {} };
 } as unknown as typeof ResizeObserver;
+
+// jsdom has no matchMedia either; MantineProvider (color-scheme detection)
+// and antd's responsive observers query it on mount. Media never changes in
+// jsdom, so a query that never matches and never fires is accurate.
+globalThis.matchMedia ??= ((query: string): MediaQueryList =>
+  ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  }) as unknown as MediaQueryList) as typeof globalThis.matchMedia;

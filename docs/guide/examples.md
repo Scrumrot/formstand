@@ -228,6 +228,14 @@ what the current CLI emits — so the tab is always the generator's real, untouc
 Compare it against the hand-built MUI Onboarding tab to see exactly what the
 generator gives you versus what you might grow it into.
 
+The **Gen: Chakra UI**, **Gen: Mantine**, and **Gen: Ant Design** tabs run
+the SAME Onboarding schema through `--ui chakra`, `--ui mantine`, and
+`--ui antd` with the same section chrome — only the backend varies, so
+flipping between the four tabs is a direct comparison of what each kit
+target emits. They're regenerated and drift-checked by CI the same way,
+and each supported kit major is typechecked against its real declarations
+by the CLI's version matrix (`cli/matrix/`).
+
 ## Schema builder: the generator in your browser
 
 The **Schema builder** tab ([direct link](https://scrumrot.github.io/formstand/examples/#/schema-builder))

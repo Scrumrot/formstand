@@ -20,6 +20,10 @@ const DEDUPED = [
   "@emotion/styled",
   "radix-ui",
   "lucide-react",
+  "@chakra-ui/react",
+  "@mantine/core",
+  "@mantine/hooks",
+  "antd",
 ];
 
 const lockVersions = (lockPath) => {

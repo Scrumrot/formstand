@@ -60,8 +60,11 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@chakra-ui/react": "^3.36.1",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
+    "@mantine/core": "^9.5.0",
+    "@mantine/hooks": "^9.5.0",
     "@mui/icons-material": "^9.2.0",
     "@mui/material": "^9.2.0",
     "@mui/x-tree-view": "^9.9.0",
@@ -71,6 +74,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.2.3",
     "@vitest/coverage-v8": "^4.1.9",
+    "antd": "^6.5.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "eslint": "^10.6.0",

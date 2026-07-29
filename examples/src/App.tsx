@@ -1,10 +1,14 @@
-import { type ReactElement, useEffect, useState } from "react";
+import { type ReactElement, type ReactNode, useEffect, useState } from "react";
 import {
   ThemeModeProvider,
   type ThemeMode,
   useGitHubStars,
+  useThemeMode,
   useThemeModeState,
 } from "./theme";
+import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
+import { MantineProvider } from "@mantine/core";
+import { ConfigProvider as AntdConfigProvider, theme as antdTheme } from "antd";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import FolderRoundedIcon from "@mui/icons-material/FolderRounded";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
@@ -22,7 +26,10 @@ import { ContextForm } from "./forms/ContextForm";
 import { DependentFieldsForm } from "./forms/DependentFieldsForm";
 import { DerivedFieldForm } from "./forms/DerivedFieldForm";
 import { FileUploadForm } from "./forms/FileUploadForm";
+import { AntdOnboardingForm } from "./generated/AntdOnboardingForm";
+import { ChakraOnboardingForm } from "./generated/ChakraOnboardingForm";
 import { DeepBoundaryForm } from "./generated/DeepBoundaryForm";
+import { MantineOnboardingForm } from "./generated/MantineOnboardingForm";
 import { KitchenSinkForm, kitchenSinkForm } from "./generated/KitchenSinkForm";
 import {
   NestedArrayStressForm,
@@ -83,6 +90,45 @@ const shadcnTab = (
     </div>
   ),
 });
+
+// Scoped provider bridges for the generated kit demos, each following the
+// shell's light/dark switch the way MuiThemeBridge does. They wrap only the
+// demo content, so the kits' theming never leaks into the playground shell.
+type KitBridgeProps = Readonly<{ children: ReactNode }>;
+
+// Chakra v3 keys dark styles off a `.dark` ancestor class (defaultSystem's
+// dark condition), so the bridge is the provider plus a mode class.
+const ChakraBridge = ({ children }: KitBridgeProps) => {
+  const mode = useThemeMode();
+  return (
+    <ChakraProvider value={defaultSystem}>
+      <div className={mode}>{children}</div>
+    </ChakraProvider>
+  );
+};
+
+// Mantine takes the scheme as a prop; its global stylesheet is imported in
+// main.tsx (component classes are inert until this provider mounts).
+const MantineBridge = ({ children }: KitBridgeProps) => {
+  const mode = useThemeMode();
+  return <MantineProvider forceColorScheme={mode}>{children}</MantineProvider>;
+};
+
+// antd needs no provider to function — ConfigProvider here is purely the
+// optional theming hook, swapping the token algorithm for dark mode.
+const AntdBridge = ({ children }: KitBridgeProps) => {
+  const mode = useThemeMode();
+  return (
+    <AntdConfigProvider
+      theme={{
+        algorithm:
+          mode === "dark" ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+      }}
+    >
+      {children}
+    </AntdConfigProvider>
+  );
+};
 
 // The generated module ships without the playground harness (it's the
 // CLI's untouched output), so this wrapper registers its form with the
@@ -247,6 +293,39 @@ const TABS: readonly Tab[] = [
     label: "Gen: nested arrays",
     render: () => <GeneratedNestedArrayStressDemo />,
   },
+  // The three kit demos are the SAME Onboarding schema and the same
+  // chrome (--sections panel --columns 2) as the mui module demo above —
+  // only --ui varies, so flipping between the four tabs is a direct
+  // backend comparison. Single-file layout: useForm lives inside the
+  // component, so (like genDeepNest) there is no form instance to
+  // register with useDemoForm.
+  {
+    key: "genChakra",
+    label: "Gen: Chakra UI",
+    render: () => (
+      <ChakraBridge>
+        <ChakraOnboardingForm />
+      </ChakraBridge>
+    ),
+  },
+  {
+    key: "genMantine",
+    label: "Gen: Mantine",
+    render: () => (
+      <MantineBridge>
+        <MantineOnboardingForm />
+      </MantineBridge>
+    ),
+  },
+  {
+    key: "genAntd",
+    label: "Gen: Ant Design",
+    render: () => (
+      <AntdBridge>
+        <AntdOnboardingForm />
+      </AntdBridge>
+    ),
+  },
 ];
 
 type GroupTitle =
@@ -294,6 +373,9 @@ const GROUP_OF: Readonly<Record<TabKey, GroupTitle>> = {
   genKitchenSink: "Generated",
   genDeepNest: "Generated",
   genArrayStress: "Generated",
+  genChakra: "Generated",
+  genMantine: "Generated",
+  genAntd: "Generated",
   cliCommand: "Generated",
   schemaBuilder: "Generated",
 };
@@ -361,6 +443,12 @@ const BLURBS: Readonly<Record<TabKey, string>> = {
     "Nine levels of nesting, untouched single-file output: leaves exactly AT formstand's 9-segment FieldPath budget bind real controls, while the level past it degrades to a // TODO.",
   genArrayStress:
     "Three-level nested arrays (teams → members → phones) from the CLI's recursive row extraction, untouched module output.",
+  genChakra:
+    "The same Onboarding schema as the mui tab through --ui chakra: Chakra UI v3's compound Field/NativeSelect/Switch components, untouched single-file output.",
+  genMantine:
+    "The same Onboarding schema through --ui mantine: Mantine v9's TextInput/NativeSelect/Switch with their built-in label and error props, untouched single-file output.",
+  genAntd:
+    "The same Onboarding schema through --ui antd: Ant Design v6 bound as plain controlled components — no antd Form/Form.Item anywhere — untouched single-file output.",
   cliCommand:
     "Fill the options and the formstand-gen command updates live — the command line is useFormSelector-derived state.",
   schemaBuilder:
