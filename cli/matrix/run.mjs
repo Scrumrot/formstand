@@ -1,9 +1,11 @@
 // The UI-kit version matrix: PROVES the CLI's kit output compiles against
 // the real installed type declarations — every supported @mui/material
-// major (5, 6, 7, 9 — MUI skipped 8) for --ui mui@N, and @chakra-ui/react 3
-// for --ui chakra — in BOTH layouts, by typechecking freshly generated
-// forms against each package's real .d.ts (installed side by side in this
-// folder under npm aliases mui5/mui6/mui7/mui9/chakra3).
+// major (5, 6, 7, 9 — MUI skipped 8) for --ui mui@N, @chakra-ui/react 3
+// for --ui chakra, and @mantine/core 9 for --ui mantine — in BOTH layouts,
+// by typechecking freshly generated forms against each package's real
+// .d.ts (installed side by side in this folder under npm aliases
+// mui5/mui6/mui7/mui9/chakra3/mantine9; @mantine/hooks installs under its
+// real name — mantine9's .d.ts resolves it node-style).
 //
 // Opt-in: `npm install` in cli/matrix once (a chunky, isolated install — not
 // part of the root or cli installs), then `npm run matrix` from cli/. Not
@@ -33,7 +35,8 @@ const { createJiti } = requireFromCli("jiti");
 
 if (
   !fs.existsSync(path.join(matrixDir, "node_modules", "mui5")) ||
-  !fs.existsSync(path.join(matrixDir, "node_modules", "chakra3"))
+  !fs.existsSync(path.join(matrixDir, "node_modules", "chakra3")) ||
+  !fs.existsSync(path.join(matrixDir, "node_modules", "mantine9"))
 ) {
   process.stderr.write(
     "matrix: node_modules missing or stale — run `npm install` in cli/matrix first (a chunky, isolated install)\n",
@@ -281,6 +284,103 @@ const generateChakra = () => {
   return files;
 };
 
+// The mantine probe: literal-attribute restatement of every prop surface the
+// mantine adapters SPREAD onto the controls (TextInput text/number/date
+// bindings with the built-in error prop, the NativeSelect select binding
+// with option children, Switch's DOM checked/onChange) — spreads bypass
+// excess-property checks, literals don't.
+const MANTINE_PROBE = [
+  'import { NativeSelect, Switch, TextInput } from "@mantine/core";',
+  "",
+  "export const Probe = () => (",
+  "  <>",
+  '    <TextInput label={"Name"} error={"required"} name="n" value="" onChange={(e) => void e.target.value} onBlur={() => {}} />',
+  '    <TextInput inputMode="decimal" label={"Age"} error={undefined} name="n" value="" onChange={() => {}} onBlur={() => {}} />',
+  '    <TextInput type="date" label={"Born"} error={undefined} name="n" value="" onChange={() => {}} onBlur={() => {}} />',
+  "    <NativeSelect",
+  '      label={"Role"}',
+  '      error={"required"}',
+  '      name="n"',
+  '      value=""',
+  "      onChange={(e) => void e.target.value}",
+  "      onBlur={() => {}}",
+  "    >",
+  '      <option value="">{"Select role"}</option>',
+  '      <option value="a">{"A"}</option>',
+  "    </NativeSelect>",
+  '    <Switch label={"Active"} name="n" checked onChange={(e) => void e.target.checked} onBlur={() => {}} />',
+  "  </>",
+  ");",
+  "",
+].join("\n");
+
+const generateMantine = () => {
+  const dir = path.join(outRoot, "mantine9");
+  const files = [];
+  const write = (rel, content) => {
+    const abs = path.join(dir, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, content, "utf8");
+    files.push(abs);
+  };
+
+  fs.mkdirSync(dir, { recursive: true });
+  fs.copyFileSync(fixtureFile, path.join(dir, "boundarySchemas.ts"));
+
+  const single = (formName, ir, name, visual) =>
+    write(
+      `single/${formName}.tsx`,
+      api.emitMantineForm({
+        ir,
+        formName,
+        schemaImport: { name, from: "../boundarySchemas", kind: "named" },
+        ...(visual === undefined ? {} : { visual }),
+      }),
+    );
+
+  // Single-file layout: the default chrome plus every non-default section
+  // wrapper and grid (panel + 2 columns, collapsible + 3 columns).
+  single("KitchenSinkForm", kitchenSinkIr, "kitchenSinkSchema");
+  single("KitchenSinkPanel", kitchenSinkIr, "kitchenSinkSchema", {
+    sections: "panel",
+    columns: 2,
+  });
+  single("KitchenSinkCollapsible", kitchenSinkIr, "kitchenSinkSchema", {
+    sections: "collapsible",
+    columns: 3,
+  });
+  single("NestedArrayForm", nestedArrayIr, "nestedArrayStressSchema");
+
+  // Module layout: the shared adapter file plus section/field files.
+  const moduleForm = (folder, ir, name, formName, visual) =>
+    api
+      .emitModuleForm({
+        ir,
+        formName,
+        ui: "mantine",
+        schemaImport: { name, from: "../../boundarySchemas", kind: "named" },
+        ...(visual === undefined ? {} : { visual }),
+      })
+      .forEach((file) =>
+        write(path.join("module", folder, file.path), file.content),
+      );
+
+  moduleForm("KitchenSink", kitchenSinkIr, "kitchenSinkSchema", "KitchenSinkForm", {
+    sections: "collapsible",
+    columns: 2,
+  });
+  moduleForm(
+    "NestedArrays",
+    nestedArrayIr,
+    "nestedArrayStressSchema",
+    "NestedArrayForm",
+  );
+
+  write("Probe.tsx", MANTINE_PROBE);
+
+  return files;
+};
+
 const formatDiagnostic = (d) => {
   const message = ts.flattenDiagnosticMessageText(d.messageText, " | ");
   if (d.file === undefined || d.start === undefined) return `TS${d.code} ${message}`;
@@ -291,7 +391,8 @@ const formatDiagnostic = (d) => {
 fs.rmSync(outRoot, { recursive: true, force: true });
 
 // One job per kit/version: mui@5..9 against the aliased @mui/material
-// majors, chakra@3 against the aliased @chakra-ui/react v3.
+// majors, chakra@3 against the aliased @chakra-ui/react v3, mantine@9
+// against the aliased @mantine/core v9.
 const jobs = [
   ...api.MUI_VERSIONS.map((version) => ({
     label: `mui@${version}`,
@@ -302,6 +403,11 @@ const jobs = [
     label: "chakra@3",
     generate: generateChakra,
     kitPaths: { "@chakra-ui/react": [nm("chakra3")] },
+  },
+  {
+    label: "mantine@9",
+    generate: generateMantine,
+    kitPaths: { "@mantine/core": [nm("mantine9")] },
   },
 ];
 
@@ -327,7 +433,7 @@ const results = jobs.map(({ label, generate, kitPaths }) => {
 const failures = results.filter((count) => count > 0).length;
 process.stderr.write(
   failures === 0
-    ? `matrix: all ${results.length} kit targets (mui majors + chakra 3) typecheck both layouts\n`
+    ? `matrix: all ${results.length} kit targets (mui majors + chakra 3 + mantine 9) typecheck both layouts\n`
     : `matrix: ${failures} target(s) FAILED\n`,
 );
 process.exit(failures === 0 ? 0 : 1);

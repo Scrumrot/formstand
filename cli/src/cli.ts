@@ -15,6 +15,7 @@ import {
   depthWarningFrontier,
   droppedDefaultFieldPaths,
   emitChakraForm,
+  emitMantineForm,
   emitMuiForm,
   emitPlainForm,
   emitShadcnForm,
@@ -48,7 +49,7 @@ Options:
   --export <name>     which export holds the zod schema (default: the default
                       export, or the sole zod-schema export)
   --type <TypeName>   generate from an exported TS type/interface instead
-  --ui <plain|mui[@5|6|7|9]|shadcn|chakra>
+  --ui <plain|mui[@5|6|7|9]|shadcn|chakra|mantine>
                       component flavor (default: plain). mui may pin an
                       @mui/material major: mui@5, mui@6, mui@7, mui@9; bare
                       mui means mui@9. Only React-19-capable majors are
@@ -56,7 +57,10 @@ Options:
                       older can't install alongside it; MUI skipped 8).
                       chakra targets @chakra-ui/react 3 (the only supported
                       major; "chakra@3" spells the same thing) and assumes
-                      the host app mounts ChakraProvider.
+                      the host app mounts ChakraProvider. mantine targets
+                      @mantine/core 9, the current major ("mantine@9" spells
+                      the same thing) and assumes the host app mounts
+                      MantineProvider.
   --layout <single|module>
                       single: one component file (default). module: a
                       feature-module folder (schema.ts/types.ts/hooks.ts via
@@ -93,6 +97,7 @@ Examples:
   formstand-gen src/types.ts --type Profile --ui mui --out src/ProfileForm.tsx
   formstand-gen src/profileSchema.ts --ui shadcn --out src/ProfileForm.tsx
   formstand-gen src/profileSchema.ts --ui chakra --out src/ProfileForm.tsx
+  formstand-gen src/profileSchema.ts --ui mantine --out src/ProfileForm.tsx
   formstand-gen src/profileSchema.ts --layout module --out src/ProfileForm
   formstand-gen src/profileSchema.ts --ui mui --sections panel --columns 2
   formstand-gen src/profileSchema.ts --ui mui@5 --out src/ProfileForm.tsx
@@ -615,6 +620,8 @@ const emitComponent = (
       return emitShadcnForm(options);
     case "chakra":
       return emitChakraForm(options);
+    case "mantine":
+      return emitMantineForm(options);
     case "plain":
       return emitPlainForm(options);
   }

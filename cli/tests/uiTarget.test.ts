@@ -119,6 +119,58 @@ describe("parseUiTarget", () => {
       },
     );
   });
+
+  // mantine is UNVERSIONED like chakra: v9 (the current major) is the only
+  // target; "mantine@9" is accepted as the explicit spelling. Majors 6 and
+  // older error with the React-19 + styling-rewrite rationale; 7 and 8 —
+  // which DO accept React 19 — error with the current-major-only scope
+  // (the emitted surface is verified against v9 only).
+  it("mantine parses versionless, with mantine@9 as an explicit alias", () => {
+    expect(parseUiTarget("mantine")).toEqual({
+      kind: "ok",
+      target: { kit: "mantine" },
+    });
+    expect(parseUiTarget("mantine@9")).toEqual({
+      kind: "ok",
+      target: { kit: "mantine" },
+    });
+  });
+
+  it("rejects mantine@6 and older with the React-19 scope rationale", () => {
+    (["mantine@6", "mantine@5", "mantine@0"] as const).forEach((value) => {
+      const result = parseUiTarget(value);
+      expect(result.kind).toBe("error");
+      expect(result.kind === "error" && result.message).toContain("React 19");
+      expect(result.kind === "error" && result.message).toContain(
+        '"mantine@9"',
+      );
+    });
+  });
+
+  it("rejects mantine@7 and @8 with the current-major-only scope", () => {
+    (["mantine@7", "mantine@8"] as const).forEach((value) => {
+      const result = parseUiTarget(value);
+      expect(result.kind).toBe("error");
+      expect(result.kind === "error" && result.message).toContain(
+        "current @mantine/core major",
+      );
+      expect(result.kind === "error" && result.message).toContain(
+        '"mantine@9"',
+      );
+    });
+  });
+
+  it("rejects other mantine versions naming the one supported major", () => {
+    (["mantine@10", "mantine@", "mantine@next", "mantine@9.1"] as const).forEach(
+      (value) => {
+        const result = parseUiTarget(value);
+        expect(result.kind).toBe("error");
+        expect(result.kind === "error" && result.message).toContain(
+          '"mantine@9"',
+        );
+      },
+    );
+  });
 });
 
 // The one empirical prop-surface delta across the supported majors is
@@ -230,6 +282,11 @@ describe("--ui chakra end to end", () => {
     expect(fs.readFileSync(pinned, "utf8")).toBe(code);
   });
 
+  it("unsupported chakra/mantine versions fail loudly", async () => {
+    expect(await main([zodFixture, "--ui", "mantine@7"])).toBe(1);
+    expect(await main([zodFixture, "--ui", "mantine@2"])).toBe(1);
+  });
+
   it("--ui chakra --layout module writes the chakra adapter", async () => {
     const dir = freshTmpDir("ui-target-chakra-module");
     const out = path.join(dir, "ProfileForm");
@@ -246,5 +303,40 @@ describe("--ui chakra end to end", () => {
     ).toBe(0);
     const adapter = fs.readFileSync(path.join(out, "adapter.ts"), "utf8");
     expect(adapter).toContain("export const chakraTextInputProps");
+  });
+});
+
+describe("--ui mantine end to end", () => {
+  it("--ui mantine reaches the emitted component in both spellings", async () => {
+    const dir = freshTmpDir("ui-target-mantine");
+    const bare = path.join(dir, "Bare.tsx");
+    const pinned = path.join(dir, "Pinned.tsx");
+    expect(await main([zodFixture, "--ui", "mantine", "--out", bare])).toBe(0);
+    expect(
+      await main([zodFixture, "--ui", "mantine@9", "--out", pinned]),
+    ).toBe(0);
+    const code = fs.readFileSync(bare, "utf8");
+    expect(code).toContain('} from "@mantine/core";');
+    expect(code).toContain("{...mantineTextInputProps(field)}");
+    // mantine@9 IS mantine — byte-identical output.
+    expect(fs.readFileSync(pinned, "utf8")).toBe(code);
+  });
+
+  it("--ui mantine --layout module writes the mantine adapter", async () => {
+    const dir = freshTmpDir("ui-target-mantine-module");
+    const out = path.join(dir, "ProfileForm");
+    expect(
+      await main([
+        zodFixture,
+        "--ui",
+        "mantine",
+        "--layout",
+        "module",
+        "--out",
+        out,
+      ]),
+    ).toBe(0);
+    const adapter = fs.readFileSync(path.join(out, "adapter.ts"), "utf8");
+    expect(adapter).toContain("export const mantineTextInputProps");
   });
 });

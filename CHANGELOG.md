@@ -206,6 +206,44 @@
   layouts, all section styles, and a literal-attribute probe for the
   Input/NativeSelect/Switch prop surfaces — so `npm run matrix` now proves
   five kit targets against their real .d.ts.
+- **First-class `--ui mantine`: a Mantine v9 backend** — both layouts, the
+  full field-kind surface the other kit backends cover (strings/numbers/
+  dates/enums/booleans, nested objects, arrays with add/remove and
+  recursive nested-row extraction, tuples, discriminated unions, TODO
+  degradations), and every `--sections` / `--columns` variant. Mantine
+  field components carry their own `label` + `error` props, so there is no
+  Field wrapper: `TextInput` binds text/number/date natively
+  (`inputMode="decimal"`, `type="date"`; Mantine's `NumberInput` widget is
+  deliberately NOT used — its `onChange` takes `(value: number | string)`,
+  not a DOM event, so it can't share formstand's input-shaped adapters),
+  `NativeSelect` binds enums as a real `<select>` with `<option>` children
+  (same native-first choice as the chakra backend), and `Switch` binds
+  booleans through plain DOM `checked`/`onChange` (a `ChangeEvent`, unlike
+  chakra's details callback). Error text rides inside the adapter builders
+  (`error: fieldError(field)`), so leaves are one-liners like the mui
+  backend's. Sections render `Stack`/`Title` (flat), `Card withBorder` +
+  `SimpleGrid` (panel), or `Accordion`/`Accordion.Item`/`Control`/`Panel`
+  (collapsible, `defaultValue="section"` + `variant="contained"`); columns
+  use `SimpleGrid cols={N}`. The generated file assumes the host app
+  mounts `MantineProvider` (same policy as the mui/chakra providers). The
+  module layout gains a shared `adapter.ts` (`mantineTextInputProps` /
+  `mantineNumberInputProps` / `mantineDateInputProps` /
+  `mantineSelectProps` / `mantineSwitchProps` + `fieldError`). mantine
+  takes no version suffix — v9 (the current major) is the only supported
+  target, with `mantine@9` accepted as the explicit spelling. The scope is
+  empirical: 9.x peers `react ^19.2` while 7.17+/8.x peer `^18 || ^19`
+  (7.0 was ^18-only, ≤6 predate the v7 emotion→CSS-modules rewrite), and
+  the emitted component surface typechecks IDENTICALLY against 7.17/8.3/9.5
+  except the `bdrs` style prop (absent in 7) — so `mantine@0`–`6` fail
+  with the React-19/styling-rewrite rationale and `mantine@7`/`@8` fail
+  with a precise verified-against-v9-only message instead of a false
+  incompatibility claim. The config file's `ui` key accepts the same
+  spellings, and the matrix harness gained a `mantine9` alias
+  (`npm:@mantine/core@^9.5`, plus its `@mantine/hooks` peer) and a
+  mantine job — both schemas, both layouts, all section styles, and a
+  literal-attribute probe for the TextInput/NativeSelect/Switch spread
+  surfaces — so `npm run matrix` now proves six kit targets against their
+  real .d.ts.
 
 ## formstand-cli 0.8.0 — 2026-07-28
 

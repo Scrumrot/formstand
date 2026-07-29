@@ -20,6 +20,7 @@ export {
   emitMuiForm,
   emitShadcnForm,
   emitChakraForm,
+  emitMantineForm,
   emitTemplateForm,
   DEFAULT_VISUAL,
 } from "./codegen";

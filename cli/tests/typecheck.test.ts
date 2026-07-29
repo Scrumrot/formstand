@@ -6,6 +6,7 @@ import {
   type EmitFormOptions,
   type VisualOptions,
   emitChakraForm,
+  emitMantineForm,
   emitMuiForm,
   emitPlainForm,
   emitShadcnForm,
@@ -15,6 +16,7 @@ import {
   chakraStubPaths,
   fixturesDir,
   freshTmpDir,
+  mantineStubPaths,
   muiStubPaths,
   realShadcnPaths,
   shadcnStubFile,
@@ -130,6 +132,7 @@ const plain = fixturesFor(emitPlainForm, "plain");
 const mui = fixturesFor(emitMuiForm, "mui");
 const shadcn = fixturesFor(emitShadcnForm, "shadcn");
 const chakra = fixturesFor(emitChakraForm, "chakra");
+const mantine = fixturesFor(emitMantineForm, "mantine");
 
 describe("generated components", () => {
   // THE BIG ONE: every plain-backend output must typecheck against the real
@@ -169,6 +172,31 @@ describe("generated components", () => {
     expect(chakra.profile.code).not.toContain("isInvalid");
     expect(chakra.profile.code).not.toContain("FormControl");
     expect(chakra.profile.code).not.toContain("helperText");
+  });
+
+  it("mantine outputs typecheck against the library source and the mantine stub", () => {
+    expect(typecheckDiagnostics(mantine.files, mantineStubPaths)).toEqual([]);
+    // The Mantine conventions the emitter promises: field components carry
+    // their own label + error props (no Field wrapper), the native-input
+    // bindings (TextInput for numbers — Mantine's NumberInput onChange is
+    // (value: number | string), not a DOM event — and a real <select> via
+    // NativeSelect), and a DOM-event Switch.
+    expect(mantine.profile.code).toContain('} from "@mantine/core";');
+    expect(mantine.profile.code).toContain(
+      "<TextInput label={label} {...mantineTextInputProps(field)} />",
+    );
+    expect(mantine.profile.code).toContain(
+      "<TextInput label={label} {...mantineNumberInputProps(field)} />",
+    );
+    expect(mantine.profile.code).toContain("error: fieldError(field),");
+    expect(mantine.profile.code).toContain("<NativeSelect label={label}");
+    expect(mantine.profile.code).toContain(
+      "<Switch label={label} {...mantineSwitchProps(field)} />",
+    );
+    expect(mantine.profile.code).not.toContain("<NumberInput");
+    expect(mantine.profile.code).not.toContain("Field.Root");
+    expect(mantine.profile.code).not.toContain("helperText");
+    expect(mantine.profile.code).not.toContain("onCheckedChange");
   });
 
   // The stub is typed with the emitter's shapes, so it can only prove
@@ -217,6 +245,8 @@ describe("generated components", () => {
     expect(chakra.panel.code).toContain(
       'gridTemplateColumns={"repeat(2, minmax(0, 1fr))"}',
     );
+    expect(mantine.panel.code).toContain("<Card withBorder");
+    expect(mantine.panel.code).toContain("<SimpleGrid cols={2}>");
   });
 
   it("collapsible renders details/summary (Accordion on mui and chakra)", () => {
@@ -228,6 +258,11 @@ describe("generated components", () => {
     );
     expect(chakra.collapsible.code).toContain("<Accordion.ItemTrigger>");
     expect(chakra.collapsible.code).toContain("<Accordion.ItemBody ");
+    expect(mantine.collapsible.code).toContain(
+      '<Accordion defaultValue="section" variant="contained"',
+    );
+    expect(mantine.collapsible.code).toContain("<Accordion.Control>");
+    expect(mantine.collapsible.code).toContain("<SimpleGrid cols={3}>");
   });
 
   it("the flat default keeps the historical output and gates the imports", () => {
@@ -238,6 +273,10 @@ describe("generated components", () => {
     expect(chakra.profile.code).toContain('<Stack gap="4">');
     expect(chakra.profile.code).not.toContain("Card");
     expect(chakra.profile.code).not.toContain("Accordion");
+    expect(mantine.profile.code).toContain('<Stack gap="md">');
+    expect(mantine.profile.code).not.toContain("Card");
+    expect(mantine.profile.code).not.toContain("Accordion");
+    expect(mantine.profile.code).not.toContain("SimpleGrid");
   });
 
   // The blank-draft cast is emitted only when the draft genuinely can't
@@ -260,5 +299,6 @@ describe("generated components", () => {
     expect(mui.leafFree.code).not.toContain("BoundFieldProps");
     expect(shadcn.leafFree.code).not.toContain("BoundFieldProps");
     expect(chakra.leafFree.code).not.toContain("BoundFieldProps");
+    expect(mantine.leafFree.code).not.toContain("BoundFieldProps");
   });
 });

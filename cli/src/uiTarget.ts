@@ -22,10 +22,18 @@ export const DEFAULT_MUI_VERSION: MuiVersion = 9;
 // backend targets (v2 and older predate the compound-component API the
 // emitter speaks, and formstand peers react ^19). "chakra@3" is accepted as
 // an explicit spelling of the same target.
+//
+// mantine carries no version either: the backend targets the current
+// @mantine/core major (9) only. Unlike chakra this is not an API-existence
+// scope — the emitted surface typechecks identically against 7.x-latest and
+// 8.x (verified empirically; the one delta found is the `bdrs` style prop,
+// absent in 7) — but 9 is the only major the matrix verifies, so it is the
+// only accepted target. "mantine@9" is the explicit spelling.
 export type UiTarget =
   | Readonly<{ kit: "plain" }>
   | Readonly<{ kit: "shadcn" }>
   | Readonly<{ kit: "chakra" }>
+  | Readonly<{ kit: "mantine" }>
   | Readonly<{ kit: "mui"; version: MuiVersion }>;
 
 // The flag/config spelling of a target — what `--ui` and the config file's
@@ -36,10 +44,12 @@ export type Ui =
   | "mui"
   | `mui@${MuiVersion}`
   | "chakra"
-  | "chakra@3";
+  | "chakra@3"
+  | "mantine"
+  | "mantine@9";
 
 // The list HELP and error messages show.
-export const UI_CHOICES = 'plain, mui, mui@<5|6|7|9>, shadcn, chakra';
+export const UI_CHOICES = 'plain, mui, mui@<5|6|7|9>, shadcn, chakra, mantine';
 
 export type ParseUiResult =
   | Readonly<{ kind: "ok"; target: UiTarget }>
@@ -63,7 +73,7 @@ export const parseUiTarget = (value: string): ParseUiResult => {
       return versionText === undefined
         ? { kind: "ok", target: { kit } }
         : err(
-            `"${kit}" takes no version (only mui and chakra are versioned), got "${value}"`,
+            `"${kit}" takes no version (only mui, chakra, and mantine are versioned), got "${value}"`,
           );
     case "chakra": {
       // Bare "chakra" IS v3; "chakra@3" is the explicit spelling of the same
@@ -81,6 +91,30 @@ export const parseUiTarget = (value: string): ParseUiResult => {
       }
       return err(
         `unsupported chakra version "${versionText}"; v3 is the only supported major — use "chakra" or "chakra@3"`,
+      );
+    }
+    case "mantine": {
+      // Bare "mantine" IS v9 (the current major); "mantine@9" is the explicit
+      // spelling. Only the current major is a target: majors 6 and older
+      // predate both formstand's react ^19 peer and the v7 styling rewrite
+      // (emotion -> CSS modules); majors 7–8 do accept React 19 — and the
+      // emitted surface even compiles there — but the backend is verified
+      // against v9 only, so they error rather than silently claim support.
+      if (versionText === undefined || versionText === "9") {
+        return { kind: "ok", target: { kit: "mantine" } };
+      }
+      if (/^[0-6]$/.test(versionText)) {
+        return err(
+          `mantine@${versionText} is not supported: formstand requires React 19, and @mantine/core 7 rewrote styling (emotion → CSS modules) — majors 6 and older predate both; supported: "mantine" (v9, also spelled "mantine@9")`,
+        );
+      }
+      if (versionText === "7" || versionText === "8") {
+        return err(
+          `mantine@${versionText} is not supported: the backend targets the current @mantine/core major only — Mantine ${versionText} does accept React 19, but generated output is verified against v9 only; use "mantine" (or its explicit spelling "mantine@9")`,
+        );
+      }
+      return err(
+        `unsupported mantine version "${versionText}"; v9 is the only supported major — use "mantine" or "mantine@9"`,
       );
     }
     case "mui": {

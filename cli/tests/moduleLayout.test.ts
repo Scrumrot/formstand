@@ -8,6 +8,7 @@ import {
   chakraStubPaths,
   fixturesDir,
   freshTmpDir,
+  mantineStubPaths,
   muiStubPaths,
   realShadcnPaths,
   shadcnStubFile,
@@ -26,7 +27,7 @@ const generateModule = (
   schemaName: string,
   formName: string,
   dir: string,
-  ui: "plain" | "mui" | "shadcn" | "chakra" = "plain",
+  ui: "plain" | "mui" | "shadcn" | "chakra" | "mantine" = "plain",
   visual?: Readonly<{ sections: "flat" | "panel" | "collapsible"; columns: 1 | 2 | 3 }>,
 ) => {
   const files = emitModuleForm({
@@ -211,6 +212,34 @@ describe("emitModuleForm kit uis", () => {
     expect(typecheckDiagnostics(written, chakraStubPaths)).toEqual([]);
   });
 
+  it("mantine modules share one adapter file and typecheck against the mantine stub", () => {
+    const dir = freshTmpDir("module-mantine");
+    const { files, written } = generateModule(
+      profileSchema,
+      "profileSchema",
+      "ProfileForm",
+      dir,
+      "mantine",
+    );
+    const paths = files.map((f) => f.path);
+    // No JSX in the mantine adapter (prop builders only) — adapter.ts.
+    expect(paths).toContain("adapter.ts");
+    const adapter = files.find((f) => f.path === "adapter.ts");
+    expect(adapter?.content).toContain("export const mantineTextInputProps");
+    expect(adapter?.content).toContain("export const mantineSwitchProps");
+    // Error text rides inside the builders (Mantine controls carry their
+    // own error prop) — no fieldError import at leaf sites.
+    expect(adapter?.content).toContain("error: fieldError(field),");
+    const field = files.find((f) => f.path === "fields/FirstNameField.tsx");
+    expect(field?.content).toContain('from "@mantine/core"');
+    expect(field?.content).toContain(
+      "<TextInput label={label} {...mantineTextInputProps(field)} />",
+    );
+    const role = files.find((f) => f.path === "fields/RoleField.tsx");
+    expect(role?.content).toContain("<NativeSelect label={label}");
+    expect(typecheckDiagnostics(written, mantineStubPaths)).toEqual([]);
+  });
+
   it("leaf-free kit modules omit the adapter and still typecheck", () => {
     const dir = freshTmpDir("module-mui-leaf-free");
     const { files, written } = generateModule(
@@ -280,6 +309,25 @@ describe("emitModuleForm visual options", () => {
     );
     expect(section?.content).toContain('} from "@chakra-ui/react";');
     expect(typecheckDiagnostics(written, chakraStubPaths)).toEqual([]);
+  });
+
+  it("mantine collapsible sections wrap in Accordion and typecheck", () => {
+    const dir = freshTmpDir("module-mantine-collapsible");
+    const { files, written } = generateModule(
+      profileSchema,
+      "profileSchema",
+      "ProfileForm",
+      dir,
+      "mantine",
+      { sections: "collapsible", columns: 2 },
+    );
+    const section = files.find((f) => f.path.startsWith("sections/"));
+    expect(section?.content).toContain(
+      '<Accordion defaultValue="section" variant="contained">',
+    );
+    expect(section?.content).toContain("<SimpleGrid cols={2}>");
+    expect(section?.content).toContain('} from "@mantine/core";');
+    expect(typecheckDiagnostics(written, mantineStubPaths)).toEqual([]);
   });
 
   it("plain collapsible sections use details/summary and typecheck", () => {

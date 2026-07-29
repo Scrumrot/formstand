@@ -23,6 +23,7 @@ import {
   isScalarSpec,
   isUnaddressable,
   jsxText,
+  mantineAdapterSection,
   muiAdapterSection,
   overDepthBudget,
   pathSegmentCount,
@@ -42,7 +43,7 @@ import type { MuiVersion } from "./uiTarget";
 //   types.ts         the draft value types
 //   hooks.ts         createForm + createFormHooks(form, name): the module's
 //                    pre-wired hook API
-//   adapter.ts(x)    (mui/shadcn only) the kit adapter the single-file
+//   adapter.ts(x)    (kit uis only) the kit adapter the single-file
 //                    backends inline, exported once for the whole module
 //   fields/*.tsx     one file per scalar leaf outside arrays — props type,
 //                    field hook, component
@@ -54,7 +55,7 @@ import type { MuiVersion } from "./uiTarget";
 // Requires formstand >= 0.7 (createFormHooks). Everything is a pure string
 // builder over the IR, like the single-file backends.
 
-export type ModuleUi = "plain" | "mui" | "shadcn" | "chakra";
+export type ModuleUi = "plain" | "mui" | "shadcn" | "chakra" | "mantine";
 
 export type ModuleFile = Readonly<{
   // Forward-slash relative path inside the module folder.
@@ -320,6 +321,37 @@ const leafImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] => {
             { from: "../adapter", names: ["muiTextFieldProps"] },
           ];
       }
+    case "mantine":
+      // Mantine controls carry their own label + error props (embedded in
+      // the adapter builders), so no Field wrapper and no fieldError import
+      // at the leaf site.
+      switch (spec.kind) {
+        case "boolean":
+          return [
+            { from: "@mantine/core", names: ["Switch"] },
+            { from: "../adapter", names: ["mantineSwitchProps"] },
+          ];
+        case "enum":
+          return [
+            { from: "@mantine/core", names: ["NativeSelect"] },
+            { from: "../adapter", names: ["mantineSelectProps"] },
+          ];
+        case "number":
+          return [
+            { from: "@mantine/core", names: ["TextInput"] },
+            { from: "../adapter", names: ["mantineNumberInputProps"] },
+          ];
+        case "date":
+          return [
+            { from: "@mantine/core", names: ["TextInput"] },
+            { from: "../adapter", names: ["mantineDateInputProps"] },
+          ];
+        default:
+          return [
+            { from: "@mantine/core", names: ["TextInput"] },
+            { from: "../adapter", names: ["mantineTextInputProps"] },
+          ];
+      }
     case "chakra":
       switch (spec.kind) {
         case "boolean":
@@ -482,6 +514,36 @@ const leafJsx = (
           return [
             `${indent}<TextField fullWidth label=${labelAttr} {...muiTextFieldProps(${varName})} />`,
           ];
+      }
+    case "mantine":
+      // Mantine controls wire their own label/error/ids internally (error
+      // rides in the adapter builders), so no id attribute is needed.
+      switch (spec.kind) {
+        case "boolean":
+          return [
+            `${indent}<Switch label=${labelAttr} {...mantineSwitchProps(${varName})} />`,
+          ];
+        case "enum":
+          return [
+            `${indent}<NativeSelect label=${labelAttr} {...mantineSelectProps(${varName})}>`,
+            `${indent}  <option value="">{"Select…"}</option>`,
+            ...spec.options.map(
+              (option) =>
+                `${indent}  <option value=${jsxText(option)}>${jsxText(labelFromName(option))}</option>`,
+            ),
+            `${indent}</NativeSelect>`,
+          ];
+        default: {
+          const builder =
+            spec.kind === "number"
+              ? "mantineNumberInputProps"
+              : spec.kind === "date"
+                ? "mantineDateInputProps"
+                : "mantineTextInputProps";
+          return [
+            `${indent}<TextInput label=${labelAttr} {...${builder}(${varName})} />`,
+          ];
+        }
       }
     case "chakra":
       // Chakra 3 compound parts: Field.Root wires ids/aria between Label,
@@ -667,6 +729,57 @@ const objectShell = (
       }
       break;
     }
+    case "mantine": {
+      switch (visual.sections) {
+        case "flat":
+          return cols === 1
+            ? [
+                `    <Stack gap="md">`,
+                `      <Title order={4}>`,
+                ...headingLines("        "),
+                "      </Title>",
+                ...children,
+                "    </Stack>",
+              ]
+            : [
+                `    <SimpleGrid cols={${cols}}>`,
+                `      <Title order={4} style={{ gridColumn: "1 / -1" }}>`,
+                ...headingLines("        "),
+                "      </Title>",
+                ...children,
+                "    </SimpleGrid>",
+              ];
+        case "panel":
+          return [
+            "    <Card withBorder>",
+            `      <SimpleGrid cols={${cols}}>`,
+            `        <Title order={4}${cols > 1 ? ` style={{ gridColumn: "1 / -1" }}` : ""}>`,
+            ...headingLines("          "),
+            "        </Title>",
+            ...children,
+            "      </SimpleGrid>",
+            "    </Card>",
+          ];
+        case "collapsible":
+          return [
+            `    <Accordion defaultValue="section" variant="contained">`,
+            `      <Accordion.Item value="section">`,
+            "        <Accordion.Control>",
+            "          <Title order={4}>",
+            ...headingLines("            "),
+            "          </Title>",
+            "        </Accordion.Control>",
+            "        <Accordion.Panel>",
+            `          <SimpleGrid cols={${cols}}>`,
+            ...children,
+            "          </SimpleGrid>",
+            "        </Accordion.Panel>",
+            "      </Accordion.Item>",
+            "    </Accordion>",
+          ];
+      }
+      break;
+    }
     case "chakra": {
       const grid = gridChakraProps(cols);
       switch (visual.sections) {
@@ -807,6 +920,28 @@ const objectSectionImports = (
         return [{ from: "@chakra-ui/react", names: ["Accordion", "Heading"] }];
     }
   }
+  if (ui === "mantine") {
+    switch (visual.sections) {
+      case "flat":
+        return [
+          {
+            from: "@mantine/core",
+            names:
+              visual.columns === 1
+                ? ["Stack", "Title"]
+                : ["SimpleGrid", "Title"],
+          },
+        ];
+      case "panel":
+        return [
+          { from: "@mantine/core", names: ["Card", "SimpleGrid", "Title"] },
+        ];
+      case "collapsible":
+        return [
+          { from: "@mantine/core", names: ["Accordion", "SimpleGrid", "Title"] },
+        ];
+    }
+  }
   if (ui !== "mui") return [];
   switch (visual.sections) {
     case "flat":
@@ -846,6 +981,29 @@ type ArrayShellParts = Readonly<{
 
 const arrayShell = (ui: ModuleUi, sectionLabel: string): ArrayShellParts => {
   switch (ui) {
+    case "mantine":
+      return {
+        imports: [
+          { from: "@mantine/core", names: ["Button", "Stack", "Text"] },
+        ],
+        rowOpen: [`    <Stack gap="md" p="md" bd="1px solid gray.3" bdrs="md">`],
+        rowClose: (removeExpr) => [
+          `      <Button type="button" variant="outline" size="sm" onClick={${removeExpr}}>`,
+          "        Remove",
+          "      </Button>",
+          "    </Stack>",
+        ],
+        listError: [
+          "      {rows.error ? (",
+          `        <Text c="red">{rows.error[0]}</Text>`,
+          "      ) : null}",
+        ],
+        addButton: (pushExpr, addLabel) => [
+          `      <Button type="button" variant="outline" size="sm" onClick={${pushExpr}}>`,
+          `        ${jsxText(addLabel)}`,
+          "      </Button>",
+        ],
+      };
     case "chakra":
       return {
         imports: [
@@ -962,6 +1120,30 @@ type FormShell = Readonly<{
 
 const formShell = (ui: ModuleUi): FormShell => {
   switch (ui) {
+    case "mantine":
+      return {
+        imports: [
+          { from: "@mantine/core", names: ["Box", "Button", "Stack"] },
+        ],
+        open: (naming) => [
+          "    <Box",
+          `      component="form"`,
+          `      onSubmit={${naming.formConst}.handleSubmit((data) => {`,
+          `        console.log("submit", data);`,
+          "      })}",
+          "      maw={640}",
+          "    >",
+          `      <Stack gap="md">`,
+        ],
+        close: [
+          `        <Button type="submit" disabled={submitting}>`,
+          `          {submitting ? "Submitting..." : "Submit"}`,
+          "        </Button>",
+          "      </Stack>",
+          "    </Box>",
+        ],
+        bodyIndent: "        ",
+      };
     case "chakra":
       return {
         imports: [
@@ -1173,12 +1355,14 @@ const adapterFile = (
   const needsText = usage.string || usage.date;
   // mui's Switch adapter also types its onChange with ChangeEvent, so a
   // boolean-only schema needs the import too; chakra's select is a native
-  // <select> (ChangeEvent), but its Switch takes a details callback.
+  // <select> (ChangeEvent), but its Switch takes a details callback;
+  // mantine speaks DOM events everywhere (its Switch included).
   const needsChangeEvent =
     needsText ||
     usage.number ||
     (ui === "mui" && (usage.enum || usage.boolean)) ||
-    (ui === "chakra" && usage.enum);
+    (ui === "chakra" && usage.enum) ||
+    (ui === "mantine" && (usage.enum || usage.boolean));
   const formstandValues = [
     ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
     ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
@@ -1199,7 +1383,9 @@ const adapterFile = (
         ? muiAdapterSection(usage, "export ", muiVersion)
         : ui === "chakra"
           ? chakraAdapterSection(usage, "export ")
-          : shadcnAdapterSection(usage, "export "),
+          : ui === "mantine"
+            ? mantineAdapterSection(usage, "export ")
+            : shadcnAdapterSection(usage, "export "),
       "",
     ].join("\n"),
   };
@@ -1396,6 +1582,15 @@ const nestedListShell = (
   close: readonly string[];
 }> => {
   switch (ui) {
+    case "mantine":
+      return {
+        imports: [{ from: "@mantine/core", names: ["Stack", "Title"] }],
+        open: [
+          `    <Stack gap="md">`,
+          `      <Title order={5}>${jsxText(label)}</Title>`,
+        ],
+        close: ["    </Stack>"],
+      };
     case "chakra":
       return {
         imports: [{ from: "@chakra-ui/react", names: ["Heading", "Stack"] }],

@@ -16,8 +16,8 @@ import type {
 
 // Code emitters: zod schema source, initial values, and the component
 // backends (plain HTML inputs bound via formstand's components; MUI,
-// shadcn/ui, and Chakra UI v3 variants with inlined adapters). All backends
-// share one IR walk
+// shadcn/ui, Chakra UI v3, and Mantine 9 variants with inlined adapters).
+// All backends share one IR walk
 // and one form scaffold (emitForm); a Backend supplies the leaf renderers,
 // section wrappers, and header imports, and the two kit backends also share
 // their emitted snippets (fieldError helper, BoundFieldProps, the leaf
@@ -3098,6 +3098,389 @@ const chakraBackend = (visual: VisualOptions): Backend => {
 
 export const emitChakraForm = (options: EmitFormOptions): string =>
   emitForm(chakraBackend(options.visual ?? DEFAULT_VISUAL), options);
+
+// ---------------------------------------------------------------------------
+// Mantine backend (@mantine/core 9)
+// ---------------------------------------------------------------------------
+
+// Emits against the current @mantine/core major (verified against the
+// installed 9.5 .d.ts in cli/matrix). Mantine field components carry their
+// own label + error props, so there is no Field wrapper: TextInput binds
+// text/number/date natively (its onChange is a DOM ChangeEvent — Mantine's
+// NumberInput is deliberately NOT used, its onChange takes
+// `(value: number | string)`, not an event, so it can't share formstand's
+// input-shaped adapters); NativeSelect is a real <select> (DOM change
+// events, like the chakra backend's NativeSelect.Field); Switch's onChange
+// is a DOM ChangeEvent<HTMLInputElement> with `checked` on the target.
+// Sections render Stack/Title (flat), Card + SimpleGrid (panel), or
+// Accordion/Accordion.Item/Control/Panel (collapsible); columns use
+// SimpleGrid cols={N}. The generated file assumes the host app mounts
+// MantineProvider (same policy as the mui and chakra backends).
+
+export const mantineAdapterSection = (usage: KindUsage, exp = ""): string => {
+  // The error line renders through each control's own `error` prop, so the
+  // builders embed `error: fieldError(field)` — every non-boolean leaf needs
+  // the helper (the Switch renders no error line, like the other backends'
+  // booleans).
+  const needsError = usage.string || usage.date || usage.number || usage.enum;
+  const textAdapter = [
+    "",
+    `${exp}const mantineTextInputProps = <T extends string | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
+    "  name: field.path,",
+    '  value: field.value ?? "",',
+    "  error: fieldError(field),",
+    "  onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {",
+    "    const text = e.target.value;",
+    '    field.setValue((text === "" && field.emptyValue === null ? null : text) as T);',
+    "  },",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
+  // TextInput with inputMode="decimal": the native binding. Mantine's
+  // NumberInput widget is not DOM-shaped (onChange: (value: number | string))
+  // — the plain input keeps the adapter identical in spirit to the other kits.
+  const numberAdapter = [
+    "",
+    `${exp}const mantineNumberInputProps = <T extends number | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
+    '  inputMode: "decimal" as const,',
+    "  name: field.path,",
+    "  value: numberToInputText(field.value),",
+    "  error: fieldError(field),",
+    "  onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {",
+    "    const parsed = parseNumberText(e.target.value);",
+    '    field.setValue((parsed.kind === "number" ? parsed.value : field.emptyValue) as T);',
+    "  },",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
+  const dateAdapter = [
+    "",
+    `${exp}const mantineDateInputProps = <T extends Date | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
+    '  type: "date" as const,',
+    "  name: field.path,",
+    "  value: dateToInputText(field.value),",
+    "  error: fieldError(field),",
+    "  onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {",
+    "    const parsed = parseDateText(e.target.value);",
+    '    field.setValue((parsed.kind === "date" ? parsed.value : field.emptyValue) as T);',
+    "  },",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
+  // NativeSelect renders a real <select>: DOM change events, options as
+  // children (the `data` prop is ignored when children are passed).
+  const selectAdapter = [
+    "",
+    `${exp}const mantineSelectProps = <T extends string | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
+    "  name: field.path,",
+    '  value: field.value ?? "",',
+    "  error: fieldError(field),",
+    "  onChange: (e: ChangeEvent<HTMLSelectElement>) => {",
+    "    const next = e.target.value;",
+    '    field.setValue((next === "" && field.emptyValue === null ? null : next) as T);',
+    "  },",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
+  const switchAdapter = [
+    "",
+    `${exp}const mantineSwitchProps = <T extends boolean | null | undefined>(`,
+    "  field: UseFieldReturn<T>,",
+    ") => ({",
+    "  name: field.path,",
+    "  checked: field.value ?? false,",
+    "  onChange: (e: ChangeEvent<HTMLInputElement>) => field.setValue(e.target.checked as T),",
+    "  onBlur: field.onBlur,",
+    "});",
+  ];
+  return [
+    "// ---- formstand → Mantine adapter -------------------------------------------",
+    ...(needsError ? withExportPrefix(FIELD_ERROR_HELPER, exp) : []),
+    ...(usage.string ? textAdapter : []),
+    ...(usage.number ? numberAdapter : []),
+    ...(usage.date ? dateAdapter : []),
+    ...(usage.enum ? selectAdapter : []),
+    ...(usage.boolean ? switchAdapter : []),
+  ].join("\n");
+};
+
+const mantineBoundComponents = (usage: KindUsage): string => {
+  const propsType = boundFieldProps(usage);
+  const input = (
+    name: string,
+    builder: string,
+    fieldType: string,
+  ): readonly string[] => [
+    "",
+    `const ${name} = ({ form, path, label }: BoundFieldProps) => {`,
+    `  const field = useField<${fieldType}>(form, path);`,
+    `  return <TextInput label={label} {...${builder}(field)} />;`,
+    "};",
+  ];
+  const select = [
+    "",
+    "const BoundSelectField = ({",
+    "  form,",
+    "  path,",
+    "  label,",
+    "  options,",
+    "}: BoundFieldProps & Readonly<{ options: readonly string[] }>) => {",
+    "  const field = useField<string | null | undefined>(form, path);",
+    "  return (",
+    "    <NativeSelect label={label} {...mantineSelectProps(field)}>",
+    "      <option value=\"\">{`Select ${label.toLowerCase()}`}</option>",
+    "      {options.map((option) => (",
+    "        <option key={option} value={option}>",
+    "          {option}",
+    "        </option>",
+    "      ))}",
+    "    </NativeSelect>",
+    "  );",
+    "};",
+  ];
+  const switchField = [
+    "",
+    "const BoundSwitchField = ({ form, path, label }: BoundFieldProps) => {",
+    "  const field = useField<boolean | null | undefined>(form, path);",
+    "  return <Switch label={label} {...mantineSwitchProps(field)} />;",
+    "};",
+  ];
+  return [
+    ...propsType,
+    ...(usage.string
+      ? input("BoundTextField", "mantineTextInputProps", "string | null | undefined")
+      : []),
+    ...(usage.number
+      ? input("BoundNumberField", "mantineNumberInputProps", "number | null | undefined")
+      : []),
+    ...(usage.date
+      ? input("BoundDateField", "mantineDateInputProps", "Date | null | undefined")
+      : []),
+    ...(usage.enum ? select : []),
+    ...(usage.boolean ? switchField : []),
+  ].join("\n");
+};
+
+// A control rendered from a bound field variable, using the in-file mantine
+// adapter builders — the discriminant select and each variant field of a
+// union (the path-typed Bound* components can't reach variant paths).
+const mantineVariantLeaf = (
+  spec: FieldSpec,
+  fieldVar: string,
+  label: string,
+  level: number,
+): readonly string[] => {
+  switch (spec.kind) {
+    case "boolean":
+      return [
+        `${ind(level)}<Switch ${jsxAttr("label", label)} {...mantineSwitchProps(${fieldVar})} />`,
+      ];
+    case "enum":
+      return [
+        `${ind(level)}<NativeSelect ${jsxAttr("label", label)} {...mantineSelectProps(${fieldVar})}>`,
+        `${ind(level + 1)}<option value="">${jsxText(`Select ${label.toLowerCase()}`)}</option>`,
+        ...spec.options.map(
+          (option) =>
+            `${ind(level + 1)}<option value=${jsxText(option)}>${jsxText(labelFromName(option))}</option>`,
+        ),
+        `${ind(level)}</NativeSelect>`,
+      ];
+    case "string":
+    case "number":
+    case "date": {
+      const builder =
+        spec.kind === "number"
+          ? "mantineNumberInputProps"
+          : spec.kind === "date"
+            ? "mantineDateInputProps"
+            : "mantineTextInputProps";
+      return [
+        `${ind(level)}<TextInput ${jsxAttr("label", label)} {...${builder}(${fieldVar})} />`,
+      ];
+    }
+    case "object":
+    case "array":
+    case "tuple":
+    case "union":
+      return [
+        `${ind(level)}{/* unreachable: containers never bind as a variant field */}`,
+      ];
+  }
+};
+
+const mantineLeaf = boundLeaf("BoundSwitchField");
+
+const mantineBackend = (visual: VisualOptions): Backend => {
+  const cols = visual.columns;
+  // Section grids are SimpleGrid cols={N} (Mantine's idiomatic even-column
+  // grid — a CSS grid underneath, so children span rows with gridColumn);
+  // section roots span the parent grid's full row.
+  const span = cols > 1 ? ` style={{ gridColumn: "1 / -1" }}` : "";
+  const sectionOpen = (label: string, level: number): readonly string[] => {
+    switch (visual.sections) {
+      case "flat":
+        // The 1-column default reads as a Stack; multi-column flows a grid.
+        return cols === 1
+          ? [
+              `${ind(level)}<Stack gap="md">`,
+              `${ind(level + 1)}<Title order={4}>${jsxText(label)}</Title>`,
+            ]
+          : [
+              `${ind(level)}<SimpleGrid cols={${cols}}${span}>`,
+              `${ind(level + 1)}<Title order={4} style={{ gridColumn: "1 / -1" }}>${jsxText(label)}</Title>`,
+            ];
+      case "panel":
+        return [
+          `${ind(level)}<Card withBorder${span}>`,
+          `${ind(level + 1)}<SimpleGrid cols={${cols}}>`,
+          `${ind(level + 2)}<Title order={4}${cols > 1 ? ` style={{ gridColumn: "1 / -1" }}` : ""}>${jsxText(label)}</Title>`,
+        ];
+      case "collapsible":
+        // One Accordion per section (mirroring the MUI backend); the item
+        // value is fixed and defaultValue opens it (single mode closes on a
+        // second click, no `collapsible` flag needed).
+        return [
+          `${ind(level)}<Accordion defaultValue="section" variant="contained"${span}>`,
+          `${ind(level + 1)}<Accordion.Item value="section">`,
+          `${ind(level + 2)}<Accordion.Control>`,
+          `${ind(level + 3)}<Title order={4}>${jsxText(label)}</Title>`,
+          `${ind(level + 2)}</Accordion.Control>`,
+          `${ind(level + 2)}<Accordion.Panel>`,
+          `${ind(level + 3)}<SimpleGrid cols={${cols}}>`,
+        ];
+    }
+  };
+  const sectionClose = (level: number): readonly string[] => {
+    switch (visual.sections) {
+      case "flat":
+        return [`${ind(level)}${cols === 1 ? "</Stack>" : "</SimpleGrid>"}`];
+      case "panel":
+        return [`${ind(level + 1)}</SimpleGrid>`, `${ind(level)}</Card>`];
+      case "collapsible":
+        return [
+          `${ind(level + 3)}</SimpleGrid>`,
+          `${ind(level + 2)}</Accordion.Panel>`,
+          `${ind(level + 1)}</Accordion.Item>`,
+          `${ind(level)}</Accordion>`,
+        ];
+    }
+  };
+
+  return {
+  header: (usage, arrays, root) => {
+    const hasLeaf = hasLeafUsage(usage);
+    // Static-leaf usage gates the Bound* components (and their FieldFormApi
+    // type): union controls render raw mantine elements from hoisted hooks.
+    const hasStaticLeaf = hasLeafUsage(collectStaticUsage(root));
+    const hasSection = arrays.length > 0 || anyAddressableObjectField(root);
+    const mantineImports = [
+      ...(hasSection && visual.sections === "collapsible" ? ["Accordion"] : []),
+      "Box",
+      "Button",
+      ...(hasSection && visual.sections === "panel" ? ["Card"] : []),
+      ...(usage.enum ? ["NativeSelect"] : []),
+      // SimpleGrid appears wherever a section's fields flow into a grid:
+      // any multi-column layout, and the panel/collapsible chrome always.
+      ...(hasSection && (cols > 1 || visual.sections !== "flat")
+        ? ["SimpleGrid"]
+        : []),
+      "Stack",
+      ...(usage.boolean ? ["Switch"] : []),
+      ...(usage.string || usage.date || usage.number ? ["TextInput"] : []),
+      ...(hasSection ? ["Title"] : []),
+    ];
+    const formstandValueImports = [
+      ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
+      ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
+      ...(hasLeaf ? ["useField"] : []),
+      ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
+      ...(arrays.length > 0 ? ["useFieldArray"] : []),
+      "useForm",
+      "useIsSubmitting",
+    ];
+    const formstandTypeImports = [
+      // FieldFormApi is referenced only by the Bound* components' props type.
+      ...(hasStaticLeaf ? ["FieldFormApi"] : []),
+      ...(hasLeaf ? ["UseFieldReturn"] : []),
+    ];
+    return [
+      // Every mantine adapter (the Switch's included) types its onChange
+      // with a DOM ChangeEvent, so any leaf pulls the import in.
+      ...(hasLeaf ? [`import type { ChangeEvent } from "react";`] : []),
+      "import {",
+      ...mantineImports.map((name) => `  ${name},`),
+      `} from "@mantine/core";`,
+      "import {",
+      ...formstandValueImports.map((name) => `  ${name},`),
+      ...formstandTypeImports.map((name) => `  type ${name},`),
+      `} from "formstand";`,
+      `import { z } from "zod";`,
+    ];
+  },
+  preamble: (usage, staticUsage) => [
+    mantineAdapterSection(usage),
+    mantineBoundComponents(staticUsage),
+    "",
+  ],
+  leaf: mantineLeaf,
+  variantLeaf: mantineVariantLeaf,
+  objectSection: (label, level, body) => [
+    ...sectionOpen(label, level),
+    ...body,
+    ...sectionClose(level),
+  ],
+  arraySection: (entry, level, rowBody) => [
+    ...sectionOpen(entry.label, level),
+    `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
+    `${ind(level + 2)}<Stack`,
+    `${ind(level + 3)}key={row.id}`,
+    `${ind(level + 3)}gap="md"`,
+    `${ind(level + 3)}p="md"`,
+    `${ind(level + 3)}bd="1px solid gray.3"`,
+    `${ind(level + 3)}bdrs="md"`,
+    `${ind(level + 2)}>`,
+    ...rowBody,
+    `${ind(level + 3)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.remove(index)}>`,
+    `${ind(level + 4)}Remove`,
+    `${ind(level + 3)}</Button>`,
+    `${ind(level + 2)}</Stack>`,
+    `${ind(level + 1)}))}`,
+    `${ind(level + 1)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
+    `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
+    `${ind(level + 1)}</Button>`,
+    ...sectionClose(level),
+  ],
+  bodyLevel: 4,
+  formOpen: [
+    "    <Box",
+    `      component="form"`,
+    "      onSubmit={form.handleSubmit((data) => {",
+    `        console.log("submit", data);`,
+    "      })}",
+    "      maw={640}",
+    "    >",
+    `      <Stack gap="md">`,
+  ],
+  formClose: [
+    `        <Button type="submit" disabled={submitting}>`,
+    `          {submitting ? "Submitting..." : "Submit"}`,
+    "        </Button>",
+    "      </Stack>",
+    "    </Box>",
+  ],
+  };
+};
+
+export const emitMantineForm = (options: EmitFormOptions): string =>
+  emitForm(mantineBackend(options.visual ?? DEFAULT_VISUAL), options);
 
 // ---------------------------------------------------------------------------
 // Custom template backend (leaf-override for an arbitrary UI kit)

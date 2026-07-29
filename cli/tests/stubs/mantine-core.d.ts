@@ -1,11 +1,19 @@
-// Minimal structural stand-in for @mantine/core, mapped in via `paths` by the
-// custom-template typecheck test (the real package is not a dependency here).
-// Deliberately narrow: exactly the controls a Mantine template spreads the
+// Minimal structural stand-in for @mantine/core, mapped in via `paths` by
+// the custom-template typecheck test AND the --ui mantine backend tests (the
+// real package is not a dependency here; the REAL 9.x declarations are
+// exercised by the cli/matrix harness). Deliberately narrow: exactly the
+// controls the mantine backend emits and a Mantine template spreads the
 // formstand prop builders onto, each prop typed to accept the builder output
-// (name/value/checked/onChange/onBlur/aria-invalid/type) plus the label, error,
-// and data props a template writes explicitly — so the generated output is
-// structurally typechecked, not merely parsed.
+// (name/value/checked/onChange/onBlur/aria-invalid/type/inputMode) plus the
+// label, error, and data props written explicitly — so the generated output
+// is structurally typechecked, not merely parsed.
 import type { ChangeEvent, ReactElement, ReactNode } from "react";
+
+// The inline-style escape hatch the backend uses for full-row spans (and the
+// row border radius) — Mantine accepts a plain React style object.
+type StyleAttr = Readonly<{
+  style?: Readonly<{ gridColumn?: string; borderRadius?: string | number }>;
+}>;
 
 export declare const TextInput: (
   props: Readonly<{
@@ -14,6 +22,7 @@ export declare const TextInput: (
     name?: string;
     value?: string;
     type?: string;
+    inputMode?: "decimal";
     "aria-invalid"?: true | undefined;
     onChange?: (
       event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -21,6 +30,92 @@ export declare const TextInput: (
     onBlur?: () => void;
   }>,
 ) => ReactElement;
+
+export declare const NativeSelect: (
+  props: Readonly<{
+    label?: ReactNode;
+    error?: ReactNode;
+    name?: string;
+    value?: string;
+    onChange?: (event: ChangeEvent<HTMLSelectElement>) => void;
+    onBlur?: () => void;
+    children?: ReactNode;
+  }>,
+) => ReactElement;
+
+export declare const Switch: (
+  props: Readonly<{
+    label?: ReactNode;
+    name?: string;
+    checked?: boolean;
+    onChange?: (event: ChangeEvent<HTMLInputElement>) => void;
+    onBlur?: () => void;
+  }>,
+) => ReactElement;
+
+export declare const Box: (
+  props: Readonly<{
+    component?: string;
+    onSubmit?: (event: Readonly<{ preventDefault: () => void }>) => unknown;
+    maw?: number;
+    children?: ReactNode;
+  }>,
+) => ReactElement;
+
+export declare const Stack: (
+  props: StyleAttr &
+    Readonly<{
+      gap?: string;
+      p?: string;
+      bd?: string;
+      bdrs?: string;
+      children?: ReactNode;
+    }>,
+) => ReactElement;
+
+export declare const SimpleGrid: (
+  props: StyleAttr & Readonly<{ cols?: number; children?: ReactNode }>,
+) => ReactElement;
+
+export declare const Title: (
+  props: StyleAttr &
+    Readonly<{ order?: 1 | 2 | 3 | 4 | 5 | 6; children?: ReactNode }>,
+) => ReactElement;
+
+export declare const Text: (
+  props: Readonly<{ c?: string; children?: ReactNode }>,
+) => ReactElement;
+
+export declare const Button: (
+  props: Readonly<{
+    type?: "button" | "submit" | "reset";
+    variant?: "filled" | "light" | "outline" | "transparent" | "subtle" | "default";
+    size?: string;
+    disabled?: boolean;
+    onClick?: () => void;
+    children?: ReactNode;
+  }>,
+) => ReactElement;
+
+export declare const Card: (
+  props: StyleAttr & Readonly<{ withBorder?: boolean; children?: ReactNode }>,
+) => ReactElement;
+
+export declare const Accordion: ((
+  props: StyleAttr &
+    Readonly<{
+      defaultValue?: string;
+      variant?: "default" | "contained" | "filled" | "separated";
+      children?: ReactNode;
+    }>,
+) => ReactElement) &
+  Readonly<{
+    Item: (
+      props: Readonly<{ value: string; children?: ReactNode }>,
+    ) => ReactElement;
+    Control: (props: Readonly<{ children?: ReactNode }>) => ReactElement;
+    Panel: (props: Readonly<{ children?: ReactNode }>) => ReactElement;
+  }>;
 
 export declare const NumberInput: (
   props: Readonly<{
