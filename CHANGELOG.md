@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.13.0 — 2026-07-29
 
 ### Added
 
@@ -53,7 +53,7 @@
   dirtiness and the persisted shape observe). `setValues`, `adoptValues`,
   and `updateState` replace wholesale by design and are unchanged.
 
-## formstand-cli Unreleased
+## formstand-cli 0.10.0 — 2026-07-29
 
 ### Added
 
