@@ -27,6 +27,15 @@ export type { SchemaImport, EmitFormOptions, VisualOptions } from "./codegen";
 export { emitModuleForm, joinModuleFiles } from "./moduleLayout";
 export type { EmitModuleOptions, ModuleFile } from "./moduleLayout";
 
+// The versioned --ui machinery: parse "mui@5" etc. into a structured target
+// (pure string handling, browser-safe like the rest of this surface).
+export {
+  DEFAULT_MUI_VERSION,
+  MUI_VERSIONS,
+  parseUiTarget,
+} from "./uiTarget";
+export type { MuiVersion, ParseUiResult, Ui, UiTarget } from "./uiTarget";
+
 export { labelFromName } from "./ir";
 export type {
   FieldSpec,

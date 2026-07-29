@@ -41,6 +41,30 @@ describe("config file", () => {
     expect(code).toContain('} from "formstand";');
   });
 
+  it("a versioned ui in the config applies, and flags still win", async () => {
+    const dir = freshTmpDir("config-versioned-ui");
+    const cfg = writeConfig(dir, `export default { ui: "mui@5" };\n`);
+    const out = path.join(dir, "Form.tsx");
+    expect(await main([zodFixture, "--config", cfg, "--out", out])).toBe(0);
+    const code = fs.readFileSync(out, "utf8");
+    expect(code).toContain("InputLabelProps: { shrink: true },");
+    expect(code).not.toContain("slotProps");
+    // An explicit bare --ui mui (= mui@9) beats the config's pin.
+    const flagged = path.join(dir, "Flagged.tsx");
+    expect(
+      await main([zodFixture, "--config", cfg, "--ui", "mui", "--out", flagged]),
+    ).toBe(0);
+    expect(fs.readFileSync(flagged, "utf8")).toContain(
+      "slotProps: { inputLabel: { shrink: true } },",
+    );
+  });
+
+  it("an unsupported ui version in the config fails loudly", async () => {
+    const dir = freshTmpDir("config-bad-ui-version");
+    const bad = writeConfig(dir, `export default { ui: "mui@8" };\n`);
+    expect(await main([zodFixture, "--config", bad])).toBe(1);
+  });
+
   it("defineConfig round-trips and typos fail loudly", async () => {
     expect(defineConfig({ ui: "shadcn" })).toEqual({ ui: "shadcn" });
     const dir = freshTmpDir("config-invalid");

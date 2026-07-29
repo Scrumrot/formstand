@@ -4,7 +4,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createJiti } from "jiti";
 import { camelCase, isReservedWord, pascalCase } from "./casing";
-import { type FormstandConfig, type Layout, type Ui } from "./config";
+import { type FormstandConfig, type Layout } from "./config";
+import { type UiTarget, UI_CHOICES, parseUiTarget } from "./uiTarget";
 import { type Template, isTemplate } from "./template";
 import {
   type EmitFormOptions,
@@ -26,6 +27,7 @@ import { fromType } from "./fromType";
 import { DEFAULT_MAX_DEPTH, fromZod, isZodSchema } from "./fromZod";
 import type { FieldSpec } from "./ir";
 import {
+  type EmitModuleOptions,
   type ModuleFile,
   emitModuleForm,
   joinModuleFiles,
@@ -45,8 +47,12 @@ Options:
   --export <name>     which export holds the zod schema (default: the default
                       export, or the sole zod-schema export)
   --type <TypeName>   generate from an exported TS type/interface instead
-  --ui <plain|mui|shadcn>
-                      component flavor (default: plain)
+  --ui <plain|mui[@5|6|7|9]|shadcn>
+                      component flavor (default: plain). mui may pin an
+                      @mui/material major: mui@5, mui@6, mui@7, mui@9; bare
+                      mui means mui@9. Only React-19-capable majors are
+                      supported (formstand peers react ^19, so MUI 4 and
+                      older can't install alongside it; MUI skipped 8).
   --layout <single|module>
                       single: one component file (default). module: a
                       feature-module folder (schema.ts/types.ts/hooks.ts via
@@ -84,13 +90,9 @@ Examples:
   formstand-gen src/profileSchema.ts --ui shadcn --out src/ProfileForm.tsx
   formstand-gen src/profileSchema.ts --layout module --out src/ProfileForm
   formstand-gen src/profileSchema.ts --ui mui --sections panel --columns 2
+  formstand-gen src/profileSchema.ts --ui mui@5 --out src/ProfileForm.tsx
   formstand-gen src/profileSchema.ts --template ./mantine.template.ts --out src/ProfileForm.tsx
 `;
-
-const UI_VALUES: readonly Ui[] = ["plain", "mui", "shadcn"];
-
-const isUi = (value: string): value is Ui =>
-  (UI_VALUES as readonly string[]).includes(value);
 
 const LAYOUT_VALUES: readonly Layout[] = ["single", "module"];
 
@@ -116,7 +118,7 @@ type CliOptions = Readonly<{
   input: string;
   exportName?: string;
   typeName?: string;
-  ui: Ui;
+  ui: UiTarget;
   layout: Layout;
   sections: Sections;
   columns: Columns;
@@ -137,7 +139,7 @@ export type ParsedCliOptions = Readonly<{
   input: string;
   exportName?: string;
   typeName?: string;
-  ui?: Ui;
+  ui?: UiTarget;
   layout?: Layout;
   sections?: Sections;
   columns?: Columns;
@@ -160,7 +162,7 @@ type PartialOptions = Readonly<{
   input?: string;
   exportName?: string;
   typeName?: string;
-  ui?: Ui;
+  ui?: UiTarget;
   layout?: Layout;
   sections?: Sections;
   columns?: Columns;
@@ -179,7 +181,6 @@ const VALUE_FLAGS: Readonly<
     string,
     | "exportName"
     | "typeName"
-    | "ui"
     | "layout"
     | "name"
     | "out"
@@ -190,7 +191,6 @@ const VALUE_FLAGS: Readonly<
 > = {
   "--export": "exportName",
   "--type": "typeName",
-  "--ui": "ui",
   "--layout": "layout",
   "--name": "name",
   "--out": "out",
@@ -212,6 +212,19 @@ const parseRest = (
   if (head === "--help" || head === "-h") return { kind: "help" };
   if (head === "--force") return parseRest(rest, { ...acc, force: true });
   if (head === "--watch") return parseRest(rest, { ...acc, watch: true });
+  if (head === "--ui") {
+    const [value, ...after] = rest;
+    if (value === undefined) {
+      return { kind: "error", message: `missing value for ${head}` };
+    }
+    // "--ui mui@5" parses to a structured target here, so everything past
+    // the flag layer works with { kit, version } instead of strings.
+    const parsed = parseUiTarget(value);
+    if (parsed.kind === "error") {
+      return { kind: "error", message: `--ui ${parsed.message}` };
+    }
+    return parseRest(after, { ...acc, ui: parsed.target });
+  }
   if (head === "--sections") {
     const [value, ...after] = rest;
     if (value === undefined) {
@@ -261,12 +274,6 @@ const parseRest = (
     if (value === undefined) {
       return { kind: "error", message: `missing value for ${head}` };
     }
-    if (head === "--ui" && !isUi(value)) {
-      return {
-        kind: "error",
-        message: `--ui must be one of ${UI_VALUES.map((ui) => `"${ui}"`).join(", ")}, got "${value}"`,
-      };
-    }
     if (head === "--layout" && !isLayout(value)) {
       return {
         kind: "error",
@@ -309,9 +316,16 @@ const CONFIG_BASENAMES = [
   "formstand.config.mjs",
 ];
 
+// The config after validation: same shape as FormstandConfig, but with the
+// ui spelling already parsed to a structured target (the same parser the
+// --ui flag uses).
+type LoadedConfig = Readonly<
+  Omit<FormstandConfig, "ui"> & { ui?: UiTarget }
+>;
+
 // Validate an unknown config value against the same guards the flags use,
 // so a typo'd config fails as loudly as a typo'd flag.
-const parseConfig = (raw: unknown, from: string): FormstandConfig => {
+const parseConfig = (raw: unknown, from: string): LoadedConfig => {
   if (typeof raw !== "object" || raw === null) {
     throw new Error(`${from}: expected a default-exported config object`);
   }
@@ -323,8 +337,14 @@ const parseConfig = (raw: unknown, from: string): FormstandConfig => {
       stderr(`note: ${from}: ignoring unknown config key "${key}"`);
     });
   const { ui, layout, sections, columns, template } = record;
-  if (ui !== undefined && (typeof ui !== "string" || !isUi(ui))) {
-    throw new Error(`${from}: ui must be one of ${UI_VALUES.join(", ")}`);
+  const uiTarget =
+    ui === undefined
+      ? undefined
+      : typeof ui === "string"
+        ? parseUiTarget(ui)
+        : ({ kind: "error", message: `must be one of ${UI_CHOICES}` } as const);
+  if (uiTarget !== undefined && uiTarget.kind === "error") {
+    throw new Error(`${from}: ui ${uiTarget.message}`);
   }
   if (
     layout !== undefined &&
@@ -351,7 +371,7 @@ const parseConfig = (raw: unknown, from: string): FormstandConfig => {
     throw new Error(`${from}: template must be a path string`);
   }
   return {
-    ...(ui !== undefined ? { ui: ui as Ui } : {}),
+    ...(uiTarget !== undefined ? { ui: uiTarget.target } : {}),
     ...(layout !== undefined ? { layout: layout as Layout } : {}),
     ...(sections !== undefined ? { sections: sections as Sections } : {}),
     ...(columnsValue !== undefined ? { columns: columnsValue } : {}),
@@ -364,7 +384,7 @@ const parseConfig = (raw: unknown, from: string): FormstandConfig => {
   };
 };
 
-const loadConfig = async (explicit?: string): Promise<FormstandConfig> => {
+const loadConfig = async (explicit?: string): Promise<LoadedConfig> => {
   const file =
     explicit !== undefined
       ? path.resolve(explicit)
@@ -400,10 +420,10 @@ const loadTemplate = async (file: string): Promise<Template> => {
 
 export const resolveOptions = (
   parsed: ParsedCliOptions,
-  config: FormstandConfig,
+  config: LoadedConfig,
 ): CliOptions => ({
   ...parsed,
-  ui: parsed.ui ?? config.ui ?? "plain",
+  ui: parsed.ui ?? config.ui ?? { kit: "plain" },
   layout: parsed.layout ?? config.layout ?? "single",
   sections: parsed.sections ?? config.sections ?? "flat",
   columns: parsed.columns ?? config.columns ?? 1,
@@ -578,20 +598,27 @@ const pickSchemaExport = (
 };
 
 const emitComponent = (
-  ui: Ui,
+  ui: UiTarget,
   options: EmitFormOptions,
   template?: Template,
 ): string => {
   if (template !== undefined) return emitTemplateForm(template, options);
-  switch (ui) {
+  switch (ui.kit) {
     case "mui":
-      return emitMuiForm(options);
+      return emitMuiForm({ ...options, muiVersion: ui.version });
     case "shadcn":
       return emitShadcnForm(options);
     case "plain":
       return emitPlainForm(options);
   }
 };
+
+// EmitModuleOptions speaks kit + optional muiVersion; flatten the parsed
+// target into that shape for the module-layout call sites.
+const moduleUiOf = (
+  ui: UiTarget,
+): Readonly<Pick<EmitModuleOptions, "ui" | "muiVersion">> =>
+  ui.kit === "mui" ? { ui: "mui", muiVersion: ui.version } : { ui: ui.kit };
 
 const stdout = (text: string): void => {
   process.stdout.write(text);
@@ -694,7 +721,7 @@ const runZodMode = async (
         ir,
         formName,
         schemaImport,
-        ui: options.ui,
+        ...moduleUiOf(options.ui),
         visual: visualOf(options),
       }),
       options.out,
@@ -744,7 +771,7 @@ const runTypeMode = (options: CliOptions, template?: Template): number => {
         formName,
         schemaImport: { name: schemaName, from: "./schema", kind: "named" },
         schemaSource,
-        ui: options.ui,
+        ...moduleUiOf(options.ui),
         visual: visualOf(options),
       }),
       options.out,

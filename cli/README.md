@@ -43,7 +43,7 @@ Without `--out`, both files print to stdout separated by `// --- file: ...` head
 | --- | --- |
 | `--export <name>` | which export holds the zod schema |
 | `--type <TypeName>` | generate from a TS type/interface instead |
-| `--ui plain\|mui\|shadcn` | component flavor (default `plain`) |
+| `--ui plain\|mui[@5\|6\|7\|9]\|shadcn` | component flavor (default `plain`). `mui` may pin an `@mui/material` major — `mui@5`, `mui@6`, `mui@7`, `mui@9`; bare `mui` means `mui@9`. Only React-19-capable majors are supported: formstand peers `react: ^19`, so MUI 4 and older can never install alongside it (and MUI skipped major 8 — 7.x jumps to 9). `plain` and `shadcn` take no version |
 | `--layout single\|module` | `single` (default): one file. `module`: a feature-module folder — see below |
 | `--sections flat\|panel\|collapsible` | section chrome: `flat` headings (default), bordered `panel`s, or `collapsible` sections (`<details>`; MUI `Accordion`) |
 | `--columns 1\|2\|3` | evenly spaced field columns inside each section (default `1`); nested sections span the full row |
@@ -64,8 +64,19 @@ Without `--out`, both files print to stdout separated by `// --- file: ...` head
 - Field arrays via `useFieldArray` with stable row keys, add/remove buttons, and a typed empty-item constant.
 - `--sections` / `--columns` pick each section's chrome and field grid, in the ui's own dialect: inline styles for `plain`, `Card`/`Accordion` + `sx` grids for `mui`, Tailwind classes (`md:grid-cols-2`, `bg-card`) for `shadcn`. Both flags work with either `--layout`.
 - `handleSubmit(console.log)` and a submit button disabled while submitting.
-- `--ui mui`: the same structure over `@mui/material` v9 with an inlined ~50-line adapter (`muiTextFieldProps` / `muiNumberFieldProps` / `muiSelectProps` / `muiSwitchProps`) binding `UseFieldReturn` to MUI props, sharing `parseNumberText` / `numberToInputText` with the library.
+- `--ui mui`: the same structure over `@mui/material` (any supported major — `mui@5` … `mui@9`, default 9) with an inlined ~50-line adapter (`muiTextFieldProps` / `muiNumberFieldProps` / `muiSelectProps` / `muiSwitchProps`) binding `UseFieldReturn` to MUI props, sharing `parseNumberText` / `numberToInputText` with the library. One emitter serves every major through a per-version config; the only prop-surface difference in the emitted output is TextField's slot-props API (`mui@5` emits the legacy `InputProps` / `InputLabelProps`, v6+ emit `slotProps.{input,inputLabel}`). Each supported major is proven to typecheck the generated output — both layouts — by the version matrix (see below).
 - `--ui shadcn`: the same structure over your app's [shadcn/ui](https://ui.shadcn.com/) components (imported from the `@/components/ui/*` alias that `npx shadcn add` scaffolds) with an inlined adapter speaking the Radix dialect — `onCheckedChange` / `onValueChange` callbacks, dropdown-close as the blur trigger, and `aria-invalid` error styling with a message line.
+
+### The MUI version matrix (pre-release check)
+
+`cli/matrix/` is an isolated workspace that installs every supported `@mui/material` major side by side (npm aliases `mui5` … `mui9`) and typechecks freshly generated `--ui mui@N` output — both layouts, every section/column variant, plus a literal-attribute probe for the TextField slot-props delta — against each major's real type declarations:
+
+```bash
+cd cli/matrix && npm install   # once; a chunky install, isolated from the root/cli installs
+cd .. && npm run matrix        # generates + typechecks against mui@5, 6, 7, 9
+```
+
+Run it before releasing any change to the MUI backend or the version configs. It is deliberately not part of the default `npm test` (it needs the matrix `node_modules`).
 
 ## `--layout module`
 
@@ -106,7 +117,7 @@ export default defineConfig({
 });
 ```
 
-`defineConfig` is an identity function with types — completion and typo-checking in the config file. Pair it with `--watch` for schema-first development: edit the schema, the module regenerates.
+`defineConfig` is an identity function with types — completion and typo-checking in the config file. `ui` accepts the same spellings as `--ui`, including the versioned `"mui@5"` … `"mui@9"`. Pair it with `--watch` for schema-first development: edit the schema, the module regenerates.
 
 ## Custom templates
 

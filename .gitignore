@@ -2,6 +2,10 @@ node_modules
 dist
 coverage
 *.log
+
+# MUI version-matrix scratch output (cli/matrix — the package.json and
+# lockfile ARE committed; the generated forms are per-run scratch)
+cli/matrix/.generated/
 .DS_Store
 .vscode
 .idea

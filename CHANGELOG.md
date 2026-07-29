@@ -137,6 +137,44 @@
 - `FieldPathArg` is now actually used by the `useField` / `useFieldArray`
   overloads it describes (it was exported dead).
 
+## formstand-cli Unreleased
+
+### Added
+
+- **Version-aware `--ui`: `mui@5` … `mui@9`** — `--ui mui` can now pin an
+  `@mui/material` major: `mui@5`, `mui@6`, `mui@7`, `mui@9` (bare `mui`
+  keeps meaning the latest supported major, 9, and its output is
+  byte-identical to before). The config file's `ui` key accepts the same
+  spellings. Scope: only React-19-capable majors — formstand peers
+  `react: ^19`, so MUI 4 and older can never install alongside it — and MUI
+  skipped major 8 entirely (7.x jumps to 9 on the registry), so `mui@8`
+  and `mui@4` fail with explanations, as do `plain@N`/`shadcn@N` (those
+  kits take no version). Internally the flag/config value parses to a
+  structured `UiTarget` (`{ kit: "mui", version }` | `{ kit: "plain" }` |
+  `{ kit: "shadcn" }`, exported with `parseUiTarget` / `MUI_VERSIONS` from
+  `formstand-cli/codegen`), and ONE mui emitter serves every major through
+  a small per-version config. The only prop-surface delta across the
+  emitted component set (verified empirically against each major's .d.ts)
+  is TextField's slot-props API: `mui@5` emits the legacy
+  `InputProps: { inputMode }` / `InputLabelProps: { shrink: true }`, v6+
+  emit `slotProps.{input,inputLabel}` (v9 removed the legacy spelling;
+  v6–7 accept both and get the modern one). Custom `--template` modules
+  compose with a versioned `--ui` exactly as they did with bare `mui`
+  (a template still overrides the ui entirely, `--layout single` only).
+- **`cli/matrix/`: the MUI version-matrix typecheck harness** — an isolated
+  workspace (own `package.json` + lockfile; not part of the root or cli
+  installs) with every supported `@mui/material` major installed side by
+  side under npm aliases (`mui5` … `mui9`). `npm run matrix` (from `cli/`)
+  generates a kitchen-sink form plus the nested-array stress form with
+  `--ui mui@N` — both layouts, every section/column variant — and
+  typechecks the output against each major's real type declarations
+  (`@mui/material` path-mapped onto the alias, `formstand` onto the
+  library source). A per-version literal-attribute probe restates the
+  adapter's TextField props style outside a JSX spread (spreads bypass
+  TypeScript's excess-property checks), so a wrong per-version config
+  fails the matrix instead of compiling silently. Run it before releasing
+  any MUI-backend change; it is deliberately not part of `npm test`.
+
 ## formstand-cli 0.8.0 — 2026-07-28
 
 ### Changed

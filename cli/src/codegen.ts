@@ -6,6 +6,7 @@ import {
   overDepthBudget,
 } from "./depth";
 import { type FieldSpec, type NamedField, labelFromName } from "./ir";
+import { type MuiVersion, DEFAULT_MUI_VERSION } from "./uiTarget";
 import type {
   Template,
   TemplateImport,
@@ -45,6 +46,9 @@ export type EmitFormOptions = Readonly<{
   formName: string;
   schemaImport: SchemaImport;
   visual?: VisualOptions;
+  // Which @mui/material major the mui backend emits for (default: the
+  // latest supported major). Ignored by every other backend.
+  muiVersion?: MuiVersion;
 }>;
 
 export type ObjectSpec = Extract<FieldSpec, Readonly<{ kind: "object" }>>;
@@ -1923,14 +1927,41 @@ const shadcnVariantLeaf = (
 };
 
 // ---------------------------------------------------------------------------
-// MUI backend (@mui/material v9)
+// MUI backend (@mui/material 5–9, one emitter + a per-version config)
 // ---------------------------------------------------------------------------
 
-// v9 rules baked in: slotProps.input (never InputProps), sx over system
-// props, MenuItem children inside a select TextField. Layout uses Stack to
-// stay out of Grid's way entirely.
+// Shared rules: sx over system props, MenuItem children inside a select
+// TextField, Stack for layout to stay out of Grid's way entirely. The one
+// prop-surface delta across the supported majors (5, 6, 7, 9 — MUI skipped
+// 8) is TextField's slot-props API, encoded below; everything else the
+// backend emits typechecks identically against every major (verified
+// empirically by the cli/matrix harness against each major's .d.ts).
 
-export const muiAdapterSection = (usage: KindUsage, exp = ""): string => {
+export type MuiVersionConfig = Readonly<{
+  // v6+ TextField takes slot overrides via `slotProps.{input,inputLabel}`;
+  // v5 has only the legacy `InputProps` / `InputLabelProps` component
+  // props (v9 REMOVED those, v6–7 keep them deprecated — so the modern
+  // spelling is emitted everywhere it exists).
+  textFieldSlotProps: boolean;
+}>;
+
+const MUI_VERSION_CONFIGS: Readonly<Record<MuiVersion, MuiVersionConfig>> = {
+  5: { textFieldSlotProps: false },
+  6: { textFieldSlotProps: true },
+  7: { textFieldSlotProps: true },
+  9: { textFieldSlotProps: true },
+};
+
+export const muiVersionConfig = (
+  version: MuiVersion = DEFAULT_MUI_VERSION,
+): MuiVersionConfig => MUI_VERSION_CONFIGS[version];
+
+export const muiAdapterSection = (
+  usage: KindUsage,
+  exp = "",
+  version: MuiVersion = DEFAULT_MUI_VERSION,
+): string => {
+  const { textFieldSlotProps } = muiVersionConfig(version);
   const needsError = usage.string || usage.date || usage.number || usage.enum;
   const textAdapter = [
     "",
@@ -1957,7 +1988,9 @@ export const muiAdapterSection = (usage: KindUsage, exp = ""): string => {
     "  value: numberToInputText(field.value),",
     "  error: fieldError(field) !== undefined,",
     "  helperText: fieldError(field),",
-    '  slotProps: { input: { inputMode: "decimal" as const } },',
+    textFieldSlotProps
+      ? '  slotProps: { input: { inputMode: "decimal" as const } },'
+      : '  InputProps: { inputMode: "decimal" as const },',
     "  onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {",
     "    const parsed = parseNumberText(e.target.value);",
     '    field.setValue((parsed.kind === "number" ? parsed.value : field.emptyValue) as T);',
@@ -1992,7 +2025,9 @@ export const muiAdapterSection = (usage: KindUsage, exp = ""): string => {
     "  error: fieldError(field) !== undefined,",
     "  helperText: fieldError(field),",
     "  // A date input always shows placeholder chrome; keep the label floated.",
-    "  slotProps: { inputLabel: { shrink: true } },",
+    textFieldSlotProps
+      ? "  slotProps: { inputLabel: { shrink: true } },"
+      : "  InputLabelProps: { shrink: true },",
     "  onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {",
     "    const parsed = parseDateText(e.target.value);",
     '    field.setValue((parsed.kind === "date" ? parsed.value : field.emptyValue) as T);',
@@ -2107,7 +2142,7 @@ const anyAddressableObjectField = (spec: FieldSpec): boolean => {
   }
 };
 
-const muiBackend = (visual: VisualOptions): Backend => {
+const muiBackend = (visual: VisualOptions, version: MuiVersion): Backend => {
   const cols = visual.columns;
   // Every section container is a CSS grid (a one-column grid with gap: 2 is
   // exactly a Stack); section roots span the parent grid's full row.
@@ -2213,7 +2248,7 @@ const muiBackend = (visual: VisualOptions): Backend => {
     ];
   },
   preamble: (usage, staticUsage) => [
-    muiAdapterSection(usage),
+    muiAdapterSection(usage, "", version),
     muiBoundComponents(staticUsage),
     "",
   ],
@@ -2265,7 +2300,13 @@ const muiBackend = (visual: VisualOptions): Backend => {
 };
 
 export const emitMuiForm = (options: EmitFormOptions): string =>
-  emitForm(muiBackend(options.visual ?? DEFAULT_VISUAL), options);
+  emitForm(
+    muiBackend(
+      options.visual ?? DEFAULT_VISUAL,
+      options.muiVersion ?? DEFAULT_MUI_VERSION,
+    ),
+    options,
+  );
 
 // ---------------------------------------------------------------------------
 // shadcn/ui backend

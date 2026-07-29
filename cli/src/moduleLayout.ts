@@ -30,6 +30,7 @@ import {
   unionCommonFieldNames,
 } from "./codegen";
 import { type FieldSpec, type NamedField, labelFromName } from "./ir";
+import type { MuiVersion } from "./uiTarget";
 
 // The --layout module emitter: instead of one file, a feature-module folder
 // in the shape of the Onboarding playground demo —
@@ -962,8 +963,15 @@ const hooksFile = (
 };
 
 // The kit adapter the single-file backends inline, exported once — only for
-// the kit uis, and only when some leaf actually renders a control.
-const adapterFile = (ui: ModuleUi, usage: KindUsage): ModuleFile | undefined => {
+// the kit uis, and only when some leaf actually renders a control. The mui
+// adapter is the one spot the targeted @mui/material major changes emission
+// (TextField's slot-props API), so the version threads to here and nowhere
+// else in the module layout.
+const adapterFile = (
+  ui: ModuleUi,
+  usage: KindUsage,
+  muiVersion?: MuiVersion,
+): ModuleFile | undefined => {
   if (ui === "plain" || !hasLeafUsage(usage)) return undefined;
   const needsText = usage.string || usage.date;
   // mui's Switch adapter also types its onChange with ChangeEvent, so a
@@ -985,7 +993,7 @@ const adapterFile = (ui: ModuleUi, usage: KindUsage): ModuleFile | undefined => 
       `} from "formstand";`,
       "",
       ui === "mui"
-        ? muiAdapterSection(usage, "export ")
+        ? muiAdapterSection(usage, "export ", muiVersion)
         : shadcnAdapterSection(usage, "export "),
       "",
     ].join("\n"),
@@ -2227,7 +2235,7 @@ export const emitModuleForm = (
   const root = assertObjectRoot(options.ir);
   const naming = namingFor(options.formName);
   const plan = buildPlan(root, naming);
-  const adapter = adapterFile(ui, collectUsage(root));
+  const adapter = adapterFile(ui, collectUsage(root), options.muiVersion);
 
   return [
     schemaFile(options.schemaImport, options.schemaSource),
