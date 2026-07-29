@@ -37,7 +37,7 @@ The hook returns:
 - `items` — the raw array values (`readonly TItem[]`).
 - `length` — the current length.
 - `error` — the **array-level** error (e.g. from `z.array().min(1)`), keyed at the array's own path.
-- `push(item)`, `remove(index)`, `insert(index, item)`, `move(from, to)`, `swap(a, b)` — thin wrappers over the form's `arrayPush` / `arrayRemove` / `arrayInsert` / `arrayMove` / `arraySwap`.
+- `push(item)`, `remove(index)`, `insert(index, item)`, `move(from, to)`, `swap(a, b)` — wrappers over the form's `arrayPush` / `arrayRemove` / `arrayInsert` / `arrayMove` / `arraySwap` that also **revalidate the array path** when the form's validation mode calls for it (same gate as a field edit: `mode`/`reValidateMode`/submit state) — so an array-level error like `min(1)` clears the moment a row is added, not on the next submit. The imperative `form.arrayPush(...)` family stays validation-silent, exactly like `form.setValue` — event-driven validation belongs to the hooks.
 
 With a `Form<TSchema>` and a typed path (including template paths like `` `albums.${index}.tracks` ``), `TItem` is **inferred from the schema** — no type argument. The explicit `useFieldArray<TItem>(form, path)` form is for schema-less `FieldFormApi` forms (there is nothing to infer from); passing it alongside a typed form is a compile error. Dynamic paths via a selector function return `UseFieldArrayReturn<unknown>`, like `useField`.
 
@@ -100,6 +100,8 @@ Constraints on the array itself (`z.array(...).min(1)`, `.max(n)`, a `.refine` o
 ```tsx
 {tracks.error ? <p role="alert">{tracks.error[0]}</p> : null}
 ```
+
+The hook's ops keep this error live: once the validation gate is open (after a failed submit in the default `onSubmit` mode, or immediately in `onChange` mode), `push` past a `max(n)` raises the error and `push`-ing the missing row under a `min(1)` clears it — no second submit needed. Custom `FieldArrayFormApi` implementations opt in by providing the optional `validateField(path)` member; without it, ops simply skip revalidation ([API notes](../api/#implementing-these-interfaces)).
 
 ## Metadata follows rows
 

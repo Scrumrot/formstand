@@ -2,21 +2,31 @@
 
 ## 0.12.0 — 2026-07-29
 
-### Fixed
+### Changed
 
 - **`useFieldArray` ops revalidate the array path** — push/remove/insert/
   move/swap now re-run field validation on the array's own path after the
   op, under the exact change-trigger gate `useField.setValue` applies
-  (`shouldValidateOn` over mode/reValidateMode/submitCount/touched). A
-  visible array-level error (`z.array().min(1)` after a failed submit) used
-  to go stale: adding the row didn't clear the message, and removing below
-  `.min` raised nothing until the next submit. The gate means `onSubmit`
-  forms stay silent before the first submit, exactly like typing in a
-  field. `FieldArrayFormApi` gains an OPTIONAL `validateField` member
-  (probed before use) — hand-rolled implementations without it keep
-  working, their ops simply skip revalidation. The IMPERATIVE
-  `form.arrayPush`/`arrayRemove` stay non-revalidating on purpose, matching
-  the `form.setValue` vs `useField.setValue` layering.
+  (`shouldValidateOn` over mode/reValidateMode/submitCount/touched). This
+  fixes a visible array-level error (`z.array().min(1)` after a failed
+  submit) going stale: adding the row didn't clear the message, and
+  removing below `.min` raised nothing until the next submit. Upgraders
+  note: in `onChange` mode (or after the first submit) array ops now
+  trigger a validation pass — including async refines — where 0.11 stayed
+  silent; `onSubmit` forms remain silent before the first submit, exactly
+  like typing in a field. The IMPERATIVE `form.arrayPush`/`arrayRemove`
+  stay non-revalidating on purpose, matching the `form.setValue` vs
+  `useField.setValue` layering.
+
+### Added
+
+- **`FieldArrayFormApi.validateField` (optional)** — the member the hook
+  probes for the revalidation above. A `Form<TSchema>` always provides it;
+  hand-rolled `FieldArrayFormApi` implementations without it keep working,
+  their ops simply skip revalidation (documented in the API reference's
+  implementing-these-interfaces notes).
+
+### Fixed
 - **`focusFirstError` / `focusField`: a hidden name-carrier no longer
   suppresses the `[id=path]` fallback.** Composite widgets like
   react-select render a hidden `<input name={path}>` for form posting next

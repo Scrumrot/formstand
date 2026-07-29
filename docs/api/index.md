@@ -243,4 +243,5 @@ Their methods are deliberately declared with **method-shorthand syntax** (`setVa
 
 - Your implementation **must accept any string path at runtime** — the compiler will not stop a caller from passing a path outside whatever narrower type you had in mind.
 - Do **not** re-declare these shapes with arrow-property syntax (`setValue: (path: string, ...) => void`): property function types are checked contravariantly, which makes `Form<TSchema>` unassignable to your copy.
+- `FieldArrayFormApi.validateField` is **optional** and opt-in: when present, `useFieldArray`'s ops (`push`/`remove`/…) call it to revalidate the array path under the form's validation gate — this is what keeps array-level errors (`min`/`max`) live as rows change. A `Form<TSchema>` always provides it; a hand-rolled implementation without it keeps working, but its ops skip revalidation and array-level errors only refresh on the next explicit validate/submit.
 :::

@@ -73,7 +73,7 @@
     "@types/prismjs": "^1.26.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.2.3",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@vitest/coverage-v8": "^4.1.10",
     "antd": "^6.5.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -91,7 +91,7 @@
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.62.1",
     "vitepress": "^1.6.4",
-    "vitest": "^4.1.9",
+    "vitest": "^4.1.10",
     "zod": "^4.2.0",
     "zustand": "^5.0.0"
   },

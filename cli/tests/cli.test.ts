@@ -119,9 +119,11 @@ describe("cli main", () => {
         chunks.push(String(chunk));
         return true;
       });
-    const code = await main(["--help"]);
-    spy.mockRestore();
-    expect(code).toBe(0);
+    try {
+      expect(await main(["--help"])).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
     const help = chunks.join("");
 
     // The flag spelling is built from UI_KITS/MUI_VERSIONS directly — the
