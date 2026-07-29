@@ -107,6 +107,26 @@ describe("useField typed paths (B1)", () => {
     expect(result.current.value).toBe("NYC");
   });
 
+  it("explicit type arguments on a schema-typed form are a readable compile error", () => {
+    const { result } = renderHook(() => {
+      const form = useForm(schema, {
+        initialValues: { name: "", age: 0, address: { city: "" }, users: [] },
+      });
+      // The trap-guard overload blames the PATH argument with instructions —
+      // the first reported overload error reads:
+      //   Argument of type '"name"' is not assignable to parameter of type
+      //   '"Remove the explicit type argument: a schema-typed form infers
+      //   the value type from the path"'.
+      // (Not the old baffling `schema?: undefined` brand mismatch.)
+      // @ts-expect-error — explicit generics on a Form select the trap-guard
+      useField<string>(form, "name");
+      // @ts-expect-error — a values-shaped explicit argument is the same trap
+      useField<{ name: string }>(form, "name");
+      return form;
+    });
+    expect(result.current).toBeDefined();
+  });
+
   it("a bare FieldFormApi keeps string paths with an explicit value type", () => {
     const { result } = renderHook(() => {
       const form = useForm(schema, {

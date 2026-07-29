@@ -83,6 +83,23 @@ type FieldSlice<TValue> = Readonly<{
   isValidating: boolean;
 }>;
 
+// The readable-error trap-guard for `useField<Values>(typedForm, "email")`:
+// any explicit type argument arity-matches ONLY the one-type-parameter
+// overloads, and the structural one's `schema?: undefined` brand then
+// rejects the Form with a baffling "... not assignable to type 'undefined'".
+// The error overload below intercepts that shape: its TValue defaults to
+// this unexported sentinel — an INFERRED call can never produce it (TValue
+// has no inference site, so it always falls back to the default), which
+// collapses `path` to `never` and fails the overload silently — while an
+// EXPLICIT TValue (never assignable to the unexported brand) on a
+// schema-carrying form types `path` as a string-literal error message, so
+// the compiler blames the path argument with instructions instead of brand
+// internals.
+declare const inferredCallsOnly: unique symbol;
+interface InferredTypeArg {
+  readonly [inferredCallsOnly]: typeof inferredCallsOnly;
+}
+
 // Overload order is deliberate. When no overload matches, TypeScript reports
 // the LAST candidate's error — so the typed-path overload sits last, and a
 // typo'd path on a Form<TSchema> is blamed on the path argument against the
@@ -103,6 +120,17 @@ export function useField<TSchema extends z.ZodType>(
   pathSelector: (state: FormState<z.input<TSchema>>) => string,
   options?: UseFieldOptions,
 ): UseFieldReturn<unknown>;
+// The trap-guard (see InferredTypeArg above): an explicit type argument on a
+// schema-carrying form binds here and blames the path argument with a
+// readable instruction. Inferred calls can never select it — TValue stays
+// at its sentinel default and `path` collapses to `never`.
+export function useField<TValue = InferredTypeArg>(
+  form: FieldFormApi & Readonly<{ schema: z.ZodType }>,
+  path: TValue extends InferredTypeArg
+    ? never
+    : "Remove the explicit type argument: a schema-typed form infers the value type from the path",
+  options?: UseFieldOptions,
+): UseFieldReturn<TValue>;
 // The `schema?: undefined` brand forces TS past this widened overload when a
 // real Form is passed (Form has `schema: TSchema`, not undefined). Without
 // it, a Form<TSchema> with an invalid path would silently bind here and

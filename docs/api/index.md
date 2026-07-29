@@ -125,6 +125,7 @@ type FieldValidationResult =
 | `useFieldArray` | `useFieldArray(form, path): UseFieldArrayReturn<TItem>` — `TItem` inferred from the schema through the path (explicit `<TItem>` only for schema-less `FieldFormApi` forms) | array ops + stable ids; see [Field arrays](../guide/field-arrays) |
 | `useFormSelector` | `useFormSelector(form, selector): U` | selector-style subscription over `FormState` |
 | `useFormSelectorShallow` | `useFormSelectorShallow(form, selector): U` | shallow-compared variant, required for object/array-returning selectors |
+| `useFormValues` | `useFormValues(form): z.input<TSchema>` | the whole values object, reactively — sugar for `useFormSelector(form, (s) => s.values)`. Reference-compared (values are replaced immutably), so it re-renders exactly when some value changes and never on touched/error churn; for values-driven derived rendering (a live map/preview). Structural `FormStateApi` forms read `unknown` |
 | `useFormError` | `useFormError(form): readonly string[] \| undefined` | shortcut for the root `""` error |
 | `useIsDirty` | `useIsDirty(form, path?): boolean` | any field dirty (derived); a typed path scopes it to that subtree (`"shipping"` covers `shipping.city`) |
 | `useIsValid` | `useIsValid(form, path?): boolean` | no errors currently in the merged map (not a fresh validation); a typed path scopes it to errors at or under that path |

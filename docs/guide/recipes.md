@@ -97,6 +97,35 @@ const total = useFormSelector(form, (s) =>
 );
 ```
 
+## Cross-field rules that blame one field
+
+A cross-field rule reads several fields but should surface on just one of them. Give an object-level `.superRefine` (or `.refine`) a `path` and the message lands on that field's error channel — `useField` picks it up like any schema error:
+
+```tsx
+const MAX_GROSS_WEIGHT = { C172: 2450, PA28: 2550 } as const;
+
+const schema = z
+  .object({
+    aircraftType: z.enum(["C172", "PA28"]),
+    grossWeight: z.number(),
+  })
+  .superRefine((data, ctx) => {
+    const max = MAX_GROSS_WEIGHT[data.aircraftType];
+    if (data.grossWeight > max) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["grossWeight"], // blame this field, not the form root
+        message: `max gross weight for a ${data.aircraftType} is ${max} lb`,
+      });
+    }
+  });
+
+const grossWeight = useField(form, "grossWeight");
+// grossWeight.error → ["max gross weight for a C172 is 2450 lb"]
+```
+
+Field-scoped validation keeps the rule live on that field: blur/change on `grossWeight` re-runs it, because a refinement on a traversed level makes `validateField` [fall back to a full parse](./validation#how-field-scoped-validation-works) and scope the resulting errors to the field — so the cross-field message appears and clears exactly like a single-field one. (A `.refine` *without* a `path` lands at the root `""` key instead — see [Root errors](./errors#root-errors-the-key).)
+
 ## Sharing a form without prop drilling
 
 `createFormContext` gives you a typed provider/hook pair — paths stay schema-checked through the context.

@@ -147,6 +147,8 @@ All return an unsubscribe function. `watchValue` compares by `Object.is`; `watch
 const unsubscribe = form.watchValues((values) => scheduleAutosave(values));
 ```
 
+For whole-values subscription **in render** — form values driving derived rendering, like a map re-rendering from live coordinates — use the hook instead: `useFormValues(form)` returns the current values object typed as `z.input<TSchema>`, re-rendering exactly when a value changes (values are replaced immutably, so it's one reference comparison) and never on touched/error churn.
+
 ## Flag hooks
 
 ```ts

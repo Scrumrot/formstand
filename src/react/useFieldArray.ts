@@ -297,6 +297,20 @@ export type ArrayItemOf<T> = [NonNullable<T>] extends [readonly (infer U)[]]
   ? U
   : never;
 
+// The readable-error trap-guard, mirroring useField's: an explicit type
+// argument (`useFieldArray<Item>(typedForm, "users")`) arity-matches ONLY
+// the one-type-parameter overloads, and the structural one's brand then
+// rejects the Form with a baffling "... not assignable to type
+// 'undefined'". The error overload below intercepts that shape — TItem
+// defaults to this unexported sentinel, which inferred calls can never
+// escape (TItem has no inference site), collapsing `path` to `never`; an
+// explicit TItem on a schema-carrying form instead types `path` as a
+// string-literal instruction the compiler blames the path argument with.
+declare const inferredCallsOnly: unique symbol;
+interface InferredTypeArg {
+  readonly [inferredCallsOnly]: typeof inferredCallsOnly;
+}
+
 // Overload order mirrors useField (and is just as deliberate): the
 // typed-path overload sits last so a typo'd path on a Form<TSchema> is
 // blamed on the path argument against the full FieldPath union, and the
@@ -319,6 +333,15 @@ export function useFieldArray<TSchema extends z.ZodType>(
     }>,
   pathSelector: (state: FormState<z.input<TSchema>>) => string,
 ): UseFieldArrayReturn<unknown>;
+// The trap-guard (see InferredTypeArg above): explicit type argument on a
+// schema-carrying form → readable error on the path argument; inferred
+// calls fall through (path collapses to never).
+export function useFieldArray<TItem = InferredTypeArg>(
+  form: FieldArrayFormApi & Readonly<{ schema: z.ZodType }>,
+  path: TItem extends InferredTypeArg
+    ? never
+    : "Remove the explicit type argument: a schema-typed form infers the item type from the path",
+): UseFieldArrayReturn<TItem>;
 export function useFieldArray<TItem = unknown>(
   form: FieldArrayFormApi & { readonly schema?: undefined },
   path: FieldPathArg<unknown>,

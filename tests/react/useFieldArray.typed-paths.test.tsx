@@ -70,6 +70,18 @@ describe("useFieldArray typed paths", () => {
     });
   });
 
+  it("explicit type arguments on a schema-typed form are a readable compile error", () => {
+    renderHook(() => {
+      const form = useForm(schema, { initialValues });
+      // The trap-guard overload blames the PATH argument with instructions —
+      //   Argument of type '"users"' is not assignable to parameter of type
+      //   '"Remove the explicit type argument: a schema-typed form infers
+      //   the item type from the path"'.
+      // @ts-expect-error — explicit generics on a Form select the trap-guard
+      return useFieldArray<{ email: string; admin: boolean }>(form, "users");
+    });
+  });
+
   it("schema-less FieldFormApi forms keep the explicit item type", () => {
     const { result } = renderHook(() => {
       const form = useForm(schema, { initialValues });

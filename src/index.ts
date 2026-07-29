@@ -65,6 +65,7 @@ export {
   useFormSelectorShallow,
 } from "./react/useFormSelector";
 export type { FormStateApi } from "./react/useFormSelector";
+export { useFormValues } from "./react/useFormValues";
 export { useFormError } from "./react/useFormError";
 export {
   useIsDirty,

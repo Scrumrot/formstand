@@ -105,7 +105,7 @@ With `debounceMs` set, each triggering interaction resets a timer; when it fires
 `validateField` / `validateFieldAsync` avoid parsing the whole form when they can, choosing one of three strategies:
 
 1. **Subschema extraction (the fast path).** When the path is reachable through plain `z.object` / `z.array` levels that carry no checks, the field's subschema is extracted (and cached per form) and parsed against just that field's value. This is what keeps an async username refine from firing while you type in an unrelated field.
-2. **Full-parse fallback.** When a traversed level carries a refinement or is a wrapper (`optional`, `nullable`, `default`, `pipe`, `union`, `record`, ...), extraction could miss cross-field rules targeting the path — so the whole form is parsed and the resulting errors are **scoped** to the path and its descendants before being written.
+2. **Full-parse fallback.** When a traversed level carries a refinement or is a wrapper (`optional`, `nullable`, `default`, `pipe`, `union`, `record`, ...), extraction could miss cross-field rules targeting the path — so the whole form is parsed and the resulting errors are **scoped** to the path and its descendants before being written. This is what makes a cross-field `.superRefine` with a `path` behave like a field-local rule on the blamed field — see the [recipe](./recipes#cross-field-rules-that-blame-one-field).
 3. **Skip.** When the path addresses no slot — an out-of-range array index — validation is skipped entirely, because parsing a subschema against `undefined` would fabricate an error no full-form parse produces.
 
 `validateField("")` is a whole-form pass and behaves exactly like `validate()`.

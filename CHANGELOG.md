@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`useFormValues(form)`** — whole-values subscription in render: returns
+  the form's current values object, typed `z.input<TSchema>` (structural
+  `FormStateApi` forms read `unknown`). Sugar for
+  `useFormSelector(form, (s) => s.values)`, reference-compared — the store
+  replaces the values object immutably, so the hook re-renders exactly when
+  some value changes and never on touched/error/submit churn. The motivating
+  case: form values driving derived rendering (a map re-rendering from live
+  coordinates).
+
+### Fixed
+
+- **Explicit type arguments on a schema-typed form now fail with a readable
+  error.** `useField<Values>(form, "email")` (any explicit generics on a
+  `Form` — the value type infers from the path, so they were always an
+  error) used to resolve onto the schema-less overload and die with a
+  baffling `"... not assignable to type 'undefined'"` brand mismatch. A
+  trap-guard overload now intercepts that shape and blames the path
+  argument with instructions: `Argument of type '"email"' is not assignable
+  to parameter of type '"Remove the explicit type argument: a schema-typed
+  form infers the value type from the path"'`. Same guard on
+  `useFieldArray` (`"... infers the item type from the path"`). Inferred
+  calls, structural-form explicit generics, selector paths, and explicit
+  instantiation expressions (`typeof useField<Schema, "name">`) are all
+  unaffected — the guard's type parameter defaults to an unexported
+  sentinel no inferred call can produce.
+
 ## 0.12.0 — 2026-07-29
 
 ### Changed
