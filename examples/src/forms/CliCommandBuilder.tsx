@@ -22,13 +22,26 @@ const schema = z
     mode: z.enum(["zod", "type"]),
     exportName: z.string(),
     typeName: z.string(),
-    ui: z.enum(["plain", "mui", "shadcn"]),
+    ui: z.enum([
+      "plain",
+      "mui",
+      "mui@5",
+      "mui@6",
+      "mui@7",
+      "mui@9",
+      "shadcn",
+      "chakra",
+      "mantine",
+      "antd",
+    ]),
     layout: z.enum(["single", "module"]),
     sections: z.enum(["flat", "panel", "collapsible"]),
     columns: z.enum(["1", "2", "3"]),
     name: z.string(),
     out: z.string(),
     schemaOut: z.string(),
+    live: z.boolean(),
+    formProp: z.boolean(),
     force: z.boolean(),
   })
   .superRefine((values, ctx) => {
@@ -72,6 +85,8 @@ const buildCommand = (values: Values): string =>
     values.schemaOut.trim() !== ""
       ? ["--schema-out", quote(values.schemaOut)]
       : []),
+    ...(values.live ? ["--live"] : []),
+    ...(values.formProp ? ["--form-prop"] : []),
     ...(values.force ? ["--force"] : []),
   ].join(" ");
 
@@ -90,6 +105,8 @@ export const CliCommandBuilder = () => {
       name: "",
       out: "src/ProfileForm.tsx",
       schemaOut: "",
+      live: false,
+      formProp: false,
       force: false,
     },
     mode: "onChange",
@@ -107,6 +124,8 @@ export const CliCommandBuilder = () => {
   const name = useField(form, "name");
   const out = useField(form, "out");
   const schemaOut = useField(form, "schemaOut");
+  const live = useField(form, "live");
+  const formProp = useField(form, "formProp");
   const force = useField(form, "force");
   const [copied, setCopied] = useState(false);
 
@@ -169,8 +188,15 @@ export const CliCommandBuilder = () => {
           <label>UI library (--ui)</label>
           <select {...selectProps(ui)}>
             <option value="plain">plain (formstand components)</option>
-            <option value="mui">mui (Material UI 9)</option>
+            <option value="mui">mui (Material UI, latest major)</option>
+            <option value="mui@5">mui@5</option>
+            <option value="mui@6">mui@6</option>
+            <option value="mui@7">mui@7</option>
+            <option value="mui@9">mui@9</option>
             <option value="shadcn">shadcn (@/components/ui)</option>
+            <option value="chakra">chakra (Chakra UI 3)</option>
+            <option value="mantine">mantine (Mantine 9)</option>
+            <option value="antd">antd (Ant Design 6)</option>
           </select>
         </div>
         <div className="field" style={{ flex: 1 }}>
@@ -238,6 +264,14 @@ export const CliCommandBuilder = () => {
       ) : null}
 
       <div className="field">
+        <label className="row" style={{ gap: 8 }}>
+          <input {...checkboxProps(live)} />
+          Live mode — no submit scaffold, values-subscription prop (--live)
+        </label>
+        <label className="row" style={{ gap: 8 }}>
+          <input {...checkboxProps(formProp)} />
+          Page owns the form — component takes a form prop (--form-prop)
+        </label>
         <label className="row" style={{ gap: 8 }}>
           <input {...checkboxProps(force)} />
           Overwrite existing files (--force)
