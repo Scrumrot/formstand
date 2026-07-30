@@ -6,11 +6,12 @@ Zod-schema-first form state for React 19, backed by zustand.
 
 **[Documentation](https://scrumrot.github.io/formstand/documentation/)** · **[Live playground](https://scrumrot.github.io/formstand/examples/)** · **[CLI](https://scrumrot.github.io/formstand/documentation/cli/)** · **[API reference](https://scrumrot.github.io/formstand/documentation/api/)**
 
-- **Typed paths** — `useField(form, "users.0.email")` infers the value type from the schema.
-- **Per-field subscriptions** — fields re-render only when their own slice changes.
-- **Sync and async validation** — with race-handling for async refines.
+- **Typed paths**: `useField(form, "users.0.email")` infers the value type from the schema.
+- **Per-field subscriptions**: fields re-render only when their own slice changes.
+- **Sync and async validation**, with race-handling for async refines.
 - **Field arrays** with stable IDs that survive reorders.
-- **Bound input components** for the common cases.
+- **Bound input components** for the common cases, accessibility wiring included.
+- **A generator**: [`formstand-cli`](https://scrumrot.github.io/formstand/documentation/cli/) writes the whole component from your schema, for six UI kits.
 
 ## Install
 
@@ -59,6 +60,31 @@ const SignUpForm = () => {
 };
 ```
 
+## Skip the typing: generate the form
+
+[`formstand-cli`](https://scrumrot.github.io/formstand/documentation/cli/) writes the
+component from a schema you already have. It is a dev dependency that produces plain
+code and adds nothing to your bundle.
+
+```bash
+npm install -D formstand-cli
+npx formstand-gen src/profileSchema.ts --ui mui --sections panel --columns 2 --out src/ProfileForm.tsx
+```
+
+You get typed `initialValues`, a bound control per field, sections for nested objects,
+`useFieldArray` blocks with add and remove buttons for lists, and a wired submit. Point
+it at a TypeScript type instead (`--type Profile`) and it generates the zod schema too.
+
+`--ui` picks the target: plain formstand components, Material UI 5 through 9, shadcn/ui,
+Chakra 3, Mantine 9, or Ant Design 6. `--layout module` writes a feature folder rather
+than one file, `--live` drops the submit scaffold for search and filter panels, and
+`--form-prop` hands form ownership to the page. Nothing generated imports from the CLI,
+so the output is yours to edit.
+
+Try it without installing anything in the
+[Schema builder](https://scrumrot.github.io/formstand/examples/#/schema-builder), which
+runs the real emitters in the browser.
+
 ## Core API
 
 ### `createForm(schema, options)`
@@ -68,7 +94,7 @@ Creates a form instance. React users typically use `useForm` instead, which wrap
 ```ts
 const form = createForm(schema, {
   initialValues,
-  mode: "onBlur",          // "onChange" | "onBlur" | "onSubmit"
+  mode: "onBlur",          // "onChange" | "onBlur" | "onSubmit" | "onTouched" | "all"
   reValidateMode: "onChange", // mode used after the first submit attempt
   validateOnMount: false,  // run a validation pass at creation (see below)
 });
@@ -82,15 +108,15 @@ const form = createForm(schema, {
 | `setValue(path, value)` | updates one field. Dirtiness is derived, not stored: a field reads as dirty while its value differs structurally from `initialValues` at that path (arrays/plain objects compare deep, Dates by timestamp, `Object.is` otherwise) |
 | `setValues(next)` | replace the entire values object; server errors release only where a value slice actually changed |
 | `setTouched(path, touched?)` | marks a path touched |
-| `setError(path, errors)` / `setErrors(map)` / `clearErrors(path?)` | the app-owned **server error channel** (`state.serverErrors`) — validation never touches it; `setError` accepts a single string or an array; `clearErrors(path)` clears both channels at the path and its descendants (`clearErrors("")` clears just the root entry; `clearErrors()` clears everything); `setErrors` replaces the whole server channel |
+| `setError(path, errors)` / `setErrors(map)` / `clearErrors(path?)` | the app-owned **server error channel** (`state.serverErrors`), which validation never touches; `setError` accepts a single string or an array; `clearErrors(path)` clears both channels at the path and its descendants (`clearErrors("")` clears just the root entry; `clearErrors()` clears everything); `setErrors` replaces the whole server channel |
 | `setMode` / `setReValidateMode` | switch modes at runtime |
-| `reset(nextInitial?, options?)` | reset to initial; optional partial overrides (shallow-merged for record roots, replaced wholesale otherwise) and `{ keepErrors, keepTouched, keepSubmitCount }` (no `keepDirty` — dirtiness derives from values vs initial, and reset makes them equal) |
-| `resetField(path)` | reset one field to its initial value, clearing its (and descendants') error/touched state (dirtiness clears by definition — the value now equals initial); a path with no initial counterpart (an appended array row) keeps its value and only clears field state |
-| `adoptValues(values)` | mid-session rebase: replaces `values` + `initialValues` and clears `errors` and in-flight validation flags (`isValidating`/`isValidatingForm` — the rebase disowns in-flight passes), but **preserves** interaction state (`touched`, `submitCount`, `isSubmitting`, `mode`). Use `reset()` for a full wipe |
-| `updateState(updater)` | atomic multi-field patch; `errors` is derived from `schemaErrors`/`serverErrors`, so patch the channels — the patch type omits `errors` entirely, and a plain-JS `errors` patch is warned about and ignored |
+| `reset(nextInitial?, options?)` | reset to initial; takes optional partial overrides (shallow-merged for record roots, replaced wholesale otherwise) and `{ keepErrors, keepTouched, keepSubmitCount }`. There is no `keepDirty`: dirtiness derives from values vs initial, and reset makes them equal |
+| `resetField(path)` | reset one field to its initial value, clearing its (and its descendants') error and touched state. Dirtiness clears by definition, since the value now equals initial. A path with no initial counterpart, such as an appended array row, keeps its value and only clears field state |
+| `adoptValues(values)` | mid-session rebase. Replaces `values` and `initialValues` and clears `errors` plus the in-flight validation flags (`isValidating`/`isValidatingForm`, since the rebase disowns in-flight passes), but **preserves** interaction state (`touched`, `submitCount`, `isSubmitting`, `mode`). Use `reset()` for a full wipe |
+| `updateState(updater)` | atomic multi-field patch. `errors` is derived from `schemaErrors`/`serverErrors`, so patch the channels instead: the patch type omits `errors` entirely, and a plain-JS `errors` patch is warned about and ignored |
 | `validate()` / `validateField(path)` / `validateFields(paths)` | sync validation; on an async schema all three transparently start the async pass instead and return `{ kind: "pending", promise }` |
 | `validateAsync()` / `validateFieldAsync(path)` / `validateFieldsAsync(paths)` | async; supports `async .refine` |
-| `submit(onValid, onInvalid?, { force? })` → `Promise<SubmitResult>` | full submit flow; resolves `{ kind: "valid", data }`, `{ kind: "invalid", errors }` (errored fields are also marked touched), `{ kind: "skipped" }` when another submit is in flight, or `{ kind: "error", error }` when `onValid` throws/rejects — submit resolves instead of rejecting, so `handleSubmit` never produces an unhandled rejection from an `onValid` throw |
+| `submit(onValid, onInvalid?, { force? })` → `Promise<SubmitResult>` | full submit flow; resolves `{ kind: "valid", data }`, `{ kind: "invalid", errors }` (errored fields are also marked touched), `{ kind: "skipped" }` when another submit is in flight, or `{ kind: "error", error }` when `onValid` throws or rejects. Submit resolves instead of rejecting, so `handleSubmit` never produces an unhandled rejection from an `onValid` throw |
 | `handleSubmit(onValid, onInvalid?)(event?)` | event handler wrapper that calls `preventDefault` |
 | `getField(path)` | typed one-shot value read |
 | `getFieldState(path)` | typed one-shot read of a field's full slice (value/error/touched/dirty/isValidating) |
@@ -108,7 +134,7 @@ const form = createForm(schema, {
 - `mode: "all"`: validate on every change and blur.
 - `reValidateMode` (default `"onChange"`) kicks in once `submitCount > 0`.
 
-For schemas with `async .refine`, sync `validate()` / `validateField()` / `validateFields()` don't throw: they detect the async requirement, start the async pass themselves, and hand you the in-flight work as `{ kind: "pending", promise }` (never a bare truthy `Promise` — a boolean gate can't silently pass). The requirement is also remembered per scope, so later sync calls skip straight to the async pass instead of re-paying a doomed sync parse per keystroke. If the *field being validated* is itself sync, `validateField` still settles synchronously even when other fields carry async refines — field validation parses just that field's subschema when it can (see below).
+For schemas with `async .refine`, sync `validate()` / `validateField()` / `validateFields()` don't throw: they detect the async requirement, start the async pass themselves, and hand you the in-flight work as `{ kind: "pending", promise }`, never a bare truthy `Promise` that a boolean gate could silently pass. The requirement is also remembered per scope, so later sync calls skip straight to the async pass instead of re-paying a doomed sync parse per keystroke. If the *field being validated* is itself sync, `validateField` still settles synchronously even when other fields carry async refines, because field validation parses just that field's subschema when it can (see below).
 
 ## React hooks
 
@@ -153,7 +179,9 @@ useField(form, (state) => `users.${state.values.selectedIdx}.email`);
 Array operations + stable IDs for React keys:
 
 ```ts
-const users = useFieldArray<UserItem>(form, "users");
+// The item type comes from the schema through the path. Passing an explicit
+// <UserItem> here is a compile error on a schema-typed form.
+const users = useFieldArray(form, "users");
 users.fields.map((f, i) => (
   <UserRow key={f.id} item={f.value} index={i} />
 ));
@@ -165,7 +193,7 @@ users.insert(i, item);
 users.error;   // array-level error (e.g. min(1))
 ```
 
-`fields` IDs are shared per `(form, path)` — every hook on the same array sees
+`fields` IDs are shared per `(form, path)`, so every hook on the same array sees
 the same ids. Array ops (hook-issued or imperative `form.arrayMove` etc.)
 record their exact index mapping and id derivation replays it, so even rows
 with equal values keep the right ids through ops; whole-array writes
@@ -177,13 +205,13 @@ remounting). A genuinely new item gets a fresh `id`.
 
 Selector-style subscription. Use `useFormSelectorShallow` for selectors that return objects/arrays.
 
-> Formerly `useFormState` / `useFormStateShallow` — renamed because React DOM
+> Formerly `useFormState` / `useFormStateShallow`, renamed because React DOM
 > ships its own (deprecated) `useFormState` and auto-imports regularly grabbed
 > the wrong one. The old names were removed in 0.4.0.
 
 ### `useFormValues(form)`
 
-The whole values object, reactively — sugar for `useFormSelector(form, (s) => s.values)`, reference-compared so it re-renders exactly when some value changes (never on touched/error churn); the render-side sibling of `form.watchValues`.
+The whole values object, reactively. Sugar for `useFormSelector(form, (s) => s.values)`, reference-compared so it re-renders exactly when some value changes and never on touched or error churn. The render-side sibling of `form.watchValues`.
 
 ### `useFormError(form)`
 
@@ -199,14 +227,14 @@ useSubmitCount(form);
 ```
 
 > **`useIsValid` reflects the error map, not a fresh validation.** It returns
-> `true` when no errors are currently recorded — covering both schema errors and
+> `true` when no errors are currently recorded, covering both schema errors and
 > server errors set via `setError`. But the error map is empty until validation
 > runs, so a never-validated form reads as valid even if its initial values
 > would fail the schema. If you gate a submit button on `!useIsValid(form)`,
 > pass `validateOnMount: true` to `useForm`/`createForm` so the initial values
 > are checked up front. (`submit`/`handleSubmit` always re-validate regardless,
 > so an invalid form can't actually be submitted either way.) `validateOnMount`
-> surfaces errors for untouched fields immediately — gate error display on
+> surfaces errors for untouched fields immediately, so gate error display on
 > `touched` if you don't want them shown before interaction.
 
 ### Bound input components
@@ -214,6 +242,7 @@ useSubmitCount(form);
 ```tsx
 <TextField form={form} path="email" label="Email" type="email" />
 <NumberField form={form} path="age" label="Age" />
+<DateField form={form} path="startDate" label="Start date" />
 <CheckboxField form={form} path="agree" label="I agree" />
 <SelectField form={form} path="theme" label="Theme" placeholder="Pick a theme"
   options={[{ value: "light", label: "Light" }, { value: "dark", label: "Dark" }]} />
@@ -232,8 +261,9 @@ state is visible instead of the browser silently showing the first option.
 `NumberField` renders a `type="text"` input with `inputMode="decimal"` and keeps
 the raw text while you type, so partial entries (`-`, `1.`, `1e`) survive instead
 of being coerced away by a controlled `<input type="number">`. Each keystroke
-that parses to a **finite** number is pushed to the form (whitespace counts as
-empty → `undefined`; `Infinity` is rejected), and the display snaps to the
+that parses to a **finite** number is pushed to the form (whitespace-only text counts
+as empty and writes the field's `emptyValue`, which is `null` for a nullable field and
+`undefined` otherwise; `Infinity` is rejected), and the display snaps to the
 canonical value on blur. If something else writes the field while you're typing
 (`reset`, `adoptValues`, another component), the external value wins and the
 input updates immediately.
@@ -247,16 +277,22 @@ Or roll your own with the prop helpers:
 ```
 
 `numberInputProps` is also exported as a stateless `<input type="number">` binding
-(native stepper + `step`), at the cost of the intermediate-entry behaviour above:
+(native stepper plus `step`), at the cost of the intermediate-entry behaviour above:
 
 ```tsx
 <input {...numberInputProps(useField(form, "age"))} type="number" step="1" />
 ```
 
+For a custom text input that needs the partial-entry behaviour, `useNumberInput(field)`
+is the hook behind `NumberField`, exported for UI-kit adapters. `DateField` has the same
+split: `dateToInputText` / `parseDateText` are exported so an adapter treats the value as
+a **local calendar date** rather than round-tripping through `toISOString()`, which would
+show a date picked as June 1 as May 31 west of UTC.
+
 ### Focus management
 
 `focusFirstError(errors, root?)` focuses the first control (in DOM order) whose
-`name` matches an errored path — the bound components set `name={path}` so this
+`name` matches an errored path. The bound components set `name={path}`, so this
 works out of the box. Wire it into the invalid-submit handler:
 
 ```tsx
@@ -264,7 +300,7 @@ works out of the box. Wire it into the invalid-submit handler:
 ```
 
 On a page with several forms, pass the form element (e.g. via a ref) as `root`
-so the search stays inside your form — without it the whole document is
+so the search stays inside your form. Without it the whole document is
 scanned, and a root-`""` error's first-control fallback refuses to guess
 between forms (it returns `false` when the document holds more than one
 `<form>`):
@@ -273,15 +309,23 @@ between forms (it returns `false` when the document holds more than one
 <form ref={formRef} onSubmit={form.handleSubmit(onValid, (errors) => focusFirstError(errors, formRef.current ?? undefined))}>
 ```
 
-It returns `true` only when a control actually received focus — disabled or
+It returns `true` only when a control actually received focus; disabled or
 hidden controls, controls inside a closed `<dialog>`, and controls that refuse
 focus (e.g. `display: none`) are passed over for the next match.
 
-For custom focus logic, every bound component also takes a `ref` to its input.
+`focusField(path, root?)` is the imperative sibling, keyed by a path instead of an error
+map: `focusField("address")` lands on the first rendered `address.*` control. Use it after
+opening a dialog, appending an array row, or landing on a wizard step, where react-hook-form
+users reach for `setFocus`.
+
+Both helpers fall back to the element whose `id` is exactly the path when no control carries
+that `name`, which is how composite widgets that render no `name` (Ant Design's `Select`,
+say) stay reachable. For custom focus logic, every bound component also takes a `ref` to its
+input.
 
 ## Sharing a form across components
 
-`useForm(schema, options)` creates a form bound to the calling component's lifetime. Calling `useForm` twice — even with the same schema — gives you **two independent forms with two independent stores**. The hook uses `useState(() => createForm(...))` under the hood, and `useState` is per-component-instance.
+`useForm(schema, options)` creates a form bound to the calling component's lifetime. Calling `useForm` twice, even with the same schema, gives you **two independent forms with two independent stores**. The hook uses `useState(() => createForm(...))` under the hood, and `useState` is per component instance.
 
 To share one form between components, use one of these patterns:
 
@@ -301,7 +345,7 @@ const Parent = () => {
 
 Each child takes `form: FieldFormApi` (or the typed `Form<typeof schema>`) and calls `useField(form, "...")` on it. Works for small trees; gets noisy if the tree is deep.
 
-### 2. `createFormContext` — no prop drilling, full typing
+### 2. `createFormContext`: no prop drilling, full typing
 
 ```tsx
 import { createFormContext } from "formstand";
@@ -318,7 +362,7 @@ const Parent = () => {
   );
 };
 
-// In NameField.tsx — no form prop:
+// In NameField.tsx, with no form prop:
 const NameField = () => {
   const form = useFormContext();          // typed Form<typeof schema>
   const name = useField(form, "name");
@@ -335,27 +379,49 @@ The factory pattern (one `createFormContext` per form shape) preserves the schem
 export const profileForm = createForm(schema, { initialValues });
 ```
 
-Import and use anywhere. The form lives for the lifetime of the module — useful for single-instance "app-wide" forms (e.g., a global filter bar), bad for forms that should reset between page mounts.
+Import and use anywhere. The form lives for the lifetime of the module, which suits single-instance "app-wide" forms such as a global filter bar, and is wrong for forms that should reset between page mounts.
+
+### 4. `createFormHooks`: a module singleton as a named hook API
+
+```ts
+// invoiceForm.ts
+export const invoiceForm = createForm(schema, { initialValues });
+export const { useInvoiceField, useInvoiceFieldArray, useInvoiceIsDirty } =
+  createFormHooks(invoiceForm, "invoice");
+```
+
+```tsx
+// Anywhere in the app, with no provider and no form prop:
+const total = useInvoiceField("total");
+```
+
+The optional name is baked into the hook names at both the type level and runtime, so a
+typo'd destructure is a compile error. Omit it for unprefixed names. Every hook keeps its
+usual signature minus the `form` argument, typed paths included.
+
+Because it is module scope, the same SSR caveat as pattern 3 applies, and more sharply:
+under Next.js the store is shared **across requests** in one server process. Keep
+`createFormHooks` forms in client-only modules.
 
 ## Common pitfalls
 
-- **Object-returning selectors must use `useFormSelectorShallow`.** `useFormSelector(form, (s) => ({ values: s.values, errors: s.errors }))` returns a fresh object on every call; React's `useSyncExternalStore` will detect snapshot churn and bail with *"Maximum update depth exceeded"*. Use `useFormSelectorShallow` instead — it caches by shallow equality.
-- **Synchronous `validate` / `validateField` return `pending` on async schemas.** They start the async pass for you and return `{ kind: "pending", promise }` — check `result.kind` (or use the `*Async` variants directly) rather than assuming `valid`/`invalid`.
-- **`form.submit()` short-circuits when one is already in flight** — it resolves `{ kind: "skipped" }`. Pass `{ force: true }` as the third argument to bypass.
-- **`z.coerce.*` collapses typed paths.** Form values are typed as `z.input<Schema>`, and in zod v4 the input of `z.coerce.number()` is `unknown` — so `FieldPath`/`FieldValue` can't see through it and path inference degrades for those fields. Prefer keeping the field's input type honest (e.g. `z.string()` in the schema and parse in a `.transform`/`.pipe`, or use `NumberField`, which parses text to `number` for you) over `z.coerce`.
+- **Object-returning selectors must use `useFormSelectorShallow`.** `useFormSelector(form, (s) => ({ values: s.values, errors: s.errors }))` returns a fresh object on every call; React's `useSyncExternalStore` will detect snapshot churn and bail with *"Maximum update depth exceeded"*. Use `useFormSelectorShallow` instead, which caches by shallow equality.
+- **Synchronous `validate` / `validateField` return `pending` on async schemas.** They start the async pass for you and return `{ kind: "pending", promise }`, so check `result.kind` (or use the `*Async` variants directly) rather than assuming `valid`/`invalid`.
+- **`form.submit()` short-circuits when one is already in flight**, resolving `{ kind: "skipped" }`. Pass `{ force: true }` as the third argument to bypass.
+- **`z.coerce.*` collapses typed paths.** Form values are typed as `z.input<Schema>`, and in zod v4 the input of `z.coerce.number()` is `unknown`, so `FieldPath`/`FieldValue` can't see through it and path inference degrades for those fields. Prefer keeping the field's input type honest (say `z.string()` in the schema plus a `.transform`/`.pipe`, or `NumberField`, which parses text to `number` for you) over `z.coerce`.
 - **The imperative write surface is typed.** `form.setValue("naem", "x")` and `form.setValue("age", "thirty")` are compile errors, as are `setTouched`/`setError`/`clearErrors`/`validateField(s)`/array ops with bad paths. Dynamic array paths still typecheck (`` `users.${i}.email` `` with `i: number` matches the template-literal path type); for a fully runtime-built string, cast: `form.setValue(path as FieldPath<z.input<typeof schema>>, value as never)`.
 
 ## Path semantics
 
 Paths are dot-separated (`"users.0.email"`). How a segment is interpreted is
 decided by the **existing container**: arrays take numeric segments as indices,
-plain objects take any segment as a string key — so a `z.record` keyed `"0"`
+plain objects take any segment as a string key, so a `z.record` keyed `"0"`
 reads and writes the record key instead of silently becoming an array. Only
 when the container doesn't exist yet does the segment type pick what's created
 (numeric → array, otherwise object). Three limitations: keys containing `.`
 are not addressable; array writes beyond index 100 000 are refused (a typo'd
 index must not allocate gigabytes); and the typed `FieldPath` union stops at
-9 segments by default — the runtime walks any depth, and `createForm`'s
+9 segments by default. The runtime walks any depth, and `createForm`'s
 type-level `pathDepth` option widens the union per form (a deliberate
 compile-time trade; see the [typed paths guide](https://scrumrot.github.io/formstand/documentation/typed-paths)).
 
@@ -382,8 +448,8 @@ const schema = z.object({
 ```
 
 - `form.submit` uses `safeParseAsync` internally, so async refines work transparently.
-- `form.validateFieldAsync(path)` parses **just that field's subschema** when the path is reachable through refinement-free objects/arrays — so an async username check doesn't fire when you validate an unrelated field. When a traversed level carries a refinement (cross-field rules), it falls back to a full-form parse and scopes the written errors to the path and its descendants.
-- `validateField("address")` also **sets and clears errors for descendant paths** (`address.city`, …), not just the exact key.
+- `form.validateFieldAsync(path)` parses **just that field's subschema** when the path is reachable through refinement-free objects/arrays, so an async username check doesn't fire when you validate an unrelated field. When a traversed level carries a refinement (cross-field rules), it falls back to a full-form parse and scopes the written errors to the path and its descendants.
+- `validateField("address")` also **sets and clears errors for descendant paths** (`address.city` and the rest), rather than only the exact key.
 - Per-path **sequence numbers** ensure stale "username was taken" results don't overwrite a newer "ok" result.
 - A **values-reference guard** drops the write if `values` mutated during the await (so `reset`/`adoptValues`/`setValue` during an in-flight validate doesn't corrupt the error map).
 
@@ -403,11 +469,11 @@ form.handleSubmit(async (data) => {
 });
 ```
 
-Errors live in two channels. `schemaErrors` is owned by validation: every pass rebuilds it (full passes wholesale, field-scoped passes splice their scope). `serverErrors` is owned by you: `setError`/`setErrors` write it and validation never reads or writes it — which is the entire preservation story. A background `validateAsync()` can't wipe a "username taken" message because it physically can't touch that channel; there are no marks or bookkeeping to get wrong. The `errors` map every hook reads is derived from both on each write: the schema's message wins at a key, server entries show where the schema is silent. The merge is order-independent — `setError` on a key the schema currently rejects stores the verdict (visible in `state.serverErrors`) behind the schema message, and if the schema later clears at that key without the value changing, the stored verdict resurfaces, since the value it judged is unchanged.
+Errors live in two channels. `schemaErrors` is owned by validation: every pass rebuilds it (full passes wholesale, field-scoped passes splice their scope). `serverErrors` is owned by you: `setError`/`setErrors` write it and validation never reads or writes it, which is the entire preservation story. A background `validateAsync()` can't wipe a "username taken" message because it physically can't touch that channel; there are no marks or bookkeeping to get wrong. The `errors` map every hook reads is derived from both on each write: the schema's message wins at a key, and server entries show where the schema is silent. The merge is order-independent. `setError` on a key the schema currently rejects stores the verdict (visible in `state.serverErrors`) behind the schema message, and if the schema later clears at that key without the value changing, the stored verdict resurfaces, since the value it judged is unchanged.
 
 A server error is released when:
 
-- the value on its spine changes (`setValue`/`resetField`/array op on the path, a descendant, or an ancestor — editing `address.street` releases a verdict on `address`; array ops release verdicts on the array itself while row-level entries follow their rows through re-indexing),
+- the value on its spine changes (`setValue`/`resetField`/array op on the path, a descendant, or an ancestor, so editing `address.street` releases a verdict on `address`; array ops release verdicts on the array itself while row-level entries follow their rows through re-indexing),
 - a `setValues` bulk write changes its value slice (entries on untouched fields survive),
 - a field-scoped validation (`validateField`/`validateFieldAsync`/`validateFields`) targets its path (`validateField("")` counts as a full pass and leaves the server channel alone, like `validate()`), or
 - you call `clearErrors` / `reset` / `adoptValues`.
@@ -416,7 +482,7 @@ Note `submit` still proceeds when the schema is valid even if server errors are 
 
 ## Field arrays with nested arrays
 
-Both work — `arrayPush("users.0.tags", tag)` mutates the inner array; outer reorders correctly re-key meta for all nested paths. Inner row ids live per `(form, path)` and reconcile by value when the outer index re-seats a different item at the path — pass a `key` from the outer `fields` so each row's whole subtree moves with its item.
+Both work. `arrayPush("users.0.tags", tag)` mutates the inner array, and outer reorders correctly re-key meta for all nested paths. Inner row ids live per `(form, path)` and reconcile by value when the outer index re-seats a different item at the path, so pass a `key` from the outer `fields` and each row's whole subtree moves with its item.
 
 ## Optimistic UI
 
@@ -435,7 +501,7 @@ form.handleSubmit(async (data) => {
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) — note the repo has three
+See [CONTRIBUTING.md](./CONTRIBUTING.md). Note the repo has three
 independent npm roots (`.`, `examples/`, `cli/`), and the root test suite
 needs `examples/` installed. Where the project is headed lives in
 [ROADMAP.md](./ROADMAP.md).

@@ -6,36 +6,36 @@ reality votes. Shipped work graduates to the [CHANGELOG](./CHANGELOG.md).
 
 _Last updated: 2026-07-10 (formstand 0.9.0, formstand-cli 0.6.0)._
 
-## Shipped — 0.9 / cli 0.6 (2026-07-10)
+## Shipped: 0.9 / cli 0.6 (2026-07-10)
 
 The whole "Now" tier plus the entire promoted parking lot landed in this
 cycle, followed by a full self-review that found and fixed ten real bugs.
 See the [CHANGELOG](./CHANGELOG.md) for detail.
 
-- **Dates as a first-class field kind** (library + CLI) — `DateField` /
+- **Dates as a first-class field kind** (library and CLI): `DateField` /
   `dateInputProps` / `dateToInputText` / `parseDateText`; the CLI emits real
   date bindings, `DATE_CAST` gone.
 - **Discriminated unions**, done the right way after the design fork:
   `useVariantField` in the library (typed variant-field access) first, then
-  the CLI emitting against it — no casts.
-- **`persistForm`** — the autosave recipe as a first-class helper.
-- **Redux DevTools** — opt-in, non-production only.
-- **Hot-path performance** — `parsePath` cache, subschema-scoped
+  the CLI emitting against it, with no casts.
+- **`persistForm`**: the autosave recipe as a first-class helper.
+- **Redux DevTools**: opt-in, non-production only.
+- **Hot-path performance**: `parsePath` cache, subschema-scoped
   `validateFields`, single-pass `dirtyPathsOf`, focused `focusFirstError`.
 - **CLI**: `formstand.config.ts` + `defineConfig`, `--watch`, nested-array
   row extraction, the blank-value matrix test.
 - **Playground/docs**: Playwright e2e job (built-bundle, in CI) + render
   checks, SSR/Next.js guide, the Schema builder's paste-a-TypeScript-type
   mode.
-- **Custom templates** (cli 0.6.1) — `defineTemplate` / `--template` override
+- **Custom templates** (cli 0.6.1): `defineTemplate` / `--template` override
   the per-kind field rendering for UI kits we don't ship.
-- **Emitters published for reuse** (cli 0.6.2) — the browser-safe
+- **Emitters published for reuse** (cli 0.6.2): the browser-safe
   `formstand-cli/codegen` subpath: `fromZod`, every emitter, module layout,
   `defineTemplate`, naming helpers, all pure and Node-free. The playground now
   dogfoods it instead of importing `cli/src` relatively.
 - **Self-review fixes**: ten findings (validateFields sync/async divergence,
   optional-union type inversion, three union-emitter compile bugs, devtools
-  in prod, date year/time edges, frozen parsePath cache) — all with
+  in prod, date year/time edges, frozen parsePath cache), all with
   regression coverage.
 
 ## Now
@@ -47,20 +47,20 @@ See the [CHANGELOG](./CHANGELOG.md) for detail.
 - **StackBlitz links.** "Open in StackBlitz" from docs examples and
   playground tabs, seeded with the demo source + formstand from npm.
 - **Brand collateral.** OG images for docs/playground pages and a README
-  header — the identity exists; it just doesn't travel yet.
+  header. The identity exists; it just doesn't travel yet.
 - **VitePress 2 migration.** The docs run VitePress 1.x, whose nested vite-5
-  toolchain carries dismissed Dependabot alerts (local dev/build only — the
+  toolchain carries dismissed Dependabot alerts (local dev/build only, since the
   deployed site is static). v2 alpha ships vite 8, but a first attempt
-  rendered our custom theme blank (builds fine, no console errors —
+  rendered our custom theme blank (builds fine, no console errors,
   theme/CSS API changes to chase). Migrate when v2 stabilizes; the alerts
   then close themselves.
 
 ## Later / parking lot
 
-- **Visual regression snapshots** for the playground — now actionable on top
+- **Visual regression snapshots** for the playground, now actionable on top
   of the shipped Playwright e2e job (baseline images + pixel-diff, vs today's
   render-integrity assertions).
-- **Field-level async coordination** — a documented pattern (or helper) for
+- **Field-level async coordination**: a documented pattern (or helper) for
   forms with several independent async validators in flight; the pieces
   exist, the ergonomics could be sharper.
 
@@ -79,7 +79,7 @@ From the 2026-07 review of the 0.8 work:
 - `camelJoin` delegates to `casing.camelCase`; the plain-UI kind→builder
   mapping in `moduleLayout` gets one `plainBuilderName` helper; the Schema
   builder's name-stem rule reuses `namingFor`.
-- `FieldPathArg` is exported but unused — substitute it at the inline sites
+- `FieldPathArg` is exported but unused. Substitute it at the inline sites
   or drop it.
 - Schema builder polish: `React.memo` the row components, `useDeferredValue`
   the emission input so typing never waits on codegen.
@@ -87,15 +87,15 @@ From the 2026-07 review of the 0.8 work:
 From the 0.9 self-review (cleanup that outranked the ten correctness fixes):
 
 - `useVariantField`'s return type re-derives what `FieldValue` already
-  computes — reuse `FieldValue<..., \`${P}.${TField}\`>` and keep
+  computes. Reuse `FieldValue<..., \`${P}.${TField}\`>` and keep
   `UnionValueAt` only for the key constraint.
 - `persistForm`'s `manual` + `restore`-semantics combination is unreachable
   (the apply mode collapses two orthogonal axes); a `{ autoApply, baseline }`
   shape would cover all four without a breaking change.
-- The `parsePath` cache clears wholesale on overflow — an LRU (or per-form
+- The `parsePath` cache clears wholesale on overflow; an LRU (or per-form
   cache at the hook layer) would avoid re-parse storms for apps whose live
   path set exceeds the cap.
-- `persistForm` and `useField` each hand-roll a trailing-edge debounce — one
+- `persistForm` and `useField` each hand-roll a trailing-edge debounce. One
   shared `createDebouncer(fn, ms)` could back both.
 
 ## How releases happen

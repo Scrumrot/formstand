@@ -2,8 +2,8 @@
 
 ## Setup: three npm roots
 
-This repo contains **three independent npm roots** — the library (`.`), the
-examples app (`examples/`), and the code generator (`cli/`) — and each needs
+This repo contains **three independent npm roots**: the library (`.`), the
+examples app (`examples/`), and the code generator (`cli/`). Each needs
 its own install. **The root test suite renders the examples app, so the
 examples install is required before `npm test` will pass**, not optional:
 
@@ -37,7 +37,7 @@ lockfile and dependency set, and the root `vitest.config.ts` `resolve.dedupe`
 block exists precisely to unify React/emotion across the two `node_modules`
 trees when tests render the examples app against the library source.
 Converting to workspaces would hoist dependencies and silently change those
-assumptions — don't.
+assumptions, so don't.
 
 ## Code style
 
@@ -49,4 +49,4 @@ discriminated unions for variants.
 
 - Add or update tests for any behavior change.
 - All gates must be green: typecheck, lint, tests (with coverage thresholds),
-  build, and docs build — the same steps CI runs.
+  build, and docs build, the same steps CI runs.
