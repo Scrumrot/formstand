@@ -100,6 +100,18 @@ describe("pathSegmentCount", () => {
     expect(pathSegmentCount("l1.l2.l3.l4.l5.l6.l7.l8.l9.leaf")).toBe(10);
     expect(pathSegmentCount("teams.${p0}.members.${p1}.phones.${index}")).toBe(6);
   });
+
+  // The hole pattern is a library entry point (formstand-cli/codegen runs the
+  // emitters in the browser), so an unterminated "${" run must not rescan to
+  // end-of-string from every start. With [^}] this input is quadratic and
+  // takes seconds; with [^{}] it is flat. Generous ceiling: the point is
+  // linear vs quadratic, not a millisecond budget on a shared runner.
+  it("stays linear on unterminated template holes", () => {
+    const evil = "${{".repeat(40_000);
+    const started = performance.now();
+    expect(pathSegmentCount(evil)).toBe(1);
+    expect(performance.now() - started).toBeLessThan(250);
+  });
 });
 
 describe("overBudgetFieldPaths", () => {

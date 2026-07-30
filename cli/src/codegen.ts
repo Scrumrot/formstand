@@ -187,9 +187,16 @@ export {
 // Segments of a bound path, counted the way the library splits paths: on
 // ".", with each template hole (`${index}`, `${p0}`, ...) one numeric
 // segment. Works on static paths and backtick templates alike.
+//
+// The hole body excludes BOTH braces, not just the closing one. A hole is
+// always a plain identifier, so `[^{}]` costs nothing on real paths, and it
+// keeps the scan linear: with `[^}]` an unterminated run like "${{${{${{..."
+// rescans to end-of-string from every "${", which is quadratic (CodeQL
+// js/polynomial-redos). This is a library entry point, and the emitters run
+// in the browser via formstand-cli/codegen, so the input is not ours.
 export const pathSegmentCount = (path: string): number =>
   path
-    .replace(/\$\{[^}]*\}/g, "0")
+    .replace(/\$\{[^{}]*\}/g, "0")
     .split(".")
     .filter((segment) => segment.length > 0).length;
 
@@ -1550,9 +1557,11 @@ const emitNestedRows = (
   const listTemplate =
     prefix.text.replaceAll("${index}", `\${${nextHole}}`) +
     templateEscape(field.name);
-  // Field segments (holes stripped) name the component and hook.
+  // Field segments (holes stripped) name the component and hook. Braces are
+  // excluded from the hole body for the same linear-scan reason as
+  // pathSegmentCount above.
   const segments = listTemplate
-    .replace(/\$\{[^}]+\}/g, "")
+    .replace(/\$\{[^{}]+\}/g, "")
     .split(".")
     .filter((segment) => segment.length > 0);
   const base = pascalJoin(segments);
