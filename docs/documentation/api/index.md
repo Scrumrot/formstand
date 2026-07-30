@@ -53,8 +53,8 @@ const form = createForm(schema, {
 | `submit(onValid, onInvalid?, { force? })` | full submit flow, returns `Promise<SubmitResult>`. Resolves `{ kind: "valid", data }`, `{ kind: "invalid", errors }` (errored fields are also marked touched), `{ kind: "skipped" }` when another submit is in flight and `force` isn't set, or `{ kind: "error", error }` when `onValid` throws or rejects. Submit resolves instead of rejecting, so `handleSubmit` never leaves an unhandled rejection |
 | `handleSubmit(onValid, onInvalid?, options?)` | returns an event handler that calls `preventDefault()` and runs `submit` |
 | `getField(path)` | typed one-shot value read |
-| `getFieldState(path)` | typed one-shot read of a field's full slice, a [`FieldSnapshot`](#fieldsnapshot) |
-| `watchField(path, listener)` | subscribe to one field's [`FieldSnapshot`](#fieldsnapshot); returns an unsubscribe function |
+| `getFieldState(path)` | typed one-shot read of a field's full slice, a [`FieldSnapshot`](#fieldsnapshot-tvalue) |
+| `watchField(path, listener)` | subscribe to one field's [`FieldSnapshot`](#fieldsnapshot-tvalue); returns an unsubscribe function |
 | `watchValue(path, listener)` | subscribe to one path's value (`Object.is`-compared); `listener(next, prev)` |
 | `watchValues(listener)` | subscribe to the **whole values object**; `listener(values, prev)` fires on any value change. The name is `watchValue` plus "s" as in "all the values". It is not a multi-path `watchValue`; that would be a new API |
 | `diff()` / `dirtyFields()` | PATCH-style helpers, derived by comparing `values` against `initialValues`: minimal divergent paths (objects recurse to the changed leaves; arrays report their base path). Reverting a field drops it |

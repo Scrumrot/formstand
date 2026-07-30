@@ -52,6 +52,13 @@ jobs:
       - name: Build docs
         run: npm run docs:build
 
+      # VitePress fails the build on a dead .md link inside docs/, but it
+      # never checks anchors and never looks at the READMEs — so a reworded
+      # heading, or a README link left behind by a page move, rots silently.
+      # Anchors are matched against the ids the build just rendered.
+      - name: Check doc links and anchors
+        run: node scripts/check-doc-links.mjs
+
       # The docs deploy builds the examples app with the examples' own
       # toolchain — run the same build here so dependency PRs against
       # examples/ get judged on it BEFORE they can break the deploy.

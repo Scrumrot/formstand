@@ -50,3 +50,8 @@ discriminated unions for variants.
 - Add or update tests for any behavior change.
 - All gates must be green: typecheck, lint, tests (with coverage thresholds),
   build, and docs build, the same steps CI runs.
+- Touching docs or a README? Run `npm run docs:build` then
+  `node scripts/check-doc-links.mjs`. It resolves every internal link and
+  every `#anchor` against the ids the build just rendered, across `docs/`
+  and both READMEs. VitePress catches dead `.md` links inside `docs/` on its
+  own, but not anchors, and not the READMEs at all.
