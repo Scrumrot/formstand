@@ -14,7 +14,7 @@ This page covers when validation runs (modes and `reValidateMode`), the sync and
 | `"onTouched"` | only once the field is touched | yes |
 | `"all"` | yes | yes |
 
-Once a submit has been attempted (`submitCount > 0`), `reValidateMode` (default `"onChange"`) takes over — the common pattern of "quiet until submit, then live feedback" is the default behavior of `mode: "onBlur"` + `reValidateMode: "onChange"`.
+Once a submit has been attempted (`submitCount > 0`), `reValidateMode` (default `"onChange"`) takes over. The common pattern of "quiet until submit, then live feedback" is what `mode: "onBlur"` plus `reValidateMode: "onChange"` already does.
 
 ```ts
 const form = useForm(schema, {
@@ -28,7 +28,7 @@ Both can be switched at runtime with `form.setMode(mode)` and `form.setReValidat
 
 ### `validateOnMount`
 
-The error map starts empty, so a never-validated form reads as valid — `useIsValid` reflects the error map, not a fresh parse. If you gate a submit button on validity, pass `validateOnMount: true` so the initial values are checked at creation (async schemas validate in the background):
+The error map starts empty, so a never-validated form reads as valid: `useIsValid` reflects the error map, not a fresh parse. If you gate a submit button on validity, pass `validateOnMount: true` so the initial values are checked at creation (async schemas validate in the background):
 
 ```ts
 const form = useForm(schema, { initialValues, validateOnMount: true });
@@ -52,7 +52,7 @@ form.validateFields(["email", "username"]); // several fields → FieldsValidati
 
 ### Pending results on async schemas
 
-If the schema needs async parsing (an `async .refine` anywhere), the sync methods don't throw — they detect the async requirement, **start the async pass themselves**, and hand you the in-flight work:
+If the schema needs async parsing (an `async .refine` anywhere), the sync methods don't throw. They detect the async requirement, **start the async pass themselves**, and hand you the in-flight work:
 
 ```ts
 const result = form.validate();
@@ -61,7 +61,7 @@ if (result.kind === "pending") {
 }
 ```
 
-All three sync methods return `{ kind: "pending", promise }` in that case — never a bare truthy `Promise` that would slip through an `if (form.validateFields(...))` gate. Check `result.kind` rather than assuming `valid`/`invalid` — or use the async variants directly when you know the schema is async.
+All three sync methods return `{ kind: "pending", promise }` in that case, never a bare truthy `Promise` that would slip through an `if (form.validateFields(...))` gate. Check `result.kind` rather than assuming `valid` or `invalid`, or use the async variants directly when you know the schema is async.
 
 Note the pending path is only taken when it must be: if the *field being validated* is itself sync, `validateField` settles synchronously even when other fields in the schema carry async refines (see field-scoped validation below).
 
@@ -92,7 +92,7 @@ For async checks that hit the network, debounce the validation `useField` trigge
 const username = useField(form, "username", { debounceMs: 300 });
 ```
 
-With `debounceMs` set, each triggering interaction resets a timer; when it fires, the field runs `validateFieldAsync`. While a check is in flight, `username.isValidating` is `true` — useful for a "checking..." indicator:
+With `debounceMs` set, each triggering interaction resets a timer; when it fires, the field runs `validateFieldAsync`. While a check is in flight, `username.isValidating` is `true`, which is what a "checking..." indicator reads:
 
 ```tsx
 <span>
@@ -105,8 +105,8 @@ With `debounceMs` set, each triggering interaction resets a timer; when it fires
 `validateField` / `validateFieldAsync` avoid parsing the whole form when they can, choosing one of three strategies:
 
 1. **Subschema extraction (the fast path).** When the path is reachable through plain `z.object` / `z.array` levels that carry no checks, the field's subschema is extracted (and cached per form) and parsed against just that field's value. This is what keeps an async username refine from firing while you type in an unrelated field.
-2. **Full-parse fallback.** When a traversed level carries a refinement or is a wrapper (`optional`, `nullable`, `default`, `pipe`, `union`, `record`, ...), extraction could miss cross-field rules targeting the path — so the whole form is parsed and the resulting errors are **scoped** to the path and its descendants before being written. This is what makes a cross-field `.superRefine` with a `path` behave like a field-local rule on the blamed field — see the [recipe](./recipes#cross-field-rules-that-blame-one-field).
-3. **Skip.** When the path addresses no slot — an out-of-range array index — validation is skipped entirely, because parsing a subschema against `undefined` would fabricate an error no full-form parse produces.
+2. **Full-parse fallback.** When a traversed level carries a refinement or is a wrapper (`optional`, `nullable`, `default`, `pipe`, `union`, `record`, and so on), extraction could miss cross-field rules targeting the path, so the whole form is parsed and the resulting errors are **scoped** to the path and its descendants before being written. This is what makes a cross-field `.superRefine` with a `path` behave like a field-local rule on the blamed field. See the [recipe](./recipes#cross-field-rules-that-blame-one-field).
+3. **Skip.** When the path addresses no slot, such as an out-of-range array index, validation is skipped entirely, because parsing a subschema against `undefined` would fabricate an error no full-form parse produces.
 
 `validateField("")` is a whole-form pass and behaves exactly like `validate()`.
 
@@ -115,15 +115,15 @@ With `debounceMs` set, each triggering interaction resets a timer; when it fires
 Async validation is guarded on two axes, so out-of-order network responses can't corrupt the error map:
 
 - **Per-path sequence counters.** Each async pass takes a sequence number for its path; a result only writes if it's still the latest pass for that path. A stale "username taken" response can't overwrite a newer "ok".
-- **Values-reference guard.** Each pass records the `values` reference it validated. If `values` changed during the await (`setValue`, `reset`, `adoptValues`, ...), the write is dropped — the result describes values that no longer exist.
+- **Values-reference guard.** Each pass records the `values` reference it validated. If `values` changed during the await (`setValue`, `reset`, `adoptValues`, and so on), the write is dropped, because the result describes values that no longer exist.
 
 In-flight state is observable: field-level passes set `state.isValidating[path]` (surfaced as `useField(...).isValidating`), and whole-form async passes set the `state.isValidatingForm` boolean.
 
 ## Performance model
 
-Field-scoped validation is **not** a CPU optimization. From the repo's benchmarks (`bench/README.md`, 50 string fields + nested object + 20 array rows): a full-form parse is ~6 µs when valid, ~30 µs with one invalid field — invisible next to a 16 ms frame, even per keystroke. The subschema fast path earns its complexity by validating a field in *isolation*: without it, any schema containing an async refine (a server-side uniqueness check, say) would fire that refine on every keystroke in **every** field. It also keeps per-keystroke cost flat as forms grow.
+Field-scoped validation is **not** a CPU optimization. From the repo's benchmarks (`bench/README.md`, 50 string fields plus a nested object and 20 array rows), a full-form parse costs about 6 µs when valid and about 30 µs with one invalid field, which is invisible next to a 16 ms frame even per keystroke. The subschema fast path earns its complexity by validating a field in *isolation*: without it, any schema containing an async refine, such as a server-side uniqueness check, would fire that refine on every keystroke in **every** field. It also keeps per-keystroke cost flat as forms grow.
 
 ## Next
 
-- [Errors: schema & server](./errors) — where validation results land, and how server errors coexist with them.
-- [Form state & lifecycle](./state) — `isValidating`, `isValidatingForm`, and the rest of the state shape.
+- [Errors: schema & server](./errors): where validation results land, and how server errors coexist with them.
+- [Form state & lifecycle](./state): `isValidating`, `isValidatingForm`, and the rest of the state shape.

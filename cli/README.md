@@ -6,6 +6,8 @@ Generate [formstand](https://scrumrot.github.io/formstand/) form components from
 npm install --save-dev formstand-cli
 ```
 
+**Full docs: [scrumrot.github.io/formstand/documentation/cli](https://scrumrot.github.io/formstand/documentation/cli/)** · **[Try it in the browser](https://scrumrot.github.io/formstand/examples/#/schema-builder)**
+
 ## Requirements
 
 - **formstand >= 0.3.0** for `--ui mui`, `--ui shadcn`, `--ui chakra`, `--ui mantine`, and `--ui antd` output (all five kit adapters import the same surface: `UseFieldReturn`, `numberToInputText`, and `parseNumberText`); plain output works on 0.2.0. `--ui chakra` output needs `@chakra-ui/react` **v3** (plus its `@emotion/react` peer) and assumes the host app mounts `ChakraProvider` at the root — the generated file does not emit the provider, same as the mui output assumes the MUI theme setup. `--ui mantine` output needs `@mantine/core` **v9** (plus its `@mantine/hooks` peer) and assumes the host app mounts `MantineProvider` at the root, the same way. `--ui antd` output needs `antd` **v6** — no provider is required (`ConfigProvider` is optional theming); antd 6 peers `react >=18`, so React 19 works without the `@ant-design/v5-patch-for-react-19` patch that antd **5** host apps need. Generated `useFieldArray` hooks get typed items on **formstand >= 0.5** (inferred from the schema through the path); on 0.4 they compile with untyped items.

@@ -4,7 +4,7 @@
 
 Zod-schema-first form state for React 19, backed by zustand.
 
-**[Documentation](https://scrumrot.github.io/formstand/)** · **[Live playground](https://scrumrot.github.io/formstand/examples/)** · **[API reference](https://scrumrot.github.io/formstand/api/)**
+**[Documentation](https://scrumrot.github.io/formstand/documentation/)** · **[Live playground](https://scrumrot.github.io/formstand/examples/)** · **[CLI](https://scrumrot.github.io/formstand/documentation/cli/)** · **[API reference](https://scrumrot.github.io/formstand/documentation/api/)**
 
 - **Typed paths** — `useField(form, "users.0.email")` infers the value type from the schema.
 - **Per-field subscriptions** — fields re-render only when their own slice changes.
@@ -357,7 +357,7 @@ are not addressable; array writes beyond index 100 000 are refused (a typo'd
 index must not allocate gigabytes); and the typed `FieldPath` union stops at
 9 segments by default — the runtime walks any depth, and `createForm`'s
 type-level `pathDepth` option widens the union per form (a deliberate
-compile-time trade; see the [typed paths guide](https://scrumrot.github.io/formstand/guide/typed-paths)).
+compile-time trade; see the [typed paths guide](https://scrumrot.github.io/formstand/documentation/typed-paths)).
 
 ## Subscriptions (non-React)
 

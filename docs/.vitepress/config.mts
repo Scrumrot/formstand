@@ -1,4 +1,22 @@
 import { defineConfig } from "vitepress";
+import pkg from "../../package.json" with { type: "json" };
+
+// The guide and the API reference used to be two routes with two sidebars.
+// They are one /documentation/ route now, with collapsible sidebar groups;
+// legacyRedirect below keeps the old URLs alive.
+const legacyRedirect = `
+(function () {
+  var p = location.pathname;
+  var m = p.match(/^\\/formstand\\/(guide|api)\\/(.*)$/);
+  if (!m) return;
+  var page = m[2].replace(/\\.html$/, "").replace(/\\/$/, "");
+  var moved = { "code-generation": "cli/" };
+  var to = m[1] === "api"
+    ? "/formstand/documentation/api/" + (page === "index" ? "" : page)
+    : "/formstand/documentation/" + (page === "index" || page === "" ? "" : (moved[page] || page));
+  location.replace(to + location.hash);
+})();
+`;
 
 export default defineConfig({
   title: "formstand",
@@ -17,6 +35,7 @@ export default defineConfig({
       },
     ],
     ["meta", { property: "og:type", content: "website" }],
+    ["script", {}, legacyRedirect],
   ],
   lastUpdated: true,
   sitemap: { hostname: "https://scrumrot.github.io/formstand/" },
@@ -27,48 +46,87 @@ export default defineConfig({
       text: "Edit this page on GitHub",
     },
     nav: [
-      { text: "Guide", link: "/guide/getting-started" },
-      { text: "API", link: "/api/" },
+      { text: "Documentation", link: "/documentation/", activeMatch: "/documentation/" },
+      { text: "CLI", link: "/documentation/cli/", activeMatch: "/documentation/cli/" },
       {
         text: "Playground",
         link: "https://scrumrot.github.io/formstand/examples/",
       },
-      { text: "Changelog", link: "https://github.com/Scrumrot/formstand/blob/main/CHANGELOG.md" },
       {
-        text: "Built on",
+        text: `v${pkg.version}`,
         items: [
+          {
+            text: "Changelog",
+            link: "https://github.com/Scrumrot/formstand/blob/main/CHANGELOG.md",
+          },
+          { text: "formstand on npm", link: "https://www.npmjs.com/package/formstand" },
+          {
+            text: "formstand-cli on npm",
+            link: "https://www.npmjs.com/package/formstand-cli",
+          },
           { text: "zod", link: "https://zod.dev" },
           { text: "zustand", link: "https://zustand.docs.pmnd.rs" },
         ],
       },
     ],
     sidebar: {
-      "/guide/": [
+      "/documentation/": [
         {
-          text: "Guide",
+          text: "Getting started",
+          collapsed: false,
           items: [
-            { text: "Getting started", link: "/guide/getting-started" },
-            { text: "Typed paths", link: "/guide/typed-paths" },
-            { text: "Validation", link: "/guide/validation" },
-            { text: "Errors: schema & server", link: "/guide/errors" },
-            { text: "Bound components", link: "/guide/components" },
-            { text: "Field arrays", link: "/guide/field-arrays" },
-            { text: "Form state & lifecycle", link: "/guide/state" },
-            { text: "Recipes", link: "/guide/recipes" },
-            { text: "SSR & Next.js", link: "/guide/ssr" },
-            {
-              text: "Migrating from react-hook-form",
-              link: "/guide/migrating-from-react-hook-form",
-            },
-            { text: "Code generation", link: "/guide/code-generation" },
-            { text: "Examples", link: "/guide/examples" },
+            { text: "Introduction", link: "/documentation/" },
+            { text: "Installation & first form", link: "/documentation/getting-started" },
+            { text: "Typed paths", link: "/documentation/typed-paths" },
           ],
         },
-      ],
-      "/api/": [
+        {
+          text: "Guides",
+          collapsed: false,
+          items: [
+            { text: "Validation", link: "/documentation/validation" },
+            { text: "Errors: schema & server", link: "/documentation/errors" },
+            { text: "Bound components", link: "/documentation/components" },
+            { text: "Field arrays", link: "/documentation/field-arrays" },
+            { text: "Form state & lifecycle", link: "/documentation/state" },
+            { text: "Recipes", link: "/documentation/recipes" },
+            { text: "SSR & Next.js", link: "/documentation/ssr" },
+          ],
+        },
+        {
+          text: "Code generation (CLI)",
+          collapsed: false,
+          items: [
+            { text: "Why formstand-cli", link: "/documentation/cli/" },
+            { text: "Quick start", link: "/documentation/cli/quick-start" },
+            { text: "UI kits", link: "/documentation/cli/ui-kits" },
+            { text: "Layouts & modes", link: "/documentation/cli/layouts" },
+            { text: "Config & overrides", link: "/documentation/cli/config" },
+            { text: "Custom templates", link: "/documentation/cli/templates" },
+            { text: "Programmatic API", link: "/documentation/cli/programmatic" },
+            { text: "Command reference", link: "/documentation/cli/reference" },
+          ],
+        },
         {
           text: "API reference",
-          items: [{ text: "Overview", link: "/api/" }],
+          collapsed: true,
+          items: [
+            { text: "createForm & Form", link: "/documentation/api/" },
+            { text: "Hooks", link: "/documentation/api/hooks" },
+            { text: "Components & bindings", link: "/documentation/api/components" },
+            { text: "Utilities & types", link: "/documentation/api/utilities" },
+          ],
+        },
+        {
+          text: "Resources",
+          collapsed: true,
+          items: [
+            { text: "Examples", link: "/documentation/examples" },
+            {
+              text: "Migrating from react-hook-form",
+              link: "/documentation/migrating-from-react-hook-form",
+            },
+          ],
         },
       ],
     },

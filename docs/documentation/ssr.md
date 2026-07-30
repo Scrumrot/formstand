@@ -1,6 +1,6 @@
 # SSR and Next.js
 
-formstand is client state — a zustand store driving controlled inputs. Server rendering interacts with that in exactly three places: where the form object is **created**, what its **initial values** are, and when **persistence** runs. Get those right and the rest is ordinary React.
+formstand is client state, a zustand store driving controlled inputs. Server rendering touches that in exactly three places: where the form object is **created**, what its **initial values** are, and when **persistence** runs. Get those right and the rest is ordinary React.
 
 ## The rule of thumb
 
@@ -18,19 +18,19 @@ export function ProfileForm() {
 }
 ```
 
-`useForm` creates the store **per component instance** — every request's render gets its own, and nothing is shared across users. Server components can't call hooks at all, so the boundary is enforced by Next itself: put the form in a client component, pass server data down as props.
+`useForm` creates the store **per component instance**, so every request's render gets its own and nothing is shared across users. Server components can't call hooks at all, so the boundary is enforced by Next itself: put the form in a client component and pass server data down as props.
 
 ## Why `createFormHooks` needs care on the server
 
-`createFormHooks(form, name)` is built on a **module-scope singleton** — that's its whole point in an SPA: one form, importable hooks, no provider. On a server, module scope is shared **across requests in the same process**:
+`createFormHooks(form, name)` is built on a **module-scope singleton**, which is its whole point in an SPA: one form, importable hooks, no provider. On a server, module scope is shared **across requests in the same process**:
 
 ```ts
-// hooks.ts — module scope: ONE store per server process, not per request
+// hooks.ts: module scope means ONE store per server process, not per request
 export const profileForm = createForm(profileSchema, { initialValues });
 export const { useProfileField } = createFormHooks(profileForm, "profile");
 ```
 
-During SSR, every concurrent request rendering this form reads (and could write) the *same* store. For a form that only ever renders its initial values on the server — the normal case, since users type on the client — the practical exposure is small: the server render reads pristine initial state, and hydration hands over to a client-side store that behaves like the SPA case. But two things must stay true:
+During SSR, every concurrent request rendering this form reads (and could write) the *same* store. For a form that only ever renders its initial values on the server, which is the normal case since users type on the client, the practical exposure is small: the server render reads pristine initial state, and hydration hands over to a client-side store that behaves like the SPA case. But two things must stay true:
 
 1. **Never write to the form during render or in server code.** A `setValue` on the server mutates state visible to other requests.
 2. **Initial values must be static.** Anything per-request (the logged-in user's data) must NOT be baked into the module singleton.
@@ -62,11 +62,11 @@ If you want `createFormHooks` exactly as-is, render its consumer client-only:
 const OnboardingForm = dynamic(() => import("./OnboardingForm"), { ssr: false });
 ```
 
-No server render, no shared-module concern — at the cost of the form not being in the initial HTML.
+No server render and no shared-module concern, at the cost of the form not being in the initial HTML.
 
 ## Hydration checklist
 
-- **Deterministic initial values.** `new Date()`, `Math.random()`, or locale-formatted strings in `initialValues` render differently on server and client — a hydration mismatch. Compute per-request values on the server and pass them in, or set them in an effect after mount.
+- **Deterministic initial values.** `new Date()`, `Math.random()`, or locale-formatted strings in `initialValues` render differently on server and client, which is a hydration mismatch. Compute per-request values on the server and pass them in, or set them in an effect after mount.
 - **Persistence runs in effects.** `localStorage` doesn't exist on the server. Call [`persistForm`](./state#persistence) (or any storage access) inside `useEffect`, never during render:
 
   ```tsx
@@ -77,4 +77,4 @@ No server render, no shared-module concern — at the cost of the form not being
   ```
 
 - **`focusField` / `focusFirstError` are DOM calls.** Safe to import anywhere (they touch the DOM only when called), but call them from event handlers or effects.
-- **The generated modules are client modules.** `formstand-gen --layout module` output uses `createFormHooks` — add `"use client"` at the top of the module's files when dropping one into an App Router project, and treat it per the singleton rules above.
+- **The generated modules are client modules.** `formstand-gen --layout module` output uses `createFormHooks`, so add `"use client"` at the top of the module's files when dropping one into an App Router project, and treat it per the singleton rules above.

@@ -1,6 +1,6 @@
 # Recipes
 
-Short, self-contained patterns for the situations every real form eventually hits. Each one is a condensed version of a working demo in the repo's `examples/` app — run `npm run examples` to see them live.
+Short, self-contained patterns for the situations every real form eventually hits. Each one is a condensed version of a working demo in the repo's `examples/` app, so run `npm run examples` to see them live.
 
 ## Server errors on submit
 
@@ -15,7 +15,7 @@ const onSubmit = form.handleSubmit(async (data) => {
       form.setError(path as FieldPath<Values>, message),
     );
     // On a multi-form page, pass your <form> element (e.g. via a ref) so the
-    // search — and the root-error fallback — stays inside this form:
+    // search, including the root-error fallback, stays inside this form:
     // focusFirstError(form.getState().errors, formRef.current ?? undefined)
     focusFirstError(form.getState().errors);
   }
@@ -49,7 +49,7 @@ useEffect(() => {
 
 ## Multi-step wizard
 
-Gate each step on just its own fields with `validateFields` — untouched steps stay unvalidated.
+Gate each step on just its own fields with `validateFields`, so untouched steps stay unvalidated.
 
 ```tsx
 const STEP_FIELDS = [
@@ -68,7 +68,7 @@ For a known-sync schema, `form.validateFields(STEP_FIELDS[step]).kind === "valid
 
 ## Optimistic update with rollback
 
-`snapshot()` before the request, `restore()` on failure — server errors and all.
+`snapshot()` before the request, `restore()` on failure, server errors and all.
 
 ```tsx
 const save = async () => {
@@ -91,7 +91,7 @@ useEffect(
   [form],
 );
 
-// Derived value — always consistent, nothing to sync:
+// Derived value, always consistent, nothing to sync:
 const total = useFormSelector(form, (s) =>
   s.values.items.reduce((sum, i) => sum + i.qty * i.price, 0),
 );
@@ -99,7 +99,7 @@ const total = useFormSelector(form, (s) =>
 
 ## Cross-field rules that blame one field
 
-A cross-field rule reads several fields but should surface on just one of them. Give an object-level `.superRefine` (or `.refine`) a `path` and the message lands on that field's error channel — `useField` picks it up like any schema error:
+A cross-field rule reads several fields but should surface on just one of them. Give an object-level `.superRefine` (or `.refine`) a `path` and the message lands on that field's error channel, where `useField` picks it up like any schema error:
 
 ```tsx
 const MAX_GROSS_WEIGHT = { C172: 2450, PA28: 2550 } as const;
@@ -124,11 +124,11 @@ const grossWeight = useField(form, "grossWeight");
 // grossWeight.error → ["max gross weight for a C172 is 2450 lb"]
 ```
 
-Field-scoped validation keeps the rule live on that field: blur/change on `grossWeight` re-runs it, because a refinement on a traversed level makes `validateField` [fall back to a full parse](./validation#how-field-scoped-validation-works) and scope the resulting errors to the field — so the cross-field message appears and clears exactly like a single-field one. (A `.refine` *without* a `path` lands at the root `""` key instead — see [Root errors](./errors#root-errors-the-key).)
+Field-scoped validation keeps the rule live on that field: blur or change on `grossWeight` re-runs it, because a refinement on a traversed level makes `validateField` [fall back to a full parse](./validation#how-field-scoped-validation-works) and scope the resulting errors to the field, so the cross-field message appears and clears exactly like a single-field one. (A `.refine` *without* a `path` lands at the root `""` key instead; see [Root errors](./errors#root-errors-the-key).)
 
 ## Sharing a form without prop drilling
 
-`createFormContext` gives you a typed provider/hook pair — paths stay schema-checked through the context.
+`createFormContext` gives you a typed provider and hook pair, and paths stay schema-checked through the context.
 
 ```tsx
 const { Provider, useFormContext } = createFormContext<typeof schema>();
@@ -151,10 +151,10 @@ const DeeplyNestedField = () => {
 
 ## One store, many forms
 
-The pattern that motivated the [`pathDepth`](./typed-paths#how-path-segments-are-interpreted) option: one module-level store backs several forms, each editing a namespaced slice — so leaf paths pick up the namespace segments and can sit past the default 9-segment typed-path budget. Widen the budget once, at `createForm`, and export per-slice hooks with `createFormHooks`:
+The pattern that motivated the [`pathDepth`](./typed-paths#how-path-segments-are-interpreted) option: one module-level store backs several forms, each editing a namespaced slice, so leaf paths pick up the namespace segments and can sit past the default 9-segment typed-path budget. Widen the budget once, at `createForm`, and export per-slice hooks with `createFormHooks`:
 
 ```ts
-// appStore.ts — one schema, namespaced per feature
+// appStore.ts: one schema, namespaced per feature
 const appSchema = z.object({
   settings: z.object({
     profile: z.object({
@@ -173,7 +173,7 @@ const appSchema = z.object({
 });
 
 // "settings.profile.contact.address.geo.coords.lat.value" is 8 segments
-// here — one more wrapper and the default budget of 9 runs out. Widen once:
+// here: one more wrapper and the default budget of 9 runs out. Widen once:
 export const appForm = createForm(appSchema, {
   initialValues,
   pathDepth: 12, // one literal in 0–25; `number` variables and unions error
@@ -187,7 +187,7 @@ export const { useBillingField } = createFormHooks(appForm, "billing");
 ```
 
 ```tsx
-// A slice component binds through its own hooks — no form prop anywhere.
+// A slice component binds through its own hooks, with no form prop anywhere.
 const LatitudeField = () => {
   const lat = useSettingsField(
     "settings.profile.contact.address.geo.coords.lat.value",
@@ -199,7 +199,7 @@ const LatitudeField = () => {
 Two wrinkles to know about:
 
 - **The budget is part of the form's type.** `Form<typeof appSchema, 12>` is deliberately not assignable to `Form<typeof appSchema>` (or vice versa), so any prop or helper that takes this form must say `Form<typeof appSchema, 12>`.
-- **Context can't infer it.** `createFormContext` takes no value argument, so a widened form's context names the budget explicitly: `createFormContext<typeof appSchema, 12>()`. Forgetting it produces a `Form<S, 12> is not assignable to Form<S, 9>` error at the `<Provider form={...}>` site — the mismatch is caught, never silently widened. The explicit `D` position enforces the same 0–25 constraint as the option: `createFormContext<S, 26>()` or a widened `number` argument is a compile error.
+- **Context can't infer it.** `createFormContext` takes no value argument, so a widened form's context names the budget explicitly: `createFormContext<typeof appSchema, 12>()`. Forgetting it produces a `Form<S, 12> is not assignable to Form<S, 9>` error at the `<Provider form={...}>` site, so the mismatch is caught, never silently widened. The explicit `D` position enforces the same 0–25 constraint as the option: `createFormContext<S, 26>()` or a widened `number` argument is a compile error.
 
 ## Focus a field imperatively
 
@@ -211,16 +211,16 @@ import { focusField } from "formstand";
 const addUser = () => {
   const index = users.length;
   users.push({ email: "" });
-  // The new row's input doesn't exist until React commits — focus after paint.
+  // The new row's input doesn't exist until React commits, so focus after paint.
   requestAnimationFrame(() => focusField(`users.${index}.email`));
 };
 ```
 
-A container path works too — `focusField("address")` lands on the first rendered `address.*` control — and a path that matches no named control falls back to the element whose `id` is exactly the path (how name-less composite widgets like Ant Design's `Select` with `id={path}` stay reachable; exact id match only). The root `""` path means whole-form scope: `focusField("", formEl)` focuses the form's first focusable control. Pass your `<form>` element as `root` on multi-form pages, exactly like `focusFirstError` (with the default `document` scope and several forms, `focusField("")` refuses to guess and returns `false`).
+A container path works too: `focusField("address")` lands on the first rendered `address.*` control. A path that matches no named control falls back to the element whose `id` is exactly the path, which is how name-less composite widgets like Ant Design's `Select` with `id={path}` stay reachable (exact id match only). The root `""` path means whole-form scope, so `focusField("", formEl)` focuses the form's first focusable control. Pass your `<form>` element as `root` on multi-form pages, exactly like `focusFirstError`; with the default `document` scope and several forms, `focusField("")` refuses to guess and returns `false`.
 
 ## Rebase after save
 
-After a successful save, the just-saved values become the new baseline — `adoptValues` swaps `values` and `initialValues` without wiping interaction state, so the form reads clean but `touched`/`submitCount` survive.
+After a successful save, the just-saved values become the new baseline, and `adoptValues` swaps `values` and `initialValues` without wiping interaction state, so the form reads clean while `touched` and `submitCount` survive.
 
 ```tsx
 await api.save(form.getState().values);

@@ -32,19 +32,19 @@ Props:
 | `CheckboxField` | `form`, `path`, `label?`, `ref?` |
 | `SelectField<T>` | `form`, `path`, `label?`, `options` (`{ value: T; label: ReactNode }[]`), `placeholder?`, `ref?` |
 
-Each renders a `div.zf-field` wrapping an optional `<label>` (correctly associated via `htmlFor`/`id`), the input, and the field's first error message in a `span.zf-error` — style them with those class names.
+Each renders a `div.zf-field` wrapping an optional `<label>` (correctly associated via `htmlFor`/`id`), the input, and the field's first error message in a `span.zf-error`. Style them with those class names.
 
 ## Accessibility wiring
 
 Every bound component ships with:
 
-- `name={path}` — enables autofill, password managers, native form posts, and [`focusFirstError`](./errors#focusing-the-first-error).
+- `name={path}` enables autofill, password managers, native form posts, and [`focusFirstError`](./errors#focusing-the-first-error).
 - `aria-invalid` while the field has an error.
 - `aria-describedby` pointing at the rendered error message's id.
 - The error message rendered with `role="alert"`, so assistive tech announces it when it appears.
-- A `ref` prop forwarding to the underlying `<input>`/`<select>` (object refs and callback refs both work), for custom focus logic — though for "focus this field now" you rarely need one: [`focusField(path)`](../guide/recipes#focus-a-field-imperatively) finds the control by its `name`.
+- A `ref` prop forwarding to the underlying `<input>`/`<select>` (object refs and callback refs both work), for custom focus logic. For "focus this field now" you rarely need one, since [`focusField(path)`](./recipes#focus-a-field-imperatively) finds the control by its `name`.
 
-Because every bound component takes the `form` itself, `path` is checked against the schema: on a real `Form<TSchema>` a typo'd `path` is a compile error, and template-literal paths like `` `users.${index}.email` `` in array rows still typecheck — the same rules as [typed paths](./typed-paths) everywhere else.
+Because every bound component takes the `form` itself, `path` is checked against the schema: on a real `Form<TSchema>` a typo'd `path` is a compile error, and template-literal paths like `` `users.${index}.email` `` in array rows still typecheck, following the same rules as [typed paths](./typed-paths) everywhere else.
 
 ## Prop builders for custom markup
 
@@ -66,15 +66,15 @@ const name = useField(form, "name");
 
 Each builder spreads `name`, the controlled `value`/`checked`, `aria-invalid`, `onChange`, and `onBlur` (which marks the field touched and triggers mode-appropriate validation). Error display, labels, and `aria-describedby` are yours to render.
 
-`numberInputProps` is a *stateless* `<input type="number">` binding — you get the native stepper and `step` attribute, at the cost of the intermediate-entry behavior described next.
+`numberInputProps` is a *stateless* `<input type="number">` binding, so you get the native stepper and the `step` attribute, at the cost of the intermediate-entry behavior described next.
 
 ## `DateField` and calendar-date semantics
 
-`DateField` renders `<input type="date">` bound to a `Date`-typed field. Display and parsing go through the exported `dateToInputText` / `parseDateText` rules, which treat the value as a **local calendar date**: the input's `"yyyy-MM-dd"` maps to local midnight, never through `toISOString()` — a date picked as June 1 must not render as May 31 for users west of UTC. Clearing writes the field's `emptyValue` (`null` for `z.date().nullable()`), rollover text like `2026-02-31` is rejected rather than silently becoming March 3, and `dateInputProps` is exported for custom markup and UI-kit adapters. For picker widgets, bind MUI X's `DatePicker` or shadcn's `Calendar` with a small adapter that reuses these same two functions.
+`DateField` renders `<input type="date">` bound to a `Date`-typed field. Display and parsing go through the exported `dateToInputText` and `parseDateText` rules, which treat the value as a **local calendar date**: the input's `"yyyy-MM-dd"` maps to local midnight, never through `toISOString()`, because a date picked as June 1 must not render as May 31 for users west of UTC. Clearing writes the field's `emptyValue` (`null` for `z.date().nullable()`), rollover text like `2026-02-31` is rejected rather than silently becoming March 3, and `dateInputProps` is exported for custom markup and UI-kit adapters. For picker widgets, bind MUI X's `DatePicker` or shadcn's `Calendar` with a small adapter that reuses these same two functions.
 
 ## Discriminated unions
 
-A `z.discriminatedUnion` field types its value as a union of variant objects. The **discriminant** (the key present in every variant) binds with plain `useField` — it's a common key, fully typed. The **variant-specific** fields (present in only some branches) live at paths `FieldPath` omits, so `useVariantField` binds those:
+A `z.discriminatedUnion` field types its value as a union of variant objects. The **discriminant**, the key present in every variant, binds with plain `useField`, since it is a common key and fully typed. The **variant-specific** fields, present in only some branches, live at paths `FieldPath` omits, so `useVariantField` binds those:
 
 ```tsx
 const schema = z.object({
@@ -101,7 +101,7 @@ function PaymentFields({ form }: { form: Form<typeof schema> }) {
 }
 ```
 
-`useVariantField(form, unionPath, field)` types the result as the field's value across the variants that declare it, widened with `| undefined` (the field is absent while a different variant is active). A field name no variant declares — or the discriminant itself — is a compile error. Call it unconditionally (React's rules) and render the matching fields based on the discriminant. `createFormHooks` exposes a bound `use{Name}VariantField`. `formstand-gen` generates this shape for discriminated-union fields.
+`useVariantField(form, unionPath, field)` types the result as the field's value across the variants that declare it, widened with `| undefined`, since the field is absent while a different variant is active. A field name no variant declares, or the discriminant itself, is a compile error. Call it unconditionally (React's rules) and render the matching fields based on the discriminant. `createFormHooks` exposes a bound `use{Name}VariantField`, and `formstand-gen` generates this shape for discriminated-union fields.
 
 ## `NumberField` and partial entries
 
@@ -110,7 +110,7 @@ A controlled `<input type="number">` coerces away intermediate text like `-` or 
 - Each keystroke that parses to a **finite** number is pushed to the form immediately.
 - Partial entries (`-`, `1.`, `1e`) are kept as local text and the form value is left untouched.
 - Whitespace-only text counts as **empty** and writes the field's `emptyValue` (`Number("  ")` would otherwise be `0`).
-- `Infinity` is rejected — kept as text, never pushed.
+- `Infinity` is rejected, kept as text and never pushed.
 - On blur, the display snaps to the canonical form value.
 - If something else writes the field while you're typing (`reset`, `adoptValues`, another component), the external value wins and the input updates immediately.
 
@@ -122,16 +122,16 @@ What should a cleared input write back? `useField` answers by **introspecting th
 - `.optional()` → clearing writes `undefined` (also the default for unrecognized shapes).
 - For schema-less forms (a bare `FieldFormApi` without a schema), it falls back to a runtime heuristic: `null` if the field's *initial value* was `null`, else `undefined`.
 
-The builders use it consistently: `numberInputProps` and `NumberField` write `emptyValue` when the text is empty; `textInputProps` and `selectProps` write `null` on a cleared value when `emptyValue` is `null` (a non-nullable text field cleared to `""` just stays `""`). `checkboxProps` is the deliberate exception: a checkbox has exactly two visual states, so unchecking always writes `false` — restoring `null` on uncheck would make `false` unreachable for a nullable boolean. If "unset" must be distinguishable from "no", use a select or radio group instead.
+The builders use it consistently: `numberInputProps` and `NumberField` write `emptyValue` when the text is empty; `textInputProps` and `selectProps` write `null` on a cleared value when `emptyValue` is `null` (a non-nullable text field cleared to `""` just stays `""`). `checkboxProps` is the deliberate exception: a checkbox has exactly two visual states, so unchecking always writes `false`, because restoring `null` on uncheck would make `false` unreachable for a nullable boolean. If "unset" must be distinguishable from "no", use a select or radio group instead.
 
 ## `SelectField` placeholder and null handling
 
-A native `<select>` with a value that matches no option silently *displays* the first option while your state says otherwise. `SelectField` stays controlled by rendering an empty `<option value="">` whenever the bound `<select>` displays `""` — which covers `undefined`, `null`, AND `""` field values (the condition derives from `selectProps`' own value coercion) — or whenever you pass `placeholder`, showing your `placeholder` text if given. For a **nullable** field the empty option is also selectable and stays visible after a choice — picking it clears the field back to `null` (the `emptyValue` round-trip); everywhere else it is a disabled placeholder. One override: if your `options` list itself contains a `""`-valued entry, that explicit, labelled option **is** the blank state — the implicit option (and the `placeholder`) are suppressed so the browser can't pair the value with an unlabelled duplicate:
+A native `<select>` with a value that matches no option silently *displays* the first option while your state says otherwise. `SelectField` stays controlled by rendering an empty `<option value="">` whenever the bound `<select>` displays `""`, which covers `undefined`, `null`, and `""` field values (the condition derives from `selectProps`' own value coercion), or whenever you pass `placeholder`, in which case your placeholder text shows. For a **nullable** field the empty option is also selectable and stays visible after a choice, so picking it clears the field back to `null` through the `emptyValue` round trip; everywhere else it is a disabled placeholder. One override: if your `options` list itself contains a `""`-valued entry, that explicit, labelled option **is** the blank state, so the implicit option and the `placeholder` are suppressed and the browser can't pair the value with an unlabelled duplicate:
 
 ```tsx
 <SelectField
   form={form}
-  path="country"        // z.string().nullable() — "not chosen" is null
+  path="country"        // z.string().nullable(), so "not chosen" is null
   placeholder="Choose a country"
   options={countries}
 />
@@ -141,5 +141,5 @@ Choosing a real option writes its `value`; for a nullable field, re-selecting th
 
 ## Next
 
-- [Typed paths](./typed-paths) — why `NumberField` beats `z.coerce.number()`.
-- [Errors: schema & server](./errors) — where the error messages these components render come from.
+- [Typed paths](./typed-paths): why `NumberField` beats `z.coerce.number()`.
+- [Errors: schema & server](./errors): where the error messages these components render come from.

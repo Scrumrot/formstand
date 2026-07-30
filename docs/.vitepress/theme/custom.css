@@ -96,6 +96,22 @@
   color: var(--vp-c-brand-1);
 }
 
+/* Collapsible groups: a hairline rail under each section title so the
+   groups read as groups, and a brass hint when a title is clickable. */
+.VPSidebarItem.level-0 > .items {
+  border-left: 1px solid var(--vp-c-divider);
+  padding-left: 14px;
+  margin-left: 2px;
+}
+
+.VPSidebarItem.level-0.collapsible > .item {
+  cursor: pointer;
+}
+
+.VPSidebarItem.level-0.collapsible > .item:hover > .text {
+  color: var(--vp-c-brand-1);
+}
+
 /* Buttons keep the default sizes but move with intent. */
 .VPButton {
   transition:

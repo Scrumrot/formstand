@@ -23,13 +23,13 @@ type FormState<TValues> = Readonly<{
 }>;
 ```
 
-`errors` is derived from the two channels — never write it directly; see [Errors: schema & server](./errors). There is deliberately **no dirty map**: dirtiness is computed, as described next.
+`errors` is derived from the two channels, so never write it directly; see [Errors: schema & server](./errors). There is deliberately **no dirty map**, because dirtiness is computed, as described next.
 
 ## Dirtiness is derived
 
-A field is dirty while its value differs *structurally* from `initialValues` at that path — arrays and plain objects compare deep, `Date`s compare by timestamp (re-picking the same date must not leave a field permanently dirty), everything else by `Object.is`. Because it's derived rather than tracked by writers, it can't drift: `arrayPush` followed by `arrayRemove` reads clean again, and `reset` is clean *by definition*.
+A field is dirty while its value differs *structurally* from `initialValues` at that path. Arrays and plain objects compare deep, `Date`s compare by timestamp (re-picking the same date must not leave a field permanently dirty), and everything else compares by `Object.is`. Because it is derived rather than tracked by writers, it can't drift: `arrayPush` followed by `arrayRemove` reads clean again, and `reset` is clean *by definition*.
 
-Read it per field (`useField(...).dirty`, `form.getFieldState(path).dirty`), form-wide or scoped to a subtree (`useIsDirty(form)`, `useIsDirty(form, "shipping")` — a boolean-only subscription, unlike `useField`), or as a PATCH-style payload:
+Read it per field (`useField(...).dirty`, `form.getFieldState(path).dirty`), form-wide or scoped to a subtree (`useIsDirty(form)`, `useIsDirty(form, "shipping")`, a boolean-only subscription unlike `useField`), or as a PATCH-style payload:
 
 ```ts
 form.dirtyFields(); // minimal divergent paths, e.g. ["profile.name", "tags"]
@@ -44,9 +44,9 @@ Both compare `values` against `initialValues` and report **minimal divergent pat
 
 - `field.onBlur()` (wired by the bound components and prop builders) sets it, as does `form.setTouched(path, touched?)` (default `true`).
 - A **failed submit marks every errored field touched**, so touched-gated error UIs show messages after the canonical first failed submit.
-- The `"onTouched"` validation mode reads it — see [Validation](./validation#modes).
+- The `"onTouched"` validation mode reads it. See [Validation](./validation#modes).
 
-Touched is *stored*, not derived — clearing it is part of `reset`'s job.
+Touched is *stored* rather than derived, so clearing it is part of `reset`'s job.
 
 ## Snapshot and restore
 
@@ -67,7 +67,7 @@ form.handleSubmit(async (data) => {
 
 `restore` re-derives the merged `errors` map from the snapshot's `schemaErrors`/`serverErrors` channels (defaulting missing channels for snapshots persisted under older shapes), so the errors-is-derived invariant holds even for hand-constructed snapshots.
 
-It also **clears the transient in-flight flags** (`isValidating` / `isValidatingForm`) rather than restoring whatever the snapshot captured: in-flight state is owned by live validation passes, never by snapshots — a flag snapshotted mid-flight has no pass left to clear it, so restoring it would stick it on forever.
+It also **clears the transient in-flight flags** (`isValidating` and `isValidatingForm`) rather than restoring whatever the snapshot captured. In-flight state is owned by live validation passes, never by snapshots: a flag snapshotted mid-flight has no pass left to clear it, so restoring it would stick it on forever.
 
 ## `reset` vs `adoptValues`
 
@@ -83,7 +83,7 @@ Two different contracts for replacing values:
 | `isValidating` / `isValidatingForm` | cleared | cleared (the rebase disowns in-flight passes, so their flags must not linger) |
 | use case | "start over" | mid-session rebase (a save succeeded; the saved data is the new baseline) |
 
-`reset`'s partial `nextInitial` is shallow-merged into the existing initial values when both are plain records, and replaces them wholesale otherwise (array- or scalar-rooted schemas). There's no `keepDirty` option because dirtiness derives from values vs initial — reset makes them equal, so everything reads clean by definition.
+`reset`'s partial `nextInitial` is shallow-merged into the existing initial values when both are plain records, and replaces them wholesale otherwise, as with array-rooted or scalar-rooted schemas. There is no `keepDirty` option because dirtiness derives from values vs initial: reset makes them equal, so everything reads clean by definition.
 
 `resetField(path)` is the single-field version: the value returns to its initial slice, and error/touched/validating state at the path and its descendants is cleared.
 
@@ -98,7 +98,7 @@ form.updateState((state) => ({
 }));
 ```
 
-The patch type omits `errors` — it's derived; patch `schemaErrors`/`serverErrors` instead and the merged map is recomputed. Note `updateState` is a raw patch: unlike `setValue`, it does not run the [server-error release contract](./errors#when-a-server-error-is-released) for you.
+The patch type omits `errors`, since it is derived. Patch `schemaErrors` and `serverErrors` instead and the merged map is recomputed. Note that `updateState` is a raw patch: unlike `setValue`, it does not run the [server-error release contract](./errors#when-a-server-error-is-released) for you.
 
 ## Persistence
 
@@ -117,7 +117,7 @@ drafts.clear();             // also cancels any pending write
 drafts.dispose();
 ```
 
-`apply: "restore"` loads the draft as *edits* (dirty vs the original initial values) instead of rebasing; `apply: "manual"` never auto-applies — call the returned `restore()` yourself. Storage defaults to `localStorage` and is structural, so `sessionStorage` or any `{ getItem, setItem, removeItem }` works. Every storage touch is guarded (private-mode failures just skip persistence), corrupt drafts return `false` from `restore()` instead of throwing, and — same caveat as the recipe — drafts round-trip through JSON, so they're for JSON-safe values (a `Date` comes back as a string). In SSR apps, call it inside an effect: see [SSR & Next.js](./ssr).
+`apply: "restore"` loads the draft as *edits*, meaning dirty against the original initial values, instead of rebasing. `apply: "manual"` never auto-applies, so you call the returned `restore()` yourself. Storage defaults to `localStorage` and is structural, so `sessionStorage` or any `{ getItem, setItem, removeItem }` works. Every storage touch is guarded, so private-mode failures just skip persistence, corrupt drafts return `false` from `restore()` instead of throwing, and (same caveat as the recipe) drafts round-trip through JSON, so they are for JSON-safe values: a `Date` comes back as a string. In SSR apps, call it inside an effect: see [SSR & Next.js](./ssr).
 
 ## Redux DevTools
 
@@ -130,7 +130,7 @@ const form = createForm(schema, {
 });
 ```
 
-Every state write shows up inspectable and time-travelable, named per form so several forms stay distinguishable (`devtools: true` uses the name "formstand"). Off by default, and **active only in non-production builds** (`process.env.NODE_ENV !== "production"`, matching zustand's own devtools default) — so leaving the option set will not stream a shipped form's state to an end user who happens to have the extension installed. With the option set but the extension absent, the middleware is inert.
+Every state write shows up inspectable and time-travelable, named per form so several forms stay distinguishable (`devtools: true` uses the name "formstand"). It is off by default and **active only in non-production builds** (`process.env.NODE_ENV !== "production"`, matching zustand's own devtools default), so leaving the option set will not stream a shipped form's state to an end user who happens to have the extension installed. With the option set but the extension absent, the middleware is inert.
 
 ## Subscriptions outside React
 
@@ -141,13 +141,13 @@ form.watchValue("users.0.email", (next, prev) => { ... });  // one path's value
 form.watchField("users.0.email", (snapshot) => { ... });    // value+error+touched+dirty+isValidating
 ```
 
-All return an unsubscribe function. `watchValue` compares by `Object.is`; `watchField` fires when any part of the field's snapshot changes. `watchValues` watches the **whole values object** (the "s" means "all the values" — it is not a multi-path `watchValue`; to watch several specific paths, register a `watchValue` per path). A typical use is autosave:
+All return an unsubscribe function. `watchValue` compares by `Object.is`; `watchField` fires when any part of the field's snapshot changes. `watchValues` watches the **whole values object** (the "s" means "all the values"; it is not a multi-path `watchValue`, so to watch several specific paths, register a `watchValue` per path). A typical use is autosave:
 
 ```ts
 const unsubscribe = form.watchValues((values) => scheduleAutosave(values));
 ```
 
-For whole-values subscription **in render** — form values driving derived rendering, like a map re-rendering from live coordinates — use the hook instead: `useFormValues(form)` returns the current values object typed as `z.input<TSchema>`, re-rendering exactly when a value changes (values are replaced immutably, so it's one reference comparison) and never on touched/error churn.
+For whole-values subscription **in render**, meaning form values driving derived rendering such as a map re-rendering from live coordinates, use the hook instead. `useFormValues(form)` returns the current values object typed as `z.input<TSchema>`, re-rendering exactly when a value changes (values are replaced immutably, so it is one reference comparison) and never on touched or error churn.
 
 ## Flag hooks
 
@@ -161,12 +161,12 @@ useSubmitCount(form);   // state.submitCount
 ```
 
 ::: warning `useIsValid` reflects the error map, not a fresh validation
-The error map is empty until validation runs, so a never-validated form reads as valid even if its initial values would fail the schema. If you gate a submit button on `!useIsValid(form)`, pass `validateOnMount: true` — see [Validation](./validation#validateonmount). Submitting always re-validates regardless, so an invalid form can't actually get through.
+The error map is empty until validation runs, so a never-validated form reads as valid even if its initial values would fail the schema. If you gate a submit button on `!useIsValid(form)`, pass `validateOnMount: true`; see [Validation](./validation#validateonmount). Submitting always re-validates regardless, so an invalid form can't actually get through.
 :::
 
 ## Sharing a form: `createFormContext`
 
-`useForm` is per-component-instance — calling it twice gives two independent forms. To share one form down a deep tree without prop drilling, create a typed context per form shape:
+`useForm` is per component instance, so calling it twice gives two independent forms. To share one form down a deep tree without prop drilling, create a typed context per form shape:
 
 ```tsx
 import { createFormContext, useField, useForm } from "formstand";
@@ -190,11 +190,11 @@ const NameField = () => {
 };
 ```
 
-The factory pattern (one `createFormContext` call per form shape) carries the schema's type through the context, so children keep full path inference. `useFormContext` throws when used outside its matching `Provider`. For small trees, just passing `form` as a prop works fine; for a single app-wide form, a module-scope `createForm` also works — and pairs with `createFormHooks` below.
+The factory pattern, one `createFormContext` call per form shape, carries the schema's type through the context, so children keep full path inference. `useFormContext` throws when used outside its matching `Provider`. For small trees, just passing `form` as a prop works fine; for a single app-wide form, a module-scope `createForm` also works, and pairs with `createFormHooks` below.
 
 ## Pre-wired hooks: `createFormHooks`
 
-For a form that is a genuine module-level singleton — one instance for the app's lifetime, like settings or a global compose box — skip the provider entirely: bake the form into the hooks once and export them as a domain API.
+For a form that is a genuine module-level singleton, one instance for the app's lifetime such as settings or a global compose box, skip the provider entirely: bake the form into the hooks once and export them as a domain API.
 
 ```tsx
 import { createForm, createFormHooks } from "formstand";
@@ -208,20 +208,20 @@ export const {
   useInvoiceIsDirty,
 } = createFormHooks(form, "invoice");
 
-// Anywhere in the app — no provider, no form prop:
+// Anywhere in the app, with no provider and no form prop:
 const CustomerField = () => {
   const customer = useInvoiceField("customer"); // path inference intact
   return <input {...textInputProps(customer)} />;
 };
 ```
 
-The optional name is baked into the hook names at both the type level and runtime (`"invoice"` → `useInvoiceField`, `useInvoiceSelector`, `useInvoiceIsDirty`…), so a typo'd destructure is a compile error; omit it for unprefixed names (`useField`, `useSelector`, …). Every returned hook keeps its unbound signature minus the `form` argument — typed paths, item inference in `useInvoiceFieldArray`, path-scoped flags.
+The optional name is baked into the hook names at both the type level and runtime (`"invoice"` gives you `useInvoiceField`, `useInvoiceSelector`, `useInvoiceIsDirty`, and so on), so a typo'd destructure is a compile error. Omit it for unprefixed names (`useField`, `useSelector`, and the rest). Every returned hook keeps its unbound signature minus the `form` argument, including typed paths, item inference in `useInvoiceFieldArray`, and path-scoped flags.
 
 ::: warning A singleton is a singleton
-The module-level form never unmounts: its state persists across route changes until you `reset()` it, and under SSR (Next.js and friends) module scope is shared **across requests** on the server — keep `createFormHooks` forms to client-only modules, and use `useForm` + `createFormContext` for anything with a per-mount lifecycle.
+The module-level form never unmounts: its state persists across route changes until you `reset()` it, and under SSR (Next.js and friends) module scope is shared **across requests** on the server. Keep `createFormHooks` forms to client-only modules, and use `useForm` plus `createFormContext` for anything with a per-mount lifecycle.
 :::
 
 ## Next
 
-- [Errors: schema & server](./errors) — the two channels behind the derived `errors` map.
-- [API reference](../api/) — the full method and type listing.
+- [Errors: schema & server](./errors): the two channels behind the derived `errors` map.
+- [API reference](./api/): the full method and type listing.

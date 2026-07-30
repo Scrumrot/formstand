@@ -1,13 +1,13 @@
 # Examples
 
-Every feature has a working, interactive demo in the **[live playground](https://scrumrot.github.io/formstand/examples/)** — the same app you get locally with `npm run examples`. Each tab below runs against the real library; the linked source is the complete, unabridged implementation.
+Every feature has a working, interactive demo in the **[live playground](https://scrumrot.github.io/formstand/examples/)**, the same app you get locally with `npm run examples`. Each tab below runs against the real library; the linked source is the complete, unabridged implementation.
 
 | Demo | What it shows | Source |
 | --- | --- | --- |
 | Basic + modes | The smallest real form, plus a live switcher for every validation mode (`onChange`/`onBlur`/`onSubmit`/`onTouched`/`all`) and `reValidateMode` | [BasicForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/BasicForm.tsx) |
-| Bound fields | All four shipped components — `TextField`, `NumberField`, `SelectField`, `CheckboxField` — with their a11y wiring, `validateOnMount`, a `useIsValid`-gated submit, and `focusFirstError` | [BoundFieldsForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/BoundFieldsForm.tsx) |
+| Bound fields | All four shipped components (`TextField`, `NumberField`, `SelectField`, `CheckboxField`) with their a11y wiring, `validateOnMount`, a `useIsValid`-gated submit, and `focusFirstError` | [BoundFieldsForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/BoundFieldsForm.tsx) |
 | Form context | `createFormContext`: zero prop drilling with typed paths intact, all four flag hooks as a status bar, `useFormError`, and `adoptValues` as the post-save rebase | [ContextForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/ContextForm.tsx) |
-| Hooks factory | `createFormHooks(form, "invoice")`: a module-singleton form baked into exported hooks (`useInvoiceField`…) — no provider, no `form` prop anywhere | [HooksFactoryForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/HooksFactoryForm.tsx) |
+| Hooks factory | `createFormHooks(form, "invoice")`: a module-singleton form baked into exported hooks (`useInvoiceField` and friends), with no provider and no `form` prop anywhere | [HooksFactoryForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/HooksFactoryForm.tsx) |
 | Onboarding | A 26-field, five-section **feature module**: `schema.ts` → `hooks.ts` (`createFormHooks`) → one file per field, one per section, with path-scoped `useIsDirty`/`useIsValid` badges per section header | [OnboardingForm/](https://github.com/Scrumrot/formstand/tree/main/examples/src/forms/OnboardingForm) |
 | Nested + submit | Nested object paths and the full `handleSubmit` flow | [NestedForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/NestedForm.tsx) |
 | Field array | `useFieldArray` basics: push, remove, reorder with stable row IDs | [ArrayForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/ArrayForm.tsx) |
@@ -21,13 +21,13 @@ Every feature has a working, interactive demo in the **[live playground](https:/
 | Dependent | Cross-field reactions with `watchValue` | [DependentFieldsForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/DependentFieldsForm.tsx) |
 | Optimistic | Optimistic UI with `snapshot()`/`restore()` rollback | [OptimisticForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/OptimisticForm.tsx) |
 | File upload | File inputs and validating `File` values | [FileUploadForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/FileUploadForm.tsx) |
-| Derived | Computed values via selectors — consistent by construction, never stored | [DerivedFieldForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/DerivedFieldForm.tsx) |
+| Derived | Computed values via selectors, consistent by construction and never stored | [DerivedFieldForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/DerivedFieldForm.tsx) |
 | Tags | A tag input over an array of primitives | [TagInputForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/TagInputForm.tsx) |
 | Perf | A 200-row stress test showing per-field re-render isolation | [PerfBenchmarkForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/PerfBenchmarkForm.tsx) |
 
 ## Material UI
 
-Six demos bind formstand to [Material UI](https://mui.com/) through one adapter file — [muiAdapter.ts](https://github.com/Scrumrot/formstand/blob/main/examples/src/mui/muiAdapter.ts), the same adapter shape `formstand-gen --ui mui` emits. It turns a `useField` result into spreadable props for `TextField`, `Select`, `Switch`, and `Slider`; numbers go through the library's exported `useNumberInput` — the text-preserving binding behind `NumberField`, since MUI's `TextField` is a text input (the stateless `numberInputProps` builder remains the right choice for native `type="number"` inputs). Nothing MUI-specific lives in the library; this is the adapter shape to copy for any third-party UI kit. All six run in the same [live playground](https://scrumrot.github.io/formstand/examples/).
+Six demos bind formstand to [Material UI](https://mui.com/) through one adapter file, [muiAdapter.ts](https://github.com/Scrumrot/formstand/blob/main/examples/src/mui/muiAdapter.ts), which is the same adapter shape `formstand-gen --ui mui` emits. It turns a `useField` result into spreadable props for `TextField`, `Select`, `Switch`, and `Slider`. Numbers go through the library's exported `useNumberInput`, the text-preserving binding behind `NumberField`, since MUI's `TextField` is a text input (the stateless `numberInputProps` builder remains the right choice for native `type="number"` inputs). Nothing MUI-specific lives in the library; this is the adapter shape to copy for any third-party UI kit. All six run in the same [live playground](https://scrumrot.github.io/formstand/examples/).
 
 | Demo | What it shows | Source |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ Six demos bind formstand to [Material UI](https://mui.com/) through one adapter 
 
 ## shadcn/ui
 
-Four demos bind formstand to [shadcn/ui](https://ui.shadcn.com/) components. shadcn's `Input` and `Textarea` take native DOM events, so the library's own exported `textInputProps`/`numberInputProps` bind them with nothing extra — the adapter file, [shadcnAdapter.ts](https://github.com/Scrumrot/formstand/blob/main/examples/src/shadcn/shadcnAdapter.ts), only bridges the Radix dialect: `Checkbox`, `Switch`, `Select`, `Slider`, and `RadioGroup` take value-first callbacks (`onCheckedChange`, `onValueChange`) and signal "done editing" through close/commit events instead of blur. Errors surface as `aria-invalid`, which the components style themselves off. `formstand-gen --ui shadcn` generates forms against this pattern.
+Four demos bind formstand to [shadcn/ui](https://ui.shadcn.com/) components. shadcn's `Input` and `Textarea` take native DOM events, so the library's own exported `textInputProps` and `numberInputProps` bind them with nothing extra, and the adapter file, [shadcnAdapter.ts](https://github.com/Scrumrot/formstand/blob/main/examples/src/shadcn/shadcnAdapter.ts), only bridges the Radix dialect: `Checkbox`, `Switch`, `Select`, `Slider`, and `RadioGroup` take value-first callbacks (`onCheckedChange`, `onValueChange`) and signal "done editing" through close and commit events instead of blur. Errors surface as `aria-invalid`, which the components style themselves off. `formstand-gen --ui shadcn` generates forms against this pattern.
 
 | Demo | What it shows | Source |
 | --- | --- | --- |
@@ -53,169 +53,169 @@ The playground bundles its own copies of the shadcn components (they're copy-in 
 
 ## Browse the source inline
 
-Every block below embeds the demo's actual source file at build time, so it can never drift from what the playground runs. Two lines in each demo are playground harness, not library API: `import { useDemoForm } from "../demo/DemoShell"` and the `useDemoForm(form)` call register the demo's form with the playground shell, which is what powers the **View state** panel (rendered by `StateDump.tsx` below). Delete those two lines when copying a demo into your own project — everything else is plain formstand.
+Every block below embeds the demo's actual source file at build time, so it can never drift from what the playground runs. Two lines in each demo are playground harness, not library API: `import { useDemoForm } from "../demo/DemoShell"` and the `useDemoForm(form)` call register the demo's form with the playground shell, which is what powers the **View state** panel (rendered by `StateDump.tsx` below). Delete those two lines when copying a demo into your own project; everything else is plain formstand.
 
-::: details Basic + modes — BasicForm.tsx
+::: details Basic + modes: BasicForm.tsx
 <<< ../../examples/src/forms/BasicForm.tsx
 :::
 
-::: details Bound fields — BoundFieldsForm.tsx
+::: details Bound fields: BoundFieldsForm.tsx
 <<< ../../examples/src/forms/BoundFieldsForm.tsx
 :::
 
-::: details Form context — ContextForm.tsx
+::: details Form context: ContextForm.tsx
 <<< ../../examples/src/forms/ContextForm.tsx
 :::
 
-::: details Hooks factory — HooksFactoryForm.tsx
+::: details Hooks factory: HooksFactoryForm.tsx
 <<< ../../examples/src/forms/HooksFactoryForm.tsx
 :::
 
-### Onboarding — the feature-module layout
+### Onboarding: the feature-module layout
 
 One folder per form: `schema.ts` (zod + select options), `types.ts`, `hooks.ts` (`createForm` + `createFormHooks`), one file per field (props type + field hook + component), one file per section (props type + section hook built on the path-scoped flags + component). The key files:
 
-::: details hooks.ts — the module's pre-wired hooks
+::: details hooks.ts: the module's pre-wired hooks
 <<< ../../examples/src/forms/OnboardingForm/hooks.ts
 :::
 
-::: details schema.ts — schema + select options as one source of truth
+::: details schema.ts: schema + select options as one source of truth
 <<< ../../examples/src/forms/OnboardingForm/schema.ts
 :::
 
-::: details A field file — CityField.tsx
+::: details A field file: CityField.tsx
 <<< ../../examples/src/forms/OnboardingForm/fields/CityField.tsx
 :::
 
-::: details A section file — PersonalSection.tsx
+::: details A section file: PersonalSection.tsx
 <<< ../../examples/src/forms/OnboardingForm/sections/PersonalSection.tsx
 :::
 
-::: details The form body — OnboardingForm.tsx
+::: details The form body: OnboardingForm.tsx
 <<< ../../examples/src/forms/OnboardingForm/OnboardingForm.tsx
 :::
 
-::: details Nested + submit — NestedForm.tsx
+::: details Nested + submit: NestedForm.tsx
 <<< ../../examples/src/forms/NestedForm.tsx
 :::
 
-::: details Field array — ArrayForm.tsx
+::: details Field array: ArrayForm.tsx
 <<< ../../examples/src/forms/ArrayForm.tsx
 :::
 
-::: details Async — AsyncForm.tsx
+::: details Async: AsyncForm.tsx
 <<< ../../examples/src/forms/AsyncForm.tsx
 :::
 
-::: details Wizard — WizardForm.tsx
+::: details Wizard: WizardForm.tsx
 <<< ../../examples/src/forms/WizardForm.tsx
 :::
 
-::: details Conditional — ConditionalForm.tsx
+::: details Conditional: ConditionalForm.tsx
 <<< ../../examples/src/forms/ConditionalForm.tsx
 :::
 
-::: details Invoice — InvoiceForm.tsx
+::: details Invoice: InvoiceForm.tsx
 <<< ../../examples/src/forms/InvoiceForm.tsx
 :::
 
-::: details Nested arrays — NestedArraysForm.tsx
+::: details Nested arrays: NestedArraysForm.tsx
 <<< ../../examples/src/forms/NestedArraysForm.tsx
 :::
 
-::: details Server errors — ServerErrorsForm.tsx
+::: details Server errors: ServerErrorsForm.tsx
 <<< ../../examples/src/forms/ServerErrorsForm.tsx
 :::
 
-::: details Autosave — AutosaveForm.tsx
+::: details Autosave: AutosaveForm.tsx
 <<< ../../examples/src/forms/AutosaveForm.tsx
 :::
 
-::: details Dependent — DependentFieldsForm.tsx
+::: details Dependent: DependentFieldsForm.tsx
 <<< ../../examples/src/forms/DependentFieldsForm.tsx
 :::
 
-::: details Optimistic — OptimisticForm.tsx
+::: details Optimistic: OptimisticForm.tsx
 <<< ../../examples/src/forms/OptimisticForm.tsx
 :::
 
-::: details File upload — FileUploadForm.tsx
+::: details File upload: FileUploadForm.tsx
 <<< ../../examples/src/forms/FileUploadForm.tsx
 :::
 
-::: details Derived — DerivedFieldForm.tsx
+::: details Derived: DerivedFieldForm.tsx
 <<< ../../examples/src/forms/DerivedFieldForm.tsx
 :::
 
-::: details Tags — TagInputForm.tsx
+::: details Tags: TagInputForm.tsx
 <<< ../../examples/src/forms/TagInputForm.tsx
 :::
 
-::: details Perf — PerfBenchmarkForm.tsx
+::: details Perf: PerfBenchmarkForm.tsx
 <<< ../../examples/src/forms/PerfBenchmarkForm.tsx
 :::
 
-::: details State dump panel — StateDump.tsx
+::: details State dump panel: StateDump.tsx
 <<< ../../examples/src/forms/StateDump.tsx
 :::
 
 ### Material UI demos
 
-::: details The adapter (muiAdapter.ts) — muiAdapter.ts
+::: details The adapter (muiAdapter.ts): muiAdapter.ts
 <<< ../../examples/src/mui/muiAdapter.ts
 :::
 
-::: details Theme bridge — MuiThemeBridge.tsx
+::: details Theme bridge: MuiThemeBridge.tsx
 <<< ../../examples/src/mui/MuiThemeBridge.tsx
 :::
 
-::: details MUI: Checkout — MuiCheckoutWizard.tsx
+::: details MUI: Checkout: MuiCheckoutWizard.tsx
 <<< ../../examples/src/mui/MuiCheckoutWizard.tsx
 :::
 
-::: details MUI: Job form — MuiJobApplication.tsx
+::: details MUI: Job form: MuiJobApplication.tsx
 <<< ../../examples/src/mui/MuiJobApplication.tsx
 :::
 
-::: details MUI: Invoice — MuiInvoiceBuilder.tsx
+::: details MUI: Invoice: MuiInvoiceBuilder.tsx
 <<< ../../examples/src/mui/MuiInvoiceBuilder.tsx
 :::
 
-::: details MUI: Settings — MuiProfileSettings.tsx
+::: details MUI: Settings: MuiProfileSettings.tsx
 <<< ../../examples/src/mui/MuiProfileSettings.tsx
 :::
 
-::: details MUI: Survey — MuiSurveyBuilder.tsx
+::: details MUI: Survey: MuiSurveyBuilder.tsx
 <<< ../../examples/src/mui/MuiSurveyBuilder.tsx
 :::
 
 ### shadcn/ui demos
 
-::: details The adapter (shadcnAdapter.ts) — shadcnAdapter.ts
+::: details The adapter (shadcnAdapter.ts): shadcnAdapter.ts
 <<< ../../examples/src/shadcn/shadcnAdapter.ts
 :::
 
-::: details Shared error helpers (used by both adapters) — fieldErrors.ts
+::: details Shared error helpers (used by both adapters): fieldErrors.ts
 <<< ../../examples/src/fieldErrors.ts
 :::
 
-::: details Error line — FieldError.tsx
+::: details Error line: FieldError.tsx
 <<< ../../examples/src/shadcn/FieldError.tsx
 :::
 
-::: details shadcn: Signup — ShadcnSignupForm.tsx
+::: details shadcn: Signup: ShadcnSignupForm.tsx
 <<< ../../examples/src/shadcn/ShadcnSignupForm.tsx
 :::
 
-::: details shadcn: Checkout — ShadcnCheckoutForm.tsx
+::: details shadcn: Checkout: ShadcnCheckoutForm.tsx
 <<< ../../examples/src/shadcn/ShadcnCheckoutForm.tsx
 :::
 
-::: details shadcn: Settings — ShadcnSettingsForm.tsx
+::: details shadcn: Settings: ShadcnSettingsForm.tsx
 <<< ../../examples/src/shadcn/ShadcnSettingsForm.tsx
 :::
 
-::: details shadcn: Team — ShadcnTeamForm.tsx
+::: details shadcn: Team: ShadcnTeamForm.tsx
 <<< ../../examples/src/shadcn/ShadcnTeamForm.tsx
 :::
 
@@ -224,7 +224,7 @@ One folder per form: `schema.ts` (zod + select options), `types.ts`, `hooks.ts` 
 The **Onboarding (CLI output)** tab is not hand-written: CI runs
 `formstand-gen schema.ts --layout module --ui mui --sections panel --columns 2`
 against the Onboarding schema and fails if the committed demo differs from
-what the current CLI emits — so the tab is always the generator's real, untouched output
+what the current CLI emits, so the tab is always the generator's real, untouched output
 ([examples/src/generated](https://github.com/Scrumrot/formstand/tree/main/examples/src/generated)).
 Compare it against the hand-built MUI Onboarding tab to see exactly what the
 generator gives you versus what you might grow it into.
@@ -232,7 +232,7 @@ generator gives you versus what you might grow it into.
 The **Gen: Chakra UI**, **Gen: Mantine**, and **Gen: Ant Design** tabs run
 the SAME Onboarding schema through `--ui chakra`, `--ui mantine`, and
 `--ui antd` with the same section chrome, so flipping between the four
-tabs compares what each kit target emits — with one deliberate second
+tabs compares what each kit target emits, with one deliberate second
 axis: the mui tab is `--layout module` (it doubles as the module-layout
 showcase), while the three kit tabs are single-file output. They're
 regenerated and drift-checked by CI the same way, and each supported kit
@@ -246,13 +246,13 @@ runs the real formstand-gen emitters in the browser: design fields and
 sections in a formstand form and the generated files (all the `--ui` /
 `--layout` / `--sections` / `--columns` combinations) regenerate on every
 keystroke. Everything downstream of the CLI's IR is a pure string builder,
-so the playground imports the emitters straight from the CLI's source — the
+so the playground imports the emitters straight from the CLI's source, and the
 output is exactly what `npx formstand-gen` writes to disk. Every playground
 tab is directly linkable the same way: `examples/#/<tab-name>` in
 kebab-case.
 
 Already have a schema? **Import code…** opens a modal that takes a
-**TypeScript type** or a **zod schema** — paste it, or pick a `.ts` file —
+**TypeScript type** or a **zod schema** (paste it, or pick a `.ts` file)
 and generates the form from it. A pasted type is read by the same
 compiler-free parser the CLI's `--type` mode uses; a pasted `z.object(...)`
 is evaluated in your browser against the bundled zod and walked by the real
