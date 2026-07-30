@@ -1,5 +1,23 @@
 # Changelog
 
+## formstand-cli Unreleased
+
+### Fixed
+
+- **The template-hole regex is linear again** (CodeQL `js/polynomial-redos`,
+  high). `pathSegmentCount` strips holes like `${index}` before counting dot
+  segments, and its pattern excluded only the closing brace, so an
+  unterminated run such as `"${{${{${{..."` rescanned to the end of the
+  string from every `${` start: 1.8 seconds at 32k repetitions, growing
+  quadratically. Excluding both braces bounds each scan at the next brace
+  and makes the same input flat. A hole is always a plain identifier, so
+  real paths are unaffected and every committed demo regenerates
+  byte-identical. Matters because `formstand-cli/codegen` is the documented
+  browser-safe surface: the playground's Schema builder runs it on pasted
+  input, and anything built on it may accept a schema it did not author. The
+  binary alone was never really exposed, since generating from a hostile
+  schema already executes that module.
+
 ## 0.13.0 — 2026-07-29
 
 ### Added
