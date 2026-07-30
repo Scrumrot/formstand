@@ -3,240 +3,109 @@
 Generate [formstand](https://scrumrot.github.io/formstand/) form components from a zod schema or a TypeScript type.
 
 ```bash
-npm install --save-dev formstand-cli
+npm install --save-dev formstand-cli    # the binary is named formstand-gen
 ```
 
 **Full docs: [scrumrot.github.io/formstand/documentation/cli](https://scrumrot.github.io/formstand/documentation/cli/)** · **[Try it in the browser](https://scrumrot.github.io/formstand/examples/#/schema-builder)**
 
-## Requirements
-
-- **formstand >= 0.3.0** for `--ui mui`, `--ui shadcn`, `--ui chakra`, `--ui mantine`, and `--ui antd` output. All five kit adapters import the same surface: `UseFieldReturn`, `numberToInputText`, and `parseNumberText`. Plain output works on 0.2.0. Kit-specific peers: chakra needs `@chakra-ui/react` **v3** plus its `@emotion/react` peer and a `ChakraProvider` at the root, mantine needs `@mantine/core` **v9** plus `@mantine/hooks` and a `MantineProvider`, and antd needs `antd` **v6** with no provider at all (`ConfigProvider` is optional theming). No generated file emits a provider, the same way the mui output assumes your theme setup. Generated `useFieldArray` hooks get typed items on **formstand >= 0.5**, inferred from the schema through the path; on 0.4 they compile with untyped items.
-- **formstand >= 0.9** for `date` fields: plain output emits `<DateField>` and the mui/shadcn adapters use `dateToInputText` / `parseDateText`, all shipped in 0.9. On older formstand, avoid `z.date()` in the schema, or replace the emitted date bindings by hand.
-- **zod v4** in your project. The CLI walks your schema structurally (duck-typed by design, with no `instanceof` against a bundled copy), so it does not ship zod itself: the schema module and the generated code both use the zod your project supplies.
+It is a one-shot generator. The file it writes is yours: no markers, no regeneration
+magic, and nothing in the output imports from this package.
 
 ## Two modes
 
-### 1. Zod mode (default)
-
-Point it at a module that exports a zod schema; it prints a complete, compilable component bound to that schema:
+**Zod mode (default).** Point it at a module that exports a zod schema and it prints a
+complete, compilable component bound to that schema:
 
 ```bash
-formstand-gen src/profileSchema.ts
 formstand-gen src/profileSchema.ts --out src/ProfileForm.tsx
 formstand-gen src/schemas.ts --export profileSchema --name ProfileForm --out src/ProfileForm.tsx
 ```
 
-The schema module is loaded at runtime (via jiti, so plain `.ts` files work) and walked structurally against your own copy of zod, with no `instanceof` games. Picked export: `--export`, else the default export, else the sole zod-schema export.
+The module is loaded at runtime through jiti, so plain `.ts` files work, and walked
+structurally against your own copy of zod. Picked export: `--export`, else the default
+export, else the sole zod-schema export.
 
-### 2. Type mode
-
-Point it at an exported TypeScript `type`/`interface`; it generates a zod schema **and** a component that imports it:
+**Type mode.** Point it at an exported `type` or `interface` and it generates a zod
+schema **and** a component that imports it:
 
 ```bash
 formstand-gen src/types.ts --type Profile --out src/ProfileForm.tsx
 # writes src/profileSchema.ts (override with --schema-out) and src/ProfileForm.tsx
 ```
 
-Without `--out`, both files print to stdout separated by `// --- file: ...` headers. With `--schema-out` but no `--out`, the schema is written to that file and the component streams to stdout.
+Without `--out`, output streams to stdout with `// --- file:` headers. Warnings go to
+stderr, so redirection stays clean, and writes are all-or-nothing: if any destination
+exists and `--force` isn't set, nothing is written.
 
 ## Flags
 
 | Flag | Meaning |
 | --- | --- |
 | `--export <name>` | which export holds the zod schema |
-| `--type <TypeName>` | generate from a TS type/interface instead |
-| `--ui plain\|mui[@5\|6\|7\|9]\|shadcn\|chakra\|mantine\|antd` | component flavor (default `plain`). `mui` may pin an `@mui/material` major: `mui@5`, `mui@6`, `mui@7`, `mui@9`, with bare `mui` meaning `mui@9`. Only React-19-capable majors are supported, since formstand peers `react: ^19`, so MUI 4 and older can never install alongside it (and MUI skipped major 8, jumping 7.x to 9). `chakra` targets `@chakra-ui/react` **3**, the only supported major (`chakra@3` spells the same thing; v2 and older lack the v3 compound API and predate the React 19 peer). `mantine` targets `@mantine/core` **9**, the current major (`mantine@9` spells the same thing; majors 6 and older predate the React 19 peer and the v7 styling rewrite, and 7 to 8 error too, since output is verified against v9 only). `antd` targets **antd 6**, the current major (`antd@6` spells the same thing; antd 5 errors too, because it runs on React 19 only via the `@ant-design/v5-patch-for-react-19` host patch and the output is verified against v6 only). `plain` and `shadcn` take no version |
-| `--layout single\|module` | `single` (default): one file. `module`: a feature-module folder, described below |
-| `--sections flat\|panel\|collapsible` | section chrome: `flat` headings (default), bordered `panel`s, or `collapsible` sections (`<details>`; MUI `Accordion`) |
-| `--columns 1\|2\|3` | evenly spaced field columns inside each section (default `1`); nested sections span the full row |
-| `--max-depth <n>` | schema/type nesting budget before a level degrades to a string plus a TODO. Default: derived from the typed-path budget as `9 + 2 = 11`, so path-budget degradation always wins over walker truncation. Also the recursion backstop and the bound on nested-array row extraction |
-| `--name <MyForm>` | component name (default derived from the schema/type name) |
-| `--out <file>` | write the component here instead of stdout |
-| `--schema-out <file>` | type mode: where the generated zod schema goes (default `<schemaName>.ts` next to `--out`) |
-| `--live` | live/no-submit form, for when a map or preview consumes the values as they change. The submit scaffold (`handleSubmit`, the submit button, `useIsSubmitting`) is omitted entirely, the component accepts an optional `onValuesChange?: (values) => void` prop wired through `form.watchValues` (available since formstand 0.2; on a post-0.12 formstand, `useFormValues(form)` is the render-side one-liner), and the emitted validation mode defaults to `"onChange"`, because a live consumer wants validity that tracks the values rather than the library-default `"onBlur"` lag. The root element stays a `<form>` for its semantics (label association, the form landmark) with a `preventDefault` `onSubmit`, so the browser's implicit Enter-key submission can't navigate the page. Composes with every `--ui`, both layouts, and `--form-prop` |
-| `--form-prop` | the page owns the form: the component's props gain `form: Form<typeof schema>` and it stops calling `useForm` itself. The `useForm` scaffold is still emitted, as an exported `use{Name}Form()` hook the page calls, so one instance can feed the generated UI **and** anything else, such as a map or an autosave effect. With `--layout module` the component takes the prop too, but the module's field hooks stay pre-wired to the exported singleton, so pass that instance (for example `profileForm` from `./hooks`). Combined with `--live`, the generated component is pure rendering and `onValuesChange` subscribes to the passed form |
-| `--config <file>` | config file (default: `formstand.config.{ts,mts,js,mjs}` in the working directory) holding project defaults for `ui`/`layout`/`sections`/`columns`/`live`/`formProp` (explicit flags win), plus per-field component overrides (`fields`, described below) |
-| `--watch` | regenerate whenever the input file changes (requires `--out`) |
-| `--template <file>` | a custom template module (`defineTemplate`) for a UI kit formstand doesn't ship. Overrides the per-kind field rendering, inheriting the plain form scaffold; `--layout single` only, and overrides `--ui` |
+| `--type <TypeName>` | generate from a TS type or interface instead |
+| `--ui <kit>` | `plain` (default), `mui[@5\|6\|7\|9]`, `shadcn`, `chakra`, `mantine`, `antd` |
+| `--layout single\|module` | one file (default), or a feature-module folder |
+| `--sections flat\|panel\|collapsible` | section chrome, default `flat` |
+| `--columns 1\|2\|3` | field columns inside each section, default `1` |
+| `--live` | no submit scaffold; adds an `onValuesChange` prop and defaults the mode to `"onChange"` |
+| `--form-prop` | the page owns the form: adds a `form` prop and exports a `use{Name}Form()` hook |
+| `--name <MyForm>` | component name, default derived from the schema or type |
+| `--out <file>` | write here instead of stdout; names the folder under `--layout module` |
+| `--schema-out <file>` | type mode: where the generated schema goes |
+| `--max-depth <n>` | nesting budget before a level degrades to a string plus a TODO |
+| `--config <file>` | config file, default `formstand.config.{ts,mts,js,mjs}` |
+| `--template <file>` | a custom template for a kit formstand doesn't ship; `--layout single` only |
+| `--watch` | regenerate whenever the input changes; requires `--out` |
 | `--force` | overwrite existing output files |
+| `--help` | usage |
 
-> **The `--form-prop` plus `--layout module` contract: the `form` prop must BE the module's exported singleton.** The module's field hooks are pre-wired to the singleton exported from `./hooks` (for example `profileForm`), and the `form` prop only drives the component's shell, meaning submit and subscription. Passing a *different* form of the same schema compiles, but silently splits state: the shell reads your instance while every field keeps reading the module's own form. The generated component therefore warns in development (`NODE_ENV !== "production"`) whenever it renders with a form that is not the module singleton. If you need a per-mount form instance instead of a singleton, use `--layout single` with `--form-prop`, or wire up `useForm` plus `createFormContext` by hand.
+Every flag is documented in full on the
+[command reference](https://scrumrot.github.io/formstand/documentation/cli/reference).
 
-## What is generated
+## What you get
 
-- `useForm` plus typed `initialValues` (strings `""`, booleans `false`, numbers/dates/enums `undefined`, nullable fields `null`, arrays `[]`). A field wrapped in `.default()` / `.prefault()` starts at its default **when the value is a JSON-serializable primitive matching the field kind**: a string, a finite number, a boolean, or a declared enum option. Factory defaults are captured through zod v4's resolving `defaultValue` getter, never invoked by the CLI itself, and only when two reads agree, since a non-deterministic factory like `Date.now` would break byte-reproducible output. Date and object/array defaults have no safe source literal, and fields the walker had to degrade to a TODO fallback never seed a default; all of those keep the blank behavior above.
-- One bound control per field: `TextField`, `NumberField`, `CheckboxField`, `SelectField` (enum options from the schema).
-- Nested objects as `<fieldset>`/`<legend>` sections.
-- Field arrays via `useFieldArray` with stable row keys, add/remove buttons, and a typed empty-item constant.
-- `--sections` / `--columns` pick each section's chrome and field grid, in the ui's own dialect: inline styles for `plain`, `Card`/`Accordion` plus `sx` grids for `mui`, Tailwind classes (`md:grid-cols-2`, `bg-card`) for `shadcn`, `Card.Root`/`Accordion.Root` plus grid style props for `chakra`, `Card`/`Accordion` plus `SimpleGrid cols={N}` for `mantine`, and `Card`/`Collapse` (items API) plus inline-style grids for `antd`. Both flags work with either `--layout`.
-- `handleSubmit(console.log)` and a submit button disabled while submitting, unless `--live` replaces the whole scaffold with a values subscription (`onValuesChange` over `form.watchValues`) and defaults the mode to `"onChange"`. `--form-prop` moves the `useForm` call out of the component into an exported `use{Name}Form()` hook and adds a typed `form` prop.
-- `--ui mui`: the same structure over `@mui/material` (any supported major, `mui@5` through `mui@9`, default 9) with an inlined adapter (`muiTextFieldProps` / `useMuiNumberFieldProps` / `muiSelectProps` / `muiSwitchProps`) binding `UseFieldReturn` to MUI props and sharing `parseNumberText` / `numberToInputText` with the library. The number binding is a raw-text-preserving hook (an inline `useNumberText` mirroring formstand's own `useNumberInput`), so typing `85000.50` is never reparsed into `8500050` mid-entry. All four stateful kit backends (mui, chakra, mantine, antd) share this shape. One emitter serves every major through a per-version config, and the only prop-surface difference in the emitted output is TextField's slot-props API: `mui@5` emits the legacy `InputProps` / `InputLabelProps`, v6 and later emit `slotProps.{input,inputLabel}`. Each supported major is proven to typecheck the generated output, both layouts, by the version matrix described below.
-- `--ui shadcn`: the same structure over your app's [shadcn/ui](https://ui.shadcn.com/) components, imported from the `@/components/ui/*` alias that `npx shadcn add` scaffolds, with an inlined adapter speaking the Radix dialect: `onCheckedChange` / `onValueChange` callbacks, dropdown-close as the blur trigger, and `aria-invalid` error styling with a message line.
-- `--ui chakra`: the same structure over [Chakra UI](https://chakra-ui.com/) **v3**'s compound components. `Field.Root` (`invalid`) / `Field.Label` / `Field.ErrorText` carry labels and errors, `Input` covers text/number/date (native bindings: `inputMode="decimal"`, `type="date"`), `NativeSelect.Root` plus `NativeSelect.Field` covers enums as a real `<select>` so the adapter speaks plain DOM change events, and `Switch.Root`/`Switch.HiddenInput`/`Switch.Control`/`Switch.Thumb`/`Switch.Label` covers booleans (`checked` plus an `onCheckedChange` details callback). The generated file assumes your app mounts `ChakraProvider` (`defaultSystem`) at the root and does not emit it. chakra takes no version suffix, since v3 is the only supported major (`chakra@3` is accepted as the explicit spelling; `chakra@2` and older fail with an explanation). The output is proven to typecheck against the real v3 declarations, both layouts, by the version matrix described below.
-- `--ui mantine`: the same structure over [Mantine](https://mantine.dev/) **v9**. Mantine field components carry their own `label` and `error` props, so there is no Field wrapper: `TextInput` binds text/number/date natively (`inputMode="decimal"`, `type="date"`; Mantine's `NumberInput` is deliberately not used, because its `onChange` takes `(value: number | string)` rather than a DOM event), `NativeSelect` binds enums as a real `<select>` with `<option>` children, and `Switch` binds booleans through a plain DOM `checked`/`onChange`. Sections render `Stack`/`Title` (flat), `Card withBorder` plus `SimpleGrid` (panel), or `Accordion`/`Accordion.Item`/`Accordion.Control`/`Accordion.Panel` (collapsible); columns use `SimpleGrid cols={N}`. The generated file assumes your app mounts `MantineProvider` at the root and does not emit it. mantine takes no version suffix, since v9 is the only supported target (`mantine@9` is accepted as the explicit spelling; older majors fail with an explanation, and 7 and 8 error too even though they accept React 19, because the output is verified against v9 only). The output is proven to typecheck against the real v9 declarations, both layouts, by the version matrix described below.
+`useForm` with typed `initialValues` (blank values matching each field's kind, and
+`.default()` honored when the value is a safe literal), one bound control per field,
+nested objects as sections, arrays via `useFieldArray` with stable row keys and add and
+remove buttons, zod descriptions rendered as helper text, and a wired submit.
 
-- `--ui antd`: the same structure over [Ant Design](https://ant.design/) **v6**, with one hard rule: antd's own `Form`/`Form.Item`, which is name-based bindings over its own state store, is **never emitted**. formstand owns the form state, so the generated code binds antd's input components as plain controlled components. `Input` binds text/number/date natively, since it extends the DOM input props (`inputMode="decimal"`, `type="date"`); antd's `InputNumber` is deliberately not used, because its `onChange` is `(value: number | null)` rather than a DOM event, and `DatePicker` is dayjs-value-based, so it is not used either. Enums bind antd's `Select`. antd ships **no native `<select>`** anywhere, so this is the one value-shaped adapter in the backend: `onChange` receives the selected value directly, `value ?? null` shows the placeholder, and there is no `name`, because antd's Select renders no form-posting input. Without a `name`, formstand's focus helpers reach the Select through their `[id=path]` fallback on formstand >= 0.11.0, and the generated markup sets `id={path}`, which antd forwards to its real combobox input; on 0.10.x and older, `focusField`/`focusFirstError` simply skip the selects. Booleans bind `Checkbox`, whose `onChange` is antd's DOM-ish `CheckboxChangeEvent` with `e.target.checked` and which has a real `onBlur`, rather than `Switch`, which has no `onBlur` prop at all and a value-shaped `(checked, event)` callback. With no `Form.Item` there is no built-in error slot, so every non-boolean control paints `status="error"` and renders an explicit `Typography.Text type="danger"` error line under the control, with a plain `<label htmlFor>`/`id` pair for the label. Sections render `Flex`/`Typography.Title` (flat), `Card variant="outlined"` (panel), or `Collapse` via the **items API** (collapsible, since children-panels are deprecated in antd 5+). **No provider is required** (`ConfigProvider` is optional theming), and antd 6 peers `react >=18`, so React 19 needs no patch. antd **5** on React 19 does require importing `@ant-design/v5-patch-for-react-19` in the host app, which is one reason only v6 is a target. antd takes no version suffix (`antd@6` is the explicit spelling; older majors fail with an explanation). The output is proven to typecheck against the real v6 declarations, both layouts, by the version matrix described below.
+Supported schema surface: `string`, `number`/`int`, `boolean`, `date`, `enum`, unions of
+string literals, `object`, `array`, and `tuple`, with `.optional()`, `.nullable()`,
+`.default()`, and `.pipe()` unwrapped. Anything outside it degrades **loudly**, to a text
+field with a `// TODO` naming what was skipped, so the file still compiles. See
+[how unsupported shapes degrade](https://scrumrot.github.io/formstand/documentation/cli/reference#how-unsupported-shapes-degrade).
 
-### The UI-kit version matrix (pre-release check)
+## UI kits
 
-`cli/matrix/` is an isolated workspace that installs every supported `@mui/material` major side by side (npm aliases `mui5` through `mui9`) plus `@chakra-ui/react` v3 (alias `chakra3`), `@mantine/core` v9 (alias `mantine9`, with its `@mantine/hooks` peer), and `antd` v6 (alias `antd6`). It typechecks freshly generated `--ui mui@N`, `--ui chakra`, `--ui mantine`, and `--ui antd` output against each package's real type declarations: both layouts, all three section styles in each layout (single-file: flat, panel@2col, collapsible@3col; module: flat, panel@2col, collapsible@2col), under `strict` **plus `exactOptionalPropertyTypes`**, since several kits type optional props without `| undefined`. It also runs literal-attribute probes for the props that hide behind JSX spreads: the TextField slot-props delta, chakra's Input/NativeSelect/Switch surfaces, mantine's TextInput/NativeSelect/Switch surfaces, and antd's Input/Select/Checkbox surfaces, including the value-shaped Select onChange restated with its explicit parameter type. The install-staleness gate derives from the job list itself, so adding a kit without installing its alias fails loudly instead of silently typechecking against the repo root's copy:
+| `--ui` | Target | What your app supplies |
+| --- | --- | --- |
+| `plain` | formstand's own components | nothing |
+| `mui` | Material UI 5, 6, 7, or 9 | `@mui/material` and your theme |
+| `shadcn` | shadcn/ui conventions | components from `npx shadcn add` |
+| `chakra` | Chakra UI v3 | `@chakra-ui/react` v3 and a `ChakraProvider` |
+| `mantine` | Mantine v9 | `@mantine/core` v9 and a `MantineProvider` |
+| `antd` | Ant Design v6 | `antd` v6, no provider |
 
-```bash
-cd cli/matrix && npm install   # once; a chunky install, isolated from the root/cli installs
-cd .. && npm run matrix        # generates + typechecks against mui@5, 6, 7, 9, chakra@3, mantine@9, and antd@6
-```
+Providers are never emitted, and antd's own `Form`/`Form.Item` is never used, since
+formstand owns the state. Each backend is typechecked against every supported major's
+real declarations before release by the version matrix in `cli/matrix/`. Per-kit binding
+notes are on the
+[UI kits page](https://scrumrot.github.io/formstand/documentation/cli/ui-kits).
 
-Run it before releasing any change to the MUI, chakra, mantine, or antd backends or the version configs. It is deliberately not part of the default `npm test` (it needs the matrix `node_modules`).
+## Beyond the basics
 
-## `--layout module`
+- **[Feature modules](https://scrumrot.github.io/formstand/documentation/cli/layouts#module-layout)**: `--layout module` writes a folder with the schema, pre-wired hooks, one file per field, and one per section, instead of a single file.
+- **[Live and form-prop modes](https://scrumrot.github.io/formstand/documentation/cli/layouts)**: `--live` for search and filter panels that have no submit, `--form-prop` when the page owns the form instance.
+- **[Config and per-field overrides](https://scrumrot.github.io/formstand/documentation/cli/config)**: project defaults in `formstand.config.ts`, plus a `fields` block that swaps a field's control by path, for a string whose suggestions are data rather than a zod enum.
+- **[Custom templates](https://scrumrot.github.io/formstand/documentation/cli/templates)**: `defineTemplate` overrides per-kind field rendering for an in-house design system, inheriting the rest of the scaffold.
+- **[Programmatic API](https://scrumrot.github.io/formstand/documentation/cli/programmatic)**: `formstand-cli/codegen` is browser-safe, with no `fs` and no TypeScript compiler, which is how the playground's Schema builder runs the real emitters client-side. The main entry adds `fromType` and `defineConfig`.
 
-Instead of one file, a feature-module folder in the shape of the [Onboarding playground demo](https://github.com/Scrumrot/formstand/tree/main/examples/src/forms/OnboardingForm):
+## Requirements
 
-```
-ProfileForm/
-  schema.ts        the zod schema (re-exported in zod mode, generated in type mode)
-  types.ts         ProfileSchema / ProfileValues
-  hooks.ts         createForm + createFormHooks(form, "profile"), the pre-wired hook API
-  fields/          one file per scalar leaf: props type + field hook + component
-  sections/        one per top-level object/array: props type + section hook
-                   (path-scoped useProfileIsDirty/IsValid) + component
-  ProfileForm.tsx  the body composing sections and root-level fields
-  index.ts         the folder's public API
-```
-
-`--out` names the folder, creating it if missing, and every destination is checked before anything is written. Without `--out`, all files stream to stdout with `// --- file:` headers. Array sections bind their row fields inline with template paths, and `date` fields get real `DateField` / date-input bindings (formstand >= 0.9). Works with **all six uis**: `plain` modules bind straight through formstand's prop builders, while the five kit uis get a shared adapter file exporting the generic builders and hooks instead of inlining them per file (`adapter.ts` for `mui`/`chakra`/`mantine`, which are pure prop builders plus the number hook, and `adapter.tsx` for `shadcn`/`antd`, whose `FieldError` components render JSX). Requires **formstand >= 0.7** for `createFormHooks`.
-
-```bash
-formstand-gen src/profileSchema.ts --layout module --out src/ProfileForm
-formstand-gen src/types.ts --type Profile --layout module --out src/ProfileForm
-formstand-gen src/profileSchema.ts --ui mui --sections panel --columns 2 --layout module --out src/ProfileForm
-```
-
-## Config file
-
-Project defaults live in `formstand.config.ts` next to where you run the CLI (flags always win):
-
-```ts
-import { defineConfig } from "formstand-cli";
-
-export default defineConfig({
-  ui: "mui",
-  layout: "module",
-  sections: "panel",
-  columns: 2,
-  live: false, // --live default: no-submit forms with onValuesChange
-  formProp: false, // --form-prop default: the page owns the form
-});
-```
-
-`defineConfig` is an identity function with types attached, so you get completion and typo checking in the config file. `ui` accepts the same spellings as `--ui`, including the versioned `"mui@5"` through `"mui@9"`, `"chakra"` (or its explicit spelling `"chakra@3"`), `"mantine"` (or `"mantine@9"`), and `"antd"` (or `"antd@6"`). Pair it with `--watch` for schema-first development: edit the schema, the module regenerates.
-
-### Per-field component overrides (`fields`)
-
-Some fields want a different control than their schema kind implies. The classic case is a string whose suggestion list is **data** rather than a zod enum, such as an ICAO airport field backed by an airport list. The `fields` block names such fields by path and swaps the emitted component:
-
-```ts
-export default defineConfig({
-  fields: {
-    "icao": { component: "autocomplete", optionsProp: true },
-    "crew.*.role": { component: "autocomplete", optionsProp: true }, // array rows via *
-    "aircraft": { component: "autocomplete" }, // enum: select becomes a combobox
-  },
-});
-```
-
-- **Paths** are exact dot paths against the walked schema. A `*` matches one array-index segment, so `"crew.*.role"` is the `role` field of every `crew` row and `"tags.*"` is the rows of a string array. A path that matches nothing is a generation-time **error** (exit 1, nothing written) with near-miss suggestions, the same loud-failure style as a typo'd flag.
-- **Semantic: free text with suggestions.** The field stays a string the user can type freely, and the list only suggests. Strict select-from-list remains the enum/Select default; an override is how you say "this string has known likely values".
-- **Options source rules.** A **string** field requires `optionsProp: true`, since there is no other options source. The generated component then takes a required `{camelPath}Options: readonly string[]` prop, so `"crew.*.role"` becomes `crewRoleOptions` (`*` segments dropped, camel-joined, `Options` appended; name collisions get `2`, `3`, and so on, like every derived identifier). An **enum** field defaults to its baked-in values as the suggestions, and `optionsProp: true` REPLACES them with the prop. Non-string and non-enum fields are errors, as are degraded (TODO'd) fields and, under `--layout module`, fields inside objects nested in array rows.
-- **Per-kit components:**
-
-  | `--ui` | emitted control |
-  | --- | --- |
-  | `plain` | `<input>` + native `<datalist>` (dependency-free) |
-  | `mui` | `Autocomplete` `freeSolo`, bound through the input value (`inputValue`/`onInputChange`); `renderInput` is the kit `TextField` with label/error/helper |
-  | `shadcn` | `Input` + native `<datalist>` (shadcn's combobox is a copy-paste recipe, not an installable component) |
-  | `chakra` | `Input` plus a native `<datalist>` inside `Field.Root` (Chakra 3's `Combobox` is Ark's collection-API compound component, out of proportion for generated suggestions) |
-  | `mantine` | `Autocomplete` (natively this semantic: `value: string`, `onChange(value)`, `data`) |
-  | `antd` | `AutoComplete` (value-shaped like its Select; `status` for errors; `id={path}` for the focus-helper fallback, since it renders no `name`d input) |
-
-- **Both layouts** thread the options prop from the top-level component down (`--layout module`: form file to section file to row/field files, nested-array extractions included), and it composes with `--live` and `--form-prop`, where the options props join the same generated props type.
-- **Templates:** a custom `--template` owns per-KIND rendering; an overridden field opted out of its kind, so the override emission wins for that field and the template keeps every other one.
-- Each override site in the generated file carries a short comment naming the options source (prop or baked enum values). `component: "autocomplete"` is the only flavor today; the shape leaves room for more.
-
-## Custom templates
-
-For a UI kit formstand doesn't ship built in, an in-house design system say, a **template** overrides the per-kind field rendering while inheriting the generated form's scaffold: sections, arrays, discriminated unions, submit. A UI kit differs in its field components, not in the form skeleton. (The sketch below targets Mantine for familiarity. Mantine now ships built in as `--ui mantine`, so treat it as an illustration of the template surface rather than a recommendation over the built-in backend.)
-
-```ts
-// mantine.template.ts
-import { defineTemplate } from "formstand-cli";
-
-export default defineTemplate({
-  name: "mantine",
-  imports: [{ from: "@mantine/core", names: ["TextInput", "NumberInput", "Select"] }],
-  leaf: {
-    string: ({ label, bind }) => `<TextInput label={${label}} {...${bind}} />`,
-    number: ({ label, bind }) => `<NumberInput label={${label}} {...${bind}} />`,
-    enum: ({ label, bind, options }) => `<Select label={${label}} data={${options}} {...${bind}} />`,
-    // string / number / boolean / date / enum. Unlisted kinds fall back to plain
-  },
-});
-```
-
-```bash
-formstand-gen src/profileSchema.ts --template ./mantine.template.ts --out src/ProfileForm.tsx
-```
-
-Each `leaf` renderer receives a context whose fields are **JS-expression strings** to splice into your control's JSX:
-
-- `bind`: the formstand prop-builder spread (`textInputProps(field)` and friends), carrying `name`/`value`/`onChange`/`onBlur`/`aria-invalid`. Spread it: `{...${bind}}`.
-- `field`: the bound `useField` result variable; reference `.error` or `.value` for custom error display.
-- `label`: the field label as an expression, so write `label={${label}}`.
-- `options`: enum only, a `string[]` expression (`data={${options}}`).
-- `description`: the field's captured `.describe()` or JSDoc description as a `string | undefined` expression (a prop reference or a quoted literal), and `""` when the schema carries none, so gate your markup on it.
-
-Unlisted kinds fall back to the plain output, so a template can override only the kinds its kit changes. `--template` overrides `--ui` and currently supports `--layout single` (module support is planned). Set a project default with `template: "./mantine.template.ts"` in `formstand.config.ts`.
-
-## Supported schema surface
-
-`string`, `number`/`int`, `boolean`, `date`, `enum`, unions of string literals, `object`, `array`, `tuple`, with `.optional()` / `.nullable()` / `.default()` / `.pipe()` unwrapped.
-
-**Descriptions become helper text.** A field's zod `.describe("1,000 lbs")` or `.meta({ description })` (one registry store in zod v4, so the last call wins; across wrappers the outermost entry present wins, so both `z.number().describe(...).optional()` and `z.number().optional().describe(...)` capture) becomes the control's helper text in both layouts, union variant fields and tuple elements included. In type mode the member's leading JSDoc description is used instead, re-emitted into the generated schema as `.describe()`. Per-kit slot: mui `helperText={fieldError(field) ?? description}`, where the error keeps the one slot while present; shadcn a muted `<p>` and antd a `Typography.Text type="secondary"` line, each rendered only when there is no error; chakra `Field.HelperText` under the same guard; mantine the native `description` prop, which has its own slot and coexists with `error`; plain an always-visible `<p className="zf-help">`, since formstand's built-in components own the error line internally. Booleans render it on shadcn/mantine/plain and are skipped where the control has no slot (mui `FormControlLabel`/`Switch`, chakra `Switch.Root`, antd's bare `Checkbox`). Custom templates get it as `ctx.description`, an expression like `ctx.label`, empty when absent. `.meta` adornments (unit prefix and suffix elements) are not generated, because the kits' adornment APIs are mutually incompatible and helper text covers the units case. Anything else falls back to a string field with a `// TODO:` comment so the file still compiles. `date` fields emit a real `DateField` (plain) or date-input binding (mui, shadcn) with no TODO, on formstand >= 0.9. `tuple` fields (`z.tuple([...])` or `[A, B]`) render fixed positional controls bound at static numeric-index paths (`coord.0`, `coord.1`) in both layouts, and a non-scalar tuple element degrades to a TODO. Arrays nested inside array rows extract a `useFieldArray`-owning row component at **every** level, recursively (bounded by `--max-depth`), threading each enclosing row's index as a `p0`, `p1`, and so on prop, so `teams[] > members[] > phones[]` all generate in **both** layouts. In `--layout module` each level is a `{Stem}Row`/`{Stem}Rows` pair in the section file; in the single-file layout it is a child `{Stem}Rows` component taking a typed `form` prop above the main component. A non-array shape inside a row (a nested object, union, or tuple) stays a TODO.
-
-Known limitations:
-
-- **Dots in keys**: formstand paths split on `.`, so a field named `"a.b"` is not path-addressable. The key is kept in the zod schema and `initialValues`, but no control is bound: a `{/* TODO: field "a.b" skipped ... */}` comment marks the spot and the CLI prints a warning.
-- **Paths deeper than formstand's typed budget**: `FieldPath` stops at **9 segments** by default, and the CLI's budget matches the library default (an array level spends two segments, name plus row index), so a binding whose full path would exceed that degrades to a `{/* TODO: path ... exceeds formstand's typed FieldPath depth (9); bind by hand */}` comment plus a CLI warning. The subtree is still materialized in the zod schema and `initialValues`, and paths exactly at the limit bind normally. The two budgets interlock: the WALKER's default nesting budget is derived as path budget plus 2 (= 11), one level past the path budget, so at default flags a leaf of up to 10 segments is walked truthfully and degrades through the path budget, giving a real, correctly typed subtree with a depth TODO. A leaf **deeper than that** (11 or more segments at default flags, or past an explicit `--max-depth`) is truncated by the walker instead: it degrades to a string-kind placeholder whose kind and flags may no longer match the schema. The file still compiles, since a truncated leaf forces the `as unknown as` cast on `initialValues`, and the CLI prints a per-path walker-truncation warning telling you to raise `--max-depth` or bind by hand. The library can widen a form's budget via `createForm`'s type-level `pathDepth` option; a matching `--path-depth` flag is not implemented yet, so bind those paths by hand for now.
-- **Tuple elements** that aren't scalar (an object, array, union, or nested tuple at a tuple position), and a tuple's **variadic rest** (`z.tuple([...], rest)`), degrade to a `// TODO` at that position, while the fixed scalar positions still generate. **Methods and callable types** are skipped or degraded to a string field the same way.
-
-## Programmatic API
-
-The generator is exposed as two entry points.
-
-**`formstand-cli/codegen`** is the browser-safe surface. Everything downstream of the IR is a pure string builder, with no `fs`/`path` and no TypeScript compiler, so this subpath runs anywhere: a browser, a build script, your own tool. The pipeline is `zod schema -> fromZod -> FieldSpec IR -> emitters`. Build a `FieldSpec` by hand or from `fromZod`, then run any emitter:
-
-```ts
-import { fromZod, emitPlainForm, emitModuleForm, emitZodSchema } from "formstand-cli/codegen";
-
-const ir = fromZod(profileSchema);
-const code = emitPlainForm({
-  ir,
-  formName: "ProfileForm",
-  schemaImport: { name: "profileSchema", from: "./profileSchema", kind: "named" },
-});
-```
-
-This is exactly how the docs' [Schema builder](https://scrumrot.github.io/formstand/examples/#/schema-builder) generates forms client-side. Exports: `fromZod` / `isZodSchema`, `emitPlainForm` / `emitMuiForm` / `emitShadcnForm` / `emitTemplateForm` / `emitModuleForm`, `emitZodSchema` / `emitInitialValues`, `joinModuleFiles`, `defineTemplate`, `labelFromName` and the casing helpers, and the `FieldSpec` / `EmitFormOptions` / `VisualOptions` types.
-
-**`formstand-cli`** (the main entry) re-exports all of the above **and** adds the parts that need Node / the TypeScript compiler:
-
-```ts
-import { fromType, defineConfig } from "formstand-cli";
-
-const { ir, typeName } = fromType("./types.ts", "Profile"); // parses TS via the compiler
-```
-
-Import from `formstand-cli/codegen` for a browser bundle. The main entry pulls the TypeScript compiler through `fromType` and won't bundle for the browser.
+- **formstand >= 0.3.0** for the kit backends, **>= 0.7** for `--layout module`, and
+  **>= 0.9** for `date` fields. Plain single-file output works on 0.2.0.
+- **zod v4** in your project. The CLI walks your schema structurally and does not ship
+  zod itself, so the schema module and the generated code both use your copy.
 
 ## License
 
