@@ -11,17 +11,17 @@ It is a one-shot generator. The file it writes is yours: no markers, no regenera
 
 ## Why use it
 
-**The schema stays the single source of truth.** You already wrote the shape, the optionality, the enum options, and the validation rules in zod. The generator reads that same schema and binds it, so the form cannot disagree with the contract it validates against.
+You already wrote the shape, the optionality, the enum options, and the validation rules once, in zod. The generator reads that same schema and binds it, which is the whole point: the form cannot disagree with the contract it validates against, because there is only one description of the data.
 
-**It writes the tedious 80% correctly the first time.** Blank values that match each field's kind (`""`, `false`, `null` for nullables, `[]` for arrays), `aria-invalid` and `aria-describedby` on every control, stable row keys on array items, a submit handler that already calls `preventDefault`. This is the part that is boring to type and easy to get subtly wrong.
+What it saves you is the boring 80% that is also easy to get subtly wrong. Blank values matching each field's kind (`""`, `false`, `null` for nullables, `[]` for arrays). `aria-invalid` and `aria-describedby` on every control. Stable row keys on array items. A submit handler that already calls `preventDefault`. None of that is hard, and all of it is tedious enough that it drifts.
 
-**It speaks your UI kit.** The same schema emits plain formstand components, Material UI, shadcn/ui, Chakra, Mantine, or Ant Design. Only [`--ui`](./ui-kits) changes. Each backend is typechecked against the real declarations of every supported major before release.
+The same schema emits plain formstand components, Material UI, shadcn/ui, Chakra, Mantine, or Ant Design; only [`--ui`](./ui-kits) changes. Every backend is typechecked against the real declarations of each supported major before a release ships, so the output compiles against the kit you actually have installed.
 
-**It scales past the point where hand-writing stops being fun.** A 40-field schema with three nested sections and two array levels takes one command. In [module layout](./layouts#module-layout) you get a feature folder with one file per field and per section instead of a 600-line component.
+It also scales past the point where writing forms by hand stops being fun. A 40-field schema with three nested sections and two array levels is one command, and [module layout](./layouts#module-layout) turns it into a feature folder with a file per field and per section rather than a 600-line component.
 
-**It is cheap for agents to drive.** A coding agent that would otherwise spend thousands of tokens emitting a form can run one deterministic command and get output that already compiles. Flags map to the choices an agent would otherwise guess at.
+Coding agents get an outsized win here. An agent that would otherwise spend thousands of tokens emitting a form can run one deterministic command instead and get output that already compiles, with flags standing in for the choices it would otherwise have to guess.
 
-**No lock-in.** Generated output imports nothing from `formstand-cli`. Delete the tool, keep the code.
+There is no lock-in to worry about, either. Generated output imports nothing from `formstand-cli`, so you can delete the tool and keep the code.
 
 ## A minute-long tour
 

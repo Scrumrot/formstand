@@ -10,6 +10,7 @@ All bound components render `name={path}`, `aria-invalid`, `aria-describedby`, a
 | --- | --- | --- |
 | `TextField` | `TextFieldProps` | `input` (`text`/`password`/`email`/`url`/`tel`) |
 | `NumberField` | `NumberFieldProps` | `input type="text" inputMode="decimal"` with partial-entry handling |
+| `DateField` | `DateFieldProps` (adds `min?`, `max?`) | `input type="date"` bound to a `Date`-typed field |
 | `CheckboxField` | `CheckboxFieldProps` | `input type="checkbox"` |
 | `SelectField` | `SelectFieldProps<T>` (`options: SelectFieldOption<T>[]`, `placeholder?`) | `select`, stays controlled while empty |
 
@@ -21,6 +22,7 @@ Pure functions over a `useField` result, for custom markup:
 | --- | --- | --- |
 | `textInputProps(field)` | `TextInputProps` | `<input>` / `<textarea>` |
 | `numberInputProps(field)` | `NumberInputProps` | `<input>` (stateless `type="number"` binding) |
+| `dateInputProps(field)` | `DateInputProps` | `<input type="date">` |
 | `checkboxProps(field)` | `CheckboxProps` | `<input>` |
 | `selectProps(field)` | `SelectProps` | `<select>` |
 
@@ -31,7 +33,11 @@ The rules the built-in bindings follow are exported alongside them, so adapters 
 | `numberToInputText` | `(value: number \| null \| undefined) => string` | canonical display text for a numeric field value (`""` for empty, `null`, or `NaN`) |
 | `parseNumberText` | `(text: string) => ParsedNumberText` | classifies user-typed text: `{ kind: "number", value }` for a finite number, `{ kind: "empty" }` for whitespace-only, `{ kind: "invalid" }` for partial entries (`-`, `1.`, `1e`) and `Infinity` |
 | `emptyValueForSchema` | `(schema: z.ZodType) => null \| undefined` | the empty representation a field's schema accepts: `null` when nullable and not optional, `undefined` otherwise. This is the schema-introspection rule behind [`useField().emptyValue`](./hooks#usefieldreturn-tvalue) |
+| `dateToInputText` | `(value: Date \| null \| undefined) => string` | canonical `"yyyy-MM-dd"` text for a date field value (`""` for empty, `null`, or an invalid `Date`), read from the **local** calendar parts |
+| `parseDateText` | `(text: string) => ParsedDateText` | classifies date-input text: `{ kind: "date", value }` at local midnight, `{ kind: "empty" }`, or `{ kind: "invalid" }` for anything that isn't `"yyyy-MM-dd"` or whose parts roll over, such as `2026-02-31` |
 | `hasFieldError` | `(error: readonly string[] \| undefined) => boolean` | the single predicate for "does this field currently show an error", used by the built-in bindings for `aria-invalid` and error rendering, so an adapter's notion of showing an error can't drift from the library's |
+
+The date pair is the reason a `DateField` value is a **calendar date** rather than an instant. `parseDateText` builds local midnight, because `new Date("2026-06-01")` is UTC midnight and reads back as May 31 anywhere west of Greenwich. Any adapter binding a date picker should go through these two rather than `toISOString()`.
 
 ## `useNumberInput(field)`
 

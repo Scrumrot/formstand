@@ -37,13 +37,13 @@ export const SignupForm = () => {
 
 ## What makes it different
 
-**The schema is not a plugin.** There is no resolver layer to configure. formstand reads the zod schema directly, which is how it can infer paths, validate one field's subschema per keystroke, and know that a nullable field clears to `null` while an optional one clears to `undefined`.
+The schema is not a plugin here. There is no resolver layer to configure, because formstand reads the zod schema directly. That is what lets it infer paths, validate one field's subschema per keystroke, and know that a nullable field clears to `null` while an optional one clears to `undefined`.
 
-**Two error channels that can't clobber each other.** Validation owns one, your app owns the other. A background revalidation pass physically cannot wipe the "username taken" message your server just returned. See [Errors](./errors).
+Errors live in two channels that cannot clobber each other. Validation owns one, your app owns the other, so a background revalidation pass physically cannot wipe the "username taken" message your server just returned. [Errors](./errors) covers the full contract.
 
-**Derived state instead of bookkeeping.** Dirtiness is computed by comparing values against initial values, so it can't drift out of sync, and `diff()` hands you a PATCH-ready payload of exactly what changed.
+Wherever state can be derived, it is. Dirtiness is computed by comparing values against initial values rather than tracked as you write, so it cannot drift out of sync, and `diff()` hands you a PATCH-ready payload of exactly what changed.
 
-**A generator that speaks the same schema.** [`formstand-cli`](./cli/) turns a schema or a TypeScript type into a working component for plain HTML, Material UI, shadcn/ui, Chakra, Mantine, or Ant Design.
+And the generator speaks the same schema. [`formstand-cli`](./cli/) turns a schema, or a TypeScript type, into a working component for plain HTML, Material UI, shadcn/ui, Chakra, Mantine, or Ant Design.
 
 ## Where to start
 

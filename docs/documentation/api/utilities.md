@@ -19,6 +19,12 @@ shouldValidateOn(trigger, mode, reValidateMode, submitAttempted, touched?): bool
 
 `shouldValidateOn` is the mode-resolution rule the hooks use. `trigger` is `"change"` or `"blur"`, and `reValidateMode` replaces `mode` once `submitAttempted` is true.
 
+```ts
+persistForm(form, key, options?): PersistHandle   // debounced draft save + restore
+```
+
+`persistForm` is the autosave recipe as a helper: it saves a debounced draft under `key` and restores it on the next load. Storage defaults to `localStorage` and is structural, so `sessionStorage` or any `{ getItem, setItem, removeItem }` works. See [Persistence](../state#persistence) for the `apply` modes and the SSR caveat.
+
 ## Exported types
 
 Everything importable via `import type { ... } from "formstand"`:
@@ -28,8 +34,10 @@ Everything importable via `import type { ... } from "formstand"`:
 - **Paths:** `PathSegment`, `FieldPath`, `FieldValue`, `PathDepth` (the legal `pathDepth` budgets, the literals 0–25), `DefaultPathDepth` (the default budget, 9)
 - **Validation:** `ValidationResult`, `SettledValidationResult`, `FieldValidationResult`, `SettledFieldValidationResult`, `FieldsValidationResult`, `SettledFieldsValidationResult`, `ValidationMode`, `ValidationTrigger`
 - **Hooks:** `FormStateApi`, `UseFieldReturn`, `FieldFormApi`, `FieldPathArg`, `UseFieldOptions`, `UseFieldArrayReturn`, `FieldArrayFormApi`, `FieldArrayEntry`, `FormProviderProps`, `FormContextApi`
-- **Components:** `TextFieldProps`, `NumberFieldProps`, `CheckboxFieldProps`, `SelectFieldProps`, `SelectFieldOption`, `FieldRef`, `PathsOf`, `NumberInputBinding` (what [`useNumberInput`](./components#usenumberinput-field) returns)
-- **Prop builders:** `TextInputProps`, `NumberInputProps`, `CheckboxProps`, `SelectProps`, `ParsedNumberText`
+- **Components:** `TextFieldProps`, `NumberFieldProps`, `DateFieldProps`, `CheckboxFieldProps`, `SelectFieldProps`, `SelectFieldOption`, `FieldRef`, `PathsOf`, `NumberInputBinding` (what [`useNumberInput`](./components#usenumberinput-field) returns)
+- **Prop builders:** `TextInputProps`, `NumberInputProps`, `DateInputProps`, `CheckboxProps`, `SelectProps`, `ParsedNumberText`, `ParsedDateText`
+- **Persistence:** `PersistOptions`, `PersistStorage`, `PersistHandle` (see [`persistForm`](../state#persistence))
+- **Pre-wired hooks:** `BoundUseField`, `BoundUseFieldArray`, `BoundUseSelector`, `BoundUseFlag`, the hook shapes [`createFormHooks`](../state#pre-wired-hooks-createformhooks) returns
 
 ## The structural form interfaces
 
