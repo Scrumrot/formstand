@@ -105,18 +105,37 @@ the CLI from two UI targets to six, and make the docs match.
   CLI currently has two dependencies (`jiti`, `typescript`), so a prompts
   library is a real addition to weigh against hand-rolled `readline`.
 
-- **Generated tests.** A `--tests` flag emitting a spec beside the component:
-  it renders, every field is present and labelled, a required field reports
-  its message, submit calls the handler with parsed data. Mechanical to
-  generate and genuinely useful, since it is the coverage nobody writes by
-  hand.
+- **Generated tests.** A spec emitted beside the component: it renders, every
+  field is present and labelled, a required field reports its message, submit
+  calls the handler with parsed data. Mechanical to generate and genuinely
+  useful, since it is the coverage nobody writes by hand. The schema already
+  knows what to assert.
 
-  The open questions are which runner to target (the repo is vitest plus
-  Testing Library, but users are on jest and playwright too, so this probably
-  starts as `--tests vitest` rather than a boolean) and how to avoid emitting
-  tests that assert trivia. A suite that only proves the component renders is
-  maintenance cost dressed as confidence; the value is in the validation and
-  submit paths, which is exactly the part that needs the schema to write.
+  **A list of runners, not a choice.** `--tests vitest`, `jest`,
+  `playwright`, or any combination, because a project can legitimately want
+  both a component spec and an e2e spec. That means the flag takes a list and
+  the config file grows a `tests` block, the way `ui`/`layout` already work.
+
+  **Combos are not the same test twice.** Vitest and Jest generate a
+  component spec (render, fill, assert against the schema's messages);
+  Playwright generates a browser spec (navigate, fill by label and role,
+  assert visible text). Different tests, not one template with syntax
+  variants. The shape that fits is the one the generator already uses for
+  components: derive the *cases* from the schema once (required fields,
+  min/max, enum options, array minimums) into an IR, then emit per runner.
+
+  **Custom config is a requirement, not a nicety, for kit output.** The
+  generator deliberately never emits providers, so a generated MUI, Chakra, or
+  Mantine component does not render without the app's theme or provider
+  wrapper. A generated test that calls a bare `render()` therefore fails on
+  the first line for exactly the targets people most want tests for. So the
+  `tests` block needs to accept the project's own setup: a custom render
+  wrapper, a setup file, Playwright fixtures, a base URL.
+
+  The remaining question is how not to emit tests that assert trivia. A suite
+  proving only that the component renders is maintenance cost dressed as
+  confidence; the value is in the validation and submit paths, which are the
+  parts that need the schema to write.
 
 - **A browser-extension devtools.** The in-page panel proves the display; an
   extension would add store discovery, a page bridge, and cross-context
