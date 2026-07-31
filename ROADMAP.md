@@ -66,6 +66,21 @@ the CLI from two UI targets to six, and make the docs match.
   this. The fix belongs in the emitters (a minmax/auto-fit track, or a
   breakpoint per kit dialect), which changes output for every CLI user, so it
   wants a deliberate design pass rather than a patch.
+- **Layout control.** Today layout is two coarse flags, `--sections` and
+  `--columns`, applied uniformly to a whole form. The ask is real control:
+  flexbox and CSS grid, or the kit's own layout components (MUI `Grid`, Chakra
+  and Mantine `SimpleGrid`, antd `Row`/`Col`), and per-field or per-section
+  placement rather than one column count for everything (this field spans two,
+  these three sit in a row).
+
+  Some of the machinery exists: every kit backend already emits that kit's
+  layout dialect for `--columns`. What is missing is a way to *say* what the
+  layout should be. The `fields` block in `formstand.config.ts` is the obvious
+  home, since it already addresses fields by path for component overrides, but
+  it is worth deciding whether layout belongs in config, in schema `.meta()`,
+  or both before building either. This is also where the responsive item above
+  gets solved properly rather than patched, so the two want designing together.
+
 - **StackBlitz links.** "Open in StackBlitz" from docs examples and playground
   tabs, seeded with the demo source plus formstand from npm.
 - **Brand collateral.** OG images for docs and playground pages, and a README
@@ -76,6 +91,32 @@ the CLI from two UI targets to six, and make the docs match.
   errors, theme/CSS API changes to chase. Migrate when v2 stabilizes.
 
 ## Later / parking lot
+
+- **An interactive CLI wizard.** `formstand-gen --wizard` walking through the
+  questions the flags ask: which file, which export, which kit, which layout,
+  where to write it. The flag semantics are already modelled once, in the
+  playground's CLI command builder tab, so the wizard is the terminal port of
+  something that exists rather than a fresh design.
+
+  Two constraints to respect. It must be **explicitly opt-in**, never
+  triggered by a bare `formstand-gen` or by a TTY check: the CLI streams to
+  stdout by default and is meant to be scriptable, and a prompt that appears
+  when a pipe does not would break both CI and any agent driving it. And the
+  CLI currently has two dependencies (`jiti`, `typescript`), so a prompts
+  library is a real addition to weigh against hand-rolled `readline`.
+
+- **Generated tests.** A `--tests` flag emitting a spec beside the component:
+  it renders, every field is present and labelled, a required field reports
+  its message, submit calls the handler with parsed data. Mechanical to
+  generate and genuinely useful, since it is the coverage nobody writes by
+  hand.
+
+  The open questions are which runner to target (the repo is vitest plus
+  Testing Library, but users are on jest and playwright too, so this probably
+  starts as `--tests vitest` rather than a boolean) and how to avoid emitting
+  tests that assert trivia. A suite that only proves the component renders is
+  maintenance cost dressed as confidence; the value is in the validation and
+  submit paths, which is exactly the part that needs the schema to write.
 
 - **A browser-extension devtools.** The in-page panel proves the display; an
   extension would add store discovery, a page bridge, and cross-context
