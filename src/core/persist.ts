@@ -87,11 +87,16 @@ const kindOf = (value: unknown): string =>
 // other: no edit produces that, only a changed schema. Renames and removals
 // are the `version` option's job.
 const conflictsWith = (draft: unknown, reference: unknown): boolean => {
+  // null and undefined carry NO shape information, on either side. null is the
+  // canonical empty for a nullable field (see emptyValue), so it can legally
+  // appear at any nullable path whatever that path's filled shape is: a
+  // nullable object starting null and then filled in, or starting filled and
+  // then cleared, are both ordinary edits. Reading either as a kind conflict
+  // would discard the drafts of every form with a nullable field.
+  if (draft === undefined || draft === null) return false;
+  if (reference === undefined || reference === null) return false;
   const draftKind = kindOf(draft);
   const referenceKind = kindOf(reference);
-  // An absent reference slot says nothing: the form may simply hold undefined
-  // there. Same for an absent draft slot.
-  if (draft === undefined || reference === undefined) return false;
   if (draftKind !== referenceKind) return true;
   if (draftKind === "array") {
     const [d] = draft as readonly unknown[];
@@ -166,6 +171,10 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
         readonly values?: unknown;
       };
       if (versioned && wrapper.__v !== options.version) return false;
+      // A wrapper with no payload is not a draft. Only reachable via tampered
+      // or foreign storage, but applying it would write undefined over the
+      // whole values object.
+      if (versioned && wrapper.values === undefined) return false;
       const values = (versioned ? wrapper.values : parsed) as z.input<TSchema>;
       // A draft whose shape conflicts with the form's is from another schema.
       // Applying it would rebase the form onto values it cannot validate, and

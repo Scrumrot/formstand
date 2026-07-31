@@ -89,6 +89,41 @@ describe("a draft from a different schema shape", () => {
     expect(form.getState().values.bio).toBe("engineer");
   });
 
+  // null is the canonical empty for a nullable field, so it can appear at any
+  // nullable path whatever that path's filled shape is. An earlier version of
+  // this guard read null-vs-object as a kind conflict, which silently
+  // discarded the drafts of every form with a nullable field.
+  it("does NOT reject a nullable that started null and was filled in", () => {
+    storage.map.set("k", JSON.stringify({ address: { city: "London" } }));
+    const form = createForm(
+      z.object({ address: z.object({ city: z.string() }).nullable() }),
+      { initialValues: { address: null } },
+    );
+    const handle = persistForm(form, { key: "k", storage, apply: "manual" });
+    expect(handle.restore()).toBe(true);
+    expect(form.getState().values.address).toEqual({ city: "London" });
+  });
+
+  it("does NOT reject a nullable that started filled and was cleared", () => {
+    storage.map.set("k", JSON.stringify({ address: null }));
+    const form = createForm(
+      z.object({ address: z.object({ city: z.string() }).nullable() }),
+      { initialValues: { address: { city: "London" } } },
+    );
+    const handle = persistForm(form, { key: "k", storage, apply: "manual" });
+    expect(handle.restore()).toBe(true);
+    expect(form.getState().values.address).toBeNull();
+  });
+
+  it("does NOT reject a cleared nullable leaf", () => {
+    storage.map.set("k", JSON.stringify({ age: null }));
+    const form = createForm(z.object({ age: z.number().nullable() }), {
+      initialValues: { age: 30 },
+    });
+    const handle = persistForm(form, { key: "k", storage, apply: "manual" });
+    expect(handle.restore()).toBe(true);
+  });
+
   it("restores a half-filled draft the full schema would reject", () => {
     // A draft is work in progress. Validating it against the schema before
     // applying would throw away exactly the drafts worth keeping.
@@ -171,6 +206,52 @@ describe("version", () => {
       apply: "manual",
     });
     expect(handle.restore()).toBe(false);
+  });
+
+  it("round-trips values that themselves contain a __v key", () => {
+    // The wrapper key could collide with real user data. It does not, because
+    // the payload is nested under `values` rather than merged.
+    const form = createForm(z.object({ __v: z.string() }), {
+      initialValues: { __v: "" },
+    });
+    const w = persistForm(form, {
+      key: "k",
+      storage,
+      version: 1,
+      debounceMs: 0,
+      apply: "manual",
+    });
+    form.setValue("__v", "user data");
+    w.dispose();
+
+    const later = createForm(z.object({ __v: z.string() }), {
+      initialValues: { __v: "" },
+    });
+    const r = persistForm(later, {
+      key: "k",
+      storage,
+      version: 1,
+      apply: "manual",
+    });
+    expect(r.restore()).toBe(true);
+    expect(later.getState().values.__v).toBe("user data");
+  });
+
+  it("ignores a wrapper carrying no payload", () => {
+    // Tampered or foreign storage. Applying it would write undefined over the
+    // entire values object.
+    storage.map.set("k", JSON.stringify({ __v: 1 }));
+    const form = createForm(z.object({ a: z.string() }), {
+      initialValues: { a: "keep me" },
+    });
+    const handle = persistForm(form, {
+      key: "k",
+      storage,
+      version: 1,
+      apply: "manual",
+    });
+    expect(handle.restore()).toBe(false);
+    expect(form.getState().values.a).toBe("keep me");
   });
 
   it("leaves the stored format unchanged when no version is set", () => {
