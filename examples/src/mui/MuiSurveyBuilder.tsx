@@ -238,7 +238,11 @@ const SectionEditor = ({
   return (
     <Card variant="outlined">
       <CardContent>
-        <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start" }}>
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={1}
+          sx={{ alignItems: { xs: "stretch", sm: "flex-start" } }}
+        >
           <TextField
             label={`Section ${index + 1} title`}
             size="small"
@@ -361,9 +365,9 @@ export const MuiSurveyBuilder = () => {
       </Typography>
 
       <Stack
-        direction="row"
+        direction={{ xs: "column", sm: "row" }}
         spacing={1}
-        sx={{ mb: 2, alignItems: "center" }}
+        sx={{ mb: 2, alignItems: { xs: "stretch", sm: "center" } }}
       >
         <TextField
           label="Survey title"

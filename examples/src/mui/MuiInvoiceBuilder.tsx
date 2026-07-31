@@ -226,8 +226,11 @@ export const MuiInvoiceBuilder = () => {
         {...muiTextFieldProps(customer)}
       />
 
-      <TableContainer>
-        <Table size="small">
+      {/* A five-column table can't stack, so below ~600px it scrolls sideways
+        * inside its own container rather than collapsing its cells to 20px.
+        * minWidth keeps the columns legible while that scroll happens. */}
+      <TableContainer sx={{ overflowX: "auto" }}>
+        <Table size="small" sx={{ minWidth: 520 }}>
           <TableHead>
             <TableRow>
               <TableCell>Description</TableCell>

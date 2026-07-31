@@ -43,7 +43,11 @@ const ContactRow = ({
   );
   const phone = useOnboardingField(`emergencyContacts.${index}.phone`);
   return (
-    <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start" }}>
+    <Stack
+      direction={{ xs: "column", sm: "row" }}
+      spacing={1}
+      sx={{ alignItems: { xs: "stretch", sm: "flex-start" } }}
+    >
       <TextField label="Name" {...muiTextFieldProps(name)} />
       <TextField label="Relationship" {...muiTextFieldProps(relationship)} />
       <TextField label="Phone" type="tel" {...muiTextFieldProps(phone)} />

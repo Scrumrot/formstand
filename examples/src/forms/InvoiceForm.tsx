@@ -42,6 +42,7 @@ const LineItemRow = ({ form, index, onRemove }: LineItemRowProps) => {
 
   return (
     <div
+      className="array-item"
       style={{
         display: "grid",
         gridTemplateColumns: "2fr 1fr 1fr auto auto",
