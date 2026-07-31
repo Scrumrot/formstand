@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`formstand/devtools`**: a form-aware debugging panel, `<FormstandDevtools
+  form={form} />`, shipped as a subpath of the existing package so there is
+  nothing extra to install and no version to keep in step. It renders one row
+  per leaf path with the value, error, and touched/dirty/validating flags;
+  surfaces the errors that belong to no field (the root `""` key, array-level
+  messages, server verdicts on paths that hold no value yet); shows the two
+  error channels separately, including whether a server verdict is visible or
+  sitting behind a schema message at the same key; renders `diff()` as a live
+  PATCH preview; and wires `snapshot()`/`restore()` to buttons for time
+  travel. Renders nothing in production builds, on the same `NODE_ENV` gate
+  `createForm`'s `devtools` option uses.
+
+  It complements rather than replaces that option: the Redux DevTools
+  extension gives a cross-store action log but only ever sees the merged error
+  map, which is exactly the distinction this panel exists to show. Dirtiness
+  comes from `getFieldState` so the panel can't disagree with `useIsDirty`,
+  and styling is inline so no host stylesheet can restyle it into lying.
+
 ## formstand-cli 0.10.1 — 2026-07-30
 
 ### Fixed

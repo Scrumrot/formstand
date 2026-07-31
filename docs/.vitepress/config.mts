@@ -90,6 +90,7 @@ export default defineConfig({
             { text: "Field arrays", link: "/documentation/field-arrays" },
             { text: "Form state & lifecycle", link: "/documentation/state" },
             { text: "Recipes", link: "/documentation/recipes" },
+            { text: "Devtools", link: "/documentation/devtools" },
             { text: "SSR & Next.js", link: "/documentation/ssr" },
           ],
         },
