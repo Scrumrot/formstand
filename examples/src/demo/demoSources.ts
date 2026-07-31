@@ -8,6 +8,7 @@ import autosaveSrc from "../forms/AutosaveForm.tsx?raw";
 import basicSrc from "../forms/BasicForm.tsx?raw";
 import boundSrc from "../forms/BoundFieldsForm.tsx?raw";
 import cliCommandSrc from "../forms/CliCommandBuilder.tsx?raw";
+import onboardingInputSchemaSrc from "../forms/OnboardingForm/schema.ts?raw";
 import antdOnboardingSrc from "../generated/AntdOnboardingForm.tsx?raw";
 import chakraOnboardingSrc from "../generated/ChakraOnboardingForm.tsx?raw";
 import deepBoundarySrc from "../generated/DeepBoundaryForm.tsx?raw";
@@ -126,14 +127,26 @@ const onboardingShadcnFiles = moduleFiles(
   "../shadcn/OnboardingForm/",
 );
 
-const generatedMuiFiles = moduleFiles(
-  import.meta.glob("../generated/OnboardingForm/**/*.{ts,tsx}", {
-    query: "?raw",
-    import: "default",
-    eager: true,
-  }),
-  "../generated/OnboardingForm/",
-);
+// In zod mode the CLI RE-EXPORTS the input schema rather than copying it, so
+// this module's schema.ts is one line pointing at ../../forms/OnboardingForm.
+// That file is outside the glob, which left the flagship "here is what the
+// generator emits" demo unable to show the schema that drove it — the one
+// file a reader most wants. Append the input alongside the module's own
+// files, pathed so it reads as the input rather than part of the output.
+const generatedMuiFiles: readonly DemoFile[] = [
+  ...moduleFiles(
+    import.meta.glob("../generated/OnboardingForm/**/*.{ts,tsx}", {
+      query: "?raw",
+      import: "default",
+      eager: true,
+    }),
+    "../generated/OnboardingForm/",
+  ),
+  {
+    path: "(input) forms/OnboardingForm/schema.ts",
+    source: stripHarness(onboardingInputSchemaSrc),
+  },
+];
 
 const kitchenSinkFiles = moduleFiles(
   import.meta.glob("../generated/KitchenSinkForm/**/*.{ts,tsx}", {
