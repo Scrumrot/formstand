@@ -119,6 +119,20 @@ drafts.dispose();
 
 `apply: "restore"` loads the draft as *edits*, meaning dirty against the original initial values, instead of rebasing. `apply: "manual"` never auto-applies, so you call the returned `restore()` yourself. Storage defaults to `localStorage` and is structural, so `sessionStorage` or any `{ getItem, setItem, removeItem }` works. Every storage touch is guarded, so private-mode failures just skip persistence, corrupt drafts return `false` from `restore()` instead of throwing, and (same caveat as the recipe) drafts round-trip through JSON, so they are for JSON-safe values: a `Date` comes back as a string. In SSR apps, call it inside an effect: see [SSR & Next.js](./ssr).
 
+### Drafts that outlive the schema
+
+A stored draft can be older than the schema reading it. `persistForm` will not apply a draft whose shape conflicts with the form's: a path holding a string where the form expects an object, or an array of strings where it expects rows. No ordinary edit produces that, only a changed schema, and applying it would rebase the form onto values it cannot validate while `adopt` cleared the errors, so it would read clean while holding them.
+
+The guard compares only overlapping paths, and only their kinds. It deliberately does **not** treat a missing key as evidence: JSON drops undefined slots, so an optional the user never filled is absent from the reference and an optional they did fill is present only in the draft. Neither means the schema changed, and rejecting on that would throw away good drafts from any form with an optional field.
+
+That leaves renames and removals, which are indistinguishable from optionals. Set `version` for those:
+
+```ts
+persistForm(form, { key: "checkout", version: 2 });
+```
+
+The version is stored with the draft and a mismatch discards it. Leave it unset and the stored format is byte-identical to before, so existing drafts survive an upgrade. One limit worth knowing: an empty initial array (`tags: []`) carries no information about its row shape, so a draft with the wrong row shape passes the automatic guard. `version` is the answer there.
+
 ## Redux DevTools
 
 The store is zustand underneath, so the Redux DevTools extension works with one option:

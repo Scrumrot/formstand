@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **`persistForm` no longer applies a draft from a different schema shape.**
+  The stored JSON was cast straight to the values type and adopted, so a draft
+  written before a schema change rebased the form onto values its own schema
+  rejects. Because the default `adopt` mode clears errors and resets the
+  baseline, the form then read **clean** while holding them, which is the worst
+  version of the failure.
+
+  A draft is now ignored when its shape conflicts with the form's: a path
+  holding a string where the form expects an object, an array of strings where
+  it expects rows. Only overlapping paths are compared, and only their kinds,
+  so a half-filled draft still restores (a draft is work in progress and would
+  fail full validation by design), and so does one that filled an optional the
+  initial values left empty.
+
+### Added
+
+- **`persistForm`'s `version` option.** Renames and removals are invisible to
+  the shape guard above, because JSON drops undefined slots and an absent key
+  is indistinguishable from an unfilled optional. `version` covers those: it is
+  stored with the draft and a mismatch discards it. Leaving it unset keeps the
+  stored format byte-identical, so existing drafts survive the upgrade.
+
 ## 0.14.0 — 2026-07-31
 
 ### Added

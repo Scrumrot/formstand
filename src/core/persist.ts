@@ -32,6 +32,14 @@ export type PersistOptions<TSchema extends z.ZodType> = Readonly<{
   // Trailing-edge debounce for writes. Default 300; 0 writes synchronously
   // on every change.
   debounceMs?: number;
+  // Bump when the schema's SHAPE changes and old drafts should be discarded
+  // rather than applied. A draft is stored with the version it was written
+  // under and ignored when the two disagree, which is the only reliable way
+  // to catch a renamed or removed field: an absent key is indistinguishable
+  // from an optional the user never filled in, so the automatic guard below
+  // cannot tell those apart. Leaving this unset keeps the stored format
+  // exactly as it was, so existing drafts survive an upgrade.
+  version?: string | number;
   // How a found draft is applied on start, and what restore() does later.
   // "adopt" (default) uses form.adoptValues — the draft becomes the new
   // baseline, so the form reads CLEAN. "restore" uses form.setValues — the
@@ -55,6 +63,49 @@ export type PersistHandle = Readonly<{
   // debounced write.
   dispose: () => void;
 }>;
+
+// The JSON kind of a value, as it exists AFTER a storage round trip. The
+// reference side is round-tripped before comparison rather than special-cased,
+// so a Date (which stores as a string) compares against a string and the
+// documented Date-becomes-string limitation is not mistaken for corruption.
+const kindOf = (value: unknown): string =>
+  value === null
+    ? "null"
+    : Array.isArray(value)
+      ? "array"
+      : typeof value;
+
+// Does the draft CONFLICT with the shape the form expects? Only overlapping
+// paths are compared, and only their kinds.
+//
+// Deliberately not a key-set equality check. JSON drops undefined slots, so an
+// optional the user never filled is absent from the reference, and an optional
+// they did fill is present only in the draft. Neither is evidence of a schema
+// change, so treating a key-set difference as corruption would throw away
+// perfectly good drafts on any form with an optional field. What IS
+// unambiguous is a path holding a string on one side and an object on the
+// other: no edit produces that, only a changed schema. Renames and removals
+// are the `version` option's job.
+const conflictsWith = (draft: unknown, reference: unknown): boolean => {
+  const draftKind = kindOf(draft);
+  const referenceKind = kindOf(reference);
+  // An absent reference slot says nothing: the form may simply hold undefined
+  // there. Same for an absent draft slot.
+  if (draft === undefined || reference === undefined) return false;
+  if (draftKind !== referenceKind) return true;
+  if (draftKind === "array") {
+    const [d] = draft as readonly unknown[];
+    const [r] = reference as readonly unknown[];
+    // Row counts differ for ordinary reasons; the ROW SHAPE is the signal.
+    return conflictsWith(d, r);
+  }
+  if (draftKind === "object") {
+    const d = draft as Record<string, unknown>;
+    const r = reference as Record<string, unknown>;
+    return Object.keys(d).some((key) => conflictsWith(d[key], r[key]));
+  }
+  return false;
+};
 
 // Resolved lazily inside persistForm — never at module scope — so importing
 // this module is SSR-safe. jsdom provides localStorage; node without DOM may
@@ -82,13 +133,49 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
   const applyDraft = (values: z.input<TSchema>): void =>
     apply === "restore" ? form.setValues(values) : form.adoptValues(values);
 
+  // The shape the draft is checked against, in stored form. Round-tripping
+  // the reference through JSON puts both sides in the same representation.
+  const referenceShape = (): unknown => {
+    try {
+      return JSON.parse(JSON.stringify(form.getState().initialValues));
+    } catch {
+      // A non-serializable initial value means we cannot compare; the write
+      // path would have failed too, so let the draft through unchecked
+      // rather than rejecting every draft for this form.
+      return undefined;
+    }
+  };
+
   const restore = (): boolean => {
     // Every storage touch is guarded: private-mode/security errors read as
     // "no draft", corrupt JSON parses as "no draft" — restore never throws.
     try {
       const raw = storage === null ? null : storage.getItem(options.key);
       if (raw === null) return false;
-      applyDraft(JSON.parse(raw) as z.input<TSchema>);
+      const parsed: unknown = JSON.parse(raw);
+      // Versioned drafts are wrapped; unversioned ones are the bare values,
+      // which is the format every existing draft is already in.
+      const versioned =
+        options.version !== undefined &&
+        typeof parsed === "object" &&
+        parsed !== null &&
+        "__v" in parsed;
+      if (options.version !== undefined && !versioned) return false;
+      const wrapper = parsed as unknown as {
+        readonly __v?: unknown;
+        readonly values?: unknown;
+      };
+      if (versioned && wrapper.__v !== options.version) return false;
+      const values = (versioned ? wrapper.values : parsed) as z.input<TSchema>;
+      // A draft whose shape conflicts with the form's is from another schema.
+      // Applying it would rebase the form onto values it cannot validate, and
+      // because "adopt" clears errors, the form would read CLEAN while holding
+      // them. Ignore it instead; the next change overwrites it.
+      const reference = referenceShape();
+      if (reference !== undefined && conflictsWith(values, reference)) {
+        return false;
+      }
+      applyDraft(values);
       return true;
     } catch {
       return false;
@@ -96,9 +183,18 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
   };
 
   const writeDraft = (values: z.input<TSchema>): void => {
-    // Quota/private-mode setItem errors just skip this write.
+    // Quota/private-mode setItem errors just skip this write. The wrapper is
+    // written ONLY when a version is configured, so a form that never opts in
+    // keeps the exact bytes it wrote before and its existing drafts still load.
     try {
-      storage?.setItem(options.key, JSON.stringify(values));
+      storage?.setItem(
+        options.key,
+        JSON.stringify(
+          options.version === undefined
+            ? values
+            : { __v: options.version, values },
+        ),
+      );
     } catch {
       /* persistence is best-effort */
     }
