@@ -53,6 +53,9 @@ export function useIsValid<
 >(form: Form<TSchema, D>, path?: P): boolean;
 export function useIsValid(form: FormStateApi, path?: string): boolean {
   return useStore(form.store, (state) => {
+    // A loop rather than Object.entries().some(): this selector re-runs on
+    // EVERY store change, and the loop exits at the first error without
+    // materializing an entries array for a map that is usually empty.
     for (const k in state.errors) {
       const errs = state.errors[k];
       if (

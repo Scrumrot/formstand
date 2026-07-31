@@ -39,7 +39,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Props types: `export type ComponentNameProps = Readonly<{...}>`
 - Use discriminated unions for variants
 - Leverage the type system to catch errors early and document intent
-- Make omissions compile errors: `switch` on `kind` with **no `default` arm**, and per-variant lookups as exhaustive `Readonly<Record<K, V>>` maps. Adding a variant should break the build, not fall through silently
+- Make omissions compile errors. Where a `switch` must handle **every** variant, omit the `default` arm so a new `kind` fails to compile; per-variant lookups go through exhaustive `Readonly<Record<K, V>>` maps for the same reason. A `default` is fine where the switch deliberately handles a **subset** (only container kinds, say), but comment which subset and why
 
 ### Comments
 
