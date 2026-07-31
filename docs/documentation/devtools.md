@@ -24,7 +24,7 @@ It ships in the `formstand` package as a subpath, so there is nothing extra to i
 
 **Errors without a field.** The root `""` key from a schema-wide `.refine`, array-level messages like `z.array().min(1)` keyed at the container, and server verdicts written at a path that holds no value yet. These are the errors that are hardest to find, because no input on the page is showing them.
 
-**Error channels.** How many entries each channel holds, and for every server error, whether it is currently visible or sitting behind a schema message at the same key. This is the part the Redux DevTools extension cannot show you, because it only ever sees the merged map. See [Errors](./errors) for the model.
+**Error channels.** How many entries each channel holds, and for every server error, whether it is currently visible or sitting behind a schema message at the same key. The Redux DevTools extension does receive `schemaErrors` and `serverErrors`, since they are top-level state, but it shows them as two more maps in a blob; the relationship between them, which is the part you actually need, is left for you to work out by eye. See [Errors](./errors) for the model.
 
 **Diff vs initial.** `form.diff()`, the PATCH-shaped payload of exactly what changed. Reads `clean` when nothing has.
 
@@ -50,7 +50,7 @@ Styling is inline and self-contained. There is no stylesheet to import, and noth
 | | `formstand/devtools` | `devtools: true` |
 | --- | --- | --- |
 | Needs a browser extension | no | yes |
-| Form semantics (per-field rows, split channels) | yes | no, raw state only |
+| Form semantics (per-field rows, channel relationship) | yes | no, raw state only |
 | Action log across every store in the app | no | yes |
 | Lives in your component tree | yes | no |
 

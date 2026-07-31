@@ -20,10 +20,11 @@ shouldValidateOn(trigger, mode, reValidateMode, submitAttempted, touched?): bool
 `shouldValidateOn` is the mode-resolution rule the hooks use. `trigger` is `"change"` or `"blur"`, and `reValidateMode` replaces `mode` once `submitAttempted` is true.
 
 ```ts
-persistForm(form, key, options?): PersistHandle   // debounced draft save + restore
+persistForm(form, options): PersistHandle   // debounced draft save + restore
+// options: { key, storage?, debounceMs?, apply? }
 ```
 
-`persistForm` is the autosave recipe as a helper: it saves a debounced draft under `key` and restores it on the next load. Storage defaults to `localStorage` and is structural, so `sessionStorage` or any `{ getItem, setItem, removeItem }` works. See [Persistence](../state#persistence) for the `apply` modes and the SSR caveat.
+`persistForm` is the autosave recipe as a helper: it saves a debounced draft under `options.key` and restores it on the next load. Storage defaults to `localStorage` and is structural, so `sessionStorage` or any `{ getItem, setItem, removeItem }` works. See [Persistence](../state#persistence) for the `apply` modes and the SSR caveat.
 
 ## Exported types
 
