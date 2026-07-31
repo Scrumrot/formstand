@@ -39,6 +39,11 @@ Everything importable via `import type { ... } from "formstand"`:
 - **Persistence:** `PersistOptions`, `PersistStorage`, `PersistHandle` (see [`persistForm`](../state#persistence))
 - **Pre-wired hooks:** `BoundUseField`, `BoundUseFieldArray`, `BoundUseSelector`, `BoundUseFlag`, the hook shapes [`createFormHooks`](../state#pre-wired-hooks-createformhooks) returns
 
+From the `formstand/devtools` subpath (see [Devtools](../devtools)):
+
+- `FormstandDevtools`, `FormstandDevtoolsProps`, `DevtoolsPosition`
+- `leafPaths(values)` and `unmatchedErrorKeys(errorKeys, leaves)`, the path walk behind the panel's field table. Exported because the behaviour is worth reusing in a custom panel: empty containers count as leaves, array rows get a path each, and `unmatchedErrorKeys` is what surfaces the root `""` key and array-level messages that no field covers.
+
 ## The structural form interfaces
 
 `FieldFormApi`, `FieldArrayFormApi`, and `FormStateApi` are the schema-less form interfaces the hooks accept, which is what lets you write a reusable field component that takes any form. When a real `Form<TSchema>` is passed, the typed overloads bind instead and path inference is preserved.

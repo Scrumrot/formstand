@@ -45,6 +45,8 @@ Wherever state can be derived, it is. Dirtiness is computed by comparing values 
 
 And the generator speaks the same schema. [`formstand-cli`](./cli/) turns a schema, or a TypeScript type, into a working component for plain HTML, Material UI, shadcn/ui, Chakra, Mantine, or Ant Design.
 
+When something is wrong, [the devtools panel](./devtools) shows you the form rather than the store: a row per field, the two error channels kept apart, the live diff against initial values, and snapshot/restore. It is a subpath of the same package and renders nothing in production.
+
 ## Where to start
 
 **New here?** [Getting started](./getting-started) installs the library and builds a first form, then [Typed paths](./typed-paths) explains the piece that makes the rest click.

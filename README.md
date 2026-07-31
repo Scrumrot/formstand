@@ -12,6 +12,7 @@ Zod-schema-first form state for React 19, backed by zustand.
 - **Field arrays** with stable IDs that survive reorders, inserts, and removes.
 - **Bound input components** with the accessibility wiring already done.
 - **A generator**: [`formstand-cli`](https://scrumrot.github.io/formstand/documentation/cli/) writes the whole component from your schema, for six UI kits.
+- **[Devtools](https://scrumrot.github.io/formstand/documentation/devtools)**: `formstand/devtools` is a panel showing every field, both error channels, and the live diff. Renders nothing in production.
 
 ## Install
 
@@ -111,6 +112,7 @@ PATCH-ready payload of exactly what changed.
 | Components | `TextField`, `NumberField`, `DateField`, `CheckboxField`, `SelectField`, the prop builders, `useNumberInput`, `focusField`/`focusFirstError` | [Components & bindings](https://scrumrot.github.io/formstand/documentation/api/components) |
 | Validation | five modes plus `reValidateMode`, field-scoped passes, async refines with race handling, per-field `debounceMs` | [Validation](https://scrumrot.github.io/formstand/documentation/validation) |
 | Utilities | `parsePath`/`getAtPath`/`setAtPath`, `validateSync`/`validateAsync`, `persistForm`, and the full type list | [Utilities & types](https://scrumrot.github.io/formstand/documentation/api/utilities) |
+| Devtools | `<FormstandDevtools form={form} />` from `formstand/devtools` | [Devtools](https://scrumrot.github.io/formstand/documentation/devtools) |
 
 Coming from react-hook-form? The
 [migration guide](https://scrumrot.github.io/formstand/documentation/migrating-from-react-hook-form)
