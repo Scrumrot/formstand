@@ -306,7 +306,7 @@ describe("emitModuleForm visual options", () => {
     );
     const section = files.find((f) => f.path.startsWith("sections/"));
     expect(section?.content).toContain("<Accordion defaultExpanded");
-    expect(section?.content).toContain('gridTemplateColumns: "repeat(2, minmax(0, 1fr))"');
+    expect(section?.content).toContain('gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" }');
     expect(section?.content).toContain('} from "@mui/material";');
     expect(typecheckDiagnostics(written, muiStubPaths)).toEqual([]);
   });
@@ -342,7 +342,7 @@ describe("emitModuleForm visual options", () => {
       '<Accordion.Root collapsible defaultValue={["section"]}>',
     );
     expect(section?.content).toContain(
-      'gridTemplateColumns={"repeat(2, minmax(0, 1fr))"}',
+      'gridTemplateColumns={{ base: "1fr", md: "repeat(2, minmax(0, 1fr))" }}',
     );
     expect(section?.content).toContain('} from "@chakra-ui/react";');
     expect(typecheckDiagnostics(written, chakraStubPaths)).toEqual([]);
@@ -362,7 +362,7 @@ describe("emitModuleForm visual options", () => {
     expect(section?.content).toContain(
       '<Accordion defaultValue="section" variant="contained">',
     );
-    expect(section?.content).toContain("<SimpleGrid cols={2}>");
+    expect(section?.content).toContain('<SimpleGrid cols={{ base: 1, sm: 2 }}>');
     expect(section?.content).toContain('} from "@mantine/core";');
     expect(typecheckDiagnostics(written, mantineStubPaths)).toEqual([]);
   });
@@ -384,7 +384,7 @@ describe("emitModuleForm visual options", () => {
     expect(section?.content).toContain("items={[");
     expect(section?.content).not.toContain("Collapse.Panel");
     expect(section?.content).toContain(
-      'gridTemplateColumns: "repeat(2, minmax(0, 1fr))"',
+      'gridTemplateColumns: "repeat(auto-fit, minmax(max(220px, calc((100% - 16px) / 2)), 1fr))"',
     );
     expect(section?.content).toContain('} from "antd";');
     expect(typecheckDiagnostics(written, antdStubPaths)).toEqual([]);
@@ -402,7 +402,7 @@ describe("emitModuleForm visual options", () => {
     );
     const section = files.find((f) => f.path.startsWith("sections/"));
     expect(section?.content).toContain("<details open>");
-    expect(section?.content).toContain('gridTemplateColumns: "repeat(3, minmax(0, 1fr))"');
+    expect(section?.content).toContain('gridTemplateColumns: "repeat(auto-fit, minmax(max(220px, calc((100% - 32px) / 3)), 1fr))"');
     expect(typecheckDiagnostics(written)).toEqual([]);
   });
 });

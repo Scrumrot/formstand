@@ -54,7 +54,7 @@ export const EmergencyContactsSection = ({
   const { rows, dirty, valid } = useEmergencyContactsSection();
   return (
     <Card variant="outlined">
-      <CardContent sx={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 2 }}>
+      <CardContent sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" }, gap: 2 }}>
         <Typography variant="subtitle1" sx={{ gridColumn: "1 / -1" }}>
           {heading}
           {dirty ? " — edited" : ""}

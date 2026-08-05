@@ -237,7 +237,7 @@ export const MantineOnboardingForm = () => {
     >
       <Stack gap="md">
         <Card withBorder style={{ gridColumn: "1 / -1" }}>
-          <SimpleGrid cols={2}>
+          <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <Title order={4} style={{ gridColumn: "1 / -1" }}>{"Personal"}</Title>
           <BoundTextField form={form} path={"personal.firstName"} label={"First Name"} />
           <BoundTextField form={form} path={"personal.lastName"} label={"Last Name"} />
@@ -247,7 +247,7 @@ export const MantineOnboardingForm = () => {
           </SimpleGrid>
         </Card>
         <Card withBorder style={{ gridColumn: "1 / -1" }}>
-          <SimpleGrid cols={2}>
+          <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <Title order={4} style={{ gridColumn: "1 / -1" }}>{"Address"}</Title>
           <BoundTextField form={form} path={"address.street"} label={"Street"} />
           <BoundTextField form={form} path={"address.unit"} label={"Unit"} />
@@ -268,7 +268,7 @@ export const MantineOnboardingForm = () => {
           </SimpleGrid>
         </Card>
         <Card withBorder style={{ gridColumn: "1 / -1" }}>
-          <SimpleGrid cols={2}>
+          <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <Title order={4} style={{ gridColumn: "1 / -1" }}>{"Employment"}</Title>
           <BoundTextField form={form} path={"employment.jobTitle"} label={"Job Title"} />
           <BoundSelectField
@@ -290,7 +290,7 @@ export const MantineOnboardingForm = () => {
           </SimpleGrid>
         </Card>
         <Card withBorder style={{ gridColumn: "1 / -1" }}>
-          <SimpleGrid cols={2}>
+          <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <Title order={4} style={{ gridColumn: "1 / -1" }}>{"Equipment"}</Title>
           <BoundSelectField
             form={form}
@@ -310,7 +310,7 @@ export const MantineOnboardingForm = () => {
           </SimpleGrid>
         </Card>
         <Card withBorder style={{ gridColumn: "1 / -1" }}>
-          <SimpleGrid cols={2}>
+          <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <Title order={4} style={{ gridColumn: "1 / -1" }}>{"Emergency Contacts"}</Title>
           {emergencyContactsArray.fields.map((row, index) => (
             <Stack

@@ -1,5 +1,19 @@
 # Changelog
 
+## formstand-cli Unreleased
+
+### Changed
+
+- **`--columns` output is responsive.** `--columns 2` now means "two columns
+  when there is room, one on a phone" in every backend's own dialect: MUI gets
+  an `sx` breakpoint object, chakra a responsive `gridTemplateColumns` style
+  prop, mantine `SimpleGrid cols={{ base: 1, sm: N }}`, and the inline-style
+  backends (plain, antd) a `repeat(auto-fit, minmax(...))` track whose calc
+  caps the column count at N while a 220px floor collapses columns that would
+  squeeze inputs below a usable width. shadcn already collapsed via
+  `md:grid-cols-N`. Fixed grid tracks were why generated multi-column forms
+  were unusable on phones; regenerate to pick the new grids up.
+
 ## 0.15.0 — 2026-08-04
 
 ### Fixed

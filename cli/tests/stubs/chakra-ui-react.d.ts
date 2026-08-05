@@ -11,7 +11,11 @@ import type { ChangeEvent, ReactElement, ReactNode } from "react";
 // property as a style prop; these are the ones the backends emit).
 type StyleProps = Readonly<{
   display?: string;
-  gridTemplateColumns?: string;
+  // The real v3 style props take ConditionalValue<T>: a value or a
+  // per-breakpoint object ({ base, md, ... }). Mirrored here so the stub
+  // accepts what the emitter writes; the version matrix proves it against
+  // the real declarations.
+  gridTemplateColumns?: string | Readonly<Record<string, string>>;
   gridColumn?: string;
   gap?: string;
   p?: string;

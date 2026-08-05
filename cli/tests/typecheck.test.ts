@@ -355,19 +355,19 @@ describe("generated components", () => {
   // shape of the chrome and that imports stay usage-gated.
   it("panel and columns render per-ui section chrome and grids", () => {
     expect(plain.panel.code).toContain('border: "1px solid #d0d7e2"');
-    expect(plain.panel.code).toContain('gridTemplateColumns: "repeat(2, minmax(0, 1fr))"');
+    expect(plain.panel.code).toContain('gridTemplateColumns: "repeat(auto-fit, minmax(max(220px, calc((100% - 16px) / 2)), 1fr))"');
     expect(mui.panel.code).toContain('<Card variant="outlined"');
-    expect(mui.panel.code).toContain('gridTemplateColumns: "repeat(2, minmax(0, 1fr))"');
+    expect(mui.panel.code).toContain('gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" }');
     expect(shadcn.panel.code).toContain("bg-card text-card-foreground shadow-sm");
     expect(shadcn.panel.code).toContain("md:grid-cols-2");
     expect(chakra.panel.code).toContain("<Card.Root");
     expect(chakra.panel.code).toContain(
-      'gridTemplateColumns={"repeat(2, minmax(0, 1fr))"}',
+      'gridTemplateColumns={{ base: "1fr", md: "repeat(2, minmax(0, 1fr))" }}',
     );
     expect(mantine.panel.code).toContain("<Card withBorder");
-    expect(mantine.panel.code).toContain("<SimpleGrid cols={2}>");
+    expect(mantine.panel.code).toContain('<SimpleGrid cols={{ base: 1, sm: 2 }}>');
     expect(antd.panel.code).toContain('<Card variant="outlined"');
-    expect(antd.panel.code).toContain('gridTemplateColumns: "repeat(2, minmax(0, 1fr))"');
+    expect(antd.panel.code).toContain('gridTemplateColumns: "repeat(auto-fit, minmax(max(220px, calc((100% - 16px) / 2)), 1fr))"');
   });
 
   it("collapsible renders details/summary (Accordion on mui and chakra)", () => {
@@ -383,7 +383,7 @@ describe("generated components", () => {
       '<Accordion defaultValue="section" variant="contained"',
     );
     expect(mantine.collapsible.code).toContain("<Accordion.Control>");
-    expect(mantine.collapsible.code).toContain("<SimpleGrid cols={3}>");
+    expect(mantine.collapsible.code).toContain('<SimpleGrid cols={{ base: 1, sm: 3 }}>');
     // antd's Collapse must use the items API — children-panels are
     // deprecated in 5.x+.
     expect(antd.collapsible.code).toContain("<Collapse");

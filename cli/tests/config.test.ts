@@ -26,7 +26,7 @@ describe("config file", () => {
     const code = fs.readFileSync(out, "utf8");
     expect(code).toContain('} from "@mui/material";');
     expect(code).toContain('<Card variant="outlined"');
-    expect(code).toContain('gridTemplateColumns: "repeat(2, minmax(0, 1fr))"');
+    expect(code).toContain('gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" }');
   });
 
   it("explicit flags beat the config", async () => {

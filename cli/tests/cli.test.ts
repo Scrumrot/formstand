@@ -146,7 +146,7 @@ describe("cli main", () => {
     ).toBe(0);
     const code = fs.readFileSync(out, "utf8");
     expect(code).toContain('border: "1px solid #d0d7e2"');
-    expect(code).toContain('gridTemplateColumns: "repeat(2, minmax(0, 1fr))"');
+    expect(code).toContain('gridTemplateColumns: "repeat(auto-fit, minmax(max(220px, calc((100% - 16px) / 2)), 1fr))"');
   });
 });
 

@@ -264,7 +264,7 @@ export const ChakraOnboardingForm = () => {
     >
       <Stack gap="4">
         <Card.Root gridColumn="1 / -1">
-          <Card.Body display="grid" gridTemplateColumns={"repeat(2, minmax(0, 1fr))"} gap="4">
+          <Card.Body display="grid" gridTemplateColumns={{ base: "1fr", md: "repeat(2, minmax(0, 1fr))" }} gap="4">
             <Heading size="sm" gridColumn="1 / -1">{"Personal"}</Heading>
           <BoundTextField form={form} path={"personal.firstName"} label={"First Name"} />
           <BoundTextField form={form} path={"personal.lastName"} label={"Last Name"} />
@@ -274,7 +274,7 @@ export const ChakraOnboardingForm = () => {
           </Card.Body>
         </Card.Root>
         <Card.Root gridColumn="1 / -1">
-          <Card.Body display="grid" gridTemplateColumns={"repeat(2, minmax(0, 1fr))"} gap="4">
+          <Card.Body display="grid" gridTemplateColumns={{ base: "1fr", md: "repeat(2, minmax(0, 1fr))" }} gap="4">
             <Heading size="sm" gridColumn="1 / -1">{"Address"}</Heading>
           <BoundTextField form={form} path={"address.street"} label={"Street"} />
           <BoundTextField form={form} path={"address.unit"} label={"Unit"} />
@@ -295,7 +295,7 @@ export const ChakraOnboardingForm = () => {
           </Card.Body>
         </Card.Root>
         <Card.Root gridColumn="1 / -1">
-          <Card.Body display="grid" gridTemplateColumns={"repeat(2, minmax(0, 1fr))"} gap="4">
+          <Card.Body display="grid" gridTemplateColumns={{ base: "1fr", md: "repeat(2, minmax(0, 1fr))" }} gap="4">
             <Heading size="sm" gridColumn="1 / -1">{"Employment"}</Heading>
           <BoundTextField form={form} path={"employment.jobTitle"} label={"Job Title"} />
           <BoundSelectField
@@ -317,7 +317,7 @@ export const ChakraOnboardingForm = () => {
           </Card.Body>
         </Card.Root>
         <Card.Root gridColumn="1 / -1">
-          <Card.Body display="grid" gridTemplateColumns={"repeat(2, minmax(0, 1fr))"} gap="4">
+          <Card.Body display="grid" gridTemplateColumns={{ base: "1fr", md: "repeat(2, minmax(0, 1fr))" }} gap="4">
             <Heading size="sm" gridColumn="1 / -1">{"Equipment"}</Heading>
           <BoundSelectField
             form={form}
@@ -337,7 +337,7 @@ export const ChakraOnboardingForm = () => {
           </Card.Body>
         </Card.Root>
         <Card.Root gridColumn="1 / -1">
-          <Card.Body display="grid" gridTemplateColumns={"repeat(2, minmax(0, 1fr))"} gap="4">
+          <Card.Body display="grid" gridTemplateColumns={{ base: "1fr", md: "repeat(2, minmax(0, 1fr))" }} gap="4">
             <Heading size="sm" gridColumn="1 / -1">{"Emergency Contacts"}</Heading>
           {emergencyContactsArray.fields.map((row, index) => (
             <Stack

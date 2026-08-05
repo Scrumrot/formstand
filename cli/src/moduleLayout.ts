@@ -1286,7 +1286,7 @@ const objectShell = (
                 "    </Stack>",
               ]
             : [
-                `    <SimpleGrid cols={${cols}}>`,
+                `    <SimpleGrid cols={{ base: 1, sm: ${cols} }}>`,
                 `      <Title order={4} style={{ gridColumn: "1 / -1" }}>`,
                 ...headingLines("        "),
                 "      </Title>",
@@ -1296,7 +1296,7 @@ const objectShell = (
         case "panel":
           return [
             "    <Card withBorder>",
-            `      <SimpleGrid cols={${cols}}>`,
+            `      <SimpleGrid cols={{ base: 1, sm: ${cols} }}>`,
             `        <Title order={4}${cols > 1 ? ` style={{ gridColumn: "1 / -1" }}` : ""}>`,
             ...headingLines("          "),
             "        </Title>",
@@ -1314,7 +1314,7 @@ const objectShell = (
             "          </Title>",
             "        </Accordion.Control>",
             "        <Accordion.Panel>",
-            `          <SimpleGrid cols={${cols}}>`,
+            `          <SimpleGrid cols={{ base: 1, sm: ${cols} }}>`,
             ...children,
             "          </SimpleGrid>",
             "        </Accordion.Panel>",

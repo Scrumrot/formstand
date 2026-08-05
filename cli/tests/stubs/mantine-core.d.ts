@@ -94,7 +94,13 @@ export declare const Stack: (
 ) => ReactElement;
 
 export declare const SimpleGrid: (
-  props: StyleAttr & Readonly<{ cols?: number; children?: ReactNode }>,
+  // Real v9 cols is StyleProp<number>: a number or a per-breakpoint object
+  // ({ base, sm, ... }); the matrix verifies against the real declarations.
+  props: StyleAttr &
+    Readonly<{
+      cols?: number | Readonly<Record<string, number>>;
+      children?: ReactNode;
+    }>,
 ) => ReactElement;
 
 export declare const Title: (

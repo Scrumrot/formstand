@@ -2199,11 +2199,27 @@ export const emitPlainForm = (options: EmitFormOptions): string =>
 // as PROPERTY/CLASS fragments (not whole objects) so wrappers can merge
 // them with span and chrome styles. One source: the single-file backends
 // and the module layout must emit identical grids for the same --columns.
+// Responsive on purpose: --columns N means "N columns WHEN THERE IS ROOM,
+// stacking as width runs out" — nobody asks for 2 columns wanting 110px
+// inputs on a phone. Inline styles cannot carry a media query, so the track
+// is the CSS clamp idiom: the calc caps the count at N (each track must fit
+// its share of the row), the 220px floor collapses columns that would drop
+// below a usable input width. auto-fit tracks are explicit tracks, so the
+// section-root `gridColumn: "1 / -1"` span keeps working.
 export const gridStyleProps = (columns: number): string =>
-  `display: "grid", gridTemplateColumns: "repeat(${columns}, minmax(0, 1fr))", gap: 16`;
+  `display: "grid", gridTemplateColumns: ${q(responsiveGridTracks(columns))}, gap: 16`;
 
+export const responsiveGridTracks = (columns: number): string =>
+  `repeat(auto-fit, minmax(max(220px, calc((100% - ${String(
+    16 * (columns - 1),
+  )}px) / ${String(columns)})), 1fr))`;
+
+// MUI's sx takes responsive objects natively, so the collapse is a real
+// breakpoint (sm, 600px) rather than the clamp trick.
 export const gridSxProps = (columns: number): string =>
-  `display: "grid", gridTemplateColumns: "repeat(${columns}, minmax(0, 1fr))", gap: 2`;
+  `display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(${String(
+    columns,
+  )}, minmax(0, 1fr))" }, gap: 2`;
 
 export const gridColsClass = (columns: number): string =>
   columns > 1 ? ` md:grid-cols-${columns}` : "";
@@ -3582,8 +3598,12 @@ export const emitShadcnForm = (options: EmitFormOptions): string =>
 
 // The chakra spelling of the shared section grid, as literal JSX attributes
 // (chakra style props). gap="4" is 1rem — the same 16px the other kits use.
+// Style props take responsive objects, so the multi-column grid collapses to
+// one column below md (768px) instead of squeezing inputs on a phone.
 export const gridChakraProps = (columns: number): string =>
-  `display="grid" gridTemplateColumns={${q(`repeat(${columns}, minmax(0, 1fr))`)}} gap="4"`;
+  `display="grid" gridTemplateColumns={{ base: "1fr", md: ${q(
+    `repeat(${columns}, minmax(0, 1fr))`,
+  )} }} gap="4"`;
 
 export const chakraAdapterSection = (usage: KindUsage, exp = ""): string => {
   // Error text renders through Field.ErrorText, gated by `invalid` on
@@ -4390,13 +4410,13 @@ const mantineBackend = (
               `${ind(level + 1)}<Title order={4}>${jsxText(label)}</Title>`,
             ]
           : [
-              `${ind(level)}<SimpleGrid cols={${cols}}${span}>`,
+              `${ind(level)}<SimpleGrid cols={{ base: 1, sm: ${cols} }}${span}>`,
               `${ind(level + 1)}<Title order={4} style={{ gridColumn: "1 / -1" }}>${jsxText(label)}</Title>`,
             ];
       case "panel":
         return [
           `${ind(level)}<Card withBorder${span}>`,
-          `${ind(level + 1)}<SimpleGrid cols={${cols}}>`,
+          `${ind(level + 1)}<SimpleGrid cols={{ base: 1, sm: ${cols} }}>`,
           `${ind(level + 2)}<Title order={4}${cols > 1 ? ` style={{ gridColumn: "1 / -1" }}` : ""}>${jsxText(label)}</Title>`,
         ];
       case "collapsible":
@@ -4410,7 +4430,7 @@ const mantineBackend = (
           `${ind(level + 3)}<Title order={4}>${jsxText(label)}</Title>`,
           `${ind(level + 2)}</Accordion.Control>`,
           `${ind(level + 2)}<Accordion.Panel>`,
-          `${ind(level + 3)}<SimpleGrid cols={${cols}}>`,
+          `${ind(level + 3)}<SimpleGrid cols={{ base: 1, sm: ${cols} }}>`,
         ];
     }
   };

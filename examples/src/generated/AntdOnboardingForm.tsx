@@ -266,7 +266,7 @@ export const AntdOnboardingForm = () => {
     >
       <Flex vertical gap="middle">
         <Card variant="outlined" style={{ gridColumn: "1 / -1" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(max(220px, calc((100% - 16px) / 2)), 1fr))", gap: 16 }}>
             <Typography.Title level={5} style={{ gridColumn: "1 / -1" }}>{"Personal"}</Typography.Title>
           <BoundTextField form={form} path={"personal.firstName"} label={"First Name"} />
           <BoundTextField form={form} path={"personal.lastName"} label={"Last Name"} />
@@ -276,7 +276,7 @@ export const AntdOnboardingForm = () => {
           </div>
         </Card>
         <Card variant="outlined" style={{ gridColumn: "1 / -1" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(max(220px, calc((100% - 16px) / 2)), 1fr))", gap: 16 }}>
             <Typography.Title level={5} style={{ gridColumn: "1 / -1" }}>{"Address"}</Typography.Title>
           <BoundTextField form={form} path={"address.street"} label={"Street"} />
           <BoundTextField form={form} path={"address.unit"} label={"Unit"} />
@@ -297,7 +297,7 @@ export const AntdOnboardingForm = () => {
           </div>
         </Card>
         <Card variant="outlined" style={{ gridColumn: "1 / -1" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(max(220px, calc((100% - 16px) / 2)), 1fr))", gap: 16 }}>
             <Typography.Title level={5} style={{ gridColumn: "1 / -1" }}>{"Employment"}</Typography.Title>
           <BoundTextField form={form} path={"employment.jobTitle"} label={"Job Title"} />
           <BoundSelectField
@@ -319,7 +319,7 @@ export const AntdOnboardingForm = () => {
           </div>
         </Card>
         <Card variant="outlined" style={{ gridColumn: "1 / -1" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(max(220px, calc((100% - 16px) / 2)), 1fr))", gap: 16 }}>
             <Typography.Title level={5} style={{ gridColumn: "1 / -1" }}>{"Equipment"}</Typography.Title>
           <BoundSelectField
             form={form}
@@ -339,7 +339,7 @@ export const AntdOnboardingForm = () => {
           </div>
         </Card>
         <Card variant="outlined" style={{ gridColumn: "1 / -1" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(max(220px, calc((100% - 16px) / 2)), 1fr))", gap: 16 }}>
             <Typography.Title level={5} style={{ gridColumn: "1 / -1" }}>{"Emergency Contacts"}</Typography.Title>
           {emergencyContactsArray.fields.map((row, index) => (
             <Flex
