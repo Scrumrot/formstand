@@ -1308,6 +1308,22 @@ type Backend = Readonly<{
   // plain/shadcn/template backends, whose number bindings are stateless
   // builders called inline.
   numberPropsHook?: string;
+  // Kit-native grid cells. Defined ONLY when the backend lays section
+  // bodies out with a real layout component (MUI <Grid>, antd <Row>/<Col>,
+  // mantine <Grid.Col>) whose children must each be wrapped — and only at
+  // columns > 1, so its presence doubles as the "wrap children" signal.
+  // CSS-grid backends (plain, chakra, shadcn) leave it undefined: their
+  // children are grid items by placement alone. Returns the raw open/close
+  // tags; fieldLines owns indentation. `item` is one column cell, `fullRow`
+  // spans the row (nested sections, arrays, unions).
+  gridChild?:
+    | Readonly<{
+        item: readonly [string, string];
+        fullRow: readonly [string, string];
+      }>
+    // Explicit undefined is how a backend factory says "columns === 1, no
+    // wrapping" without conditional spreads (exactOptionalPropertyTypes).
+    | undefined;
   // Wrapper around a nested object's fields.
   objectSection: (
     label: string,
@@ -1399,8 +1415,29 @@ const fieldLines = (
   arrays: ReadonlyMap<string, ArrayEntry>,
   unions: ReadonlyMap<string, UnionEntry>,
   ctx: NestedCtx,
+  // True when these fields are the direct children of a kit grid container
+  // (a section body under a gridChild backend). The ROOT field list is a
+  // Stack/Flex in every backend, so the top-level call never sets it; array
+  // ROW bodies live in per-row stacks, so they never set it either.
+  inGrid = false,
 ): readonly string[] =>
   fields.flatMap((field): readonly string[] => {
+    // A const binding so kind-narrowing survives into the cell closures
+    // below (property narrowing on field.spec would not).
+    const spec = field.spec;
+    // Each child of a kit grid container becomes one wrapped cell; the
+    // payload renders one level deeper to sit inside its wrapper. Bare
+    // comments (TODOs) stay unwrapped — a comment is not an element, so it
+    // creates no cell, while an empty wrapper would.
+    const cell = (
+      kind: "item" | "fullRow",
+      payload: (lvl: number) => readonly string[],
+    ): readonly string[] => {
+      const wrap = inGrid ? backend.gridChild : undefined;
+      if (wrap === undefined) return payload(level);
+      const [open, close] = wrap[kind];
+      return [ind(level) + open, ...payload(level + 1), ind(level) + close];
+    };
     if (isUnaddressable(field.name)) {
       return [
         `${ind(level)}{/* TODO: field ${commentText(q(field.name))} skipped — "." in a key is not path-addressable (see formstand docs) */}`,
@@ -1413,38 +1450,46 @@ const fieldLines = (
     const fullPath =
       prefix.text +
       (prefix.dynamic ? templateEscape(field.name) : field.name);
-    if (overDepthBudget(field.spec, pathSegmentCount(fullPath))) {
+    if (overDepthBudget(spec, pathSegmentCount(fullPath))) {
       return [depthTodoLine(fullPath, ind(level))];
     }
-    switch (field.spec.kind) {
+    switch (spec.kind) {
       case "object":
-        return [
-          ...todoComment(field.spec, level),
+        return cell("fullRow", (lvl) => [
+          ...todoComment(spec, lvl),
           ...backend.objectSection(
             field.label,
-            level,
+            lvl,
             fieldLines(
               backend,
-              field.spec.fields,
+              spec.fields,
               extendPrefix(prefix, field.name),
-              level + 1,
+              lvl + 1,
               arrays,
               unions,
               ctx,
+              // The nested section's own body is a kit grid exactly when
+              // this backend wraps cells at all (gridChild exists only at
+              // columns > 1).
+              backend.gridChild !== undefined,
             ),
           ),
-        ];
+        ]);
       case "array": {
         if (prefix.dynamic) {
           // A nested array inside an array row: extract a child Rows component
           // (its own useFieldArray on the parent-indexed path) and reference
           // it here, instead of a TODO.
-          return emitNestedRows(backend, prefix, field, level, arrays, unions, ctx);
+          return cell("fullRow", (lvl) =>
+            emitNestedRows(backend, prefix, field, lvl, arrays, unions, ctx),
+          );
         }
         const entry = arrays.get(prefix.text + field.name);
         return entry === undefined
           ? []
-          : arraySectionLines(backend, entry, level, arrays, unions, ctx);
+          : cell("fullRow", (lvl) =>
+              arraySectionLines(backend, entry, lvl, arrays, unions, ctx),
+            );
       }
       case "union": {
         // Unions inside an array row bind dynamic paths useVariantField can't
@@ -1456,40 +1501,53 @@ const fieldLines = (
           ? [
               `${ind(level)}{/* TODO: discriminated union ${commentText(q(prefix.text + field.name))} inside an array row is not supported; extract it by hand */}`,
             ]
-          : [
-              ...todoComment(field.spec, level),
-              ...unionLines(backend, entry, field.label, level),
-            ];
+          : cell("fullRow", (lvl) => [
+              ...todoComment(spec, lvl),
+              ...unionLines(backend, entry, field.label, lvl),
+            ]);
       }
       case "tuple": {
         // Fixed positions bind at static numeric indices (coord.0, coord.1) —
         // no useFieldArray, no add/remove. Scalar elements render a control;
         // a non-scalar element (object/array/union/nested tuple) is a TODO.
         const elemPrefix = extendPrefix(prefix, field.name);
-        const elements = field.spec.elements;
-        const body = elements.flatMap((element, i): readonly string[] =>
-          isScalarSpec(element)
-            ? backend.leaf(
-                element,
-                pathAttr(elemPrefix, String(i)),
-                `${field.label} ${i + 1}`,
-                level + 1,
-              )
-            : [
-                `${ind(level + 1)}{/* TODO: tuple element ${i} (${element.kind}) at ${commentText(q(elemPrefix.text + i))} isn't scalar — bind it by hand */}`,
-              ],
-        );
-        return [
-          ...todoComment(field.spec, level),
-          ...backend.objectSection(field.label, level, body),
-        ];
+        const elements = spec.elements;
+        // The tuple's own section body is a kit grid under a gridChild
+        // backend, so its scalar elements are cells too.
+        const elementCell = (
+          lvl: number,
+          payload: (inner: number) => readonly string[],
+        ): readonly string[] => {
+          const wrap = backend.gridChild;
+          if (wrap === undefined) return payload(lvl);
+          const [open, close] = wrap.item;
+          return [ind(lvl) + open, ...payload(lvl + 1), ind(lvl) + close];
+        };
+        return cell("fullRow", (lvl) => [
+          ...todoComment(spec, lvl),
+          ...backend.objectSection(
+            field.label,
+            lvl,
+            elements.flatMap((element, i): readonly string[] =>
+              isScalarSpec(element)
+                ? elementCell(lvl + 1, (inner) =>
+                    backend.leaf(
+                      element,
+                      pathAttr(elemPrefix, String(i)),
+                      `${field.label} ${i + 1}`,
+                      inner,
+                    ),
+                  )
+                : [
+                    `${ind(lvl + 1)}{/* TODO: tuple element ${i} (${element.kind}) at ${commentText(q(elemPrefix.text + i))} isn't scalar — bind it by hand */}`,
+                  ],
+            ),
+          ),
+        ]);
       }
       default:
-        return backend.leaf(
-          field.spec,
-          pathAttr(prefix, field.name),
-          field.label,
-          level,
+        return cell("item", (lvl) =>
+          backend.leaf(spec, pathAttr(prefix, field.name), field.label, lvl),
         );
     }
   });
@@ -4964,58 +5022,69 @@ const antdBackend = (
   scaffold: ScaffoldOptions,
 ): Backend => {
   const cols = visual.columns;
-  // Section grids are style-prop CSS grids (the plain backend's
-  // gridStyleProps — antd has no grid-container primitive beyond Row/Col
-  // span math); section roots span the parent grid's full row.
-  const grid = gridStyleProps(cols);
-  const span = cols > 1 ? ` style={{ gridColumn: "1 / -1" }}` : "";
+  // Multi-column sections lay out with antd's own Row/Col (24-column span
+  // math, responsive props) — the kit's idiom, and what makes per-field
+  // spans a Col prop later. An earlier revision used the plain backend's
+  // CSS grid here; Row/Col replaced it when --columns went responsive.
+  // fieldLines wraps each child via gridChild below, so sections no longer
+  // self-span: their wrapper Col owns the row.
+  const colSm = String(24 / cols);
+  const rowOpen = `<Row gutter={[16, 16]}>`;
+  const titleCol = (level: number, label: string): readonly string[] => [
+    `${ind(level)}<Col span={24}>`,
+    `${ind(level + 1)}<Typography.Title level={5}>${jsxText(label)}</Typography.Title>`,
+    `${ind(level)}</Col>`,
+  ];
   const sectionOpen = (label: string, level: number): readonly string[] => {
     switch (visual.sections) {
       case "flat":
         // The 1-column default reads as a vertical Flex; multi-column flows
-        // a grid.
+        // a Row of Cols.
         return cols === 1
           ? [
               `${ind(level)}<Flex vertical gap="middle">`,
               `${ind(level + 1)}<Typography.Title level={5}>${jsxText(label)}</Typography.Title>`,
             ]
-          : [
-              `${ind(level)}<div style={{ ${grid}, gridColumn: "1 / -1" }}>`,
-              `${ind(level + 1)}<Typography.Title level={5} style={{ gridColumn: "1 / -1" }}>${jsxText(label)}</Typography.Title>`,
-            ];
+          : [`${ind(level)}${rowOpen}`, ...titleCol(level + 1, label)];
       case "panel":
-        return [
-          `${ind(level)}<Card variant="outlined"${span}>`,
-          `${ind(level + 1)}<div style={{ ${grid} }}>`,
-          `${ind(level + 2)}<Typography.Title level={5}${cols > 1 ? ` style={{ gridColumn: "1 / -1" }}` : ""}>${jsxText(label)}</Typography.Title>`,
-        ];
+        return cols === 1
+          ? [
+              `${ind(level)}<Card variant="outlined">`,
+              `${ind(level + 1)}<Flex vertical gap="middle">`,
+              `${ind(level + 2)}<Typography.Title level={5}>${jsxText(label)}</Typography.Title>`,
+            ]
+          : [
+              `${ind(level)}<Card variant="outlined">`,
+              `${ind(level + 1)}${rowOpen}`,
+              ...titleCol(level + 2, label),
+            ];
       case "collapsible":
         // One Collapse per section (mirroring the MUI backend), via the
         // items API — children-panels are deprecated in antd 5.x+.
         return [
           `${ind(level)}<Collapse`,
           `${ind(level + 1)}defaultActiveKey={["section"]}`,
-          ...(cols > 1
-            ? [`${ind(level + 1)}style={{ gridColumn: "1 / -1" }}`]
-            : []),
           `${ind(level + 1)}items={[`,
           `${ind(level + 2)}{`,
           `${ind(level + 3)}key: "section",`,
           `${ind(level + 3)}label: <Typography.Title level={5}>${jsxText(label)}</Typography.Title>,`,
           `${ind(level + 3)}children: (`,
-          `${ind(level + 4)}<div style={{ ${grid} }}>`,
+          `${ind(level + 4)}${cols === 1 ? `<Flex vertical gap="middle">` : rowOpen}`,
         ];
     }
   };
   const sectionClose = (level: number): readonly string[] => {
     switch (visual.sections) {
       case "flat":
-        return [`${ind(level)}${cols === 1 ? "</Flex>" : "</div>"}`];
+        return [`${ind(level)}${cols === 1 ? "</Flex>" : "</Row>"}`];
       case "panel":
-        return [`${ind(level + 1)}</div>`, `${ind(level)}</Card>`];
+        return [
+          `${ind(level + 1)}${cols === 1 ? "</Flex>" : "</Row>"}`,
+          `${ind(level)}</Card>`,
+        ];
       case "collapsible":
         return [
-          `${ind(level + 4)}</div>`,
+          `${ind(level + 4)}${cols === 1 ? "</Flex>" : "</Row>"}`,
           `${ind(level + 3)}),`,
           `${ind(level + 2)}},`,
           `${ind(level + 1)}]}`,
@@ -5040,9 +5109,11 @@ const antdBackend = (
       ...(hasSection && visual.sections === "panel" ? ["Card"] : []),
       ...(usage.boolean ? ["Checkbox"] : []),
       ...(hasSection && visual.sections === "collapsible" ? ["Collapse"] : []),
+      ...(hasSection && visual.columns > 1 ? ["Col"] : []),
       // Flex is the stack primitive: the form body always, non-boolean
       // leaves for their label/control/error column.
       "Flex",
+      ...(hasSection && visual.columns > 1 ? ["Row"] : []),
       ...(usage.string || usage.date || usage.number ? ["Input"] : []),
       ...(usage.enum ? ["Select"] : []),
       // Typography.Title heads sections; Typography.Text renders the
@@ -5074,12 +5145,25 @@ const antdBackend = (
   leaf: antdLeaf,
   variantLeaf: antdVariantLeaf,
   numberPropsHook: kitScalarBinding("antd", "number"),
+  gridChild:
+    cols === 1
+      ? undefined
+      : {
+          item: [`<Col xs={24} sm={${colSm}}>`, "</Col>"],
+          fullRow: ["<Col span={24}>", "</Col>"],
+        },
   objectSection: wrapSection(sectionOpen, sectionClose),
   arraySection: (entry, level, rowBody) => [
     ...sectionOpen(entry.label, level),
+    // Row children must be Cols: each mapped row keeps the old grid's
+    // two-up flow via the same xs/sm split, the error and add-button span.
     `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
-    `${ind(level + 2)}<Flex`,
-    `${ind(level + 3)}key={row.id}`,
+    ...(cols === 1
+      ? [`${ind(level + 2)}<Flex`, `${ind(level + 3)}key={row.id}`]
+      : [
+          `${ind(level + 2)}<Col key={row.id} xs={24} sm={${colSm}}>`,
+          `${ind(level + 2)}<Flex`,
+        ]),
     `${ind(level + 3)}vertical`,
     `${ind(level + 3)}gap="middle"`,
     `${ind(level + 3)}style={{ border: "1px solid #d9d9d9", borderRadius: 8, padding: 16 }}`,
@@ -5089,9 +5173,11 @@ const antdBackend = (
     `${ind(level + 4)}Remove`,
     `${ind(level + 3)}</Button>`,
     `${ind(level + 2)}</Flex>`,
+    ...(cols === 1 ? [] : [`${ind(level + 2)}</Col>`]),
     `${ind(level + 1)}))}`,
-    // The array-level error — the same per-kit line the module layout's
-    // list shell renders.
+    // The array-level error and add button — Row children must be Cols, so
+    // at cols > 1 both ride one spanning Col.
+    ...(cols === 1 ? [] : [`${ind(level + 1)}<Col span={24}>`]),
     `${ind(level + 1)}{${entry.hookName}.error ? (`,
     `${ind(level + 2)}<Typography.Text role="alert" type="danger">`,
     `${ind(level + 3)}{${entry.hookName}.error[0]}`,
@@ -5100,6 +5186,7 @@ const antdBackend = (
     `${ind(level + 1)}<Button htmlType="button" size="small" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
     `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
     `${ind(level + 1)}</Button>`,
+    ...(cols === 1 ? [] : [`${ind(level + 1)}</Col>`]),
     ...sectionClose(level),
   ],
   bodyLevel: 4,

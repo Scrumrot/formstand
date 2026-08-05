@@ -367,7 +367,8 @@ describe("generated components", () => {
     expect(mantine.panel.code).toContain("<Card withBorder");
     expect(mantine.panel.code).toContain('<SimpleGrid cols={{ base: 1, sm: 2 }}>');
     expect(antd.panel.code).toContain('<Card variant="outlined"');
-    expect(antd.panel.code).toContain('gridTemplateColumns: "repeat(auto-fit, minmax(max(220px, calc((100% - 16px) / 2)), 1fr))"');
+    expect(antd.panel.code).toContain("<Row gutter={[16, 16]}>");
+    expect(antd.panel.code).toContain("<Col xs={24} sm={12}>");
   });
 
   it("collapsible renders details/summary (Accordion on mui and chakra)", () => {

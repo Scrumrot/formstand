@@ -384,7 +384,10 @@ describe("emitModuleForm visual options", () => {
     expect(section?.content).toContain("items={[");
     expect(section?.content).not.toContain("Collapse.Panel");
     expect(section?.content).toContain(
-      'gridTemplateColumns: "repeat(auto-fit, minmax(max(220px, calc((100% - 16px) / 2)), 1fr))"',
+      "<Row gutter={[16, 16]}>",
+    );
+    expect(section?.content).toContain(
+      "<Col xs={24} sm={12}>",
     );
     expect(section?.content).toContain('} from "antd";');
     expect(typecheckDiagnostics(written, antdStubPaths)).toEqual([]);

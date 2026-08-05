@@ -131,3 +131,24 @@ export declare const Button: (
     children?: ReactNode;
   }>,
 ) => ReactElement;
+
+// Row/Col: the 24-column layout pair the multi-column sections emit. The
+// real props are far wider; only what the emitter writes is typed, and the
+// version matrix proves the output against the real antd declarations.
+export declare const Row: (
+  props: Readonly<{
+    gutter?: number | readonly [number, number];
+    children?: ReactNode;
+  }>,
+) => ReactElement;
+
+export declare const Col: (
+  props: Readonly<{
+    span?: number;
+    xs?: number;
+    sm?: number;
+    md?: number;
+    key?: string;
+    children?: ReactNode;
+  }>,
+) => ReactElement;

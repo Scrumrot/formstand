@@ -13,6 +13,12 @@
   squeeze inputs below a usable width. shadcn already collapsed via
   `md:grid-cols-N`. Fixed grid tracks were why generated multi-column forms
   were unusable on phones; regenerate to pick the new grids up.
+- **antd sections lay out with `Row`/`Col`** instead of an inline CSS grid:
+  the kit's own 24-column idiom, responsive via `xs`/`sm` props, in both
+  layouts. Nested sections, arrays, unions, and tuples ride spanning or item
+  `Col`s; a union section keeps its vertical shell, since its children are
+  conditional fragments that cannot each be a `Col`. This is also the shape
+  that makes a per-field span a one-prop change later.
 
 ## 0.15.0 — 2026-08-04
 

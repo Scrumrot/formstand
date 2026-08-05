@@ -1324,7 +1324,16 @@ const objectShell = (
       }
     }
     case "antd": {
-      const grid = gridStyleProps(cols);
+      // Multi-column shells are antd's own Row/Col (see the single-file
+      // backend): the heading rides a spanning Col, children arrive
+      // pre-wrapped by the body builder.
+      const titleCol = (pad: string): readonly string[] => [
+        `${pad}<Col span={24}>`,
+        `${pad}  <Typography.Title level={5}>`,
+        ...headingLines(`${pad}    `),
+        `${pad}  </Typography.Title>`,
+        `${pad}</Col>`,
+      ];
       switch (visual.sections) {
         case "flat":
           return cols === 1
@@ -1337,24 +1346,31 @@ const objectShell = (
                 "    </Flex>",
               ]
             : [
-                `    <div style={{ ${grid} }}>`,
-                `      <Typography.Title level={5} style={{ gridColumn: "1 / -1" }}>`,
-                ...headingLines("        "),
-                "      </Typography.Title>",
+                `    <Row gutter={[16, 16]}>`,
+                ...titleCol("      "),
                 ...children,
-                "    </div>",
+                "    </Row>",
               ];
         case "panel":
-          return [
-            `    <Card variant="outlined">`,
-            `      <div style={{ ${grid} }}>`,
-            `        <Typography.Title level={5}${cols > 1 ? ` style={{ gridColumn: "1 / -1" }}` : ""}>`,
-            ...headingLines("          "),
-            "        </Typography.Title>",
-            ...children,
-            "      </div>",
-            "    </Card>",
-          ];
+          return cols === 1
+            ? [
+                `    <Card variant="outlined">`,
+                `      <Flex vertical gap="middle">`,
+                `        <Typography.Title level={5}>`,
+                ...headingLines("          "),
+                "        </Typography.Title>",
+                ...children,
+                "      </Flex>",
+                "    </Card>",
+              ]
+            : [
+                `    <Card variant="outlined">`,
+                `      <Row gutter={[16, 16]}>`,
+                ...titleCol("        "),
+                ...children,
+                "      </Row>",
+                "    </Card>",
+              ];
         case "collapsible":
           // The items API — children-panels are deprecated in antd 5.x+.
           return [
@@ -1369,9 +1385,9 @@ const objectShell = (
             "            </Typography.Title>",
             "          ),",
             "          children: (",
-            `            <div style={{ ${grid} }}>`,
+            `            ${cols === 1 ? `<Flex vertical gap="middle">` : "<Row gutter={[16, 16]}>"}`,
             ...children,
-            "            </div>",
+            `            ${cols === 1 ? "</Flex>" : "</Row>"}`,
             "          ),",
             "        },",
             "      ]}",
@@ -1549,24 +1565,22 @@ const objectSectionImports = (
           ];
       }
       break;
-    case "antd":
+    case "antd": {
+      // Multi-column shells are Row/Col; 1-column shells are vertical Flex.
+      const rowCol =
+        visual.columns === 1 ? ["Flex"] : ["Col", "Row"];
       switch (visual.sections) {
         case "flat":
-          // Multi-column flat sections are a plain style-prop grid <div> —
-          // only the Title needs an import there.
-          return [
-            {
-              from: "antd",
-              names:
-                visual.columns === 1 ? ["Flex", "Typography"] : ["Typography"],
-            },
-          ];
+          return [{ from: "antd", names: [...rowCol, "Typography"] }];
         case "panel":
-          return [{ from: "antd", names: ["Card", "Typography"] }];
+          return [{ from: "antd", names: ["Card", ...rowCol, "Typography"] }];
         case "collapsible":
-          return [{ from: "antd", names: ["Collapse", "Typography"] }];
+          return [
+            { from: "antd", names: [...rowCol, "Collapse", "Typography"] },
+          ];
       }
       break;
+    }
     case "mui":
       switch (visual.sections) {
         case "flat":
@@ -2708,12 +2722,36 @@ const objectSectionFile = (
     nestedArrayComponents(ui, naming, entry, nestedUsed),
   );
 
+  // antd cols>1 lays the shell out as <Row> (see objectShell), whose direct
+  // children must each be a <Col>. Deeper levels (fieldsets' innards) are
+  // ordinary flow content. Other uis keep CSS grids: placement alone makes
+  // their children cells, so no wrapper.
+  const antdRowCells = ui === "antd" && visual.columns > 1;
+  const antdCell = (
+    kind: "item" | "fullRow",
+    indent: string,
+    payload: (inner: string) => readonly string[],
+  ): readonly string[] =>
+    antdRowCells
+      ? [
+          `${indent}${
+            kind === "item"
+              ? `<Col xs={24} sm={${String(24 / visual.columns)}}>`
+              : "<Col span={24}>"
+          }`,
+          ...payload(`${indent}  `),
+          `${indent}</Col>`,
+        ]
+      : payload(indent);
   const body = (
     fields: readonly NamedField[],
     segments: readonly string[],
     indent: string,
+    inRow = false,
   ): readonly string[] =>
     fields.flatMap((field): readonly string[] => {
+      // Const-bound so kind-narrowing survives into the antdCell closures.
+      const spec = field.spec;
       if (isUnaddressable(field.name)) {
         return [
           `${indent}{/* TODO: field ${commentText(q(field.name))} skipped — "." in a key is not path-addressable (see formstand docs) */}`,
@@ -2724,32 +2762,43 @@ const objectSectionFile = (
       // single-file walker, so an over-budget union/tuple degrades to the
       // depth TODO (its hand-binding advice would be unachievable) and the
       // CLI warning list mirrors the emitted TODOs exactly.
-      if (overDepthBudget(field.spec, at.length)) {
+      if (overDepthBudget(spec, at.length)) {
         return [depthTodoLine(at.join("."), indent)];
       }
-      switch (field.spec.kind) {
+      switch (spec.kind) {
         case "object":
-          return [
-            `${indent}<fieldset${
-              visual.columns > 1
-                ? ui === "shadcn"
-                  ? ` className="md:col-span-full"`
-                  : ` style={{ gridColumn: "1 / -1" }}`
-                : ""
-            }>`,
-            `${indent}  <legend>${jsxText(field.label)}</legend>`,
-            ...body(field.spec.fields, at, `${indent}  `),
-            `${indent}</fieldset>`,
-          ];
+          return inRow
+            ? antdCell("fullRow", indent, (inner) => [
+                `${inner}<fieldset>`,
+                `${inner}  <legend>${jsxText(field.label)}</legend>`,
+                ...body(spec.fields, at, `${inner}  `),
+                `${inner}</fieldset>`,
+              ])
+            : [
+                `${indent}<fieldset${
+                  visual.columns > 1
+                    ? ui === "shadcn"
+                      ? ` className="md:col-span-full"`
+                      : ` style={{ gridColumn: "1 / -1" }}`
+                    : ""
+                }>`,
+                `${indent}  <legend>${jsxText(field.label)}</legend>`,
+                ...body(spec.fields, at, `${indent}  `),
+                `${indent}</fieldset>`,
+              ];
         case "array": {
           const entry = nestedByKey.get(at.join("."));
           return entry === undefined
             ? [
                 `${indent}{/* TODO: nested array ${commentText(q(at.join(".")))} — extract a row component with its own ${naming.hook("FieldArray")} */}`,
               ]
-            : [
-                `${indent}<${entry.stem}Rows${optionsPropsAttrs(rowItemOptionsProps(entry.item))} />`,
-              ];
+            : inRow
+              ? antdCell("fullRow", indent, (inner) => [
+                  `${inner}<${entry.stem}Rows${optionsPropsAttrs(rowItemOptionsProps(entry.item))} />`,
+                ])
+              : [
+                  `${indent}<${entry.stem}Rows${optionsPropsAttrs(rowItemOptionsProps(entry.item))} />`,
+                ];
         }
         case "union":
           // A union nested inside an object section: only top-level unions
@@ -2770,9 +2819,13 @@ const objectSectionFile = (
           const planned = own(at);
           return planned === undefined
             ? []
-            : [
-                `${indent}<${planned.componentName}${optionsPropsAttrs(leafOptionsProp(planned.spec))} />`,
-              ];
+            : inRow
+              ? antdCell("item", indent, (inner) => [
+                  `${inner}<${planned.componentName}${optionsPropsAttrs(leafOptionsProp(planned.spec))} />`,
+                ])
+              : [
+                  `${indent}<${planned.componentName}${optionsPropsAttrs(leafOptionsProp(planned.spec))} />`,
+                ];
         }
       }
     });
@@ -2837,7 +2890,7 @@ const objectSectionFile = (
       `}: ${propsType}) => {`,
       `  const { dirty, valid } = ${hookName}();`,
       "  return (",
-      ...objectShell(ui, visual, body(spec.fields, [section.key], "      ")),
+      ...objectShell(ui, visual, body(spec.fields, [section.key], "      ", true)),
       "  );",
       "};",
       "",
@@ -2878,16 +2931,30 @@ const tupleSectionFile = (
       `  const ${varName} = ${naming.hook("Field")}(${q(`${section.key}.${index}`)});`,
   );
 
+  const antdRowCells = ui === "antd" && visual.columns > 1;
   const bodyLines = elements.flatMap(({ element, index, varName, scalar }) =>
     scalar
-      ? leafControl(
-          ui,
-          element,
-          varName,
-          jsxText(`${section.label} ${index + 1}`),
-          `{${q(`${section.key}.${index}`)}}`,
-          "      ",
-        )
+      ? antdRowCells
+        ? [
+            `      <Col xs={24} sm={${String(24 / visual.columns)}}>`,
+            ...leafControl(
+              ui,
+              element,
+              varName,
+              jsxText(`${section.label} ${index + 1}`),
+              `{${q(`${section.key}.${index}`)}}`,
+              "        ",
+            ),
+            "      </Col>",
+          ]
+        : leafControl(
+            ui,
+            element,
+            varName,
+            jsxText(`${section.label} ${index + 1}`),
+            `{${q(`${section.key}.${index}`)}}`,
+            "      ",
+          )
       : [
           `      {/* TODO: tuple element ${index} (${element.kind}) at ${commentText(q(`${section.key}.${index}`))} isn't scalar — bind it by hand */}`,
         ],
@@ -3192,21 +3259,47 @@ const arraySectionFile = (
       `}: ${propsType}) => {`,
       `  const { rows, dirty, valid } = ${hookName}();`,
       "  return (",
-      ...objectShell(ui, visual, [
-        "      {rows.fields.map((row, index) => (",
-        `        <${rowName}`,
-        "          key={row.id}",
-        "          index={index}",
-        "          onRemove={() => rows.remove(index)}",
-        ...rowOptionsProps.map((name) => `          ${name}={${name}}`),
-        "        />",
-        "      ))}",
-        ...shell.listError,
-        ...shell.addButton(
-          `() => rows.push(${emptyName})`,
-          `Add ${section.label.toLowerCase()}`,
-        ),
-      ]),
+      // antd's multi-column shell is a Row: each mapped row rides an
+      // item Col (keeping the grid's two-up flow), the error and add
+      // button one spanning Col. Other uis' CSS grids need no wrappers.
+      ...objectShell(
+        ui,
+        visual,
+        ui === "antd" && visual.columns > 1
+          ? [
+              "      {rows.fields.map((row, index) => (",
+              `        <Col key={row.id} xs={24} sm={${String(24 / visual.columns)}}>`,
+              `          <${rowName}`,
+              "            index={index}",
+              "            onRemove={() => rows.remove(index)}",
+              ...rowOptionsProps.map((name) => `            ${name}={${name}}`),
+              "          />",
+              "        </Col>",
+              "      ))}",
+              "      <Col span={24}>",
+              ...shell.listError,
+              ...shell.addButton(
+                `() => rows.push(${emptyName})`,
+                `Add ${section.label.toLowerCase()}`,
+              ),
+              "      </Col>",
+            ]
+          : [
+              "      {rows.fields.map((row, index) => (",
+              `        <${rowName}`,
+              "          key={row.id}",
+              "          index={index}",
+              "          onRemove={() => rows.remove(index)}",
+              ...rowOptionsProps.map((name) => `          ${name}={${name}}`),
+              "        />",
+              "      ))}",
+              ...shell.listError,
+              ...shell.addButton(
+                `() => rows.push(${emptyName})`,
+                `Add ${section.label.toLowerCase()}`,
+              ),
+            ],
+      ),
       "  );",
       "};",
       "",
@@ -3594,7 +3687,14 @@ const unionSectionFile = (
         })),
       ),
       "  return (",
-      ...objectShell(ui, visual, children),
+      // A union's children are conditional fragments (a leaf set per active
+      // variant): under antd's Row they would be loose non-Col children, so
+      // the union section keeps the vertical shell at any column count.
+      ...objectShell(
+        ui,
+        ui === "antd" ? { ...visual, columns: 1 } : visual,
+        children,
+      ),
       "  );",
       "};",
       "",

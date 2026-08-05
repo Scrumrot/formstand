@@ -4,7 +4,9 @@ import {
   Button,
   Card,
   Checkbox,
+  Col,
   Flex,
+  Row,
   Input,
   Select,
   Typography,
@@ -265,85 +267,141 @@ export const AntdOnboardingForm = () => {
       style={{ maxWidth: 640 }}
     >
       <Flex vertical gap="middle">
-        <Card variant="outlined" style={{ gridColumn: "1 / -1" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(max(220px, calc((100% - 16px) / 2)), 1fr))", gap: 16 }}>
-            <Typography.Title level={5} style={{ gridColumn: "1 / -1" }}>{"Personal"}</Typography.Title>
-          <BoundTextField form={form} path={"personal.firstName"} label={"First Name"} />
-          <BoundTextField form={form} path={"personal.lastName"} label={"Last Name"} />
-          <BoundTextField form={form} path={"personal.preferredName"} label={"Preferred Name"} />
-          <BoundTextField form={form} path={"personal.email"} label={"Email"} />
-          <BoundTextField form={form} path={"personal.phone"} label={"Phone"} />
-          </div>
+        <Card variant="outlined">
+          <Row gutter={[16, 16]}>
+            <Col span={24}>
+              <Typography.Title level={5}>{"Personal"}</Typography.Title>
+            </Col>
+          <Col xs={24} sm={12}>
+            <BoundTextField form={form} path={"personal.firstName"} label={"First Name"} />
+          </Col>
+          <Col xs={24} sm={12}>
+            <BoundTextField form={form} path={"personal.lastName"} label={"Last Name"} />
+          </Col>
+          <Col xs={24} sm={12}>
+            <BoundTextField form={form} path={"personal.preferredName"} label={"Preferred Name"} />
+          </Col>
+          <Col xs={24} sm={12}>
+            <BoundTextField form={form} path={"personal.email"} label={"Email"} />
+          </Col>
+          <Col xs={24} sm={12}>
+            <BoundTextField form={form} path={"personal.phone"} label={"Phone"} />
+          </Col>
+          </Row>
         </Card>
-        <Card variant="outlined" style={{ gridColumn: "1 / -1" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(max(220px, calc((100% - 16px) / 2)), 1fr))", gap: 16 }}>
-            <Typography.Title level={5} style={{ gridColumn: "1 / -1" }}>{"Address"}</Typography.Title>
-          <BoundTextField form={form} path={"address.street"} label={"Street"} />
-          <BoundTextField form={form} path={"address.unit"} label={"Unit"} />
-          <BoundTextField form={form} path={"address.city"} label={"City"} />
-          <BoundSelectField
-            form={form}
-            path={"address.region"}
-            label={"Region"}
-            options={["west", "mountain", "central", "east"]}
-          />
-          <BoundTextField form={form} path={"address.postalCode"} label={"Postal Code"} />
-          <BoundSelectField
-            form={form}
-            path={"address.country"}
-            label={"Country"}
-            options={["us", "ca", "de", "jp", "au"]}
-          />
-          </div>
+        <Card variant="outlined">
+          <Row gutter={[16, 16]}>
+            <Col span={24}>
+              <Typography.Title level={5}>{"Address"}</Typography.Title>
+            </Col>
+          <Col xs={24} sm={12}>
+            <BoundTextField form={form} path={"address.street"} label={"Street"} />
+          </Col>
+          <Col xs={24} sm={12}>
+            <BoundTextField form={form} path={"address.unit"} label={"Unit"} />
+          </Col>
+          <Col xs={24} sm={12}>
+            <BoundTextField form={form} path={"address.city"} label={"City"} />
+          </Col>
+          <Col xs={24} sm={12}>
+            <BoundSelectField
+              form={form}
+              path={"address.region"}
+              label={"Region"}
+              options={["west", "mountain", "central", "east"]}
+            />
+          </Col>
+          <Col xs={24} sm={12}>
+            <BoundTextField form={form} path={"address.postalCode"} label={"Postal Code"} />
+          </Col>
+          <Col xs={24} sm={12}>
+            <BoundSelectField
+              form={form}
+              path={"address.country"}
+              label={"Country"}
+              options={["us", "ca", "de", "jp", "au"]}
+            />
+          </Col>
+          </Row>
         </Card>
-        <Card variant="outlined" style={{ gridColumn: "1 / -1" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(max(220px, calc((100% - 16px) / 2)), 1fr))", gap: 16 }}>
-            <Typography.Title level={5} style={{ gridColumn: "1 / -1" }}>{"Employment"}</Typography.Title>
-          <BoundTextField form={form} path={"employment.jobTitle"} label={"Job Title"} />
-          <BoundSelectField
-            form={form}
-            path={"employment.department"}
-            label={"Department"}
-            options={["engineering", "design", "product", "sales", "support"]}
-          />
-          <BoundTextField form={form} path={"employment.startDate"} label={"Start Date"} />
-          <BoundSelectField
-            form={form}
-            path={"employment.employmentType"}
-            label={"Employment Type"}
-            options={["full-time", "part-time", "contract"]}
-          />
-          <BoundNumberField form={form} path={"employment.salary"} label={"Salary"} />
-          <BoundCheckboxField form={form} path={"employment.remote"} label={"Remote"} />
-          <BoundTextField form={form} path={"employment.managerEmail"} label={"Manager Email"} />
-          </div>
+        <Card variant="outlined">
+          <Row gutter={[16, 16]}>
+            <Col span={24}>
+              <Typography.Title level={5}>{"Employment"}</Typography.Title>
+            </Col>
+          <Col xs={24} sm={12}>
+            <BoundTextField form={form} path={"employment.jobTitle"} label={"Job Title"} />
+          </Col>
+          <Col xs={24} sm={12}>
+            <BoundSelectField
+              form={form}
+              path={"employment.department"}
+              label={"Department"}
+              options={["engineering", "design", "product", "sales", "support"]}
+            />
+          </Col>
+          <Col xs={24} sm={12}>
+            <BoundTextField form={form} path={"employment.startDate"} label={"Start Date"} />
+          </Col>
+          <Col xs={24} sm={12}>
+            <BoundSelectField
+              form={form}
+              path={"employment.employmentType"}
+              label={"Employment Type"}
+              options={["full-time", "part-time", "contract"]}
+            />
+          </Col>
+          <Col xs={24} sm={12}>
+            <BoundNumberField form={form} path={"employment.salary"} label={"Salary"} />
+          </Col>
+          <Col xs={24} sm={12}>
+            <BoundCheckboxField form={form} path={"employment.remote"} label={"Remote"} />
+          </Col>
+          <Col xs={24} sm={12}>
+            <BoundTextField form={form} path={"employment.managerEmail"} label={"Manager Email"} />
+          </Col>
+          </Row>
         </Card>
-        <Card variant="outlined" style={{ gridColumn: "1 / -1" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(max(220px, calc((100% - 16px) / 2)), 1fr))", gap: 16 }}>
-            <Typography.Title level={5} style={{ gridColumn: "1 / -1" }}>{"Equipment"}</Typography.Title>
-          <BoundSelectField
-            form={form}
-            path={"equipment.laptop"}
-            label={"Laptop"}
-            options={["macbook-pro", "thinkpad", "framework"]}
-          />
-          <BoundNumberField form={form} path={"equipment.monitorCount"} label={"Monitor Count"} />
-          <BoundCheckboxField form={form} path={"equipment.needsPhone"} label={"Needs Phone"} />
-          <BoundSelectField
-            form={form}
-            path={"equipment.shirtSize"}
-            label={"Shirt Size"}
-            options={["xs", "s", "m", "l", "xl", "2xl"]}
-          />
-          <BoundTextField form={form} path={"equipment.notes"} label={"Notes"} />
-          </div>
+        <Card variant="outlined">
+          <Row gutter={[16, 16]}>
+            <Col span={24}>
+              <Typography.Title level={5}>{"Equipment"}</Typography.Title>
+            </Col>
+          <Col xs={24} sm={12}>
+            <BoundSelectField
+              form={form}
+              path={"equipment.laptop"}
+              label={"Laptop"}
+              options={["macbook-pro", "thinkpad", "framework"]}
+            />
+          </Col>
+          <Col xs={24} sm={12}>
+            <BoundNumberField form={form} path={"equipment.monitorCount"} label={"Monitor Count"} />
+          </Col>
+          <Col xs={24} sm={12}>
+            <BoundCheckboxField form={form} path={"equipment.needsPhone"} label={"Needs Phone"} />
+          </Col>
+          <Col xs={24} sm={12}>
+            <BoundSelectField
+              form={form}
+              path={"equipment.shirtSize"}
+              label={"Shirt Size"}
+              options={["xs", "s", "m", "l", "xl", "2xl"]}
+            />
+          </Col>
+          <Col xs={24} sm={12}>
+            <BoundTextField form={form} path={"equipment.notes"} label={"Notes"} />
+          </Col>
+          </Row>
         </Card>
-        <Card variant="outlined" style={{ gridColumn: "1 / -1" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(max(220px, calc((100% - 16px) / 2)), 1fr))", gap: 16 }}>
-            <Typography.Title level={5} style={{ gridColumn: "1 / -1" }}>{"Emergency Contacts"}</Typography.Title>
+        <Card variant="outlined">
+          <Row gutter={[16, 16]}>
+            <Col span={24}>
+              <Typography.Title level={5}>{"Emergency Contacts"}</Typography.Title>
+            </Col>
           {emergencyContactsArray.fields.map((row, index) => (
+            <Col key={row.id} xs={24} sm={12}>
             <Flex
-              key={row.id}
               vertical
               gap="middle"
               style={{ border: "1px solid #d9d9d9", borderRadius: 8, padding: 16 }}
@@ -355,7 +413,9 @@ export const AntdOnboardingForm = () => {
                 Remove
               </Button>
             </Flex>
+            </Col>
           ))}
+          <Col span={24}>
           {emergencyContactsArray.error ? (
             <Typography.Text role="alert" type="danger">
               {emergencyContactsArray.error[0]}
@@ -364,7 +424,8 @@ export const AntdOnboardingForm = () => {
           <Button htmlType="button" size="small" onClick={() => emergencyContactsArray.push(emptyEmergencyContactsItem)}>
             {"Add emergency contacts"}
           </Button>
-          </div>
+          </Col>
+          </Row>
         </Card>
         <Button htmlType="submit" type="primary" disabled={submitting}>
           {submitting ? "Submitting..." : "Submit"}
