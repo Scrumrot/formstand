@@ -218,7 +218,8 @@ describe("single-file and module emitters agree on panel chrome", () => {
     );
     const chrome = [
       '<Card variant="outlined"',
-      "<CardContent sx={{ display",
+      "<CardContent>",
+      "<Grid container spacing={2}>",
       '<Typography variant="subtitle1"',
     ];
     chrome.forEach((piece) => {

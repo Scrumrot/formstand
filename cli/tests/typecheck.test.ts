@@ -357,7 +357,7 @@ describe("generated components", () => {
     expect(plain.panel.code).toContain('border: "1px solid #d0d7e2"');
     expect(plain.panel.code).toContain('gridTemplateColumns: "repeat(auto-fit, minmax(max(220px, calc((100% - 16px) / 2)), 1fr))"');
     expect(mui.panel.code).toContain('<Card variant="outlined"');
-    expect(mui.panel.code).toContain('gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" }');
+    expect(mui.panel.code).toContain("<Grid container spacing={2}>");
     expect(shadcn.panel.code).toContain("bg-card text-card-foreground shadow-sm");
     expect(shadcn.panel.code).toContain("md:grid-cols-2");
     expect(chakra.panel.code).toContain("<Card.Root");

@@ -165,3 +165,20 @@ export declare const Switch: (
     onBlur?: () => void;
   }>,
 ) => ReactElement;
+
+// Grid: the layout container multi-column sections emit. Both spellings are
+// declared — v5's legacy item/xs/sm and v6+'s size — because this stub backs
+// tests across the version configs; the matrix proves each major's real
+// declarations only accept its own spelling.
+export declare const Grid: (
+  props: Readonly<{
+    container?: boolean;
+    spacing?: number;
+    item?: boolean;
+    xs?: number;
+    sm?: number;
+    size?: number | Readonly<Record<string, number>>;
+    key?: string;
+    children?: ReactNode;
+  }>,
+) => ReactElement;

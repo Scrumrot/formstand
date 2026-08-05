@@ -306,7 +306,7 @@ describe("emitModuleForm visual options", () => {
     );
     const section = files.find((f) => f.path.startsWith("sections/"));
     expect(section?.content).toContain("<Accordion defaultExpanded");
-    expect(section?.content).toContain('gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" }');
+    expect(section?.content).toContain("<Grid container spacing={2}>");
     expect(section?.content).toContain('} from "@mui/material";');
     expect(typecheckDiagnostics(written, muiStubPaths)).toEqual([]);
   });

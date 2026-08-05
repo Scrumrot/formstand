@@ -47,7 +47,7 @@ import {
   unionCommonFieldNames,
 } from "./codegen";
 import { type FieldSpec, type NamedField, labelFromName } from "./ir";
-import type { MuiVersion } from "./uiTarget";
+import { DEFAULT_MUI_VERSION, type MuiVersion } from "./uiTarget";
 
 // The --layout module emitter: instead of one file, a feature-module folder
 // in the shape of the Onboarding playground demo —
@@ -1225,6 +1225,7 @@ const headingLines = (indent: string): readonly string[] => [
 const containerCellTags = (
   ui: ModuleUi,
   columns: number,
+  muiVersion: MuiVersion = DEFAULT_MUI_VERSION,
 ): Readonly<{
   item: readonly [string, string];
   fullRow: readonly [string, string];
@@ -1244,12 +1245,21 @@ const containerCellTags = (
         ],
         fullRow: ["<Grid.Col span={12}>", "</Grid.Col>"],
       };
-    case "mui":
-      // Pending: mui's Grid spelling differs per major (v5 item/xs vs v7+
-      // size), so its container migration lands with muiVersion threaded
-      // through the section builders. Until then mui keeps its sx CSS grid,
-      // which needs no cell wrappers.
-      return undefined;
+    case "mui": {
+      // Grid's size prop only exists from v7 (v6's size grid is the
+      // separate Grid2 import); v5 and v6 take the legacy item/xs/sm.
+      // Mirrors the single-file backend's version config.
+      const sm = String(12 / columns);
+      return muiVersion === 5 || muiVersion === 6
+        ? {
+            item: [`<Grid item xs={12} sm={${sm}}>`, "</Grid>"],
+            fullRow: ["<Grid item xs={12}>", "</Grid>"],
+          }
+        : {
+            item: [`<Grid size={{ xs: 12, sm: ${sm} }}>`, "</Grid>"],
+            fullRow: ["<Grid size={12}>", "</Grid>"],
+          };
+    }
     case "plain":
     case "shadcn":
     case "chakra":
@@ -1261,11 +1271,26 @@ const objectShell = (
   ui: ModuleUi,
   visual: VisualOptions,
   children: readonly string[],
+  muiVersion: MuiVersion = DEFAULT_MUI_VERSION,
 ): readonly string[] => {
   const cols = visual.columns;
   switch (ui) {
     case "mui": {
-      const gridSx = gridSxProps(cols);
+      // Multi-column shells are MUI's own <Grid container> (per-version
+      // spelling via containerCellTags); the heading rides a spanning cell,
+      // children arrive pre-wrapped by the body builder. 1-column chrome
+      // keeps the historical Stack/CardContent grid.
+      const tags = containerCellTags(ui, cols, muiVersion);
+      const titleCell = (pad: string): readonly string[] =>
+        tags === undefined
+          ? []
+          : [
+              `${pad}${tags.fullRow[0]}`,
+              `${pad}  <Typography variant="subtitle1">`,
+              ...headingLines(`${pad}    `),
+              `${pad}  </Typography>`,
+              `${pad}${tags.fullRow[1]}`,
+            ];
       switch (visual.sections) {
         case "flat":
           return cols === 1
@@ -1278,24 +1303,33 @@ const objectShell = (
                 "    </Stack>",
               ]
             : [
-                `    <Box sx={{ ${gridSx} }}>`,
-                `      <Typography variant="subtitle1" sx={{ gridColumn: "1 / -1" }}>`,
-                ...headingLines("        "),
-                "      </Typography>",
+                "    <Grid container spacing={2}>",
+                ...titleCell("      "),
                 ...children,
-                "    </Box>",
+                "    </Grid>",
               ];
         case "panel":
-          return [
-            `    <Card variant="outlined">`,
-            `      <CardContent sx={{ ${gridSx} }}>`,
-            `        <Typography variant="subtitle1"${cols > 1 ? ` sx={{ gridColumn: "1 / -1" }}` : ""}>`,
-            ...headingLines("          "),
-            "        </Typography>",
-            ...children,
-            "      </CardContent>",
-            "    </Card>",
-          ];
+          return cols === 1
+            ? [
+                `    <Card variant="outlined">`,
+                `      <CardContent sx={{ ${gridSxProps(1)} }}>`,
+                `        <Typography variant="subtitle1">`,
+                ...headingLines("          "),
+                "        </Typography>",
+                ...children,
+                "      </CardContent>",
+                "    </Card>",
+              ]
+            : [
+                `    <Card variant="outlined">`,
+                "      <CardContent>",
+                "        <Grid container spacing={2}>",
+                ...titleCell("          "),
+                ...children,
+                "        </Grid>",
+                "      </CardContent>",
+                "    </Card>",
+              ];
         case "collapsible":
           return [
             `    <Accordion defaultExpanded variant="outlined" disableGutters>`,
@@ -1304,9 +1338,19 @@ const objectShell = (
             ...headingLines("          "),
             "        </Typography>",
             "      </AccordionSummary>",
-            `      <AccordionDetails sx={{ ${gridSx} }}>`,
-            ...children,
-            "      </AccordionDetails>",
+            ...(cols === 1
+              ? [
+                  `      <AccordionDetails sx={{ ${gridSxProps(1)} }}>`,
+                  ...children,
+                  "      </AccordionDetails>",
+                ]
+              : [
+                  "      <AccordionDetails>",
+                  "        <Grid container spacing={2}>",
+                  ...children,
+                  "        </Grid>",
+                  "      </AccordionDetails>",
+                ]),
             "    </Accordion>",
           ];
       }
@@ -1632,7 +1676,9 @@ const objectSectionImports = (
       }
       break;
     }
-    case "mui":
+    case "mui": {
+      // Multi-column shells import Grid; 1-column flat keeps its Stack.
+      const gridImport = visual.columns > 1 ? ["Grid"] : [];
       switch (visual.sections) {
         case "flat":
           return [
@@ -1641,14 +1687,14 @@ const objectSectionImports = (
               names:
                 visual.columns === 1
                   ? ["Stack", "Typography"]
-                  : ["Box", "Typography"],
+                  : ["Grid", "Typography"],
             },
           ];
         case "panel":
           return [
             {
               from: "@mui/material",
-              names: ["Card", "CardContent", "Typography"],
+              names: ["Card", "CardContent", ...gridImport, "Typography"],
             },
           ];
         case "collapsible":
@@ -1659,11 +1705,13 @@ const objectSectionImports = (
                 "Accordion",
                 "AccordionDetails",
                 "AccordionSummary",
+                ...gridImport,
                 "Typography",
               ],
             },
           ];
       }
+    }
   }
 };
 
@@ -2752,6 +2800,7 @@ const objectSectionFile = (
   naming: Naming,
   section: SectionPlan,
   plan: Plan,
+  muiVersion: MuiVersion = DEFAULT_MUI_VERSION,
 ): ModuleFile => {
   const spec = section.spec as ObjectSpec;
   const propsType = `${section.componentName}Props`;
@@ -2778,7 +2827,7 @@ const objectSectionFile = (
   // each be a wrapped cell; deeper levels (fieldsets' innards) are ordinary
   // flow content. CSS-grid uis return undefined: placement alone makes
   // their children cells.
-  const cells = containerCellTags(ui, visual.columns);
+  const cells = containerCellTags(ui, visual.columns, muiVersion);
   const antdCell = (
     kind: "item" | "fullRow",
     indent: string,
@@ -2938,7 +2987,12 @@ const objectSectionFile = (
       `}: ${propsType}) => {`,
       `  const { dirty, valid } = ${hookName}();`,
       "  return (",
-      ...objectShell(ui, visual, body(spec.fields, [section.key], "      ", true)),
+      ...objectShell(
+        ui,
+        visual,
+        body(spec.fields, [section.key], "      ", true),
+        muiVersion,
+      ),
       "  );",
       "};",
       "",
@@ -2954,6 +3008,7 @@ const tupleSectionFile = (
   visual: VisualOptions,
   naming: Naming,
   section: SectionPlan,
+  muiVersion: MuiVersion = DEFAULT_MUI_VERSION,
 ): ModuleFile => {
   const spec = section.spec as Extract<FieldSpec, Readonly<{ kind: "tuple" }>>;
   const propsType = `${section.componentName}Props`;
@@ -2979,7 +3034,7 @@ const tupleSectionFile = (
       `  const ${varName} = ${naming.hook("Field")}(${q(`${section.key}.${index}`)});`,
   );
 
-  const tupleCells = containerCellTags(ui, visual.columns);
+  const tupleCells = containerCellTags(ui, visual.columns, muiVersion);
   const bodyLines = elements.flatMap(({ element, index, varName, scalar }) =>
     scalar
       ? tupleCells !== undefined
@@ -3042,7 +3097,7 @@ const tupleSectionFile = (
         })),
       ),
       "  return (",
-      ...objectShell(ui, visual, bodyLines),
+      ...objectShell(ui, visual, bodyLines, muiVersion),
       "  );",
       "};",
       "",
@@ -3055,6 +3110,7 @@ const arraySectionFile = (
   visual: VisualOptions,
   naming: Naming,
   section: SectionPlan,
+  muiVersion: MuiVersion = DEFAULT_MUI_VERSION,
 ): ModuleFile => {
   const spec = section.spec as Extract<FieldSpec, Readonly<{ kind: "array" }>>;
   const propsType = `${section.componentName}Props`;
@@ -3307,46 +3363,52 @@ const arraySectionFile = (
       `}: ${propsType}) => {`,
       `  const { rows, dirty, valid } = ${hookName}();`,
       "  return (",
-      // antd's multi-column shell is a Row: each mapped row rides an
-      // item Col (keeping the grid's two-up flow), the error and add
-      // button one spanning Col. Other uis' CSS grids need no wrappers.
+      // A container ui's shell (antd Row, mantine Grid, mui Grid
+      // container) needs every child wrapped: each mapped row rides an
+      // item cell (keeping the grid's two-up flow), the error and add
+      // button one spanning cell. CSS-grid uis need no wrappers. The key
+      // moves onto the wrapper so React tracks the outermost element.
       ...objectShell(
         ui,
         visual,
-        ui === "antd" && visual.columns > 1
-          ? [
-              "      {rows.fields.map((row, index) => (",
-              `        <Col key={row.id} xs={24} sm={${String(24 / visual.columns)}}>`,
-              `          <${rowName}`,
-              "            index={index}",
-              "            onRemove={() => rows.remove(index)}",
-              ...rowOptionsProps.map((name) => `            ${name}={${name}}`),
-              "          />",
-              "        </Col>",
-              "      ))}",
-              "      <Col span={24}>",
-              ...shell.listError,
-              ...shell.addButton(
-                `() => rows.push(${emptyName})`,
-                `Add ${section.label.toLowerCase()}`,
-              ),
-              "      </Col>",
-            ]
-          : [
-              "      {rows.fields.map((row, index) => (",
-              `        <${rowName}`,
-              "          key={row.id}",
-              "          index={index}",
-              "          onRemove={() => rows.remove(index)}",
-              ...rowOptionsProps.map((name) => `          ${name}={${name}}`),
-              "        />",
-              "      ))}",
-              ...shell.listError,
-              ...shell.addButton(
-                `() => rows.push(${emptyName})`,
-                `Add ${section.label.toLowerCase()}`,
-              ),
-            ],
+        (() => {
+          const cells = containerCellTags(ui, visual.columns, muiVersion);
+          return cells !== undefined
+            ? [
+                "      {rows.fields.map((row, index) => (",
+                `        ${cells.item[0].replace("<Grid ", "<Grid key={row.id} ").replace("<Col ", "<Col key={row.id} ").replace("<Grid.Col ", "<Grid.Col key={row.id} ")}`,
+                `          <${rowName}`,
+                "            index={index}",
+                "            onRemove={() => rows.remove(index)}",
+                ...rowOptionsProps.map((name) => `            ${name}={${name}}`),
+                "          />",
+                `        ${cells.item[1]}`,
+                "      ))}",
+                `      ${cells.fullRow[0]}`,
+                ...shell.listError,
+                ...shell.addButton(
+                  `() => rows.push(${emptyName})`,
+                  `Add ${section.label.toLowerCase()}`,
+                ),
+                `      ${cells.fullRow[1]}`,
+              ]
+            : [
+                "      {rows.fields.map((row, index) => (",
+                `        <${rowName}`,
+                "          key={row.id}",
+                "          index={index}",
+                "          onRemove={() => rows.remove(index)}",
+                ...rowOptionsProps.map((name) => `          ${name}={${name}}`),
+                "        />",
+                "      ))}",
+                ...shell.listError,
+                ...shell.addButton(
+                  `() => rows.push(${emptyName})`,
+                  `Add ${section.label.toLowerCase()}`,
+                ),
+              ];
+        })(),
+        muiVersion,
       ),
       "  );",
       "};",
@@ -3736,11 +3798,14 @@ const unionSectionFile = (
       ),
       "  return (",
       // A union's children are conditional fragments (a leaf set per active
-      // variant): under antd's Row they would be loose non-Col children, so
-      // the union section keeps the vertical shell at any column count.
+      // variant): under a container shell (antd Row, mantine Grid, mui Grid
+      // container) they would be loose unwrapped children, so the union
+      // section keeps the vertical shell at any column count.
       ...objectShell(
         ui,
-        ui === "antd" ? { ...visual, columns: 1 } : visual,
+        containerCellTags(ui, visual.columns) !== undefined
+          ? { ...visual, columns: 1 }
+          : visual,
         children,
       ),
       "  );",
@@ -3773,11 +3838,11 @@ export const emitModuleForm = (
     ...plan.fields.map((field) => fieldFile(ui, naming, field)),
     ...plan.sections.map((section) =>
       section.spec.kind === "object"
-        ? objectSectionFile(ui, visual, naming, section, plan)
+        ? objectSectionFile(ui, visual, naming, section, plan, options.muiVersion)
         : section.spec.kind === "array"
-          ? arraySectionFile(ui, visual, naming, section)
+          ? arraySectionFile(ui, visual, naming, section, options.muiVersion)
           : section.spec.kind === "tuple"
-            ? tupleSectionFile(ui, visual, naming, section)
+            ? tupleSectionFile(ui, visual, naming, section, options.muiVersion)
             : unionSectionFile(ui, visual, naming, section),
     ),
     formFile(ui, naming, root, plan, scaffold),

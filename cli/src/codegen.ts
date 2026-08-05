@@ -2759,13 +2759,18 @@ type MuiVersionConfig = Readonly<{
   // props (v9 REMOVED those, v6–7 keep them deprecated — so the modern
   // spelling is emitted everywhere it exists).
   textFieldSlotProps: boolean;
+  // Grid's size prop only exists from v7 (where Grid2 was renamed Grid);
+  // in v5 AND v6 the plain Grid is the legacy item/xs/sm one, so both get
+  // the legacy spelling. The matrix against real v6 declarations is what
+  // established this — v6's size-prop grid is the separate Grid2 import.
+  gridSizeProp: boolean;
 }>;
 
 const MUI_VERSION_CONFIGS: Readonly<Record<MuiVersion, MuiVersionConfig>> = {
-  5: { textFieldSlotProps: false },
-  6: { textFieldSlotProps: true },
-  7: { textFieldSlotProps: true },
-  9: { textFieldSlotProps: true },
+  5: { textFieldSlotProps: false, gridSizeProp: false },
+  6: { textFieldSlotProps: true, gridSizeProp: false },
+  7: { textFieldSlotProps: true, gridSizeProp: true },
+  9: { textFieldSlotProps: true, gridSizeProp: true },
 };
 
 const muiVersionConfig = (
@@ -3076,51 +3081,80 @@ const muiBackend = (
   scaffold: ScaffoldOptions,
 ): Backend => {
   const cols = visual.columns;
-  // Every section container is a CSS grid (a one-column grid with gap: 2 is
-  // exactly a Stack); section roots span the parent grid's full row.
-  const gridSx = gridSxProps(cols);
-  const span = cols > 1 ? `gridColumn: "1 / -1", ` : "";
+  // Multi-column sections lay out with MUI's own <Grid> — the same
+  // component the hand-written playground demos use — with the per-version
+  // spelling from the config: v5's legacy item/xs/sm, v6+'s size objects.
+  // fieldLines wraps each child via gridChild below, so sections no longer
+  // self-span. The 1-column chrome keeps the historical Stack/CardContent
+  // output verbatim.
+  const { gridSizeProp } = muiVersionConfig(version);
+  const colSm = String(12 / cols);
+  const gridOpen = "<Grid container spacing={2}>";
+  const itemCell: readonly [string, string] = gridSizeProp
+    ? [`<Grid size={{ xs: 12, sm: ${colSm} }}>`, "</Grid>"]
+    : [`<Grid item xs={12} sm={${colSm}}>`, "</Grid>"];
+  const fullRowCell: readonly [string, string] = gridSizeProp
+    ? ["<Grid size={12}>", "</Grid>"]
+    : ["<Grid item xs={12}>", "</Grid>"];
+  const titleCell = (level: number, label: string): readonly string[] => [
+    `${ind(level)}${fullRowCell[0]}`,
+    `${ind(level + 1)}<Typography variant="subtitle1">${jsxText(label)}</Typography>`,
+    `${ind(level)}${fullRowCell[1]}`,
+  ];
   const sectionOpen = (label: string, level: number): readonly string[] => {
     switch (visual.sections) {
       case "flat":
-        // The 1-column default keeps the historical Stack output verbatim.
         return cols === 1
           ? [
               `${ind(level)}<Stack spacing={2}>`,
               `${ind(level + 1)}<Typography variant="subtitle1">${jsxText(label)}</Typography>`,
             ]
-          : [
-              `${ind(level)}<Box sx={{ ${span}${gridSx} }}>`,
-              `${ind(level + 1)}<Typography variant="subtitle1" sx={{ gridColumn: "1 / -1" }}>${jsxText(label)}</Typography>`,
-            ];
+          : [`${ind(level)}${gridOpen}`, ...titleCell(level + 1, label)];
       case "panel":
         // Same chrome shape as the module layout's objectShell (which puts
         // the heading INSIDE the grid CardContent so it can carry the
         // dirty/valid flags) — the two emitters must not drift for the
         // same --sections flag.
-        return [
-          `${ind(level)}<Card variant="outlined"${cols > 1 ? ` sx={{ gridColumn: "1 / -1" }}` : ""}>`,
-          `${ind(level + 1)}<CardContent sx={{ ${gridSx} }}>`,
-          `${ind(level + 2)}<Typography variant="subtitle1"${cols > 1 ? ` sx={{ gridColumn: "1 / -1" }}` : ""}>${jsxText(label)}</Typography>`,
-        ];
+        return cols === 1
+          ? [
+              `${ind(level)}<Card variant="outlined">`,
+              `${ind(level + 1)}<CardContent sx={{ ${gridSxProps(1)} }}>`,
+              `${ind(level + 2)}<Typography variant="subtitle1">${jsxText(label)}</Typography>`,
+            ]
+          : [
+              `${ind(level)}<Card variant="outlined">`,
+              `${ind(level + 1)}<CardContent>`,
+              `${ind(level + 2)}${gridOpen}`,
+              ...titleCell(level + 3, label),
+            ];
       case "collapsible":
         return [
-          `${ind(level)}<Accordion defaultExpanded variant="outlined" disableGutters${cols > 1 ? ` sx={{ gridColumn: "1 / -1" }}` : ""}>`,
+          `${ind(level)}<Accordion defaultExpanded variant="outlined" disableGutters>`,
           `${ind(level + 1)}<AccordionSummary expandIcon={<span aria-hidden>{"▾"}</span>}>`,
           `${ind(level + 2)}<Typography variant="subtitle1">${jsxText(label)}</Typography>`,
           `${ind(level + 1)}</AccordionSummary>`,
-          `${ind(level + 1)}<AccordionDetails sx={{ ${gridSx} }}>`,
+          ...(cols === 1
+            ? [`${ind(level + 1)}<AccordionDetails sx={{ ${gridSxProps(1)} }}>`]
+            : [
+                `${ind(level + 1)}<AccordionDetails>`,
+                `${ind(level + 2)}${gridOpen}`,
+              ]),
         ];
     }
   };
   const sectionClose = (level: number): readonly string[] => {
     switch (visual.sections) {
       case "flat":
-        return [`${ind(level)}${cols === 1 ? "</Stack>" : "</Box>"}`];
+        return [`${ind(level)}${cols === 1 ? "</Stack>" : "</Grid>"}`];
       case "panel":
-        return [`${ind(level + 1)}</CardContent>`, `${ind(level)}</Card>`];
+        return [
+          ...(cols === 1 ? [] : [`${ind(level + 2)}</Grid>`]),
+          `${ind(level + 1)}</CardContent>`,
+          `${ind(level)}</Card>`,
+        ];
       case "collapsible":
         return [
+          ...(cols === 1 ? [] : [`${ind(level + 2)}</Grid>`]),
           `${ind(level + 1)}</AccordionDetails>`,
           `${ind(level)}</Accordion>`,
         ];
@@ -3142,6 +3176,7 @@ const muiBackend = (
         ? ["Card", "CardContent"]
         : []),
       ...(usage.boolean ? ["FormControlLabel"] : []),
+      ...(hasSection && visual.columns > 1 ? ["Grid"] : []),
       ...(usage.enum ? ["MenuItem"] : []),
       "Stack",
       ...(usage.boolean ? ["Switch"] : []),
@@ -3175,11 +3210,23 @@ const muiBackend = (
   variantLeaf: muiVariantLeaf,
   numberPropsHook: kitScalarBinding("mui", "number"),
   objectSection: wrapSection(sectionOpen, sectionClose),
+  gridChild:
+    cols === 1 ? undefined : { item: itemCell, fullRow: fullRowCell },
   arraySection: (entry, level, rowBody) => [
     ...sectionOpen(entry.label, level),
+    // Grid children must be Grid items: each mapped row keeps the old
+    // grid's two-up flow, the error and add button share a spanning cell.
     `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
-    `${ind(level + 2)}<Stack`,
-    `${ind(level + 3)}key={row.id}`,
+    ...(cols === 1
+      ? [`${ind(level + 2)}<Stack`, `${ind(level + 3)}key={row.id}`]
+      : [
+          `${ind(level + 2)}${
+            gridSizeProp
+              ? `<Grid key={row.id} size={{ xs: 12, sm: ${colSm} }}>`
+              : `<Grid key={row.id} item xs={12} sm={${colSm}}>`
+          }`,
+          `${ind(level + 2)}<Stack`,
+        ]),
     `${ind(level + 3)}spacing={2}`,
     `${ind(level + 3)}sx={{ p: 2, border: 1, borderColor: "divider", borderRadius: 1 }}`,
     `${ind(level + 2)}>`,
@@ -3188,15 +3235,18 @@ const muiBackend = (
     `${ind(level + 4)}Remove`,
     `${ind(level + 3)}</Button>`,
     `${ind(level + 2)}</Stack>`,
+    ...(cols === 1 ? [] : [`${ind(level + 2)}${fullRowCell[1]}`]),
     `${ind(level + 1)}))}`,
-    // The array-level error (z.array().min(...) etc.) — the same per-kit
-    // line the module layout's list shell renders.
+    // The array-level error (z.array().min(...) etc.) and the add button —
+    // one spanning cell at cols > 1.
+    ...(cols === 1 ? [] : [`${ind(level + 1)}${fullRowCell[0]}`]),
     `${ind(level + 1)}{${entry.hookName}.error ? (`,
     `${ind(level + 2)}<Typography role="alert" color="error">{${entry.hookName}.error[0]}</Typography>`,
     `${ind(level + 1)}) : null}`,
     `${ind(level + 1)}<Button type="button" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
     `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
     `${ind(level + 1)}</Button>`,
+    ...(cols === 1 ? [] : [`${ind(level + 1)}${fullRowCell[1]}`]),
     ...sectionClose(level),
   ],
   bodyLevel: 4,

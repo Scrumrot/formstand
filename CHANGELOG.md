@@ -26,6 +26,13 @@
   spans, 1-column chrome reads as a `Stack`. The version matrix caught one
   invented prop on the way in (`Grid` has no `gutter` in v9), which is
   exactly the drift it exists to catch.
+- **mui sections lay out with `Grid` containers** instead of `sx` CSS grids
+  — the same component the hand-written playground demos use — with the
+  spelling the pinned major actually accepts: `size={{ xs: 12, sm: 6 }}` on
+  v7/v9, legacy `item xs={12} sm={6}` on v5 **and** v6 (v6's size-prop grid
+  is the separate `Grid2` import; the matrix against real v6 declarations is
+  what established that). 1-column chrome keeps the historical Stack and
+  CardContent output.
 
 ## 0.15.0 — 2026-08-04
 
