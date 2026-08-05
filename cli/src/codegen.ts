@@ -4454,53 +4454,67 @@ const mantineBackend = (
   scaffold: ScaffoldOptions,
 ): Backend => {
   const cols = visual.columns;
-  // Section grids are SimpleGrid cols={N} (Mantine's idiomatic even-column
-  // grid — a CSS grid underneath, so children span rows with gridColumn);
-  // section roots span the parent grid's full row.
-  const span = cols > 1 ? ` style={{ gridColumn: "1 / -1" }}` : "";
+  // Multi-column sections lay out with Mantine's own <Grid>/<Grid.Col>
+  // (12-column spans, responsive span objects) — SimpleGrid was the earlier
+  // spelling, but it has no per-child span, and Grid.Col is what makes a
+  // future per-field span a one-prop change. fieldLines wraps each child
+  // via gridChild below, so sections no longer self-span.
+  const colSm = String(12 / cols);
+  const gridOpen = "<Grid>";
+  const titleCol = (level: number, label: string): readonly string[] => [
+    `${ind(level)}<Grid.Col span={12}>`,
+    `${ind(level + 1)}<Title order={4}>${jsxText(label)}</Title>`,
+    `${ind(level)}</Grid.Col>`,
+  ];
   const sectionOpen = (label: string, level: number): readonly string[] => {
     switch (visual.sections) {
       case "flat":
-        // The 1-column default reads as a Stack; multi-column flows a grid.
+        // The 1-column default reads as a Stack; multi-column flows a Grid.
         return cols === 1
           ? [
               `${ind(level)}<Stack gap="md">`,
               `${ind(level + 1)}<Title order={4}>${jsxText(label)}</Title>`,
             ]
-          : [
-              `${ind(level)}<SimpleGrid cols={{ base: 1, sm: ${cols} }}${span}>`,
-              `${ind(level + 1)}<Title order={4} style={{ gridColumn: "1 / -1" }}>${jsxText(label)}</Title>`,
-            ];
+          : [`${ind(level)}${gridOpen}`, ...titleCol(level + 1, label)];
       case "panel":
-        return [
-          `${ind(level)}<Card withBorder${span}>`,
-          `${ind(level + 1)}<SimpleGrid cols={{ base: 1, sm: ${cols} }}>`,
-          `${ind(level + 2)}<Title order={4}${cols > 1 ? ` style={{ gridColumn: "1 / -1" }}` : ""}>${jsxText(label)}</Title>`,
-        ];
+        return cols === 1
+          ? [
+              `${ind(level)}<Card withBorder>`,
+              `${ind(level + 1)}<Stack gap="md">`,
+              `${ind(level + 2)}<Title order={4}>${jsxText(label)}</Title>`,
+            ]
+          : [
+              `${ind(level)}<Card withBorder>`,
+              `${ind(level + 1)}${gridOpen}`,
+              ...titleCol(level + 2, label),
+            ];
       case "collapsible":
         // One Accordion per section (mirroring the MUI backend); the item
         // value is fixed and defaultValue opens it (single mode closes on a
         // second click, no `collapsible` flag needed).
         return [
-          `${ind(level)}<Accordion defaultValue="section" variant="contained"${span}>`,
+          `${ind(level)}<Accordion defaultValue="section" variant="contained">`,
           `${ind(level + 1)}<Accordion.Item value="section">`,
           `${ind(level + 2)}<Accordion.Control>`,
           `${ind(level + 3)}<Title order={4}>${jsxText(label)}</Title>`,
           `${ind(level + 2)}</Accordion.Control>`,
           `${ind(level + 2)}<Accordion.Panel>`,
-          `${ind(level + 3)}<SimpleGrid cols={{ base: 1, sm: ${cols} }}>`,
+          `${ind(level + 3)}${cols === 1 ? `<Stack gap="md">` : gridOpen}`,
         ];
     }
   };
   const sectionClose = (level: number): readonly string[] => {
     switch (visual.sections) {
       case "flat":
-        return [`${ind(level)}${cols === 1 ? "</Stack>" : "</SimpleGrid>"}`];
+        return [`${ind(level)}${cols === 1 ? "</Stack>" : "</Grid>"}`];
       case "panel":
-        return [`${ind(level + 1)}</SimpleGrid>`, `${ind(level)}</Card>`];
+        return [
+          `${ind(level + 1)}${cols === 1 ? "</Stack>" : "</Grid>"}`,
+          `${ind(level)}</Card>`,
+        ];
       case "collapsible":
         return [
-          `${ind(level + 3)}</SimpleGrid>`,
+          `${ind(level + 3)}${cols === 1 ? "</Stack>" : "</Grid>"}`,
           `${ind(level + 2)}</Accordion.Panel>`,
           `${ind(level + 1)}</Accordion.Item>`,
           `${ind(level)}</Accordion>`,
@@ -4519,11 +4533,9 @@ const mantineBackend = (
       ...(scaffold.live && arrays.length === 0 ? [] : ["Button"]),
       ...(hasSection && visual.sections === "panel" ? ["Card"] : []),
       ...(usage.enum ? ["NativeSelect"] : []),
-      // SimpleGrid appears wherever a section's fields flow into a grid:
-      // any multi-column layout, and the panel/collapsible chrome always.
-      ...(hasSection && (cols > 1 || visual.sections !== "flat")
-        ? ["SimpleGrid"]
-        : []),
+      // Grid/Grid.Col lay out every multi-column section; the 1-column
+      // chrome is a Stack in all three section styles.
+      ...(hasSection && cols > 1 ? ["Grid"] : []),
       "Stack",
       ...(usage.boolean ? ["Switch"] : []),
       // Text renders each array's list-level error line.
@@ -4559,12 +4571,25 @@ const mantineBackend = (
   leaf: mantineLeaf,
   variantLeaf: mantineVariantLeaf,
   numberPropsHook: kitScalarBinding("mantine", "number"),
+  gridChild:
+    cols === 1
+      ? undefined
+      : {
+          item: [`<Grid.Col span={{ base: 12, sm: ${colSm} }}>`, "</Grid.Col>"],
+          fullRow: ["<Grid.Col span={12}>", "</Grid.Col>"],
+        },
   objectSection: wrapSection(sectionOpen, sectionClose),
   arraySection: (entry, level, rowBody) => [
     ...sectionOpen(entry.label, level),
+    // Grid children must be Grid.Cols: each mapped row keeps the old
+    // grid's two-up flow, the error and add button share a spanning Col.
     `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
-    `${ind(level + 2)}<Stack`,
-    `${ind(level + 3)}key={row.id}`,
+    ...(cols === 1
+      ? [`${ind(level + 2)}<Stack`, `${ind(level + 3)}key={row.id}`]
+      : [
+          `${ind(level + 2)}<Grid.Col key={row.id} span={{ base: 12, sm: ${colSm} }}>`,
+          `${ind(level + 2)}<Stack`,
+        ]),
     `${ind(level + 3)}gap="md"`,
     `${ind(level + 3)}p="md"`,
     `${ind(level + 3)}bd="1px solid gray.3"`,
@@ -4575,15 +4600,17 @@ const mantineBackend = (
     `${ind(level + 4)}Remove`,
     `${ind(level + 3)}</Button>`,
     `${ind(level + 2)}</Stack>`,
+    ...(cols === 1 ? [] : [`${ind(level + 2)}</Grid.Col>`]),
     `${ind(level + 1)}))}`,
-    // The array-level error — the same per-kit line the module layout's
-    // list shell renders.
+    // The array-level error and add button — one spanning Col at cols > 1.
+    ...(cols === 1 ? [] : [`${ind(level + 1)}<Grid.Col span={12}>`]),
     `${ind(level + 1)}{${entry.hookName}.error ? (`,
     `${ind(level + 2)}<Text role="alert" c="red">{${entry.hookName}.error[0]}</Text>`,
     `${ind(level + 1)}) : null}`,
     `${ind(level + 1)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
     `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
     `${ind(level + 1)}</Button>`,
+    ...(cols === 1 ? [] : [`${ind(level + 1)}</Grid.Col>`]),
     ...sectionClose(level),
   ],
   bodyLevel: 4,

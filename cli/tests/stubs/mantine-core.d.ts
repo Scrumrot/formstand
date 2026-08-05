@@ -181,3 +181,19 @@ export declare const Select: (
     onBlur?: () => void;
   }>,
 ) => ReactElement;
+
+// Grid/Grid.Col: the span-capable layout pair multi-column sections emit.
+// Only what the emitter writes is typed; the version matrix proves the
+// output against the real @mantine/core declarations.
+export declare const Grid: ((
+  props: StyleAttr & Readonly<{ children?: ReactNode }>,
+) => ReactElement) & {
+  Col: (
+    props: StyleAttr &
+      Readonly<{
+        span?: number | Readonly<Record<string, number>>;
+        key?: string;
+        children?: ReactNode;
+      }>,
+  ) => ReactElement;
+};

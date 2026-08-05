@@ -365,7 +365,8 @@ describe("generated components", () => {
       'gridTemplateColumns={{ base: "1fr", md: "repeat(2, minmax(0, 1fr))" }}',
     );
     expect(mantine.panel.code).toContain("<Card withBorder");
-    expect(mantine.panel.code).toContain('<SimpleGrid cols={{ base: 1, sm: 2 }}>');
+    expect(mantine.panel.code).toContain("<Grid>");
+    expect(mantine.panel.code).toContain("<Grid.Col span={{ base: 12, sm: 6 }}>");
     expect(antd.panel.code).toContain('<Card variant="outlined"');
     expect(antd.panel.code).toContain("<Row gutter={[16, 16]}>");
     expect(antd.panel.code).toContain("<Col xs={24} sm={12}>");
@@ -384,7 +385,10 @@ describe("generated components", () => {
       '<Accordion defaultValue="section" variant="contained"',
     );
     expect(mantine.collapsible.code).toContain("<Accordion.Control>");
-    expect(mantine.collapsible.code).toContain('<SimpleGrid cols={{ base: 1, sm: 3 }}>');
+    expect(mantine.collapsible.code).toContain("<Grid>");
+    expect(mantine.collapsible.code).toContain(
+      "<Grid.Col span={{ base: 12, sm: 4 }}>",
+    );
     // antd's Collapse must use the items API — children-panels are
     // deprecated in 5.x+.
     expect(antd.collapsible.code).toContain("<Collapse");

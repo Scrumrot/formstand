@@ -1219,6 +1219,44 @@ const headingLines = (indent: string): readonly string[] => [
 // picks the chrome (flat / panel / collapsible) and its content container is
 // the grid the fields flow into. The 1-column flat default keeps the
 // historical output verbatim.
+// The cell tags a container ui wraps section children in, or undefined for
+// the CSS-grid uis. Shared by the section-body builder, the tuple and array
+// section files, and mirrored by the single-file backends' gridChild.
+const containerCellTags = (
+  ui: ModuleUi,
+  columns: number,
+): Readonly<{
+  item: readonly [string, string];
+  fullRow: readonly [string, string];
+}> | undefined => {
+  if (columns === 1) return undefined;
+  switch (ui) {
+    case "antd":
+      return {
+        item: [`<Col xs={24} sm={${String(24 / columns)}}>`, "</Col>"],
+        fullRow: ["<Col span={24}>", "</Col>"],
+      };
+    case "mantine":
+      return {
+        item: [
+          `<Grid.Col span={{ base: 12, sm: ${String(12 / columns)} }}>`,
+          "</Grid.Col>",
+        ],
+        fullRow: ["<Grid.Col span={12}>", "</Grid.Col>"],
+      };
+    case "mui":
+      // Pending: mui's Grid spelling differs per major (v5 item/xs vs v7+
+      // size), so its container migration lands with muiVersion threaded
+      // through the section builders. Until then mui keeps its sx CSS grid,
+      // which needs no cell wrappers.
+      return undefined;
+    case "plain":
+    case "shadcn":
+    case "chakra":
+      return undefined;
+  }
+};
+
 const objectShell = (
   ui: ModuleUi,
   visual: VisualOptions,
@@ -1274,6 +1312,16 @@ const objectShell = (
       }
     }
     case "mantine": {
+      // Multi-column shells are Mantine's own Grid/Grid.Col (see the
+      // single-file backend): the heading rides a spanning Grid.Col,
+      // children arrive pre-wrapped by the body builder.
+      const titleCol = (pad: string): readonly string[] => [
+        `${pad}<Grid.Col span={12}>`,
+        `${pad}  <Title order={4}>`,
+        ...headingLines(`${pad}    `),
+        `${pad}  </Title>`,
+        `${pad}</Grid.Col>`,
+      ];
       switch (visual.sections) {
         case "flat":
           return cols === 1
@@ -1286,24 +1334,31 @@ const objectShell = (
                 "    </Stack>",
               ]
             : [
-                `    <SimpleGrid cols={{ base: 1, sm: ${cols} }}>`,
-                `      <Title order={4} style={{ gridColumn: "1 / -1" }}>`,
-                ...headingLines("        "),
-                "      </Title>",
+                "    <Grid>",
+                ...titleCol("      "),
                 ...children,
-                "    </SimpleGrid>",
+                "    </Grid>",
               ];
         case "panel":
-          return [
-            "    <Card withBorder>",
-            `      <SimpleGrid cols={{ base: 1, sm: ${cols} }}>`,
-            `        <Title order={4}${cols > 1 ? ` style={{ gridColumn: "1 / -1" }}` : ""}>`,
-            ...headingLines("          "),
-            "        </Title>",
-            ...children,
-            "      </SimpleGrid>",
-            "    </Card>",
-          ];
+          return cols === 1
+            ? [
+                "    <Card withBorder>",
+                `      <Stack gap="md">`,
+                `        <Title order={4}>`,
+                ...headingLines("          "),
+                "        </Title>",
+                ...children,
+                "      </Stack>",
+                "    </Card>",
+              ]
+            : [
+                "    <Card withBorder>",
+                "      <Grid>",
+                ...titleCol("        "),
+                ...children,
+                "      </Grid>",
+                "    </Card>",
+              ];
         case "collapsible":
           return [
             `    <Accordion defaultValue="section" variant="contained">`,
@@ -1314,9 +1369,9 @@ const objectShell = (
             "          </Title>",
             "        </Accordion.Control>",
             "        <Accordion.Panel>",
-            `          <SimpleGrid cols={{ base: 1, sm: ${cols} }}>`,
+            `          ${cols === 1 ? `<Stack gap="md">` : "<Grid>"}`,
             ...children,
-            "          </SimpleGrid>",
+            `          ${cols === 1 ? "</Stack>" : "</Grid>"}`,
             "        </Accordion.Panel>",
             "      </Accordion.Item>",
             "    </Accordion>",
@@ -1540,31 +1595,27 @@ const objectSectionImports = (
           ];
       }
       break;
-    case "mantine":
+    case "mantine": {
+      const gridOrStack = visual.columns === 1 ? "Stack" : "Grid";
       switch (visual.sections) {
         case "flat":
           return [
-            {
-              from: "@mantine/core",
-              names:
-                visual.columns === 1
-                  ? ["Stack", "Title"]
-                  : ["SimpleGrid", "Title"],
-            },
+            { from: "@mantine/core", names: [gridOrStack, "Title"] },
           ];
         case "panel":
           return [
-            { from: "@mantine/core", names: ["Card", "SimpleGrid", "Title"] },
+            { from: "@mantine/core", names: ["Card", gridOrStack, "Title"] },
           ];
         case "collapsible":
           return [
             {
               from: "@mantine/core",
-              names: ["Accordion", "SimpleGrid", "Title"],
+              names: ["Accordion", gridOrStack, "Title"],
             },
           ];
       }
       break;
+    }
     case "antd": {
       // Multi-column shells are Row/Col; 1-column shells are vertical Flex.
       const rowCol =
@@ -2722,25 +2773,22 @@ const objectSectionFile = (
     nestedArrayComponents(ui, naming, entry, nestedUsed),
   );
 
-  // antd cols>1 lays the shell out as <Row> (see objectShell), whose direct
-  // children must each be a <Col>. Deeper levels (fieldsets' innards) are
-  // ordinary flow content. Other uis keep CSS grids: placement alone makes
-  // their children cells, so no wrapper.
-  const antdRowCells = ui === "antd" && visual.columns > 1;
+  // Container uis lay the shell out with a real layout component (antd
+  // <Row>, mantine <Grid>, mui <Grid container>) whose direct children must
+  // each be a wrapped cell; deeper levels (fieldsets' innards) are ordinary
+  // flow content. CSS-grid uis return undefined: placement alone makes
+  // their children cells.
+  const cells = containerCellTags(ui, visual.columns);
   const antdCell = (
     kind: "item" | "fullRow",
     indent: string,
     payload: (inner: string) => readonly string[],
   ): readonly string[] =>
-    antdRowCells
+    cells !== undefined
       ? [
-          `${indent}${
-            kind === "item"
-              ? `<Col xs={24} sm={${String(24 / visual.columns)}}>`
-              : "<Col span={24}>"
-          }`,
+          `${indent}${cells[kind][0]}`,
           ...payload(`${indent}  `),
-          `${indent}</Col>`,
+          `${indent}${cells[kind][1]}`,
         ]
       : payload(indent);
   const body = (
@@ -2931,12 +2979,12 @@ const tupleSectionFile = (
       `  const ${varName} = ${naming.hook("Field")}(${q(`${section.key}.${index}`)});`,
   );
 
-  const antdRowCells = ui === "antd" && visual.columns > 1;
+  const tupleCells = containerCellTags(ui, visual.columns);
   const bodyLines = elements.flatMap(({ element, index, varName, scalar }) =>
     scalar
-      ? antdRowCells
+      ? tupleCells !== undefined
         ? [
-            `      <Col xs={24} sm={${String(24 / visual.columns)}}>`,
+            `      ${tupleCells.item[0]}`,
             ...leafControl(
               ui,
               element,
@@ -2945,7 +2993,7 @@ const tupleSectionFile = (
               `{${q(`${section.key}.${index}`)}}`,
               "        ",
             ),
-            "      </Col>",
+            `      ${tupleCells.item[1]}`,
           ]
         : leafControl(
             ui,

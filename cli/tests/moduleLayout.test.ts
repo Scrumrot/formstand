@@ -362,7 +362,8 @@ describe("emitModuleForm visual options", () => {
     expect(section?.content).toContain(
       '<Accordion defaultValue="section" variant="contained">',
     );
-    expect(section?.content).toContain('<SimpleGrid cols={{ base: 1, sm: 2 }}>');
+    expect(section?.content).toContain("<Grid>");
+    expect(section?.content).toContain("<Grid.Col span={{ base: 12, sm: 6 }}>");
     expect(section?.content).toContain('} from "@mantine/core";');
     expect(typecheckDiagnostics(written, mantineStubPaths)).toEqual([]);
   });

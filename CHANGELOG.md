@@ -19,6 +19,13 @@
   `Col`s; a union section keeps its vertical shell, since its children are
   conditional fragments that cannot each be a `Col`. This is also the shape
   that makes a per-field span a one-prop change later.
+- **mantine sections lay out with `Grid`/`Grid.Col`** instead of
+  `SimpleGrid`: responsive span objects (`span={{ base: 12, sm: 6 }}`), and
+  the container that can express a per-field span at all, which `SimpleGrid`
+  cannot. Same cell rules as antd: leaves ride item Cols, nested content
+  spans, 1-column chrome reads as a `Stack`. The version matrix caught one
+  invented prop on the way in (`Grid` has no `gutter` in v9), which is
+  exactly the drift it exists to catch.
 
 ## 0.15.0 — 2026-08-04
 
