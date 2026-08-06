@@ -41,4 +41,14 @@ describe("FieldValue", () => {
       FieldValue<Form, "users.5.profile.name">
     >().toEqualTypeOf<string>();
   });
+
+  // Regression: a tuple is a readonly unknown[] too, so the generic array
+  // arm used to catch it first and union every element — "pair.0" into
+  // [string, number] typed as string | number, which broke the CLI's module
+  // tuple sections (their per-kind prop builders need the exact element).
+  it("resolves tuple index paths positionally, not as the element union", () => {
+    type Shape = { pair: readonly [string, number] };
+    expectTypeOf<FieldValue<Shape, "pair.0">>().toEqualTypeOf<string>();
+    expectTypeOf<FieldValue<Shape, "pair.1">>().toEqualTypeOf<number>();
+  });
 });

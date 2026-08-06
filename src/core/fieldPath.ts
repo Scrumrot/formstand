@@ -118,10 +118,17 @@ type FieldPathRec<T, D extends number> = [D] extends [0]
         }[keyof T & string]
       : never;
 
+// Tuples must resolve POSITIONALLY before the generic array arm runs: a
+// tuple is a readonly unknown[] too, and `infer U` there unions every
+// element, so "pair.0" into [string, number] would type as string | number.
+// A tuple's keyof includes its index literals ("0" | "1" | ...), a plain
+// array's does not, so `K extends keyof T` is exactly the tuple test.
 type StepValue<T, K extends string> = T extends readonly (infer U)[]
-  ? K extends `${number}`
-    ? U
-    : never
+  ? K extends keyof T
+    ? T[K]
+    : K extends `${number}`
+      ? U
+      : never
   : T extends object
     ? K extends keyof T
       ? T[K]
