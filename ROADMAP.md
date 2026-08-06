@@ -4,7 +4,8 @@ A living plan for **formstand** (the library) and **formstand-cli** (the
 generator), ordered by intent, not promise. Items move between horizons as
 reality votes. Shipped work graduates to the [CHANGELOG](./CHANGELOG.md).
 
-_Last updated: 2026-07-31 (formstand 0.13.0, formstand-cli 0.10.1)._
+_Last updated: 2026-08-06 (formstand 0.15.0, formstand-cli 0.10.1 plus the
+unreleased container-layout work on `main`)._
 
 ## Shipped since 0.9 (2026-07-10 to 2026-07-31)
 
@@ -54,49 +55,42 @@ the CLI from two UI targets to six, and make the docs match.
 - Schema builder paste-zod mode: paste a `z.object(...)` and it is evaluated
   in the browser against the bundled zod, complementing paste-a-TS-type.
 
+**Since then (0.14 and 0.15, plus unreleased CLI work on `main`)**
+
+- `formstand/devtools` (0.14.0): an in-page panel with per-field rows, both
+  error channels shown separately, a live `diff()`, and snapshot/restore.
+- `persistForm` hardening (0.15.0): a shape guard that discards drafts whose
+  stored shape conflicts with the current schema, and an opt-in `version` so
+  schema migrations can invalidate old drafts deliberately.
+- Responsive `--columns` and kit-native containers (CLI, unreleased):
+  multi-column output collapses to one column on a phone in every backend,
+  and antd, Mantine, and MUI sections now lay out with their kit's own
+  Row/Col, Grid/Grid.Col, and Grid components instead of inline CSS grid.
+
 ## Now
 
-- **Devtools.** `formstand/devtools` is built and on `main` under
-  `## Unreleased`: a panel with per-field rows, the two error channels shown
-  separately, a live `diff()`, and snapshot/restore. Remaining before it is
-  really done: a playground tab so people can try it without installing, and
-  a release to put it on npm.
-- **Responsive generated output.** `--columns 2|3` emits fixed grid tracks, so
-  generated forms do not reflow on a phone. Seven playground demos still show
-  this. The fix belongs in the emitters (a minmax/auto-fit track, or a
-  breakpoint per kit dialect), which changes output for every CLI user, so it
-  wants a deliberate design pass rather than a patch.
-- **Layout control.** Today layout is two coarse flags, `--sections` and
-  `--columns`, applied uniformly to a whole form. The ask is real control:
-  flexbox and CSS grid, or the kit's own layout components (MUI `Grid`, Chakra
-  and Mantine `SimpleGrid`, antd `Row`/`Col`), and per-field or per-section
-  placement rather than one column count for everything (this field spans two,
-  these three sit in a row).
-
-  Some of the machinery exists: every kit backend already emits that kit's
-  layout dialect for `--columns`. What is missing is a way to *say* what the
-  layout should be. The `fields` block in `formstand.config.ts` is the obvious
-  home, since it already addresses fields by path for component overrides, but
-  it is worth deciding whether layout belongs in config, in schema `.meta()`,
-  or both before building either. This is also where the responsive item above
-  gets solved properly rather than patched, so the two want designing together.
-
-- **StackBlitz links.** "Open in StackBlitz" from docs examples and playground
-  tabs, seeded with the demo source plus formstand from npm.
-- **Brand collateral.** OG images for docs and playground pages, and a README
-  header. The identity exists; it still doesn't travel.
-- **VitePress 2 migration.** The docs run VitePress 1.6.x, whose nested vite
-  toolchain carries dev-only advisories (the deployed site is static). A first
-  attempt at v2 alpha rendered the custom theme blank: builds fine, no console
-  errors, theme/CSS API changes to chase. Migrate when v2 stabilizes.
-
-## Later / parking lot
-
-- **An interactive CLI wizard.** `formstand-gen --wizard` walking through the
-  questions the flags ask: which file, which export, which kit, which layout,
-  where to write it. The flag semantics are already modelled once, in the
-  playground's CLI command builder tab, so the wizard is the terminal port of
-  something that exists rather than a fresh design.
+- **Ship the container-layout CLI release.** The responsive `--columns` and
+  kit-container work sits on `main` under `## formstand-cli Unreleased`, with
+  three confirmed edge-config bugs from its code review to fix first: the
+  module union section at `columns > 1` renders a `Stack` its imports don't
+  include, a tuple-only root emits containers the import gate never counted,
+  and a module nested fieldset lost its full-row span for the CSS-grid
+  backends. Fix, extend the matrix with tuple-only and root-union schemas so
+  the class cannot recur, then cut the release.
+- **Per-field layout placement.** Phase 1 landed: every backend emits its
+  kit's own layout dialect for `--columns`, responsive by default. Phase 2 is
+  saying more than one column count for a whole form: this field spans two,
+  these three sit in a row. The agreed home is a `span` in the `fields` block
+  of `formstand.config.ts`, which already addresses fields by path for
+  component overrides. The per-child cell hook the container migration added
+  (`Backend.gridChild`) is the seam a span flows through.
+- **A step-by-step CLI wizard.** `formstand-gen --wizard` walking through the
+  questions the flags ask, one at a time: which file, which export, which kit,
+  which layout, columns or not, where to write it, ending with the composed
+  command printed so the run is reproducible without the wizard. The flag
+  semantics are already modelled once, in the playground's CLI command builder
+  tab, so this is the terminal port of something that exists rather than a
+  fresh design.
 
   Two constraints to respect. It must be **explicitly opt-in**, never
   triggered by a bare `formstand-gen` or by a TTY check: the CLI streams to
@@ -105,6 +99,38 @@ the CLI from two UI targets to six, and make the docs match.
   CLI currently has two dependencies (`jiti`, `typescript`), so a prompts
   library is a real addition to weigh against hand-rolled `readline`.
 
+- **More schema inputs: JSON Schema and OpenAPI.** The CLI reads two sources
+  today, a zod schema export and a TS type, through two front-ends
+  (`fromZod`, `fromType`) that meet in one IR every emitter consumes. A JSON
+  Schema front-end is a third door into the same IR, and it follows the type
+  mode's path rather than zod mode's: the input carries no runtime validator,
+  so the generator emits a zod schema beside the component the way
+  `--schema-out` already does for TS types.
+
+  OpenAPI is mostly a pointer exercise on top: 3.1 component schemas *are*
+  JSON Schema, so the work is selecting which one (a flag naming
+  `#/components/schemas/X` or an operation's request body) plus `$ref`
+  resolution. The design questions are mapping fidelity, not plumbing: which
+  keywords translate cleanly (`allOf` merging, `oneOf` as unions, string
+  `format`s), which degrade to the existing TODO-comment fallback
+  (`patternProperties`, tuple `items` arrays), and 3.0's `nullable: true`
+  dialect versus 3.1's type arrays. This also serves the larger aim of the
+  CLI as a generator agents drive: an agent holding an OpenAPI spec should
+  get a typed form from it without hand-translating the schema first.
+
+- **StackBlitz links.** "Open in StackBlitz" from docs examples and playground
+  tabs, seeded with the demo source plus formstand from npm.
+- **Brand collateral.** OG images for docs and playground pages, and a README
+  header. The identity exists; it still doesn't travel.
+- **VitePress 2 migration.** Done and parked: the `chore/vitepress-2` branch
+  builds and renders the full site on 2.0.0-alpha.18 (the historic blank-theme
+  failure no longer reproduces there; no root cause beyond "fixed in alpha").
+  Merge when v2 ships a stable release.
+
+## Later / parking lot
+
+- **A devtools playground tab.** The panel shipped in 0.14.0; a playground
+  tab would let people try it without installing.
 - **Generated tests.** A spec emitted beside the component: it renders, every
   field is present and labelled, a required field reports its message, submit
   calls the handler with parsed data. Mechanical to generate and genuinely
