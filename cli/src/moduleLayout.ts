@@ -2068,7 +2068,17 @@ const hooksFile = (
   const hasVariantFields = root.fields.some(
     (field) => !isUnaddressable(field.name) && hasVariantFieldUsage(field.spec),
   );
-  const hasFields = plan.fields.length > 0 || hasArrays || hasUnions;
+  // A tuple section binds each scalar element with the plain field hook at
+  // its positional path (coord.0) and imports it whenever at least one
+  // element is scalar — this gate mirrors that import rule exactly. Tuples
+  // missing here shipped a tuple-only root whose sections imported a hook
+  // the hooks file never exported.
+  const hasTupleBindings = plan.sections.some(
+    (section) =>
+      section.spec.kind === "tuple" && section.spec.elements.some(isScalarSpec),
+  );
+  const hasFields =
+    plan.fields.length > 0 || hasArrays || hasUnions || hasTupleBindings;
   const hooks = [
     ...(hasFields ? [naming.hook("Field")] : []),
     ...(hasVariantFields ? [naming.hook("VariantField")] : []),
@@ -2863,26 +2873,27 @@ const objectSectionFile = (
         return [depthTodoLine(at.join("."), indent)];
       }
       switch (spec.kind) {
-        case "object":
+        case "object": {
+          // The full-row span: container uis carry it on the fullRow cell
+          // wrapper (antdCell), so their fieldset stays bare; CSS-grid uis
+          // have no wrapper, so the span must ride the fieldset itself —
+          // inRow included, or a nested section collapses into one track.
+          const spanAttr =
+            visual.columns > 1 && cells === undefined
+              ? ui === "shadcn"
+                ? ` className="md:col-span-full"`
+                : ` style={{ gridColumn: "1 / -1" }}`
+              : "";
+          const fieldsetLines = (inner: string): readonly string[] => [
+            `${inner}<fieldset${spanAttr}>`,
+            `${inner}  <legend>${jsxText(field.label)}</legend>`,
+            ...body(spec.fields, at, `${inner}  `),
+            `${inner}</fieldset>`,
+          ];
           return inRow
-            ? antdCell("fullRow", indent, (inner) => [
-                `${inner}<fieldset>`,
-                `${inner}  <legend>${jsxText(field.label)}</legend>`,
-                ...body(spec.fields, at, `${inner}  `),
-                `${inner}</fieldset>`,
-              ])
-            : [
-                `${indent}<fieldset${
-                  visual.columns > 1
-                    ? ui === "shadcn"
-                      ? ` className="md:col-span-full"`
-                      : ` style={{ gridColumn: "1 / -1" }}`
-                    : ""
-                }>`,
-                `${indent}  <legend>${jsxText(field.label)}</legend>`,
-                ...body(spec.fields, at, `${indent}  `),
-                `${indent}</fieldset>`,
-              ];
+            ? antdCell("fullRow", indent, fieldsetLines)
+            : fieldsetLines(indent);
+        }
         case "array": {
           const entry = nestedByKey.get(at.join("."));
           return entry === undefined
@@ -3739,8 +3750,18 @@ const unionSectionFile = (
     ...commonBindings.map((binding) => binding.spec),
     ...bindings.map((binding) => binding.spec),
   ];
+  // A union's children are conditional fragments (a leaf set per active
+  // variant): under a container shell (antd Row, mantine Grid, mui Grid
+  // container) they would be loose unwrapped children, so the union section
+  // keeps the vertical shell at any column count. Bound once so the imports
+  // below and the shell render from the SAME visual — computing imports from
+  // the original multi-column visual imported Grid while rendering Stack.
+  const shellVisual: VisualOptions =
+    containerCellTags(ui, visual.columns) !== undefined
+      ? { ...visual, columns: 1 }
+      : visual;
   const imports = mergeImports([
-    ...objectSectionImports(ui, visual),
+    ...objectSectionImports(ui, shellVisual),
     ...leafSpecs.flatMap((leaf) => leafImports(ui, leaf)),
   ]);
 
@@ -3797,17 +3818,7 @@ const unionSectionFile = (
         })),
       ),
       "  return (",
-      // A union's children are conditional fragments (a leaf set per active
-      // variant): under a container shell (antd Row, mantine Grid, mui Grid
-      // container) they would be loose unwrapped children, so the union
-      // section keeps the vertical shell at any column count.
-      ...objectShell(
-        ui,
-        containerCellTags(ui, visual.columns) !== undefined
-          ? { ...visual, columns: 1 }
-          : visual,
-        children,
-      ),
+      ...objectShell(ui, shellVisual, children),
       "  );",
       "};",
       "",

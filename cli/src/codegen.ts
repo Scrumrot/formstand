@@ -3057,19 +3057,23 @@ const muiBoundComponents = (
 
 const muiLeaf = boundLeaf("BoundSwitchField", describedLeafKinds("mui"));
 
-// Typography renders section headings: any addressable object field at any
-// depth needs it (array sections are covered by the arrays.length check).
-const anyAddressableObjectField = (spec: FieldSpec): boolean => {
+// Typography renders section headings: any addressable object OR tuple field
+// at any depth needs it, since both render backend.objectSection chrome
+// (array sections are covered by the arrays.length check; unions render bare
+// variant controls, no heading). Tuples missing here shipped a tuple-only
+// root that emitted <Row>/<Col>/<Typography> without importing them.
+const anyAddressableSectionField = (spec: FieldSpec): boolean => {
   switch (spec.kind) {
     case "object":
       return spec.fields.some(
         (field) =>
           !isUnaddressable(field.name) &&
           (field.spec.kind === "object" ||
-            anyAddressableObjectField(field.spec)),
+            field.spec.kind === "tuple" ||
+            anyAddressableSectionField(field.spec)),
       );
     case "array":
-      return anyAddressableObjectField(spec.item);
+      return anyAddressableSectionField(spec.item);
     default:
       return false;
   }
@@ -3163,7 +3167,7 @@ const muiBackend = (
 
   return {
   header: (usage, arrays, root) => {
-    const hasSection = arrays.length > 0 || anyAddressableObjectField(root);
+    const hasSection = arrays.length > 0 || anyAddressableSectionField(root);
     const muiImports = [
       ...(hasSection && visual.sections === "collapsible"
         ? ["Accordion", "AccordionDetails", "AccordionSummary"]
@@ -4102,7 +4106,7 @@ const chakraBackend = (
 
   return {
   header: (usage, arrays, root) => {
-    const hasSection = arrays.length > 0 || anyAddressableObjectField(root);
+    const hasSection = arrays.length > 0 || anyAddressableSectionField(root);
     const chakraImports = [
       ...(hasSection && visual.sections === "collapsible" ? ["Accordion"] : []),
       "Box",
@@ -4574,7 +4578,7 @@ const mantineBackend = (
 
   return {
   header: (usage, arrays, root) => {
-    const hasSection = arrays.length > 0 || anyAddressableObjectField(root);
+    const hasSection = arrays.length > 0 || anyAddressableSectionField(root);
     const mantineImports = [
       ...(hasSection && visual.sections === "collapsible" ? ["Accordion"] : []),
       ...(usage.autocomplete ? ["Autocomplete"] : []),
@@ -5172,7 +5176,7 @@ const antdBackend = (
 
   return {
   header: (usage, arrays, root) => {
-    const hasSection = arrays.length > 0 || anyAddressableObjectField(root);
+    const hasSection = arrays.length > 0 || anyAddressableSectionField(root);
     const needsError =
       usage.string ||
       usage.date ||

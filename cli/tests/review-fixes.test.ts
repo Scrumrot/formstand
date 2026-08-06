@@ -4,10 +4,18 @@ import { z } from "zod";
 import { main, moduleSpecifier } from "../src/cli";
 import { camelIdent, pascalCase } from "../src/casing";
 import { emitPlainForm, emitZodSchema } from "../src/codegen";
-import { emitMuiForm } from "../src/codegen";
+import { emitAntdForm, emitMuiForm } from "../src/codegen";
 import { emitModuleForm, joinModuleFiles } from "../src/moduleLayout";
 import { fromZod } from "../src/fromZod";
-import { freshTmpDir, muiStubPaths, typecheckDiagnostics, zodFixture } from "./helpers";
+import {
+  antdStubPaths,
+  freshTmpDir,
+  mantineStubPaths,
+  muiStubPaths,
+  typecheckDiagnostics,
+  zodFixture,
+} from "./helpers";
+import { tupleOnlySchema } from "./fixtures/tupleOnlySchema";
 import fs from "node:fs";
 
 // Regression tests for the 2026-07 full-repo review findings (CLI side).
@@ -299,5 +307,128 @@ describe("hoisted NumberProps consts respect the identifier registry (0.11 cycle
       return dest;
     });
     expect(typecheckDiagnostics(written, muiStubPaths)).toEqual([]);
+  });
+});
+
+// Regression tests for the 2026-08 container-migration review: root shapes
+// whose section chrome outran the import/export gates. Each reproduced as a
+// compile error in generated output while every suite was green, because the
+// shared fixtures always carry an object or array field that satisfied the
+// gates by accident. The version matrix covers these shapes against the real
+// kit declarations (cli/matrix/edgeSchemas.ts); these tests keep the gates
+// honest in CI, where the matrix does not run.
+describe("container edge configs", () => {
+  const writeModule = (
+    files: readonly Readonly<{ path: string; content: string }>[],
+    dir: string,
+  ): readonly string[] =>
+    files.map((file) => {
+      const dest = path.join(dir, file.path);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, file.content, "utf8");
+      return dest;
+    });
+
+  it("a tuple-only root imports the section chrome it renders", () => {
+    const dir = freshTmpDir("review-tuple-only-single");
+    fs.writeFileSync(
+      path.join(dir, "schema.ts"),
+      emitZodSchema(fromZod(tupleOnlySchema), "s"),
+      "utf8",
+    );
+    // columns 1 already needs the heading import (Typography/Title/Heading);
+    // columns > 1 adds the kit grid pair (Row/Col, Grid). Both were missing.
+    const flat = emitMuiForm({
+      ir: fromZod(tupleOnlySchema),
+      formName: "TupleFlatForm",
+      schemaImport: { name: "s", from: "./schema", kind: "named" },
+    });
+    expect(flat).toContain("<Typography");
+    const grid = emitAntdForm({
+      ir: fromZod(tupleOnlySchema),
+      formName: "TupleGridForm",
+      schemaImport: { name: "s", from: "./schema", kind: "named" },
+      visual: { sections: "flat", columns: 2 },
+    });
+    expect(grid).toContain("<Row gutter={[16, 16]}>");
+    const flatFile = path.join(dir, "TupleFlatForm.tsx");
+    const gridFile = path.join(dir, "TupleGridForm.tsx");
+    fs.writeFileSync(flatFile, flat, "utf8");
+    fs.writeFileSync(gridFile, grid, "utf8");
+    expect(typecheckDiagnostics([flatFile], muiStubPaths)).toEqual([]);
+    expect(typecheckDiagnostics([gridFile], antdStubPaths)).toEqual([]);
+  });
+
+  it("a module union section's imports match its forced 1-column shell", () => {
+    const unionRootSchema = z.object({
+      payment: z.discriminatedUnion("method", [
+        z.object({ method: z.literal("card"), last4: z.string() }),
+        z.object({ method: z.literal("bank"), iban: z.string() }),
+      ]),
+    });
+    const files = emitModuleForm({
+      ir: fromZod(unionRootSchema),
+      formName: "PaymentForm",
+      ui: "mantine",
+      schemaImport: { name: "s", from: "./schema", kind: "named" },
+      schemaSource: emitZodSchema(fromZod(unionRootSchema), "s"),
+      visual: { sections: "flat", columns: 2 },
+    });
+    const section = files.find((f) => f.path === "sections/PaymentSection.tsx");
+    // The union keeps its vertical shell at any column count (conditional
+    // fragments cannot each be a grid cell), so the import block must be
+    // computed from the SAME forced 1-column visual: Stack in, Grid out.
+    expect(section?.content).toContain("<Stack");
+    expect(section?.content).toMatch(
+      /import \{[^}]*\bStack\b[^}]*\} from "@mantine\/core"/s,
+    );
+    expect(section?.content).not.toContain("<Grid");
+    const written = writeModule(files, freshTmpDir("review-union-grid-module"));
+    expect(typecheckDiagnostics(written, mantineStubPaths)).toEqual([]);
+  });
+
+  it("a module tuple-only root exports the field hook its sections import", () => {
+    const files = emitModuleForm({
+      ir: fromZod(tupleOnlySchema),
+      formName: "TupleForm",
+      ui: "plain",
+      schemaImport: { name: "s", from: "./schema", kind: "named" },
+      schemaSource: emitZodSchema(fromZod(tupleOnlySchema), "s"),
+      visual: { sections: "flat", columns: 2 },
+    });
+    // The tuple sections bind scalar elements with useTupleField at their
+    // positional paths, so hooks.ts must export it even though no plan
+    // field, array, or union exists to trip the gate.
+    const hooks = files.find((f) => f.path === "hooks.ts");
+    expect(hooks?.content).toContain("useTupleField,");
+    const written = writeModule(files, freshTmpDir("review-tuple-only-module"));
+    expect(typecheckDiagnostics(written)).toEqual([]);
+  });
+
+  it("a module nested fieldset keeps its full-row span for CSS-grid uis", () => {
+    const nestedSchema = z.object({
+      shipping: z.object({
+        note: z.string(),
+        address: z.object({ street: z.string(), city: z.string() }),
+      }),
+    });
+    // shadcn/plain have no cell wrapper to carry the span, so it must ride
+    // the fieldset itself even inside the section grid — a bare nested
+    // fieldset collapses into a single track.
+    const sectionFor = (ui: "shadcn" | "plain") =>
+      emitModuleForm({
+        ir: fromZod(nestedSchema),
+        formName: "ShippingForm",
+        ui,
+        schemaImport: { name: "s", from: "./schema", kind: "named" },
+        schemaSource: emitZodSchema(fromZod(nestedSchema), "s"),
+        visual: { sections: "flat", columns: 2 },
+      }).find((f) => f.path === "sections/ShippingSection.tsx");
+    expect(sectionFor("shadcn")?.content).toContain(
+      '<fieldset className="md:col-span-full">',
+    );
+    expect(sectionFor("plain")?.content).toContain(
+      '<fieldset style={{ gridColumn: "1 / -1" }}>',
+    );
   });
 });

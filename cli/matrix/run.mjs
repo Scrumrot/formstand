@@ -53,6 +53,15 @@ const schemas = await jiti.import(pathToFileURL(fixtureFile).href);
 const kitchenSinkIr = api.fromZod(schemas.kitchenSinkSchema);
 const nestedArrayIr = api.fromZod(schemas.nestedArrayStressSchema);
 
+// Edge-config fixtures the kitchen sink cannot represent because they are
+// defined by what they LACK (a tuple-only root, a union-only root) — the
+// shapes a reviewed import-gate bug class shipped through while the matrix
+// was green. See edgeSchemas.ts for the per-schema rationale.
+const edgeFile = path.join(matrixDir, "edgeSchemas.ts");
+const edgeSchemas = await jiti.import(pathToFileURL(edgeFile).href);
+const tupleOnlyIr = api.fromZod(edgeSchemas.tupleOnlySchema);
+const rootUnionIr = api.fromZod(edgeSchemas.rootUnionSchema);
+
 // A described twin of the kitchen sink: a description on every scalar leaf
 // (containers recursed, union variant fields and tuple elements included),
 // so each kit's helper-text slot — Bound component props, inline union
@@ -336,6 +345,7 @@ const generateKit = ({ alias, emitSingle, moduleUi, moduleExtra, probe }) => {
   const dir = path.join(outRoot, alias);
   fs.mkdirSync(dir, { recursive: true });
   fs.copyFileSync(fixtureFile, path.join(dir, "boundarySchemas.ts"));
+  fs.copyFileSync(edgeFile, path.join(dir, "edgeSchemas.ts"));
 
   const writeFile = (rel, content) => {
     const abs = path.join(dir, rel);
@@ -344,25 +354,25 @@ const generateKit = ({ alias, emitSingle, moduleUi, moduleExtra, probe }) => {
     return abs;
   };
 
-  const single = (formName, ir, name, visual, extra) =>
+  const single = (formName, ir, name, visual, extra, from = "../boundarySchemas") =>
     writeFile(
       `single/${formName}.tsx`,
       emitSingle({
         ir,
         formName,
-        schemaImport: { name, from: "../boundarySchemas", kind: "named" },
+        schemaImport: { name, from, kind: "named" },
         ...(visual === undefined ? {} : { visual }),
         ...(extra ?? {}),
       }),
     );
 
-  const moduleForm = (folder, ir, name, formName, visual) =>
+  const moduleForm = (folder, ir, name, formName, visual, from = "../../boundarySchemas") =>
     api
       .emitModuleForm({
         ir,
         formName,
         ui: moduleUi,
-        schemaImport: { name, from: "../../boundarySchemas", kind: "named" },
+        schemaImport: { name, from, kind: "named" },
         ...(moduleExtra ?? {}),
         ...(visual === undefined ? {} : { visual }),
       })
@@ -426,6 +436,43 @@ const generateKit = ({ alias, emitSingle, moduleUi, moduleExtra, probe }) => {
       describedIr,
       "kitchenSinkSchema",
       "KitchenSinkDescribedForm",
+    ),
+    // The edge roots, at both column counts where each bug bites: the
+    // tuple-only heading imports (Typography/Title/Heading) go missing at
+    // columns 1 already, the grid pair (Row/Col, Grid) needs columns > 1,
+    // and the module union shell/import pairing only diverges at columns > 1.
+    single("TupleOnlyForm", tupleOnlyIr, "tupleOnlySchema", undefined, undefined, "../edgeSchemas"),
+    single(
+      "TupleOnlyGrid",
+      tupleOnlyIr,
+      "tupleOnlySchema",
+      { sections: "flat", columns: 2 },
+      undefined,
+      "../edgeSchemas",
+    ),
+    single(
+      "RootUnionGrid",
+      rootUnionIr,
+      "rootUnionSchema",
+      { sections: "flat", columns: 2 },
+      undefined,
+      "../edgeSchemas",
+    ),
+    ...moduleForm(
+      "TupleOnlyGrid",
+      tupleOnlyIr,
+      "tupleOnlySchema",
+      "TupleOnlyForm",
+      { sections: "flat", columns: 2 },
+      "../../edgeSchemas",
+    ),
+    ...moduleForm(
+      "RootUnionGrid",
+      rootUnionIr,
+      "rootUnionSchema",
+      "RootUnionForm",
+      { sections: "flat", columns: 2 },
+      "../../edgeSchemas",
     ),
   ];
   const readGenerated = (rel) => fs.readFileSync(path.join(dir, rel), "utf8");

@@ -1,6 +1,41 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Tuple element paths type as their exact element.** `FieldValue` resolved
+  a path like `"pair.0"` into `[string, number]` through the generic array
+  arm, so the value typed as `string | number` instead of `string`. The
+  bundled field components hid this by asserting their own value type; the
+  raw hooks exposed it, and a CLI module tuple section over a mixed tuple
+  did not compile because its per-kind prop builders need the exact element.
+  Tuple index paths now resolve positionally. Types only, no runtime change.
+
 ## formstand-cli Unreleased
+
+### Fixed
+
+- **Four edge-config compile and layout bugs in the container migration**,
+  all one family: a gate that decides imports or exports did not count every
+  shape that renders section chrome.
+  - A module union section at `--columns 2|3` rendered its vertical `Stack`
+    shell while importing for the grid it no longer renders, a TS2304 in
+    mantine and mui output. Imports and shell now derive from one visual.
+  - A tuple-only root emitted section chrome (`Typography`/`Title`/`Heading`
+    headings, and at `--columns 2|3` the `Row`/`Col` or `Grid` pair) without
+    importing any of it; the section-import gate now counts tuples.
+  - A module tuple section imported the bound field hook from `hooks.ts`,
+    which never exported it for a tuple-only root; the export gate now
+    mirrors the tuple section's own import rule.
+  - A module nested `<fieldset>` lost its full-row span for the CSS-grid
+    backends (plain, shadcn, chakra), collapsing a nested section into one
+    grid cell; the span now rides the fieldset whenever no cell wrapper
+    exists to carry it.
+
+  The version matrix now generates tuple-only and root-union schemas against
+  every kit's real declarations (`cli/matrix/edgeSchemas.ts`), and the CI
+  suite grew matching regression tests, so the class cannot ship green again.
 
 ### Changed
 
