@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.15.1 — 2026-08-06
 
 ### Fixed
 
@@ -12,7 +12,7 @@
   did not compile because its per-kind prop builders need the exact element.
   Tuple index paths now resolve positionally. Types only, no runtime change.
 
-## formstand-cli Unreleased
+## formstand-cli 0.11.0 — 2026-08-06
 
 ### Fixed
 
