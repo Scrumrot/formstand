@@ -1340,6 +1340,14 @@ type Backend = Readonly<{
     // Explicit undefined is how a backend factory says "columns === 1, no
     // wrapping" without conditional spreads (exactOptionalPropertyTypes).
     | undefined;
+  // Vertical rhythm for a union riding a grid cell. A union renders bare
+  // sibling controls (discriminant select, common fields, variant
+  // fragments) with no section chrome, so inside a fullRow cell they lose
+  // the spacing the kit's 1-column Stack chrome otherwise provides — this
+  // open/close pair restores it. Only kit-grid backends whose leaves don't
+  // carry their own wrapper define it (mui/mantine Stack; antd leaves are
+  // each a Flex already), and only at columns > 1, like gridChild.
+  unionCellShell?: readonly [string, string] | undefined;
   // Wrapper around a nested object's fields.
   objectSection: (
     label: string,
@@ -1520,10 +1528,23 @@ const fieldLines = (
           ? [
               `${ind(level)}{/* TODO: discriminated union ${commentText(q(prefix.text + field.name))} inside an array row is not supported; extract it by hand */}`,
             ]
-          : cell("fullRow", (lvl) => [
-              ...todoComment(spec, lvl),
-              ...unionLines(backend, entry, field.label, lvl),
-            ]);
+          : cell("fullRow", (lvl) => {
+              // Inside a kit grid the union's bare controls ride one cell;
+              // the kit's shell restores the vertical rhythm its 1-column
+              // Stack chrome would have provided.
+              const shell = inGrid ? backend.unionCellShell : undefined;
+              const body = (inner: number): readonly string[] => [
+                ...todoComment(spec, inner),
+                ...unionLines(backend, entry, field.label, inner),
+              ];
+              return shell === undefined
+                ? body(lvl)
+                : [
+                    ind(lvl) + shell[0],
+                    ...body(lvl + 1),
+                    ind(lvl) + shell[1],
+                  ];
+            });
       }
       case "tuple": {
         // Fixed positions bind at static numeric indices (coord.0, coord.1) —
@@ -3247,6 +3268,8 @@ const muiBackend = (
   objectSection: wrapSection(sectionOpen, sectionClose, bodyDelta),
   gridChild:
     cols === 1 ? undefined : { item: itemCell, fullRow: fullRowCell },
+  unionCellShell:
+    cols === 1 ? undefined : ["<Stack spacing={2}>", "</Stack>"],
   arraySection: (entry, level, rowBody) => {
     // Children sit under the chrome's innermost container — same shift as
     // objectSection's body. At cols > 1 each row's Stack nests INSIDE its
@@ -4695,6 +4718,8 @@ const mantineBackend = (
           item: [`<Grid.Col span={{ base: 12, sm: ${colSm} }}>`, "</Grid.Col>"],
           fullRow: ["<Grid.Col span={12}>", "</Grid.Col>"],
         },
+  unionCellShell:
+    cols === 1 ? undefined : [`<Stack gap="md">`, "</Stack>"],
   objectSection: wrapSection(sectionOpen, sectionClose, bodyDelta),
   arraySection: (entry, level, rowBody) => {
     // Children sit under the chrome's innermost container — same shift as

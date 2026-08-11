@@ -4,7 +4,7 @@ import { z } from "zod";
 import { main, moduleSpecifier } from "../src/cli";
 import { camelIdent, pascalCase } from "../src/casing";
 import { emitPlainForm, emitZodSchema } from "../src/codegen";
-import { emitAntdForm, emitMuiForm } from "../src/codegen";
+import { emitAntdForm, emitMantineForm, emitMuiForm } from "../src/codegen";
 import { emitModuleForm, joinModuleFiles } from "../src/moduleLayout";
 import { fromZod } from "../src/fromZod";
 import {
@@ -430,5 +430,92 @@ describe("container edge configs", () => {
     expect(sectionFor("plain")?.content).toContain(
       '<fieldset style={{ gridColumn: "1 / -1" }}>',
     );
+  });
+});
+
+describe("grid-cell cosmetics", () => {
+  // A union INSIDE an object section is what rides a grid cell — a root
+  // union binds under the root Stack and never gets a cell.
+  const nestedUnionSchema = z.object({
+    order: z.object({
+      reference: z.string(),
+      payment: z.discriminatedUnion("method", [
+        z.object({ method: z.literal("card"), last4: z.string() }),
+        z.object({ method: z.literal("bank"), iban: z.string() }),
+      ]),
+    }),
+  });
+
+  const indentOf = (source: string, pattern: RegExp): string => {
+    const match = source.match(pattern);
+    expect(match, `no line matches ${String(pattern)}`).not.toBeNull();
+    return (match as RegExpMatchArray)[1] ?? "";
+  };
+
+  it("a union riding a grid cell keeps its vertical rhythm in a Stack", () => {
+    const dir = freshTmpDir("review-union-cell-stack");
+    fs.writeFileSync(
+      path.join(dir, "schema.ts"),
+      emitZodSchema(fromZod(nestedUnionSchema), "s"),
+      "utf8",
+    );
+    // Without the shell the discriminant select, common fields, and variant
+    // fragments are bare siblings inside the fullRow cell — visibly tighter
+    // than the same union at --columns 1. antd needs none (each control is
+    // already a Flex column).
+    const mui = emitMuiForm({
+      ir: fromZod(nestedUnionSchema),
+      formName: "OrderMuiForm",
+      schemaImport: { name: "s", from: "./schema", kind: "named" },
+      visual: { sections: "flat", columns: 2 },
+    });
+    expect(mui).toMatch(/<Grid size=\{12\}>\s*<Stack spacing=\{2\}>/);
+    const muiFile = path.join(dir, "OrderMuiForm.tsx");
+    fs.writeFileSync(muiFile, mui, "utf8");
+    expect(typecheckDiagnostics([muiFile], muiStubPaths)).toEqual([]);
+
+    const mantine = emitMantineForm({
+      ir: fromZod(nestedUnionSchema),
+      formName: "OrderMantineForm",
+      schemaImport: { name: "s", from: "./schema", kind: "named" },
+      visual: { sections: "flat", columns: 2 },
+    });
+    expect(mantine).toMatch(/<Grid\.Col span=\{12\}>\s*<Stack gap="md">/);
+    const mantineFile = path.join(dir, "OrderMantineForm.tsx");
+    fs.writeFileSync(mantineFile, mantine, "utf8");
+    expect(typecheckDiagnostics([mantineFile], mantineStubPaths)).toEqual([]);
+  });
+
+  it("panel chrome cells sit under their Grid container, title beside them", () => {
+    const schema = z.object({
+      contact: z.object({ email: z.string(), phone: z.string() }),
+    });
+    const panel = emitMuiForm({
+      ir: fromZod(schema),
+      formName: "ContactForm",
+      schemaImport: { name: "s", from: "./schema", kind: "named" },
+      visual: { sections: "panel", columns: 2 },
+    });
+    // The title cell and the field cells are siblings (same indent), one
+    // level under the Grid container — the drift emitted the container two
+    // levels below the cells it wrapped.
+    const container = indentOf(panel, /^(\s*)<Grid container spacing=\{2\}>/m);
+    const title = indentOf(panel, /^(\s*)<Grid size=\{12\}>/m);
+    const item = indentOf(panel, /^(\s*)<Grid size=\{\{ xs: 12, sm: 6 \}\}>/m);
+    expect(title).toBe(item);
+    expect(title).toBe(`${container}  `);
+  });
+
+  it("array row stacks nest inside their wrapper cell, not beside it", () => {
+    const schema = z.object({ tags: z.array(z.string()) });
+    const grid = emitMuiForm({
+      ir: fromZod(schema),
+      formName: "TagsForm",
+      schemaImport: { name: "s", from: "./schema", kind: "named" },
+      visual: { sections: "flat", columns: 2 },
+    });
+    const cell = indentOf(grid, /^(\s*)<Grid key=\{row\.id\}/m);
+    const stack = indentOf(grid, /^(\s*)<Stack$/m);
+    expect(stack).toBe(`${cell}  `);
   });
 });
