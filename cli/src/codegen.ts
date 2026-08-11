@@ -117,6 +117,22 @@ export type ObjectSpec = Extract<FieldSpec, Readonly<{ kind: "object" }>>;
 
 export const ind = (level: number): string => "  ".repeat(level);
 
+// Re-indent an already-built JSX block by whole levels. Section bodies are
+// generated one level below their section tag (fieldLines' contract, which
+// cannot know the kit's chrome), but panel/collapsible chrome nests the
+// body's real container deeper — the shift is what parks cells under their
+// container instead of under the Card. Safe on generated lines only: every
+// line is space-prefixed code, so prefixing more spaces never changes
+// meaning (multi-line string literals would break, and no emitter produces
+// them).
+export const shiftLines = (
+  lines: readonly string[],
+  delta: number,
+): readonly string[] =>
+  delta === 0
+    ? lines
+    : lines.map((line) => (line.length === 0 ? line : ind(delta) + line));
+
 // ---------------------------------------------------------------------------
 // Escaping — one helper per emission context, so ANY field name is safe
 // ---------------------------------------------------------------------------
@@ -1330,7 +1346,10 @@ type Backend = Readonly<{
     level: number,
     body: readonly string[],
   ) => readonly string[];
-  // Wrapper around a field array's mapped rows (rowBody sits at level + 3).
+  // Wrapper around a field array's mapped rows. rowBody arrives built at
+  // level + 3 (the flat-chrome row depth — arraySectionLines cannot know
+  // the kit's chrome); a kit whose chrome or row cells nest deeper shifts
+  // it with shiftLines, the same way wrapSection shifts section bodies.
   arraySection: (
     entry: ArrayEntry,
     level: number,
@@ -2187,7 +2206,9 @@ const plainBackend = (
           ...(cols > 1
             ? [
                 `${ind(level + 1)}<div${styleAttr(grid)}>`,
-                ...body,
+                // The body was built at level+1; inside the grid div it
+                // belongs one deeper.
+                ...shiftLines(body, 1),
                 `${ind(level + 1)}</div>`,
               ]
             : body),
@@ -2598,15 +2619,21 @@ const kitFormstandImportLines = (
 };
 
 // The objectSection production every kit backend shares: wrap the body in
-// the kit's sectionOpen/sectionClose pair.
+// the kit's sectionOpen/sectionClose pair. bodyDelta is how many levels
+// DEEPER than the historical level+1 the body must sit — the depth of the
+// chrome's innermost container beyond the section tag itself (flat chrome
+// is one element, so 0; a Card+CardContent+Grid stack adds 2). Without the
+// shift, panel/collapsible cells render shallower than the container that
+// holds them and a host Prettier pass reflows every generated file.
 const wrapSection =
   (
     sectionOpen: (label: string, level: number) => readonly string[],
     sectionClose: (level: number) => readonly string[],
+    bodyDelta = 0,
   ): Backend["objectSection"] =>
   (label, level, body) => [
     ...sectionOpen(label, level),
-    ...body,
+    ...shiftLines(body, bodyDelta),
     ...sectionClose(level),
   ];
 
@@ -3164,6 +3191,10 @@ const muiBackend = (
         ];
     }
   };
+  // Depth of the chrome's innermost container beyond the section tag: flat
+  // is the container itself; panel adds Card+CardContent (and the Grid at
+  // cols > 1), collapsible AccordionDetails (+Grid) under the Accordion.
+  const bodyDelta = visual.sections === "flat" ? 0 : cols === 1 ? 1 : 2;
 
   return {
   header: (usage, arrays, root) => {
@@ -3213,46 +3244,55 @@ const muiBackend = (
   leaf: muiLeaf,
   variantLeaf: muiVariantLeaf,
   numberPropsHook: kitScalarBinding("mui", "number"),
-  objectSection: wrapSection(sectionOpen, sectionClose),
+  objectSection: wrapSection(sectionOpen, sectionClose, bodyDelta),
   gridChild:
     cols === 1 ? undefined : { item: itemCell, fullRow: fullRowCell },
-  arraySection: (entry, level, rowBody) => [
-    ...sectionOpen(entry.label, level),
-    // Grid children must be Grid items: each mapped row keeps the old
-    // grid's two-up flow, the error and add button share a spanning cell.
-    `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
-    ...(cols === 1
-      ? [`${ind(level + 2)}<Stack`, `${ind(level + 3)}key={row.id}`]
-      : [
-          `${ind(level + 2)}${
-            gridSizeProp
-              ? `<Grid key={row.id} size={{ xs: 12, sm: ${colSm} }}>`
-              : `<Grid key={row.id} item xs={12} sm={${colSm}}>`
-          }`,
-          `${ind(level + 2)}<Stack`,
-        ]),
-    `${ind(level + 3)}spacing={2}`,
-    `${ind(level + 3)}sx={{ p: 2, border: 1, borderColor: "divider", borderRadius: 1 }}`,
-    `${ind(level + 2)}>`,
-    ...rowBody,
-    `${ind(level + 3)}<Button type="button" onClick={() => ${entry.hookName}.remove(index)}>`,
-    `${ind(level + 4)}Remove`,
-    `${ind(level + 3)}</Button>`,
-    `${ind(level + 2)}</Stack>`,
-    ...(cols === 1 ? [] : [`${ind(level + 2)}${fullRowCell[1]}`]),
-    `${ind(level + 1)}))}`,
-    // The array-level error (z.array().min(...) etc.) and the add button —
-    // one spanning cell at cols > 1.
-    ...(cols === 1 ? [] : [`${ind(level + 1)}${fullRowCell[0]}`]),
-    `${ind(level + 1)}{${entry.hookName}.error ? (`,
-    `${ind(level + 2)}<Typography role="alert" color="error">{${entry.hookName}.error[0]}</Typography>`,
-    `${ind(level + 1)}) : null}`,
-    `${ind(level + 1)}<Button type="button" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
-    `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
-    `${ind(level + 1)}</Button>`,
-    ...(cols === 1 ? [] : [`${ind(level + 1)}${fullRowCell[1]}`]),
-    ...sectionClose(level),
-  ],
+  arraySection: (entry, level, rowBody) => {
+    // Children sit under the chrome's innermost container — same shift as
+    // objectSection's body. At cols > 1 each row's Stack nests INSIDE its
+    // wrapper cell (one deeper again), and the error/add pair sits inside
+    // its spanning cell.
+    const base = level + 1 + bodyDelta;
+    const rowStack = cols === 1 ? base + 1 : base + 2;
+    const spanBase = cols === 1 ? base : base + 1;
+    return [
+      ...sectionOpen(entry.label, level),
+      // Grid children must be Grid items: each mapped row keeps the old
+      // grid's two-up flow, the error and add button share a spanning cell.
+      `${ind(base)}{${entry.hookName}.fields.map((row, index) => (`,
+      ...(cols === 1
+        ? [`${ind(rowStack)}<Stack`, `${ind(rowStack + 1)}key={row.id}`]
+        : [
+            `${ind(base + 1)}${
+              gridSizeProp
+                ? `<Grid key={row.id} size={{ xs: 12, sm: ${colSm} }}>`
+                : `<Grid key={row.id} item xs={12} sm={${colSm}}>`
+            }`,
+            `${ind(rowStack)}<Stack`,
+          ]),
+      `${ind(rowStack + 1)}spacing={2}`,
+      `${ind(rowStack + 1)}sx={{ p: 2, border: 1, borderColor: "divider", borderRadius: 1 }}`,
+      `${ind(rowStack)}>`,
+      ...shiftLines(rowBody, rowStack + 1 - (level + 3)),
+      `${ind(rowStack + 1)}<Button type="button" onClick={() => ${entry.hookName}.remove(index)}>`,
+      `${ind(rowStack + 2)}Remove`,
+      `${ind(rowStack + 1)}</Button>`,
+      `${ind(rowStack)}</Stack>`,
+      ...(cols === 1 ? [] : [`${ind(base + 1)}${fullRowCell[1]}`]),
+      `${ind(base)}))}`,
+      // The array-level error (z.array().min(...) etc.) and the add button —
+      // one spanning cell at cols > 1.
+      ...(cols === 1 ? [] : [`${ind(base)}${fullRowCell[0]}`]),
+      `${ind(spanBase)}{${entry.hookName}.error ? (`,
+      `${ind(spanBase + 1)}<Typography role="alert" color="error">{${entry.hookName}.error[0]}</Typography>`,
+      `${ind(spanBase)}) : null}`,
+      `${ind(spanBase)}<Button type="button" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
+      `${ind(spanBase + 1)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
+      `${ind(spanBase)}</Button>`,
+      ...(cols === 1 ? [] : [`${ind(base)}${fullRowCell[1]}`]),
+      ...sectionClose(level),
+    ];
+  },
   bodyLevel: 4,
   formShell: {
     open: ["    <Box", `      component="form"`],
@@ -3584,6 +3624,9 @@ const shadcnBackend = (
     visual.sections === "collapsible"
       ? [`${ind(level + 1)}</div>`, `${ind(level)}</details>`]
       : [`${ind(level)}</fieldset>`];
+  // Collapsible chrome interposes the grid div between the section tag and
+  // its body; fieldset bodies are direct children (legend is a sibling).
+  const bodyDelta = visual.sections === "collapsible" ? 1 : 0;
 
   return {
   header: (usage, arrays, root) => {
@@ -3630,48 +3673,53 @@ const shadcnBackend = (
   ],
   leaf: shadcnLeaf,
   variantLeaf: shadcnVariantLeaf,
-  objectSection: wrapSection(sectionOpen, sectionClose),
-  arraySection: (entry, level, rowBody) => [
-    ...(visual.sections === "collapsible"
-      ? [
-          `${ind(level)}<details open className="rounded-lg border${span}">`,
-          `${ind(level + 1)}<summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium">${jsxText(entry.label)}</summary>`,
-          `${ind(level + 1)}<div className="grid gap-3 px-4 pb-4">`,
-        ]
-      : [
-          `${ind(level)}<section className="grid gap-3${visual.sections === "panel" ? ` rounded-lg border p-4${panelChrome}` : ""}${span}">`,
-          `${ind(level + 1)}<h3 className="text-sm font-medium">${jsxText(entry.label)}</h3>`,
-        ]),
-    `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
-    `${ind(level + 2)}<div key={row.id} className="grid gap-4 rounded-lg border p-4">`,
-    ...rowBody,
-    `${ind(level + 3)}<Button`,
-    `${ind(level + 4)}type="button"`,
-    `${ind(level + 4)}variant="outline"`,
-    `${ind(level + 4)}size="sm"`,
-    `${ind(level + 4)}className="w-fit"`,
-    `${ind(level + 4)}onClick={() => ${entry.hookName}.remove(index)}`,
-    `${ind(level + 3)}>`,
-    `${ind(level + 4)}Remove`,
-    `${ind(level + 3)}</Button>`,
-    `${ind(level + 2)}</div>`,
-    `${ind(level + 1)}))}`,
-    // The array-level error — the same line the module layout's list shell
-    // renders.
-    `${ind(level + 1)}{${entry.hookName}.error ? <p role="alert">{${entry.hookName}.error[0]}</p> : null}`,
-    `${ind(level + 1)}<Button`,
-    `${ind(level + 2)}type="button"`,
-    `${ind(level + 2)}variant="outline"`,
-    `${ind(level + 2)}size="sm"`,
-    `${ind(level + 2)}className="w-fit"`,
-    `${ind(level + 2)}onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}`,
-    `${ind(level + 1)}>`,
-    `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
-    `${ind(level + 1)}</Button>`,
-    ...(visual.sections === "collapsible"
-      ? [`${ind(level + 1)}</div>`, `${ind(level)}</details>`]
-      : [`${ind(level)}</section>`]),
-  ],
+  objectSection: wrapSection(sectionOpen, sectionClose, bodyDelta),
+  arraySection: (entry, level, rowBody) => {
+    // Rows sit under the chrome's innermost container (the collapsible grid
+    // div), not under the section tag — same shift as objectSection's body.
+    const base = level + 1 + bodyDelta;
+    return [
+      ...(visual.sections === "collapsible"
+        ? [
+            `${ind(level)}<details open className="rounded-lg border${span}">`,
+            `${ind(level + 1)}<summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium">${jsxText(entry.label)}</summary>`,
+            `${ind(level + 1)}<div className="grid gap-3 px-4 pb-4">`,
+          ]
+        : [
+            `${ind(level)}<section className="grid gap-3${visual.sections === "panel" ? ` rounded-lg border p-4${panelChrome}` : ""}${span}">`,
+            `${ind(level + 1)}<h3 className="text-sm font-medium">${jsxText(entry.label)}</h3>`,
+          ]),
+      `${ind(base)}{${entry.hookName}.fields.map((row, index) => (`,
+      `${ind(base + 1)}<div key={row.id} className="grid gap-4 rounded-lg border p-4">`,
+      ...shiftLines(rowBody, bodyDelta),
+      `${ind(base + 2)}<Button`,
+      `${ind(base + 3)}type="button"`,
+      `${ind(base + 3)}variant="outline"`,
+      `${ind(base + 3)}size="sm"`,
+      `${ind(base + 3)}className="w-fit"`,
+      `${ind(base + 3)}onClick={() => ${entry.hookName}.remove(index)}`,
+      `${ind(base + 2)}>`,
+      `${ind(base + 3)}Remove`,
+      `${ind(base + 2)}</Button>`,
+      `${ind(base + 1)}</div>`,
+      `${ind(base)}))}`,
+      // The array-level error — the same line the module layout's list shell
+      // renders.
+      `${ind(base)}{${entry.hookName}.error ? <p role="alert">{${entry.hookName}.error[0]}</p> : null}`,
+      `${ind(base)}<Button`,
+      `${ind(base + 1)}type="button"`,
+      `${ind(base + 1)}variant="outline"`,
+      `${ind(base + 1)}size="sm"`,
+      `${ind(base + 1)}className="w-fit"`,
+      `${ind(base + 1)}onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}`,
+      `${ind(base)}>`,
+      `${ind(base + 1)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
+      `${ind(base)}</Button>`,
+      ...(visual.sections === "collapsible"
+        ? [`${ind(level + 1)}</div>`, `${ind(level)}</details>`]
+        : [`${ind(level)}</section>`]),
+    ];
+  },
   bodyLevel: 3,
   formShell: {
     open: ["    <form", `      className="grid max-w-xl gap-4"`],
@@ -4103,6 +4151,11 @@ const chakraBackend = (
         ];
     }
   };
+  // Depth of the chrome's innermost container beyond the section tag: flat
+  // Stack/Box is the container itself; panel adds Card.Body; collapsible
+  // nests Item > ItemContent > ItemBody under the Root.
+  const bodyDelta =
+    visual.sections === "flat" ? 0 : visual.sections === "panel" ? 1 : 3;
 
   return {
   header: (usage, arrays, root) => {
@@ -4161,33 +4214,38 @@ const chakraBackend = (
   leaf: chakraLeaf,
   variantLeaf: chakraVariantLeaf,
   numberPropsHook: kitScalarBinding("chakra", "number"),
-  objectSection: wrapSection(sectionOpen, sectionClose),
-  arraySection: (entry, level, rowBody) => [
-    ...sectionOpen(entry.label, level),
-    `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
-    `${ind(level + 2)}<Stack`,
-    `${ind(level + 3)}key={row.id}`,
-    `${ind(level + 3)}gap="4"`,
-    `${ind(level + 3)}p="4"`,
-    `${ind(level + 3)}borderWidth="1px"`,
-    `${ind(level + 3)}borderRadius="md"`,
-    `${ind(level + 2)}>`,
-    ...rowBody,
-    `${ind(level + 3)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.remove(index)}>`,
-    `${ind(level + 4)}Remove`,
-    `${ind(level + 3)}</Button>`,
-    `${ind(level + 2)}</Stack>`,
-    `${ind(level + 1)}))}`,
-    // The array-level error — the same per-kit line the module layout's
-    // list shell renders.
-    `${ind(level + 1)}{${entry.hookName}.error ? (`,
-    `${ind(level + 2)}<Text role="alert" color="red.500">{${entry.hookName}.error[0]}</Text>`,
-    `${ind(level + 1)}) : null}`,
-    `${ind(level + 1)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
-    `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
-    `${ind(level + 1)}</Button>`,
-    ...sectionClose(level),
-  ],
+  objectSection: wrapSection(sectionOpen, sectionClose, bodyDelta),
+  arraySection: (entry, level, rowBody) => {
+    // Children sit under the chrome's innermost container — same shift as
+    // objectSection's body.
+    const base = level + 1 + bodyDelta;
+    return [
+      ...sectionOpen(entry.label, level),
+      `${ind(base)}{${entry.hookName}.fields.map((row, index) => (`,
+      `${ind(base + 1)}<Stack`,
+      `${ind(base + 2)}key={row.id}`,
+      `${ind(base + 2)}gap="4"`,
+      `${ind(base + 2)}p="4"`,
+      `${ind(base + 2)}borderWidth="1px"`,
+      `${ind(base + 2)}borderRadius="md"`,
+      `${ind(base + 1)}>`,
+      ...shiftLines(rowBody, bodyDelta),
+      `${ind(base + 2)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.remove(index)}>`,
+      `${ind(base + 3)}Remove`,
+      `${ind(base + 2)}</Button>`,
+      `${ind(base + 1)}</Stack>`,
+      `${ind(base)}))}`,
+      // The array-level error — the same per-kit line the module layout's
+      // list shell renders.
+      `${ind(base)}{${entry.hookName}.error ? (`,
+      `${ind(base + 1)}<Text role="alert" color="red.500">{${entry.hookName}.error[0]}</Text>`,
+      `${ind(base)}) : null}`,
+      `${ind(base)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
+      `${ind(base + 1)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
+      `${ind(base)}</Button>`,
+      ...sectionClose(level),
+    ];
+  },
   bodyLevel: 4,
   formShell: {
     open: ["    <Box", `      as="form"`],
@@ -4575,6 +4633,11 @@ const mantineBackend = (
         ];
     }
   };
+  // Depth of the chrome's innermost container beyond the section tag: flat
+  // Stack/Grid is the container itself; panel adds it under the Card;
+  // collapsible nests Item > Panel > Stack/Grid under the Accordion.
+  const bodyDelta =
+    visual.sections === "flat" ? 0 : visual.sections === "panel" ? 1 : 3;
 
   return {
   header: (usage, arrays, root) => {
@@ -4632,41 +4695,50 @@ const mantineBackend = (
           item: [`<Grid.Col span={{ base: 12, sm: ${colSm} }}>`, "</Grid.Col>"],
           fullRow: ["<Grid.Col span={12}>", "</Grid.Col>"],
         },
-  objectSection: wrapSection(sectionOpen, sectionClose),
-  arraySection: (entry, level, rowBody) => [
-    ...sectionOpen(entry.label, level),
-    // Grid children must be Grid.Cols: each mapped row keeps the old
-    // grid's two-up flow, the error and add button share a spanning Col.
-    `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
-    ...(cols === 1
-      ? [`${ind(level + 2)}<Stack`, `${ind(level + 3)}key={row.id}`]
-      : [
-          `${ind(level + 2)}<Grid.Col key={row.id} span={{ base: 12, sm: ${colSm} }}>`,
-          `${ind(level + 2)}<Stack`,
-        ]),
-    `${ind(level + 3)}gap="md"`,
-    `${ind(level + 3)}p="md"`,
-    `${ind(level + 3)}bd="1px solid gray.3"`,
-    `${ind(level + 3)}bdrs="md"`,
-    `${ind(level + 2)}>`,
-    ...rowBody,
-    `${ind(level + 3)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.remove(index)}>`,
-    `${ind(level + 4)}Remove`,
-    `${ind(level + 3)}</Button>`,
-    `${ind(level + 2)}</Stack>`,
-    ...(cols === 1 ? [] : [`${ind(level + 2)}</Grid.Col>`]),
-    `${ind(level + 1)}))}`,
-    // The array-level error and add button — one spanning Col at cols > 1.
-    ...(cols === 1 ? [] : [`${ind(level + 1)}<Grid.Col span={12}>`]),
-    `${ind(level + 1)}{${entry.hookName}.error ? (`,
-    `${ind(level + 2)}<Text role="alert" c="red">{${entry.hookName}.error[0]}</Text>`,
-    `${ind(level + 1)}) : null}`,
-    `${ind(level + 1)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
-    `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
-    `${ind(level + 1)}</Button>`,
-    ...(cols === 1 ? [] : [`${ind(level + 1)}</Grid.Col>`]),
-    ...sectionClose(level),
-  ],
+  objectSection: wrapSection(sectionOpen, sectionClose, bodyDelta),
+  arraySection: (entry, level, rowBody) => {
+    // Children sit under the chrome's innermost container — same shift as
+    // objectSection's body. At cols > 1 each row's Stack nests INSIDE its
+    // wrapper Col (one deeper again), and the error/add pair sits inside
+    // its spanning Col.
+    const base = level + 1 + bodyDelta;
+    const rowStack = cols === 1 ? base + 1 : base + 2;
+    const spanBase = cols === 1 ? base : base + 1;
+    return [
+      ...sectionOpen(entry.label, level),
+      // Grid children must be Grid.Cols: each mapped row keeps the old
+      // grid's two-up flow, the error and add button share a spanning Col.
+      `${ind(base)}{${entry.hookName}.fields.map((row, index) => (`,
+      ...(cols === 1
+        ? [`${ind(rowStack)}<Stack`, `${ind(rowStack + 1)}key={row.id}`]
+        : [
+            `${ind(base + 1)}<Grid.Col key={row.id} span={{ base: 12, sm: ${colSm} }}>`,
+            `${ind(rowStack)}<Stack`,
+          ]),
+      `${ind(rowStack + 1)}gap="md"`,
+      `${ind(rowStack + 1)}p="md"`,
+      `${ind(rowStack + 1)}bd="1px solid gray.3"`,
+      `${ind(rowStack + 1)}bdrs="md"`,
+      `${ind(rowStack)}>`,
+      ...shiftLines(rowBody, rowStack + 1 - (level + 3)),
+      `${ind(rowStack + 1)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.remove(index)}>`,
+      `${ind(rowStack + 2)}Remove`,
+      `${ind(rowStack + 1)}</Button>`,
+      `${ind(rowStack)}</Stack>`,
+      ...(cols === 1 ? [] : [`${ind(base + 1)}</Grid.Col>`]),
+      `${ind(base)}))}`,
+      // The array-level error and add button — one spanning Col at cols > 1.
+      ...(cols === 1 ? [] : [`${ind(base)}<Grid.Col span={12}>`]),
+      `${ind(spanBase)}{${entry.hookName}.error ? (`,
+      `${ind(spanBase + 1)}<Text role="alert" c="red">{${entry.hookName}.error[0]}</Text>`,
+      `${ind(spanBase)}) : null}`,
+      `${ind(spanBase)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
+      `${ind(spanBase + 1)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
+      `${ind(spanBase)}</Button>`,
+      ...(cols === 1 ? [] : [`${ind(base)}</Grid.Col>`]),
+      ...sectionClose(level),
+    ];
+  },
   bodyLevel: 4,
   formShell: {
     open: ["    <Box", `      component="form"`],
@@ -5173,6 +5245,11 @@ const antdBackend = (
         ];
     }
   };
+  // Depth of the chrome's innermost container beyond the section tag: flat
+  // Flex/Row is the container itself; panel adds it under the Card;
+  // collapsible reaches it through the items array's children expression.
+  const bodyDelta =
+    visual.sections === "flat" ? 0 : visual.sections === "panel" ? 1 : 4;
 
   return {
   header: (usage, arrays, root) => {
@@ -5233,43 +5310,52 @@ const antdBackend = (
           item: [`<Col xs={24} sm={${colSm}}>`, "</Col>"],
           fullRow: ["<Col span={24}>", "</Col>"],
         },
-  objectSection: wrapSection(sectionOpen, sectionClose),
-  arraySection: (entry, level, rowBody) => [
-    ...sectionOpen(entry.label, level),
-    // Row children must be Cols: each mapped row keeps the old grid's
-    // two-up flow via the same xs/sm split, the error and add-button span.
-    `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
-    ...(cols === 1
-      ? [`${ind(level + 2)}<Flex`, `${ind(level + 3)}key={row.id}`]
-      : [
-          `${ind(level + 2)}<Col key={row.id} xs={24} sm={${colSm}}>`,
-          `${ind(level + 2)}<Flex`,
-        ]),
-    `${ind(level + 3)}vertical`,
-    `${ind(level + 3)}gap="middle"`,
-    `${ind(level + 3)}style={{ border: "1px solid #d9d9d9", borderRadius: 8, padding: 16 }}`,
-    `${ind(level + 2)}>`,
-    ...rowBody,
-    `${ind(level + 3)}<Button htmlType="button" size="small" onClick={() => ${entry.hookName}.remove(index)}>`,
-    `${ind(level + 4)}Remove`,
-    `${ind(level + 3)}</Button>`,
-    `${ind(level + 2)}</Flex>`,
-    ...(cols === 1 ? [] : [`${ind(level + 2)}</Col>`]),
-    `${ind(level + 1)}))}`,
-    // The array-level error and add button — Row children must be Cols, so
-    // at cols > 1 both ride one spanning Col.
-    ...(cols === 1 ? [] : [`${ind(level + 1)}<Col span={24}>`]),
-    `${ind(level + 1)}{${entry.hookName}.error ? (`,
-    `${ind(level + 2)}<Typography.Text role="alert" type="danger">`,
-    `${ind(level + 3)}{${entry.hookName}.error[0]}`,
-    `${ind(level + 2)}</Typography.Text>`,
-    `${ind(level + 1)}) : null}`,
-    `${ind(level + 1)}<Button htmlType="button" size="small" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
-    `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
-    `${ind(level + 1)}</Button>`,
-    ...(cols === 1 ? [] : [`${ind(level + 1)}</Col>`]),
-    ...sectionClose(level),
-  ],
+  objectSection: wrapSection(sectionOpen, sectionClose, bodyDelta),
+  arraySection: (entry, level, rowBody) => {
+    // Children sit under the chrome's innermost container — same shift as
+    // objectSection's body. At cols > 1 each row's Flex nests INSIDE its
+    // wrapper Col (one deeper again), and the error/add pair sits inside
+    // its spanning Col.
+    const base = level + 1 + bodyDelta;
+    const rowStack = cols === 1 ? base + 1 : base + 2;
+    const spanBase = cols === 1 ? base : base + 1;
+    return [
+      ...sectionOpen(entry.label, level),
+      // Row children must be Cols: each mapped row keeps the old grid's
+      // two-up flow via the same xs/sm split, the error and add-button span.
+      `${ind(base)}{${entry.hookName}.fields.map((row, index) => (`,
+      ...(cols === 1
+        ? [`${ind(rowStack)}<Flex`, `${ind(rowStack + 1)}key={row.id}`]
+        : [
+            `${ind(base + 1)}<Col key={row.id} xs={24} sm={${colSm}}>`,
+            `${ind(rowStack)}<Flex`,
+          ]),
+      `${ind(rowStack + 1)}vertical`,
+      `${ind(rowStack + 1)}gap="middle"`,
+      `${ind(rowStack + 1)}style={{ border: "1px solid #d9d9d9", borderRadius: 8, padding: 16 }}`,
+      `${ind(rowStack)}>`,
+      ...shiftLines(rowBody, rowStack + 1 - (level + 3)),
+      `${ind(rowStack + 1)}<Button htmlType="button" size="small" onClick={() => ${entry.hookName}.remove(index)}>`,
+      `${ind(rowStack + 2)}Remove`,
+      `${ind(rowStack + 1)}</Button>`,
+      `${ind(rowStack)}</Flex>`,
+      ...(cols === 1 ? [] : [`${ind(base + 1)}</Col>`]),
+      `${ind(base)}))}`,
+      // The array-level error and add button — Row children must be Cols, so
+      // at cols > 1 both ride one spanning Col.
+      ...(cols === 1 ? [] : [`${ind(base)}<Col span={24}>`]),
+      `${ind(spanBase)}{${entry.hookName}.error ? (`,
+      `${ind(spanBase + 1)}<Typography.Text role="alert" type="danger">`,
+      `${ind(spanBase + 2)}{${entry.hookName}.error[0]}`,
+      `${ind(spanBase + 1)}</Typography.Text>`,
+      `${ind(spanBase)}) : null}`,
+      `${ind(spanBase)}<Button htmlType="button" size="small" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
+      `${ind(spanBase + 1)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
+      `${ind(spanBase)}</Button>`,
+      ...(cols === 1 ? [] : [`${ind(base)}</Col>`]),
+      ...sectionClose(level),
+    ];
+  },
   bodyLevel: 4,
   formShell: {
     open: ["    <form"],

@@ -31,21 +31,21 @@ export const EquipmentSection = ({
               {valid ? "" : " — has errors"}
             </Typography>
           </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <LaptopField />
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <MonitorCountField />
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <NeedsPhoneField />
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <ShirtSizeField />
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <NotesField />
-      </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <LaptopField />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <MonitorCountField />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <NeedsPhoneField />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <ShirtSizeField />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <NotesField />
+          </Grid>
         </Grid>
       </CardContent>
     </Card>

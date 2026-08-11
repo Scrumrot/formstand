@@ -266,101 +266,101 @@ export const ChakraOnboardingForm = () => {
         <Card.Root gridColumn="1 / -1">
           <Card.Body display="grid" gridTemplateColumns={{ base: "1fr", md: "repeat(2, minmax(0, 1fr))" }} gap="4">
             <Heading size="sm" gridColumn="1 / -1">{"Personal"}</Heading>
-          <BoundTextField form={form} path={"personal.firstName"} label={"First Name"} />
-          <BoundTextField form={form} path={"personal.lastName"} label={"Last Name"} />
-          <BoundTextField form={form} path={"personal.preferredName"} label={"Preferred Name"} />
-          <BoundTextField form={form} path={"personal.email"} label={"Email"} />
-          <BoundTextField form={form} path={"personal.phone"} label={"Phone"} />
+            <BoundTextField form={form} path={"personal.firstName"} label={"First Name"} />
+            <BoundTextField form={form} path={"personal.lastName"} label={"Last Name"} />
+            <BoundTextField form={form} path={"personal.preferredName"} label={"Preferred Name"} />
+            <BoundTextField form={form} path={"personal.email"} label={"Email"} />
+            <BoundTextField form={form} path={"personal.phone"} label={"Phone"} />
           </Card.Body>
         </Card.Root>
         <Card.Root gridColumn="1 / -1">
           <Card.Body display="grid" gridTemplateColumns={{ base: "1fr", md: "repeat(2, minmax(0, 1fr))" }} gap="4">
             <Heading size="sm" gridColumn="1 / -1">{"Address"}</Heading>
-          <BoundTextField form={form} path={"address.street"} label={"Street"} />
-          <BoundTextField form={form} path={"address.unit"} label={"Unit"} />
-          <BoundTextField form={form} path={"address.city"} label={"City"} />
-          <BoundSelectField
-            form={form}
-            path={"address.region"}
-            label={"Region"}
-            options={["west", "mountain", "central", "east"]}
-          />
-          <BoundTextField form={form} path={"address.postalCode"} label={"Postal Code"} />
-          <BoundSelectField
-            form={form}
-            path={"address.country"}
-            label={"Country"}
-            options={["us", "ca", "de", "jp", "au"]}
-          />
+            <BoundTextField form={form} path={"address.street"} label={"Street"} />
+            <BoundTextField form={form} path={"address.unit"} label={"Unit"} />
+            <BoundTextField form={form} path={"address.city"} label={"City"} />
+            <BoundSelectField
+              form={form}
+              path={"address.region"}
+              label={"Region"}
+              options={["west", "mountain", "central", "east"]}
+            />
+            <BoundTextField form={form} path={"address.postalCode"} label={"Postal Code"} />
+            <BoundSelectField
+              form={form}
+              path={"address.country"}
+              label={"Country"}
+              options={["us", "ca", "de", "jp", "au"]}
+            />
           </Card.Body>
         </Card.Root>
         <Card.Root gridColumn="1 / -1">
           <Card.Body display="grid" gridTemplateColumns={{ base: "1fr", md: "repeat(2, minmax(0, 1fr))" }} gap="4">
             <Heading size="sm" gridColumn="1 / -1">{"Employment"}</Heading>
-          <BoundTextField form={form} path={"employment.jobTitle"} label={"Job Title"} />
-          <BoundSelectField
-            form={form}
-            path={"employment.department"}
-            label={"Department"}
-            options={["engineering", "design", "product", "sales", "support"]}
-          />
-          <BoundTextField form={form} path={"employment.startDate"} label={"Start Date"} />
-          <BoundSelectField
-            form={form}
-            path={"employment.employmentType"}
-            label={"Employment Type"}
-            options={["full-time", "part-time", "contract"]}
-          />
-          <BoundNumberField form={form} path={"employment.salary"} label={"Salary"} />
-          <BoundSwitchField form={form} path={"employment.remote"} label={"Remote"} />
-          <BoundTextField form={form} path={"employment.managerEmail"} label={"Manager Email"} />
+            <BoundTextField form={form} path={"employment.jobTitle"} label={"Job Title"} />
+            <BoundSelectField
+              form={form}
+              path={"employment.department"}
+              label={"Department"}
+              options={["engineering", "design", "product", "sales", "support"]}
+            />
+            <BoundTextField form={form} path={"employment.startDate"} label={"Start Date"} />
+            <BoundSelectField
+              form={form}
+              path={"employment.employmentType"}
+              label={"Employment Type"}
+              options={["full-time", "part-time", "contract"]}
+            />
+            <BoundNumberField form={form} path={"employment.salary"} label={"Salary"} />
+            <BoundSwitchField form={form} path={"employment.remote"} label={"Remote"} />
+            <BoundTextField form={form} path={"employment.managerEmail"} label={"Manager Email"} />
           </Card.Body>
         </Card.Root>
         <Card.Root gridColumn="1 / -1">
           <Card.Body display="grid" gridTemplateColumns={{ base: "1fr", md: "repeat(2, minmax(0, 1fr))" }} gap="4">
             <Heading size="sm" gridColumn="1 / -1">{"Equipment"}</Heading>
-          <BoundSelectField
-            form={form}
-            path={"equipment.laptop"}
-            label={"Laptop"}
-            options={["macbook-pro", "thinkpad", "framework"]}
-          />
-          <BoundNumberField form={form} path={"equipment.monitorCount"} label={"Monitor Count"} />
-          <BoundSwitchField form={form} path={"equipment.needsPhone"} label={"Needs Phone"} />
-          <BoundSelectField
-            form={form}
-            path={"equipment.shirtSize"}
-            label={"Shirt Size"}
-            options={["xs", "s", "m", "l", "xl", "2xl"]}
-          />
-          <BoundTextField form={form} path={"equipment.notes"} label={"Notes"} />
+            <BoundSelectField
+              form={form}
+              path={"equipment.laptop"}
+              label={"Laptop"}
+              options={["macbook-pro", "thinkpad", "framework"]}
+            />
+            <BoundNumberField form={form} path={"equipment.monitorCount"} label={"Monitor Count"} />
+            <BoundSwitchField form={form} path={"equipment.needsPhone"} label={"Needs Phone"} />
+            <BoundSelectField
+              form={form}
+              path={"equipment.shirtSize"}
+              label={"Shirt Size"}
+              options={["xs", "s", "m", "l", "xl", "2xl"]}
+            />
+            <BoundTextField form={form} path={"equipment.notes"} label={"Notes"} />
           </Card.Body>
         </Card.Root>
         <Card.Root gridColumn="1 / -1">
           <Card.Body display="grid" gridTemplateColumns={{ base: "1fr", md: "repeat(2, minmax(0, 1fr))" }} gap="4">
             <Heading size="sm" gridColumn="1 / -1">{"Emergency Contacts"}</Heading>
-          {emergencyContactsArray.fields.map((row, index) => (
-            <Stack
-              key={row.id}
-              gap="4"
-              p="4"
-              borderWidth="1px"
-              borderRadius="md"
-            >
-              <BoundTextField form={form} path={`emergencyContacts.${index}.name`} label={"Name"} />
-              <BoundTextField form={form} path={`emergencyContacts.${index}.relationship`} label={"Relationship"} />
-              <BoundTextField form={form} path={`emergencyContacts.${index}.phone`} label={"Phone"} />
-              <Button type="button" variant="outline" size="sm" onClick={() => emergencyContactsArray.remove(index)}>
-                Remove
-              </Button>
-            </Stack>
-          ))}
-          {emergencyContactsArray.error ? (
-            <Text role="alert" color="red.500">{emergencyContactsArray.error[0]}</Text>
-          ) : null}
-          <Button type="button" variant="outline" size="sm" onClick={() => emergencyContactsArray.push(emptyEmergencyContactsItem)}>
-            {"Add emergency contacts"}
-          </Button>
+            {emergencyContactsArray.fields.map((row, index) => (
+              <Stack
+                key={row.id}
+                gap="4"
+                p="4"
+                borderWidth="1px"
+                borderRadius="md"
+              >
+                <BoundTextField form={form} path={`emergencyContacts.${index}.name`} label={"Name"} />
+                <BoundTextField form={form} path={`emergencyContacts.${index}.relationship`} label={"Relationship"} />
+                <BoundTextField form={form} path={`emergencyContacts.${index}.phone`} label={"Phone"} />
+                <Button type="button" variant="outline" size="sm" onClick={() => emergencyContactsArray.remove(index)}>
+                  Remove
+                </Button>
+              </Stack>
+            ))}
+            {emergencyContactsArray.error ? (
+              <Text role="alert" color="red.500">{emergencyContactsArray.error[0]}</Text>
+            ) : null}
+            <Button type="button" variant="outline" size="sm" onClick={() => emergencyContactsArray.push(emptyEmergencyContactsItem)}>
+              {"Add emergency contacts"}
+            </Button>
           </Card.Body>
         </Card.Root>
         <Button type="submit" disabled={submitting}>

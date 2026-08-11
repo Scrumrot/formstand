@@ -32,24 +32,24 @@ export const AddressSection = ({
               {valid ? "" : " — has errors"}
             </Typography>
           </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <StreetField />
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <UnitField />
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <CityField />
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <RegionField />
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <PostalCodeField />
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <CountryField />
-      </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <StreetField />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <UnitField />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <CityField />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <RegionField />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <PostalCodeField />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <CountryField />
+          </Grid>
         </Grid>
       </CardContent>
     </Card>

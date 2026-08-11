@@ -241,21 +241,21 @@ export const MantineOnboardingForm = () => {
             <Grid.Col span={12}>
               <Title order={4}>{"Personal"}</Title>
             </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundTextField form={form} path={"personal.firstName"} label={"First Name"} />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundTextField form={form} path={"personal.lastName"} label={"Last Name"} />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundTextField form={form} path={"personal.preferredName"} label={"Preferred Name"} />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundTextField form={form} path={"personal.email"} label={"Email"} />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundTextField form={form} path={"personal.phone"} label={"Phone"} />
-          </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundTextField form={form} path={"personal.firstName"} label={"First Name"} />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundTextField form={form} path={"personal.lastName"} label={"Last Name"} />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundTextField form={form} path={"personal.preferredName"} label={"Preferred Name"} />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundTextField form={form} path={"personal.email"} label={"Email"} />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundTextField form={form} path={"personal.phone"} label={"Phone"} />
+            </Grid.Col>
           </Grid>
         </Card>
         <Card withBorder>
@@ -263,34 +263,34 @@ export const MantineOnboardingForm = () => {
             <Grid.Col span={12}>
               <Title order={4}>{"Address"}</Title>
             </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundTextField form={form} path={"address.street"} label={"Street"} />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundTextField form={form} path={"address.unit"} label={"Unit"} />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundTextField form={form} path={"address.city"} label={"City"} />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundSelectField
-              form={form}
-              path={"address.region"}
-              label={"Region"}
-              options={["west", "mountain", "central", "east"]}
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundTextField form={form} path={"address.postalCode"} label={"Postal Code"} />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundSelectField
-              form={form}
-              path={"address.country"}
-              label={"Country"}
-              options={["us", "ca", "de", "jp", "au"]}
-            />
-          </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundTextField form={form} path={"address.street"} label={"Street"} />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundTextField form={form} path={"address.unit"} label={"Unit"} />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundTextField form={form} path={"address.city"} label={"City"} />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundSelectField
+                form={form}
+                path={"address.region"}
+                label={"Region"}
+                options={["west", "mountain", "central", "east"]}
+              />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundTextField form={form} path={"address.postalCode"} label={"Postal Code"} />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundSelectField
+                form={form}
+                path={"address.country"}
+                label={"Country"}
+                options={["us", "ca", "de", "jp", "au"]}
+              />
+            </Grid.Col>
           </Grid>
         </Card>
         <Card withBorder>
@@ -298,37 +298,37 @@ export const MantineOnboardingForm = () => {
             <Grid.Col span={12}>
               <Title order={4}>{"Employment"}</Title>
             </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundTextField form={form} path={"employment.jobTitle"} label={"Job Title"} />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundSelectField
-              form={form}
-              path={"employment.department"}
-              label={"Department"}
-              options={["engineering", "design", "product", "sales", "support"]}
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundTextField form={form} path={"employment.startDate"} label={"Start Date"} />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundSelectField
-              form={form}
-              path={"employment.employmentType"}
-              label={"Employment Type"}
-              options={["full-time", "part-time", "contract"]}
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundNumberField form={form} path={"employment.salary"} label={"Salary"} />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundSwitchField form={form} path={"employment.remote"} label={"Remote"} />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundTextField form={form} path={"employment.managerEmail"} label={"Manager Email"} />
-          </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundTextField form={form} path={"employment.jobTitle"} label={"Job Title"} />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundSelectField
+                form={form}
+                path={"employment.department"}
+                label={"Department"}
+                options={["engineering", "design", "product", "sales", "support"]}
+              />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundTextField form={form} path={"employment.startDate"} label={"Start Date"} />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundSelectField
+                form={form}
+                path={"employment.employmentType"}
+                label={"Employment Type"}
+                options={["full-time", "part-time", "contract"]}
+              />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundNumberField form={form} path={"employment.salary"} label={"Salary"} />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundSwitchField form={form} path={"employment.remote"} label={"Remote"} />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundTextField form={form} path={"employment.managerEmail"} label={"Manager Email"} />
+            </Grid.Col>
           </Grid>
         </Card>
         <Card withBorder>
@@ -336,31 +336,31 @@ export const MantineOnboardingForm = () => {
             <Grid.Col span={12}>
               <Title order={4}>{"Equipment"}</Title>
             </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundSelectField
-              form={form}
-              path={"equipment.laptop"}
-              label={"Laptop"}
-              options={["macbook-pro", "thinkpad", "framework"]}
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundNumberField form={form} path={"equipment.monitorCount"} label={"Monitor Count"} />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundSwitchField form={form} path={"equipment.needsPhone"} label={"Needs Phone"} />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundSelectField
-              form={form}
-              path={"equipment.shirtSize"}
-              label={"Shirt Size"}
-              options={["xs", "s", "m", "l", "xl", "2xl"]}
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <BoundTextField form={form} path={"equipment.notes"} label={"Notes"} />
-          </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundSelectField
+                form={form}
+                path={"equipment.laptop"}
+                label={"Laptop"}
+                options={["macbook-pro", "thinkpad", "framework"]}
+              />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundNumberField form={form} path={"equipment.monitorCount"} label={"Monitor Count"} />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundSwitchField form={form} path={"equipment.needsPhone"} label={"Needs Phone"} />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundSelectField
+                form={form}
+                path={"equipment.shirtSize"}
+                label={"Shirt Size"}
+                options={["xs", "s", "m", "l", "xl", "2xl"]}
+              />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <BoundTextField form={form} path={"equipment.notes"} label={"Notes"} />
+            </Grid.Col>
           </Grid>
         </Card>
         <Card withBorder>
@@ -368,31 +368,31 @@ export const MantineOnboardingForm = () => {
             <Grid.Col span={12}>
               <Title order={4}>{"Emergency Contacts"}</Title>
             </Grid.Col>
-          {emergencyContactsArray.fields.map((row, index) => (
-            <Grid.Col key={row.id} span={{ base: 12, sm: 6 }}>
-            <Stack
-              gap="md"
-              p="md"
-              bd="1px solid gray.3"
-              bdrs="md"
-            >
-              <BoundTextField form={form} path={`emergencyContacts.${index}.name`} label={"Name"} />
-              <BoundTextField form={form} path={`emergencyContacts.${index}.relationship`} label={"Relationship"} />
-              <BoundTextField form={form} path={`emergencyContacts.${index}.phone`} label={"Phone"} />
-              <Button type="button" variant="outline" size="sm" onClick={() => emergencyContactsArray.remove(index)}>
-                Remove
+            {emergencyContactsArray.fields.map((row, index) => (
+              <Grid.Col key={row.id} span={{ base: 12, sm: 6 }}>
+                <Stack
+                  gap="md"
+                  p="md"
+                  bd="1px solid gray.3"
+                  bdrs="md"
+                >
+                  <BoundTextField form={form} path={`emergencyContacts.${index}.name`} label={"Name"} />
+                  <BoundTextField form={form} path={`emergencyContacts.${index}.relationship`} label={"Relationship"} />
+                  <BoundTextField form={form} path={`emergencyContacts.${index}.phone`} label={"Phone"} />
+                  <Button type="button" variant="outline" size="sm" onClick={() => emergencyContactsArray.remove(index)}>
+                    Remove
+                  </Button>
+                </Stack>
+              </Grid.Col>
+            ))}
+            <Grid.Col span={12}>
+              {emergencyContactsArray.error ? (
+                <Text role="alert" c="red">{emergencyContactsArray.error[0]}</Text>
+              ) : null}
+              <Button type="button" variant="outline" size="sm" onClick={() => emergencyContactsArray.push(emptyEmergencyContactsItem)}>
+                {"Add emergency contacts"}
               </Button>
-            </Stack>
             </Grid.Col>
-          ))}
-          <Grid.Col span={12}>
-          {emergencyContactsArray.error ? (
-            <Text role="alert" c="red">{emergencyContactsArray.error[0]}</Text>
-          ) : null}
-          <Button type="button" variant="outline" size="sm" onClick={() => emergencyContactsArray.push(emptyEmergencyContactsItem)}>
-            {"Add emergency contacts"}
-          </Button>
-          </Grid.Col>
           </Grid>
         </Card>
         <Button type="submit" disabled={submitting}>

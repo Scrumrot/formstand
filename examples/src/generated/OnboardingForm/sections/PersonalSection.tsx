@@ -31,21 +31,21 @@ export const PersonalSection = ({
               {valid ? "" : " — has errors"}
             </Typography>
           </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <FirstNameField />
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <LastNameField />
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <PreferredNameField />
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <EmailField />
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <PhoneField />
-      </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <FirstNameField />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <LastNameField />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <PreferredNameField />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <EmailField />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <PhoneField />
+          </Grid>
         </Grid>
       </CardContent>
     </Card>

@@ -33,27 +33,27 @@ export const EmploymentSection = ({
               {valid ? "" : " — has errors"}
             </Typography>
           </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <JobTitleField />
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <DepartmentField />
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <StartDateField />
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <EmploymentTypeField />
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <SalaryField />
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <RemoteField />
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6 }}>
-        <ManagerEmailField />
-      </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <JobTitleField />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <DepartmentField />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <StartDateField />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <EmploymentTypeField />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <SalaryField />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <RemoteField />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <ManagerEmailField />
+          </Grid>
         </Grid>
       </CardContent>
     </Card>

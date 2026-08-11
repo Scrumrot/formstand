@@ -43,6 +43,7 @@ import {
   q,
   reactImportLines,
   shadcnAdapterSection,
+  shiftLines,
   templateEscape,
   unionCommonFieldNames,
 } from "./codegen";
@@ -1270,6 +1271,10 @@ const containerCellTags = (
 const objectShell = (
   ui: ModuleUi,
   visual: VisualOptions,
+  // Built at the flat-chrome depth (6 spaces: shell at 4, children one
+  // level in). Branches whose chrome nests the body container deeper shift
+  // them, so cells sit under their container instead of under the Card —
+  // the callers can't know the chrome and must not try.
   children: readonly string[],
   muiVersion: MuiVersion = DEFAULT_MUI_VERSION,
 ): readonly string[] => {
@@ -1316,7 +1321,7 @@ const objectShell = (
                 `        <Typography variant="subtitle1">`,
                 ...headingLines("          "),
                 "        </Typography>",
-                ...children,
+                ...shiftLines(children, 1),
                 "      </CardContent>",
                 "    </Card>",
               ]
@@ -1325,7 +1330,7 @@ const objectShell = (
                 "      <CardContent>",
                 "        <Grid container spacing={2}>",
                 ...titleCell("          "),
-                ...children,
+                ...shiftLines(children, 2),
                 "        </Grid>",
                 "      </CardContent>",
                 "    </Card>",
@@ -1341,13 +1346,13 @@ const objectShell = (
             ...(cols === 1
               ? [
                   `      <AccordionDetails sx={{ ${gridSxProps(1)} }}>`,
-                  ...children,
+                  ...shiftLines(children, 1),
                   "      </AccordionDetails>",
                 ]
               : [
                   "      <AccordionDetails>",
                   "        <Grid container spacing={2}>",
-                  ...children,
+                  ...shiftLines(children, 2),
                   "        </Grid>",
                   "      </AccordionDetails>",
                 ]),
@@ -1391,7 +1396,7 @@ const objectShell = (
                 `        <Title order={4}>`,
                 ...headingLines("          "),
                 "        </Title>",
-                ...children,
+                ...shiftLines(children, 1),
                 "      </Stack>",
                 "    </Card>",
               ]
@@ -1399,7 +1404,7 @@ const objectShell = (
                 "    <Card withBorder>",
                 "      <Grid>",
                 ...titleCol("        "),
-                ...children,
+                ...shiftLines(children, 1),
                 "      </Grid>",
                 "    </Card>",
               ];
@@ -1414,7 +1419,7 @@ const objectShell = (
             "        </Accordion.Control>",
             "        <Accordion.Panel>",
             `          ${cols === 1 ? `<Stack gap="md">` : "<Grid>"}`,
-            ...children,
+            ...shiftLines(children, 3),
             `          ${cols === 1 ? "</Stack>" : "</Grid>"}`,
             "        </Accordion.Panel>",
             "      </Accordion.Item>",
@@ -1458,7 +1463,7 @@ const objectShell = (
                 `        <Typography.Title level={5}>`,
                 ...headingLines("          "),
                 "        </Typography.Title>",
-                ...children,
+                ...shiftLines(children, 1),
                 "      </Flex>",
                 "    </Card>",
               ]
@@ -1466,7 +1471,7 @@ const objectShell = (
                 `    <Card variant="outlined">`,
                 `      <Row gutter={[16, 16]}>`,
                 ...titleCol("        "),
-                ...children,
+                ...shiftLines(children, 1),
                 "      </Row>",
                 "    </Card>",
               ];
@@ -1485,7 +1490,7 @@ const objectShell = (
             "          ),",
             "          children: (",
             `            ${cols === 1 ? `<Flex vertical gap="middle">` : "<Row gutter={[16, 16]}>"}`,
-            ...children,
+            ...shiftLines(children, 4),
             `            ${cols === 1 ? "</Flex>" : "</Row>"}`,
             "          ),",
             "        },",
@@ -1522,7 +1527,7 @@ const objectShell = (
             `        <Heading size="sm"${cols > 1 ? ` gridColumn="1 / -1"` : ""}>`,
             ...headingLines("          "),
             "        </Heading>",
-            ...children,
+            ...shiftLines(children, 1),
             "      </Card.Body>",
             "    </Card.Root>",
           ];
@@ -1538,7 +1543,7 @@ const objectShell = (
             "        </Accordion.ItemTrigger>",
             "        <Accordion.ItemContent>",
             `          <Accordion.ItemBody ${grid}>`,
-            ...children,
+            ...shiftLines(children, 3),
             "          </Accordion.ItemBody>",
             "        </Accordion.ItemContent>",
             "      </Accordion.Item>",
@@ -1566,7 +1571,7 @@ const objectShell = (
             ...headingLines("        "),
             "      </summary>",
             `      <div className="grid gap-4 px-4 pb-4${colsClass}">`,
-            ...children,
+            ...shiftLines(children, 1),
             "      </div>",
             "    </details>",
           ];
@@ -1600,7 +1605,11 @@ const objectShell = (
             "      </summary>",
             ...(grid === ""
               ? children
-              : [`      <div style={{ ${grid} }}>`, ...children, "      </div>"]),
+              : [
+                  `      <div style={{ ${grid} }}>`,
+                  ...shiftLines(children, 1),
+                  "      </div>",
+                ]),
             "    </details>",
           ];
       }
