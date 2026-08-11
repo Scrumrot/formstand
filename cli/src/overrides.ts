@@ -3,12 +3,14 @@ import { isUnaddressable } from "./codegen";
 import { isScalarSpec, overDepthBudget } from "./depth";
 import type { FieldSpec, NamedField } from "./ir";
 
-// Per-field component overrides — the formstand.config.ts `fields` block:
+// Per-field overrides — the formstand.config.ts `fields` block:
 //
 //   export default defineConfig({
 //     fields: {
 //       "icao": { component: "autocomplete", optionsProp: true },
 //       "crew.*.role": { component: "autocomplete", optionsProp: true },
+//       "employment.salary": { span: "full" },
+//       "address.street": { span: 2 },
 //     },
 //   });
 //
@@ -23,13 +25,19 @@ import type { FieldSpec, NamedField } from "./ir";
 
 // The config-file shape of one override (before resolution). `component` is
 // a union of one on purpose — future flavors (textarea, slider, ...) slot in
-// as new members without reshaping the config.
+// as new members without reshaping the config. `span` is the second,
+// independent axis: layout placement in the section's multi-column grid.
+// An entry must carry at least one of the two.
 export type FieldOverrideConfig = Readonly<{
-  component: "autocomplete";
+  component?: "autocomplete";
   // string fields: REQUIRED (the options are data — an airport list — so
   // the generated component must accept them as a prop). enum fields:
   // optional; when true the prop REPLACES the baked-in enum values.
   optionsProp?: boolean;
+  // "full" spans the whole row; a number is how many columns the field
+  // occupies (2 of 3, say). 1 would be the default item width, so the
+  // parser rejects it as noise rather than silently accepting a no-op.
+  span?: number | "full";
 }>;
 
 export type FieldOverrides = Readonly<Record<string, FieldOverrideConfig>>;
@@ -57,19 +65,20 @@ export const parseFieldOverrides = (
       }
       const override = value as Readonly<Record<string, unknown>>;
       const unknownKeys = Object.keys(override).filter(
-        (key) => key !== "component" && key !== "optionsProp",
+        (key) => key !== "component" && key !== "optionsProp" && key !== "span",
       );
       if (unknownKeys.length > 0) {
         throw new Error(
           `${from}: fields["${path}"] has unknown key(s) ${unknownKeys
             .map((key) => `"${key}"`)
-            .join(", ")} (known: component, optionsProp)`,
+            .join(", ")} (known: component, optionsProp, span)`,
         );
       }
       const component = override["component"];
       if (
-        typeof component !== "string" ||
-        !(OVERRIDE_COMPONENTS as readonly string[]).includes(component)
+        component !== undefined &&
+        (typeof component !== "string" ||
+          !(OVERRIDE_COMPONENTS as readonly string[]).includes(component))
       ) {
         throw new Error(
           `${from}: fields["${path}"].component must be one of ${OVERRIDE_COMPONENTS.map(
@@ -83,11 +92,38 @@ export const parseFieldOverrides = (
           `${from}: fields["${path}"].optionsProp must be a boolean`,
         );
       }
+      if (optionsProp !== undefined && component === undefined) {
+        throw new Error(
+          `${from}: fields["${path}"].optionsProp requires a component override to feed`,
+        );
+      }
+      const span = override["span"];
+      // span: 1 is the default item width — accepting it would bless a
+      // silent no-op, the exact failure mode this config errors against.
+      if (
+        span !== undefined &&
+        span !== "full" &&
+        (typeof span !== "number" || !Number.isInteger(span) || span < 2)
+      ) {
+        throw new Error(
+          `${from}: fields["${path}"].span must be "full" or an integer >= 2`,
+        );
+      }
+      if (component === undefined && span === undefined) {
+        throw new Error(
+          `${from}: fields["${path}"] must set component and/or span`,
+        );
+      }
       return [
         path,
         {
-          component: component as FieldOverrideConfig["component"],
+          ...(component === undefined
+            ? {}
+            : { component: component as "autocomplete" }),
           ...(optionsProp === undefined ? {} : { optionsProp }),
+          ...(span === undefined
+            ? {}
+            : { span: span as FieldOverrideConfig["span"] }),
         },
       ];
     },
@@ -108,6 +144,9 @@ type MatchResult =
       kind: "found";
       spec: FieldSpec;
       segments: readonly string[];
+      // Anywhere under an array's "*" — rows are per-row stacks in every
+      // backend, so a span there has no grid to act on.
+      insideRow: boolean;
       insideRowObject: boolean;
     }>
   | Readonly<{ kind: "miss"; reason: string }>;
@@ -128,6 +167,7 @@ const matchPath = (
         kind: "found",
         spec,
         segments,
+        insideRow: inRow,
         insideRowObject: inRowObject,
       };
     }
@@ -268,8 +308,9 @@ type ResolvedOverride = Readonly<{
 }>;
 
 type FieldOverrideSpecInput = Readonly<{
-  component: "autocomplete";
+  component?: "autocomplete";
   optionsPropName?: string;
+  span?: number | "full";
 }>;
 
 const overrideError = (path: string, why: string): string =>
@@ -278,13 +319,16 @@ const overrideError = (path: string, why: string): string =>
 // Validate every override against the walked IR and return a new IR with the
 // matched leaves stamped. Throws ONE error aggregating every problem (the
 // CLI's loud-failure style — exit 1, nothing emitted). `layout` matters for
-// one reachability rule: the module layout degrades objects nested inside
-// array rows to a TODO, so an override buried there errors under
-// --layout module instead of silently vanishing.
+// two reachability rules: the module layout degrades objects nested inside
+// array rows to a TODO (an autocomplete buried there is unreachable), and
+// it stacks deeper-than-section objects as plain fieldsets (a span buried
+// there has no grid). `columns` gates span the same way: a span on a
+// 1-column form would be a silent no-op, which this config errors against.
 export const applyFieldOverrides = (
   ir: FieldSpec,
   overrides: FieldOverrides | undefined,
   layout: "single" | "module" = "single",
+  columns = 1,
 ): FieldSpec => {
   if (overrides === undefined || Object.keys(overrides).length === 0) {
     return ir;
@@ -319,8 +363,10 @@ export const applyFieldOverrides = (
         };
       }
       const { spec } = match;
+      const wantsComponent = config.component !== undefined;
       const problems = [
-        ...(!isScalarSpec(spec) || (spec.kind !== "string" && spec.kind !== "enum")
+        ...(wantsComponent &&
+        (!isScalarSpec(spec) || (spec.kind !== "string" && spec.kind !== "enum"))
           ? [
               overrideError(
                 path,
@@ -349,7 +395,7 @@ export const applyFieldOverrides = (
               ),
             ]
           : []),
-        ...(spec.kind === "string" && config.optionsProp !== true
+        ...(wantsComponent && spec.kind === "string" && config.optionsProp !== true
           ? [
               overrideError(
                 path,
@@ -359,7 +405,7 @@ export const applyFieldOverrides = (
               ),
             ]
           : []),
-        ...(layout === "module" && match.insideRowObject
+        ...(wantsComponent && layout === "module" && match.insideRowObject
           ? [
               overrideError(
                 path,
@@ -367,6 +413,56 @@ export const applyFieldOverrides = (
               ),
             ]
           : []),
+        // A span that cannot reach a grid is a silent no-op, so every
+        // placement without one errors: the value names a LAYOUT intent,
+        // and layouts that stack (roots, rows, 1-column forms, module
+        // fieldsets below the section) cannot honor it.
+        ...(config.span === undefined
+          ? []
+          : [
+              ...(!isScalarSpec(spec)
+                ? [
+                    overrideError(
+                      path,
+                      `span applies to scalar fields; containers (kind "${spec.kind}") already span the full row`,
+                    ),
+                  ]
+                : []),
+              ...(columns < 2
+                ? [
+                    overrideError(
+                      path,
+                      `span needs a multi-column form — pass --columns 2 or 3`,
+                    ),
+                  ]
+                : []),
+              ...(match.segments.length < 2
+                ? [
+                    overrideError(
+                      path,
+                      `root-level fields stack vertically in every layout; span applies to fields inside sections`,
+                    ),
+                  ]
+                : []),
+              ...(match.insideRow
+                ? [
+                    overrideError(
+                      path,
+                      `array rows stack vertically; a span has no grid to act on inside "*" rows`,
+                    ),
+                  ]
+                : []),
+              ...(layout === "module" &&
+              !match.insideRow &&
+              match.segments.length > 2
+                ? [
+                    overrideError(
+                      path,
+                      `--layout module stacks objects below the top-level section as plain fieldsets; only a section's direct fields sit in its grid (use --layout single for deeper spans)`,
+                    ),
+                  ]
+                : []),
+            ]),
       ];
       return { path, config, match, errors: problems };
     },
@@ -393,7 +489,14 @@ export const applyFieldOverrides = (
   >(
     (acc, { path, config, match }) => {
       if (match.kind !== "found") return acc; // unreachable after the throw
-      const wantsProp = match.spec.kind === "string" || config.optionsProp === true;
+      const spanPart = config.span === undefined ? {} : { span: config.span };
+      const componentPart =
+        config.component === undefined ? {} : { component: config.component };
+      // Only a component override feeds from an options prop; a span-only
+      // entry on a string field must NOT claim one.
+      const wantsProp =
+        config.component !== undefined &&
+        (match.spec.kind === "string" || config.optionsProp === true);
       if (!wantsProp) {
         return {
           used: acc.used,
@@ -401,7 +504,10 @@ export const applyFieldOverrides = (
             ...acc.byPath,
             [
               path,
-              { segments: match.segments, spec: { component: config.component } },
+              {
+                segments: match.segments,
+                spec: { ...componentPart, ...spanPart },
+              },
             ],
           ]),
         };
@@ -416,7 +522,7 @@ export const applyFieldOverrides = (
             path,
             {
               segments: match.segments,
-              spec: { component: config.component, optionsPropName: name },
+              spec: { ...componentPart, optionsPropName: name, ...spanPart },
             },
           ],
         ]),

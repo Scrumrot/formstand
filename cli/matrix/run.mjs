@@ -115,6 +115,19 @@ const overridesIr = api.applyFieldOverrides(
   "module",
 );
 
+// The span twin: a full-row field and a partial (2-of-3) beside it, on a
+// section's direct fields so the module layout accepts them too. Columns 3
+// matches the KitchenSinkSpans variants below.
+const spanIr = api.applyFieldOverrides(
+  kitchenSinkIr,
+  {
+    "contact.email": { span: "full" },
+    "contact.phone": { span: 2 },
+  },
+  "module",
+  3,
+);
+
 const posix = (p) => p.replace(/\\/g, "/");
 const nm = (p) => posix(path.join(matrixDir, "node_modules", p));
 
@@ -410,6 +423,23 @@ const generateKit = ({ alias, emitSingle, moduleUi, moduleExtra, probe }) => {
       overridesIr,
       "kitchenSinkSchema",
       "KitchenSinkOverridesForm",
+    ),
+    // The config-fields span placement at columns 3 (the only count where a
+    // partial span differs from full row), in both layouts: proves each
+    // kit's span spelling against the real .d.ts — mui's per-version Grid
+    // cell (size objects vs legacy item/xs/sm), mantine's Grid.Col span
+    // object, antd's Col xs/sm pair, chakra's responsive gridColumn Box
+    // prop — plus the full-row spelling beside it.
+    single("KitchenSinkSpans", spanIr, "kitchenSinkSchema", {
+      sections: "flat",
+      columns: 3,
+    }),
+    ...moduleForm(
+      "KitchenSinkSpans",
+      spanIr,
+      "kitchenSinkSchema",
+      "KitchenSinkSpansForm",
+      { sections: "flat", columns: 3 },
     ),
     ...moduleForm(
       "KitchenSink",

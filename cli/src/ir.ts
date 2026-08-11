@@ -3,19 +3,26 @@ import { capitalize, splitWords } from "./casing";
 // The intermediate representation both frontends (zod runtime walk, TS
 // compiler API walk) produce and all code emitters consume.
 
-// A per-field component override, resolved from formstand.config.ts `fields`
-// by applyFieldOverrides (see ./overrides) and stamped onto the matched
-// string/enum leaf. "autocomplete" is the only flavor today (free text with
-// suggestions — the field stays a string; strict select-from-list remains
-// the enum/Select path); the discriminated shape leaves room for future
-// flavors (textarea, slider, ...).
+// A per-field override, resolved from formstand.config.ts `fields` by
+// applyFieldOverrides (see ./overrides) and stamped onto the matched leaf.
+// Two independent axes share the block: `component` swaps the control
+// ("autocomplete" is the only flavor today — free text with suggestions;
+// strict select-from-list remains the enum/Select path), `span` places the
+// field in its section's multi-column grid. An override may carry either
+// or both.
 export type FieldOverrideSpec = Readonly<{
-  component: "autocomplete";
+  component?: "autocomplete";
   // Present when the generated component takes a `{name}: readonly string[]`
   // prop feeding the suggestions (required for plain string fields — no
   // other options source exists; optional for enums, where it REPLACES the
   // baked-in enum values). The name is already collision-resolved.
   optionsPropName?: string;
+  // How many of the section's columns the field occupies ("full" = the
+  // whole row; a number at or past the column count clamps to full at emit
+  // time). Stamped raw — the emitters know the column count, the config
+  // does not. Validated loudly against placements that cannot work (root
+  // fields, array rows, 1-column forms — see applyFieldOverrides).
+  span?: number | "full";
 }>;
 
 export type SharedSpecProps = Readonly<{

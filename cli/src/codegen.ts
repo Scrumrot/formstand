@@ -1348,6 +1348,14 @@ type Backend = Readonly<{
   // carry their own wrapper define it (mui/mantine Stack; antd leaves are
   // each a Flex already), and only at columns > 1, like gridChild.
   unionCellShell?: readonly [string, string] | undefined;
+  // The cell for a config `fields` span (see spanCellFor): kit-grid
+  // backends REPLACE the item cell with it, CSS-grid backends — whose
+  // leaves are grid items by placement alone — WRAP the leaf in the
+  // spanning element. Undefined at columns 1 like gridChild; override
+  // validation guarantees a surviving span always has a section grid.
+  spanCell?:
+    | ((span: FieldSpan) => Readonly<{ open: string; close: string; note?: string }>)
+    | undefined;
   // Wrapper around a nested object's fields.
   objectSection: (
     label: string,
@@ -1442,11 +1450,14 @@ const fieldLines = (
   arrays: ReadonlyMap<string, ArrayEntry>,
   unions: ReadonlyMap<string, UnionEntry>,
   ctx: NestedCtx,
-  // True when these fields are the direct children of a kit grid container
-  // (a section body under a gridChild backend). The ROOT field list is a
-  // Stack/Flex in every backend, so the top-level call never sets it; array
-  // ROW bodies live in per-row stacks, so they never set it either.
-  inGrid = false,
+  // True when these fields are a SECTION body (nested object/tuple
+  // innards) rather than the root list or an array row — the root list is
+  // a Stack/Flex in every backend and rows live in per-row stacks, so
+  // neither ever sets it. Under a gridChild backend a section body is a
+  // kit grid whose children wrap in cells; under a CSS-grid backend the
+  // flag still matters for config spans, whose wrapper only makes sense
+  // against the section's grid.
+  inSection = false,
 ): readonly string[] =>
   fields.flatMap((field): readonly string[] => {
     // A const binding so kind-narrowing survives into the cell closures
@@ -1460,7 +1471,7 @@ const fieldLines = (
       kind: "item" | "fullRow",
       payload: (lvl: number) => readonly string[],
     ): readonly string[] => {
-      const wrap = inGrid ? backend.gridChild : undefined;
+      const wrap = inSection ? backend.gridChild : undefined;
       if (wrap === undefined) return payload(level);
       const [open, close] = wrap[kind];
       return [ind(level) + open, ...payload(level + 1), ind(level) + close];
@@ -1495,10 +1506,9 @@ const fieldLines = (
               arrays,
               unions,
               ctx,
-              // The nested section's own body is a kit grid exactly when
-              // this backend wraps cells at all (gridChild exists only at
-              // columns > 1).
-              backend.gridChild !== undefined,
+              // A nested object's fields are a section body — a kit grid
+              // under a gridChild backend, a CSS grid otherwise.
+              true,
             ),
           ),
         ]);
@@ -1532,7 +1542,7 @@ const fieldLines = (
               // Inside a kit grid the union's bare controls ride one cell;
               // the kit's shell restores the vertical rhythm its 1-column
               // Stack chrome would have provided.
-              const shell = inGrid ? backend.unionCellShell : undefined;
+              const shell = inSection ? backend.unionCellShell : undefined;
               const body = (inner: number): readonly string[] => [
                 ...todoComment(spec, inner),
                 ...unionLines(backend, entry, field.label, inner),
@@ -1585,10 +1595,31 @@ const fieldLines = (
           ),
         ]);
       }
-      default:
-        return cell("item", (lvl) =>
-          backend.leaf(spec, pathAttr(prefix, field.name), field.label, lvl),
-        );
+      default: {
+        // A config span replaces the leaf's item cell (kit grids) or wraps
+        // the leaf in a spanning element (CSS grids) — one code path,
+        // because spanCell already IS the right wrapper per backend.
+        // Validation upstream rejected spans that can't reach a section
+        // grid, so inSection is always true when one arrives here.
+        const span = spec.override?.span;
+        if (span === undefined || !inSection || backend.spanCell === undefined) {
+          return cell("item", (lvl) =>
+            backend.leaf(spec, pathAttr(prefix, field.name), field.label, lvl),
+          );
+        }
+        const { open, close, note } = backend.spanCell(span);
+        return [
+          ...(note === undefined ? [] : [`${ind(level)}{/* ${note} */}`]),
+          ind(level) + open,
+          ...backend.leaf(
+            spec,
+            pathAttr(prefix, field.name),
+            field.label,
+            level + 1,
+          ),
+          ind(level) + close,
+        ];
+      }
     }
   });
 
@@ -2271,6 +2302,8 @@ const plainBackend = (
     `${ind(level + 1)}</button>`,
     `${ind(level)}${visual.sections === "collapsible" ? "</details>" : "</section>"}`,
   ],
+  spanCell:
+    cols === 1 ? undefined : (fieldSpan) => spanCellFor("plain", fieldSpan, cols),
   bodyLevel: 3,
   formShell: {
     open: ["    <form"],
@@ -2313,6 +2346,87 @@ export const responsiveGridTracks = (columns: number): string =>
   `repeat(auto-fit, minmax(max(220px, calc((100% - ${String(
     16 * (columns - 1),
   )}px) / ${String(columns)})), 1fr))`;
+
+// The value of a formstand.config.ts `fields` span: how many of the
+// section's columns the field occupies, or the whole row.
+export type FieldSpan = number | "full";
+
+// The spanning cell a config `span` places a field in, per ui dialect —
+// ONE source, because the single-file backends and the module layout must
+// emit identical cells for the same span and column count (the same
+// invariant the grids themselves follow). A span at or past the column
+// count takes the whole row.
+export const spanCellFor = (
+  ui: "plain" | "shadcn" | "chakra" | "mui" | "mantine" | "antd",
+  span: FieldSpan,
+  columns: number,
+  // mui only: v7/9's size-prop grid vs the v5/v6 legacy item/xs/sm
+  // spelling — mirrors containerCellTags and the single-file backend.
+  muiGridSizeProp = true,
+): Readonly<{ open: string; close: string; note?: string }> => {
+  const full = span === "full" || span >= columns;
+  const cols = full ? columns : (span as number);
+  switch (ui) {
+    case "mui": {
+      const sm = String((12 / columns) * cols);
+      return {
+        open: muiGridSizeProp
+          ? full
+            ? "<Grid size={12}>"
+            : `<Grid size={{ xs: 12, sm: ${sm} }}>`
+          : full
+            ? "<Grid item xs={12}>"
+            : `<Grid item xs={12} sm={${sm}}>`,
+        close: "</Grid>",
+      };
+    }
+    case "mantine":
+      return {
+        open: full
+          ? "<Grid.Col span={12}>"
+          : `<Grid.Col span={{ base: 12, sm: ${String((12 / columns) * cols)} }}>`,
+        close: "</Grid.Col>",
+      };
+    case "antd":
+      return {
+        open: full
+          ? "<Col span={24}>"
+          : `<Col xs={24} sm={${String((24 / columns) * cols)}}>`,
+        close: "</Col>",
+      };
+    case "shadcn":
+      return {
+        open: `<div className="${full ? "md:col-span-full" : `md:col-span-${String(cols)}`}">`,
+        close: "</div>",
+      };
+    case "chakra":
+      // The section grid collapses below `md` (gridChakraProps), so a
+      // partial span applies from md up and base stays auto for the
+      // 1-column phone flow. The full row is "1 / -1", safe at any track
+      // count — same spelling section roots use.
+      return {
+        open: full
+          ? `<Box gridColumn="1 / -1">`
+          : `<Box gridColumn={{ md: ${q(`span ${String(cols)}`)} }}>`,
+        close: "</Box>",
+      };
+    case "plain":
+      // Inline styles cannot carry a media query, and the plain grid's
+      // auto-fit tracks collapse by width — a hard `span 2` would force
+      // implicit tracks (overflow) once the tracks collapse on a phone.
+      // "1 / -1" is safe at ANY track count, so a partial span degrades
+      // to the full row and says so in a comment beside the wrapper.
+      return {
+        open: `<div style={{ gridColumn: "1 / -1" }}>`,
+        close: "</div>",
+        ...(full
+          ? {}
+          : {
+              note: `span ${String(cols)} widened to the full row: plain inline styles cannot express a responsive partial span`,
+            }),
+      };
+  }
+};
 
 // MUI's sx takes responsive objects natively, so the collapse is a real
 // breakpoint (sm, 600px) rather than the clamp trick.
@@ -3270,6 +3384,10 @@ const muiBackend = (
     cols === 1 ? undefined : { item: itemCell, fullRow: fullRowCell },
   unionCellShell:
     cols === 1 ? undefined : ["<Stack spacing={2}>", "</Stack>"],
+  spanCell:
+    cols === 1
+      ? undefined
+      : (fieldSpan) => spanCellFor("mui", fieldSpan, cols, gridSizeProp),
   arraySection: (entry, level, rowBody) => {
     // Children sit under the chrome's innermost container — same shift as
     // objectSection's body. At cols > 1 each row's Stack nests INSIDE its
@@ -3743,6 +3861,10 @@ const shadcnBackend = (
         : [`${ind(level)}</section>`]),
     ];
   },
+  spanCell:
+    cols === 1
+      ? undefined
+      : (fieldSpan) => spanCellFor("shadcn", fieldSpan, cols),
   bodyLevel: 3,
   formShell: {
     open: ["    <form", `      className="grid max-w-xl gap-4"`],
@@ -4269,6 +4391,10 @@ const chakraBackend = (
       ...sectionClose(level),
     ];
   },
+  spanCell:
+    cols === 1
+      ? undefined
+      : (fieldSpan) => spanCellFor("chakra", fieldSpan, cols),
   bodyLevel: 4,
   formShell: {
     open: ["    <Box", `      as="form"`],
@@ -4720,6 +4846,10 @@ const mantineBackend = (
         },
   unionCellShell:
     cols === 1 ? undefined : [`<Stack gap="md">`, "</Stack>"],
+  spanCell:
+    cols === 1
+      ? undefined
+      : (fieldSpan) => spanCellFor("mantine", fieldSpan, cols),
   objectSection: wrapSection(sectionOpen, sectionClose, bodyDelta),
   arraySection: (entry, level, rowBody) => {
     // Children sit under the chrome's innermost container — same shift as
@@ -5335,6 +5465,10 @@ const antdBackend = (
           item: [`<Col xs={24} sm={${colSm}}>`, "</Col>"],
           fullRow: ["<Col span={24}>", "</Col>"],
         },
+  spanCell:
+    cols === 1
+      ? undefined
+      : (fieldSpan) => spanCellFor("antd", fieldSpan, cols),
   objectSection: wrapSection(sectionOpen, sectionClose, bodyDelta),
   arraySection: (entry, level, rowBody) => {
     // Children sit under the chrome's innermost container — same shift as

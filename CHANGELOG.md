@@ -1,5 +1,40 @@
 # Changelog
 
+## formstand-cli Unreleased
+
+### Added
+
+- **Per-field layout placement: `span` in the config `fields` block.** With
+  `--columns 2|3`, `"employment.notes": { span: "full" }` gives a field the
+  whole row and `{ span: 2 }` two of three columns; it composes with an
+  autocomplete override in the same entry. Each backend emits the span in
+  the dialect its section grids already use (mui `Grid` size objects, with
+  the legacy `item xs/sm` spelling on mui@5/6; mantine `Grid.Col` span
+  objects; antd `Col` `xs`/`sm`; shadcn `md:col-span-N`; chakra a `Box`
+  with responsive `gridColumn`), so every spelling still collapses to one
+  column on a phone. Plain is the one exception, for partial spans only:
+  inline styles cannot carry a media query, so a numeric span widens to the
+  full row with a comment saying so at the site. A span with no grid to act
+  on (a root-level field, array rows, a container, a 1-column form, or a
+  module-layout field below a section's direct children) is a loud
+  generation-time error, never a silent no-op.
+
+### Fixed
+
+- **Generated bodies indent under their real container.** Panel and
+  collapsible chrome nests the body's container deeper than the section tag
+  (Card > CardContent > Grid), but cells were emitted shallower than the
+  container holding them and array row stacks sat beside their wrapper
+  cells instead of inside them. Both layouts now shift bodies to the
+  chrome's true depth, so generated files survive a host Prettier pass
+  without reflowing. Cosmetic only; the demos regenerate with a
+  whitespace-only diff.
+- **A union riding a grid cell keeps its vertical rhythm.** Inside an
+  object section at `--columns 2|3`, a discriminated union's controls are
+  bare siblings in one full-row cell and had lost the spacing the 1-column
+  chrome provides; mui and mantine now wrap them in the kit's Stack. antd
+  needs no wrapper, since each of its controls is already a vertical Flex.
+
 ## 0.15.2 — 2026-08-11
 
 Identical to 0.15.1, republished under a fresh tag. The v0.15.1 tag was

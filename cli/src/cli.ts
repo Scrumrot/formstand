@@ -809,12 +809,14 @@ const runZodMode = async (
     return 1;
   }
   // Config `fields` overrides stamp the IR before any emitter runs; a bad
-  // override (unknown path, non-string/enum target, missing optionsProp)
-  // throws here — main() reports it and exits 1 with nothing written.
+  // override (unknown path, non-string/enum target, missing optionsProp,
+  // a span with no grid to act on) throws here — main() reports it and
+  // exits 1 with nothing written.
   const ir: FieldSpec = applyFieldOverrides(
     fromZod(pick.schema, options.maxDepth),
     options.fields,
     options.layout,
+    options.columns,
   );
   warnDegradedBindings(ir, options.layout, options.maxDepth ?? DEFAULT_MAX_DEPTH);
   const formName = options.name ?? deriveFormName(pick.exportName);
@@ -874,7 +876,12 @@ const runTypeMode = (options: CliOptions, template?: Template): number => {
   // Same override stamping as zod mode — the config speaks IR paths, so it
   // is frontend-agnostic (the emitted zod schema source stays override-free;
   // overrides shape COMPONENTS, not validation).
-  const ir = applyFieldOverrides(walkedIr, options.fields, options.layout);
+  const ir = applyFieldOverrides(
+    walkedIr,
+    options.fields,
+    options.layout,
+    options.columns,
+  );
   warnDegradedBindings(ir, options.layout, options.maxDepth ?? DEFAULT_MAX_DEPTH);
   const schemaName = `${camelCase(typeName)}Schema`;
   const formName = options.name ?? deriveFormName(typeName);

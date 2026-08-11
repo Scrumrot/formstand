@@ -44,6 +44,7 @@ import {
   reactImportLines,
   shadcnAdapterSection,
   shiftLines,
+  spanCellFor,
   templateEscape,
   unionCommonFieldNames,
 } from "./codegen";
@@ -2859,6 +2860,33 @@ const objectSectionFile = (
           `${indent}${cells[kind][1]}`,
         ]
       : payload(indent);
+  // A leaf's cell honoring a config `span`: the span REPLACES the item
+  // cell (kit uis) or WRAPS the field reference in the spanning element
+  // (CSS-grid uis, where antdCell would have left it bare). Guarded on
+  // columns so an unvalidated IR reaching the API degrades to the plain
+  // item cell instead of emitting a wrapper against no grid.
+  const leafCell = (
+    leafSpec: FieldSpec,
+    indent: string,
+    payload: (inner: string) => readonly string[],
+  ): readonly string[] => {
+    const fieldSpan = leafSpec.override?.span;
+    if (fieldSpan === undefined || visual.columns === 1) {
+      return antdCell("item", indent, payload);
+    }
+    const { open, close, note } = spanCellFor(
+      ui,
+      fieldSpan,
+      visual.columns,
+      !(muiVersion === 5 || muiVersion === 6),
+    );
+    return [
+      ...(note === undefined ? [] : [`${indent}{/* ${note} */}`]),
+      `${indent}${open}`,
+      ...payload(`${indent}  `),
+      `${indent}${close}`,
+    ];
+  };
   const body = (
     fields: readonly NamedField[],
     segments: readonly string[],
@@ -2937,7 +2965,7 @@ const objectSectionFile = (
           return planned === undefined
             ? []
             : inRow
-              ? antdCell("item", indent, (inner) => [
+              ? leafCell(spec, indent, (inner) => [
                   `${inner}<${planned.componentName}${optionsPropsAttrs(leafOptionsProp(planned.spec))} />`,
                 ])
               : [
@@ -2986,6 +3014,19 @@ const objectSectionFile = (
       HEADER,
       ...mergeImports([
         ...objectSectionImports(ui, visual),
+        // A chakra span wraps its field reference in a <Box> the section
+        // chrome does not otherwise import — gated on an actual span among
+        // the DIRECT fields (nested fieldsets never wrap), so no unused
+        // import ships: the exact bug family the edge-config release fixed.
+        ...(ui === "chakra" &&
+        visual.columns > 1 &&
+        spec.fields.some(
+          (field) =>
+            isScalarSpec(field.spec) &&
+            field.spec.override?.span !== undefined,
+        )
+          ? [{ from: "@chakra-ui/react", names: ["Box"] } as const]
+          : []),
         ...nestedParts.flatMap((part) => part.imports),
       ]),
       ...hooksImports,

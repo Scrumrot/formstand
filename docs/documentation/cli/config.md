@@ -70,6 +70,26 @@ A [custom template](./templates) owns per-kind rendering, but an overridden fiel
 
 `component: "autocomplete"` is the only flavor today. The shape leaves room for more.
 
+## Per-field layout placement
+
+The other thing the `fields` block can say about a field is how much room it gets in a multi-column section. With `--columns 2` or `3` every field normally takes one column; `span` widens the ones that deserve more.
+
+```ts
+export default defineConfig({
+  columns: 3,
+  fields: {
+    "employment.notes": { span: "full" }, // the whole row
+    "employment.jobTitle": { span: 2 },   // two of the three columns
+  },
+});
+```
+
+`span` takes `"full"` or an integer of at least 2, and a number at or past the column count means the full row. It composes with a component override on the same field: `{ component: "autocomplete", optionsProp: true, span: "full" }` is one entry.
+
+Each backend emits the span in the same layout dialect its section grids use: mui widens the field's `Grid` cell (`size={{ xs: 12, sm: 8 }}` for two of three columns, with the legacy `item xs/sm` spelling on `mui@5` and `mui@6`), mantine the `Grid.Col` span object, antd the `Col` `xs`/`sm` pair, shadcn a `md:col-span-N` wrapper, chakra a `Box` with a responsive `gridColumn`. Every spelling collapses to one column on a phone along with the grid itself. The plain backend is the one exception, for partial spans only: inline styles cannot carry a media query, so a numeric span widens to the full row and the generated file says so in a comment at the site. `span: "full"` is exact in every backend.
+
+A span with no grid to act on is a generation-time error rather than a silent no-op: on a root-level field (the root list stacks in every layout), inside array rows (rows stack too), on a container (sections already span the row), on a 1-column form, or, under `--layout module`, on a field nested deeper than a section's direct children (deeper objects render there as stacked fieldsets; `--layout single` grids every level).
+
 ## Descriptions become helper text
 
 You don't need config for this one. A field's zod description is picked up automatically and rendered as the control's helper text:

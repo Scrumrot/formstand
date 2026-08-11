@@ -55,35 +55,29 @@ the CLI from two UI targets to six, and make the docs match.
 - Schema builder paste-zod mode: paste a `z.object(...)` and it is evaluated
   in the browser against the bundled zod, complementing paste-a-TS-type.
 
-**Since then (0.14 and 0.15, plus unreleased CLI work on `main`)**
+**Since then (0.14 through 0.15.2, formstand-cli 0.11.1, and unreleased
+work on `main`)**
 
 - `formstand/devtools` (0.14.0): an in-page panel with per-field rows, both
   error channels shown separately, a live `diff()`, and snapshot/restore.
 - `persistForm` hardening (0.15.0): a shape guard that discards drafts whose
   stored shape conflicts with the current schema, and an opt-in `version` so
   schema migrations can invalidate old drafts deliberately.
-- Responsive `--columns` and kit-native containers (CLI, unreleased):
-  multi-column output collapses to one column on a phone in every backend,
-  and antd, Mantine, and MUI sections now lay out with their kit's own
-  Row/Col, Grid/Grid.Col, and Grid components instead of inline CSS grid.
+- Responsive `--columns` and kit-native containers (formstand-cli 0.11.0,
+  republished as 0.11.1 after the August 6 GitHub Actions outage dropped the
+  tag events): multi-column output collapses to one column on a phone in
+  every backend; antd, Mantine, and MUI sections lay out with their kit's
+  own Row/Col, Grid/Grid.Col, and Grid components; and the review's four
+  edge-config bugs shipped fixed, with tuple-only and root-union schemas in
+  the matrix so that class cannot recur.
+- Per-field layout placement, phase 2 (CLI, unreleased): `span` in the
+  config `fields` block places a field in its section's grid ("full" or a
+  column count), emitted in each backend's own dialect through the
+  `Backend.gridChild`/`spanCellFor` seam the container migration prepared.
+  Placements with no grid to act on are loud generation-time errors.
 
 ## Now
 
-- **Ship the container-layout CLI release.** The responsive `--columns` and
-  kit-container work sits on `main` under `## formstand-cli Unreleased`, with
-  three confirmed edge-config bugs from its code review to fix first: the
-  module union section at `columns > 1` renders a `Stack` its imports don't
-  include, a tuple-only root emits containers the import gate never counted,
-  and a module nested fieldset lost its full-row span for the CSS-grid
-  backends. Fix, extend the matrix with tuple-only and root-union schemas so
-  the class cannot recur, then cut the release.
-- **Per-field layout placement.** Phase 1 landed: every backend emits its
-  kit's own layout dialect for `--columns`, responsive by default. Phase 2 is
-  saying more than one column count for a whole form: this field spans two,
-  these three sit in a row. The agreed home is a `span` in the `fields` block
-  of `formstand.config.ts`, which already addresses fields by path for
-  component overrides. The per-child cell hook the container migration added
-  (`Backend.gridChild`) is the seam a span flows through.
 - **A step-by-step CLI wizard.** `formstand-gen --wizard` walking through the
   questions the flags ask, one at a time: which file, which export, which kit,
   which layout, columns or not, where to write it, ending with the composed

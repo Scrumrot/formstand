@@ -16,7 +16,8 @@ type StyleProps = Readonly<{
   // accepts what the emitter writes; the version matrix proves it against
   // the real declarations.
   gridTemplateColumns?: string | Readonly<Record<string, string>>;
-  gridColumn?: string;
+  // Responsive too: config spans emit gridColumn={{ md: "span 2" }}.
+  gridColumn?: string | Readonly<Record<string, string>>;
   gap?: string;
   p?: string;
   borderWidth?: string;
