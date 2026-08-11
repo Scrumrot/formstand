@@ -121,9 +121,10 @@ export const parseFieldOverrides = (
             ? {}
             : { component: component as "autocomplete" }),
           ...(optionsProp === undefined ? {} : { optionsProp }),
-          ...(span === undefined
-            ? {}
-            : { span: span as FieldOverrideConfig["span"] }),
+          // The exact union, not FieldOverrideConfig["span"]: indexing an
+          // optional property re-adds undefined, which the
+          // exactOptionalPropertyTypes root build rejects.
+          ...(span === undefined ? {} : { span: span as number | "full" }),
         },
       ];
     },
