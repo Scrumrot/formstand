@@ -712,18 +712,29 @@ button.secondary.active {
   }
   /* Generated plain output frames nested objects as <fieldset>s with UA
    * default chrome; at 8 levels deep (the deep-nesting demo) that padding
-   * eats most of a phone's width before any input gets a say. */
-  .demo-body fieldset {
-    padding: 8px;
+   * eats most of a phone's width before any input gets a say. Unclassed
+   * fieldsets ARE the plain output — kit output never renders one bare,
+   * and shadcn's carry Tailwind classes whose own padding must win, so
+   * :not([class]) is the scope, not specificity. !important because
+   * panel-mode plain output carries its padding inline
+   * (style={{ padding: 16 }}), which no selector outranks — without it
+   * only flat/collapsible fieldsets slimmed and panel kept 16px a level. */
+  .demo-body fieldset:not([class]) {
+    padding: 8px !important;
     margin: 0 0 8px;
     min-width: 0;
   }
   /* The plain MODULE layout binds through the prop builders with bare
    * <label>text<input/></label> markup (no .zf-field wrapper), so those
    * labels size to their content and inputs sit at intrinsic width. Stack
-   * them at phone width. Checkbox labels keep their inline row: a stacked
-   * checkbox above its own caption reads as two controls. */
-  .demo-body label:not(.row):not(:has(input[type="checkbox"])) {
+   * them at phone width — but only labels that WRAP a control: a kit
+   * label (MUI's floating InputLabel) is a leaf, and display:grid on it
+   * turns its text into an anonymous grid item, which kills the
+   * text-overflow ellipsis that lives on the label itself. Checkbox
+   * labels keep their inline row: a stacked checkbox above its own
+   * caption reads as two controls. */
+  .demo-body label:not(.row):has(> input:not([type="checkbox"])),
+  .demo-body label:not(.row):has(> select) {
     display: grid;
     gap: 4px;
     min-width: 0;
