@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.15.2 — 2026-08-11
+
+Identical to 0.15.1, republished under a fresh tag. The v0.15.1 tag was
+pushed during the August 6 GitHub Actions outage and GitHub dropped the
+tag event outright, so the Publish workflow never ran and 0.15.1 never
+reached npm. The Publish workflow only fires on tag pushes by design (the
+trusted-publishing trust is bound to that trigger), so the recovery is a
+new version under a new tag. No code changes.
+
+## formstand-cli 0.11.1 — 2026-08-11
+
+Identical to formstand-cli 0.11.0, republished under a fresh tag for the
+same reason as 0.15.2 above: the cli-v0.11.0 tag event was dropped in the
+August 6 outage and the version never reached npm. No code changes.
+
 ## 0.15.1 — 2026-08-06
 
 ### Fixed
