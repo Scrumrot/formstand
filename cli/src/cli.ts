@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
+// Core module; importing it never touches stdin — the interface only opens
+// inside the --wizard branch.
+import { createInterface } from "node:readline/promises";
 import { pathToFileURL } from "node:url";
 import { createJiti } from "jiti";
 import { camelCase, isReservedWord, pascalCase } from "./casing";
@@ -47,6 +50,7 @@ import {
   emitModuleForm,
   joinModuleFiles,
 } from "./moduleLayout";
+import { type WizardIo, runWizard } from "./wizard";
 
 // The --ui flag spelling and mui enumeration, built from UI_KITS /
 // MUI_VERSIONS directly (uiTarget.ts is the single source of truth) so HELP
@@ -132,6 +136,11 @@ Options:
   --watch             regenerate whenever the input file changes (requires
                       --out)
   --force             overwrite existing output files
+  --wizard            ask the questions the flags answer, one at a time, and
+                      end by printing the composed command so the run is
+                      reproducible without the wizard. Runs ALONE (no other
+                      flags) and only when asked — never from a TTY check.
+                      Prompts write to stderr, so stdout output stays pipeable.
   -h, --help          show this help
 
 Examples:
@@ -1022,7 +1031,101 @@ const run = async (
     : runZodMode(options, template);
 };
 
-export const main = async (argv: readonly string[]): Promise<number> => {
+// The wizard's readline seam: process.stdin for answers, STDERR for
+// prompts — a run that streams its component to stdout keeps that stream
+// clean. The pending question races the interface's close event so a pipe
+// that ends mid-interview fails loudly instead of hanging.
+const readlineWizardIo = (): Readonly<{ io: WizardIo; close: () => void }> => {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stderr,
+  });
+  // NOT rl.question: it only captures lines that arrive while a question
+  // is pending, and a piped `printf 'a\nb\n' | formstand-gen --wizard`
+  // delivers every answer before the interview asks for it — question()
+  // would drop them all and the wizard would die on "input ended". Buffer
+  // every line at the edge instead; a terminal is just the slow case where
+  // the queue is always empty. This mutable queue is the IO boundary the
+  // pure interview (runWizard) talks to.
+  const state: {
+    queue: string[];
+    waiting: ((line: string) => void) | undefined;
+    onEnded: (() => void) | undefined;
+    ended: boolean;
+  } = { queue: [], waiting: undefined, onEnded: undefined, ended: false };
+  rl.on("line", (line) => {
+    const waiting = state.waiting;
+    if (waiting === undefined) {
+      state.queue.push(line);
+      return;
+    }
+    state.waiting = undefined;
+    state.onEnded = undefined;
+    waiting(line);
+  });
+  rl.on("close", () => {
+    state.ended = true;
+    state.onEnded?.();
+  });
+  return {
+    io: {
+      ask: (prompt) =>
+        new Promise<string>((resolve, reject) => {
+          process.stderr.write(prompt);
+          const buffered = state.queue.shift();
+          if (buffered !== undefined) {
+            resolve(buffered);
+            return;
+          }
+          if (state.ended) {
+            reject(new Error("input ended before the wizard finished"));
+            return;
+          }
+          state.waiting = resolve;
+          state.onEnded = () => {
+            reject(new Error("input ended before the wizard finished"));
+          };
+        }),
+      say: (line) => {
+        stderr(line);
+      },
+      fileExists: (filePath) => fs.existsSync(path.resolve(filePath)),
+    },
+    close: () => {
+      rl.close();
+    },
+  };
+};
+
+export const main = async (
+  argv: readonly string[],
+  // Test seam: a scripted WizardIo replaces the readline interface, so the
+  // interview is drivable without a TTY or a child process.
+  wizardIo?: WizardIo,
+): Promise<number> => {
+  if (argv.includes("--wizard")) {
+    // The wizard runs ALONE: it asks everything the other flags say, and a
+    // half-flags half-questions run would have two sources of truth.
+    if (argv.length !== 1) {
+      stderr("error: --wizard runs alone — it asks everything the other flags cover");
+      return 1;
+    }
+    const wired =
+      wizardIo === undefined
+        ? readlineWizardIo()
+        : { io: wizardIo, close: (): void => undefined };
+    try {
+      const outcome = await runWizard(wired.io);
+      wired.close();
+      // Declining the final confirm still succeeded: the composed command
+      // was the deliverable.
+      return outcome.kind === "run" ? await main(outcome.argv) : 0;
+    } catch (e) {
+      wired.close();
+      stderr(`error: ${e instanceof Error ? e.message : String(e)}`);
+      return 1;
+    }
+  }
   const parsed = parseArgs(argv);
   switch (parsed.kind) {
     case "help":

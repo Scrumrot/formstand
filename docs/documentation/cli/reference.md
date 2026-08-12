@@ -24,9 +24,16 @@ formstand-gen <input file> [flags]
 | `--template FILE` | a custom template module for a kit formstand doesn't ship. `--layout single` only, and it overrides `--ui`. See [Templates](./templates) |
 | `--watch` | regenerate whenever the input changes; requires `--out` |
 | `--force` | allow overwriting existing files |
+| `--wizard` | ask the flag questions interactively, one at a time. Runs alone; see below |
 | `--help`, `-h` | usage |
 
 Without `--out`, code goes to stdout while notes and warnings go to stderr, so redirection stays clean. Writes are all-or-nothing: if any destination exists and `--force` isn't set, nothing is written.
+
+## The wizard
+
+`formstand-gen --wizard` walks through the questions the flags answer, one at a time: which file, zod export or TS type, which kit, which layout, section chrome, columns, name, and where to write. Enter accepts the default shown on every question, invalid answers re-ask instead of exiting, an existing output target offers `--force` on the spot, and the interview ends by printing the composed `formstand-gen` command before asking to run it, so the run is reproducible without the wizard from then on.
+
+Three properties worth relying on. It is strictly opt-in: nothing prompts from a bare `formstand-gen` or a TTY check, so scripts and CI keep their contract. It takes the flag alone: a half-flags, half-questions run would have two sources of truth, so any other flag beside `--wizard` is an error. And every prompt writes to stderr, so a run that ends streaming the component to stdout stays cleanly pipeable; the answers can even be piped in on stdin, one per line.
 
 ## What gets generated
 

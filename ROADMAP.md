@@ -75,23 +75,14 @@ work on `main`)**
   column count), emitted in each backend's own dialect through the
   `Backend.gridChild`/`spanCellFor` seam the container migration prepared.
   Placements with no grid to act on are loud generation-time errors.
+- The CLI wizard (unreleased): `formstand-gen --wizard` asks the flag
+  questions one at a time and ends by printing the composed command, so the
+  run is reproducible without it. Both roadmap constraints held: strictly
+  opt-in (the flag runs alone, never a TTY sniff, prompts on stderr so
+  stdout output stays pipeable), and zero new dependencies — numbered
+  readline lists over a hand-rolled buffer, no prompts library.
 
 ## Now
-
-- **A step-by-step CLI wizard.** `formstand-gen --wizard` walking through the
-  questions the flags ask, one at a time: which file, which export, which kit,
-  which layout, columns or not, where to write it, ending with the composed
-  command printed so the run is reproducible without the wizard. The flag
-  semantics are already modelled once, in the playground's CLI command builder
-  tab, so this is the terminal port of something that exists rather than a
-  fresh design.
-
-  Two constraints to respect. It must be **explicitly opt-in**, never
-  triggered by a bare `formstand-gen` or by a TTY check: the CLI streams to
-  stdout by default and is meant to be scriptable, and a prompt that appears
-  when a pipe does not would break both CI and any agent driving it. And the
-  CLI currently has two dependencies (`jiti`, `typescript`), so a prompts
-  library is a real addition to weigh against hand-rolled `readline`.
 
 - **More schema inputs: JSON Schema and OpenAPI.** The CLI reads two sources
   today, a zod schema export and a TS type, through two front-ends

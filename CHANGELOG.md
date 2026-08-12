@@ -4,6 +4,16 @@
 
 ### Added
 
+- **`--wizard`: the flag questions asked one at a time.** Which file, zod
+  export or TS type, which kit, layout, section chrome, columns, name, and
+  where to write — Enter accepts the default on every question, invalid
+  answers re-ask, and an existing output target offers `--force` on the
+  spot. The interview ends by printing the composed `formstand-gen`
+  command before running it, so the run is reproducible without the wizard
+  from then on. Strictly opt-in (never a TTY sniff, and the flag runs
+  alone), prompts on stderr so stdout output stays pipeable, answers
+  pipeable on stdin, and zero new dependencies: numbered readline lists,
+  not a prompts library.
 - **Per-field layout placement: `span` in the config `fields` block.** With
   `--columns 2|3`, `"employment.notes": { span: "full" }` gives a field the
   whole row and `{ span: 2 }` two of three columns; it composes with an
