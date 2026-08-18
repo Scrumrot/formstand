@@ -1,6 +1,6 @@
 # Changelog
 
-## formstand-cli Unreleased
+## formstand-cli 0.12.0 — 2026-08-18
 
 ### Added
 
