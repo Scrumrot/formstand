@@ -13,6 +13,8 @@ export const zodFixture = path.join(fixturesDir, "profileSchema.ts");
 export const typeFixture = path.join(fixturesDir, "profileType.ts");
 export const tupleFixture = path.join(fixturesDir, "tupleType.ts");
 export const defaultExportFixture = path.join(fixturesDir, "schema.ts");
+export const jsonSchemaFixture = path.join(fixturesDir, "profileSchema.json");
+export const openApiFixture = path.join(fixturesDir, "orderApi.json");
 
 const posix = (p: string): string => p.replace(/\\/g, "/");
 

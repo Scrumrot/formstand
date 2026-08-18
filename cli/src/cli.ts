@@ -41,6 +41,7 @@ import {
   truncatedFieldPaths,
   unaddressableFieldPaths,
 } from "./codegen";
+import { fromJsonSchema } from "./fromJsonSchema";
 import { fromType } from "./fromType";
 import { DEFAULT_MAX_DEPTH, fromZod, isZodSchema } from "./fromZod";
 import type { FieldSpec } from "./ir";
@@ -69,14 +70,21 @@ Usage:
   formstand-gen <input.ts> [options]
 
 Input:
-  A TypeScript module exporting a zod schema (default), or any TypeScript
-  file when --type names an exported type/interface (a zod schema source
-  file is generated alongside the component in that mode).
+  A TypeScript module exporting a zod schema (default), any TypeScript file
+  when --type names an exported type/interface, or a .json file holding a
+  JSON Schema or OpenAPI 3.x document (--schema picks one schema out of an
+  OpenAPI document). The type and .json modes generate a zod schema source
+  file alongside the component.
 
 Options:
   --export <name>     which export holds the zod schema (default: the default
                       export, or the sole zod-schema export)
   --type <TypeName>   generate from an exported TS type/interface instead
+  --schema <name|#/pointer>
+                      (.json input) which schema to generate from: a component
+                      schema name, or a full "#/..." JSON pointer (which can
+                      reach an operation's request body). Required when an
+                      OpenAPI document declares several component schemas
   --ui <${UI_FLAG_CHOICES}>
                       component flavor (default: plain). mui may pin an
                       @mui/material major: ${MUI_CHOICE_LIST}; bare
@@ -109,8 +117,8 @@ Options:
                       extraction)
   --name <MyForm>     component name (default: derived from the schema/type)
   --out <file>        write the component here instead of stdout
-  --schema-out <file> (type mode) where to write the generated zod schema
-                      (default: <schemaName>.ts next to --out)
+  --schema-out <file> (--type / .json input) where to write the generated zod
+                      schema (default: <schemaName>.ts next to --out)
   --live              live/no-submit form (a map or preview consumes values
                       as they change): omits the submit scaffold entirely,
                       adds an optional onValuesChange prop wired through
@@ -146,6 +154,7 @@ Options:
 Examples:
   formstand-gen src/profileSchema.ts --out src/ProfileForm.tsx
   formstand-gen src/types.ts --type Profile --ui mui --out src/ProfileForm.tsx
+  formstand-gen api.json --schema Order --out src/OrderForm.tsx
   formstand-gen src/profileSchema.ts --ui shadcn --out src/ProfileForm.tsx
   formstand-gen src/profileSchema.ts --ui chakra --out src/ProfileForm.tsx
   formstand-gen src/profileSchema.ts --ui mantine --out src/ProfileForm.tsx
@@ -180,6 +189,9 @@ type CliOptions = Readonly<{
   input: string;
   exportName?: string;
   typeName?: string;
+  // --schema: which schema inside a .json input (a component name or a
+  // "#/..." pointer). Never applies to TS inputs.
+  schema?: string;
   ui: UiTarget;
   layout: Layout;
   sections: Sections;
@@ -206,6 +218,7 @@ export type ParsedCliOptions = Readonly<{
   input: string;
   exportName?: string;
   typeName?: string;
+  schema?: string;
   ui?: UiTarget;
   layout?: Layout;
   sections?: Sections;
@@ -233,6 +246,7 @@ type PartialOptions = Readonly<{
   input?: string;
   exportName?: string;
   typeName?: string;
+  schema?: string;
   ui?: UiTarget;
   layout?: Layout;
   sections?: Sections;
@@ -254,6 +268,7 @@ const VALUE_FLAGS: Readonly<
     string,
     | "exportName"
     | "typeName"
+    | "schema"
     | "layout"
     | "name"
     | "out"
@@ -264,6 +279,7 @@ const VALUE_FLAGS: Readonly<
 > = {
   "--export": "exportName",
   "--type": "typeName",
+  "--schema": "schema",
   "--layout": "layout",
   "--name": "name",
   "--out": "out",
@@ -874,14 +890,17 @@ const runZodMode = async (
   return 0;
 };
 
-const runTypeMode = (options: CliOptions, template?: Template): number => {
-  // Pass the input as the user typed it so error messages echo it verbatim
-  // (fromType resolves it internally).
-  const { ir: walkedIr, typeName } = fromType(
-    options.input,
-    options.typeName,
-    options.maxDepth,
-  );
+// The generated-schema modes (--type and .json input) share everything past
+// the walk: neither input carries a runtime validator, so emitZodSchema
+// writes one beside the component (or it becomes the module's schema.ts).
+// baseName is the walk's naming base (the type name, the selected component
+// name, or the schema's title).
+const runGeneratedSchemaMode = (
+  options: CliOptions,
+  walkedIr: FieldSpec,
+  baseName: string,
+  template?: Template,
+): number => {
   // Same override stamping as zod mode — the config speaks IR paths, so it
   // is frontend-agnostic (the emitted zod schema source stays override-free;
   // overrides shape COMPONENTS, not validation).
@@ -892,8 +911,8 @@ const runTypeMode = (options: CliOptions, template?: Template): number => {
     options.columns,
   );
   warnDegradedBindings(ir, options.layout, options.maxDepth ?? DEFAULT_MAX_DEPTH);
-  const schemaName = `${camelCase(typeName)}Schema`;
-  const formName = options.name ?? deriveFormName(typeName);
+  const schemaName = `${camelCase(baseName)}Schema`;
+  const formName = options.name ?? deriveFormName(baseName);
   const schemaSource = emitZodSchema(ir, schemaName);
   if (options.layout === "module") {
     // The schema is a module file (schema.ts), so --schema-out has no
@@ -982,6 +1001,44 @@ const runTypeMode = (options: CliOptions, template?: Template): number => {
   return 0;
 };
 
+const runTypeMode = (options: CliOptions, template?: Template): number => {
+  // Pass the input as the user typed it so error messages echo it verbatim
+  // (fromType resolves it internally).
+  const { ir, typeName } = fromType(
+    options.input,
+    options.typeName,
+    options.maxDepth,
+  );
+  return runGeneratedSchemaMode(options, ir, typeName, template);
+};
+
+const runJsonSchemaMode = (
+  options: CliOptions,
+  template?: Template,
+): number => {
+  const inputAbs = path.resolve(options.input);
+  const document = ((): unknown => {
+    try {
+      return JSON.parse(fs.readFileSync(inputAbs, "utf8"));
+    } catch (e) {
+      throw new Error(`could not parse ${options.input} as JSON: ${firstLine(e)}`);
+    }
+  })();
+  // Naming falls back to the filename when the document offers no name of
+  // its own (no selected component, no title) — same base the zod mode's
+  // default-export path derives.
+  const fallbackName = pascalCase(
+    path.basename(inputAbs).replace(/\..*$/, ""),
+  );
+  const { ir, schemaName } = fromJsonSchema(document, {
+    select: options.schema,
+    maxDepth: options.maxDepth,
+    source: options.input,
+    fallbackName: fallbackName.length === 0 ? "Generated" : fallbackName,
+  });
+  return runGeneratedSchemaMode(options, ir, schemaName, template);
+};
+
 // Regenerate on input change. The first run respects --force; reruns
 // overwrite the destinations they themselves wrote. Watching the parent
 // directory (filtered to the input's basename) survives editors that save
@@ -1026,9 +1083,33 @@ const run = async (
     stderr(`error: input file not found: ${options.input}`);
     return 1;
   }
-  return options.typeName !== undefined
-    ? runTypeMode(options, template)
-    : runZodMode(options, template);
+  // OpenAPI documents travel as YAML at least as often as JSON, but reading
+  // them would mean a YAML dependency — named as unsupported rather than
+  // silently misparsed as a TS module.
+  if (/\.ya?ml$/i.test(options.input)) {
+    stderr(
+      "error: YAML input is not supported yet — convert it to JSON first (e.g. npx js-yaml api.yaml > api.json)",
+    );
+    return 1;
+  }
+  const jsonInput = /\.json$/i.test(options.input);
+  if (!jsonInput && options.schema !== undefined) {
+    stderr(
+      "error: --schema selects inside a JSON Schema/OpenAPI document, so it needs a .json input (a zod export is picked with --export, a TS type with --type)",
+    );
+    return 1;
+  }
+  if (jsonInput && (options.typeName ?? options.exportName) !== undefined) {
+    stderr(
+      "error: --type/--export do not apply to a .json input — pick a schema in the document with --schema",
+    );
+    return 1;
+  }
+  return jsonInput
+    ? runJsonSchemaMode(options, template)
+    : options.typeName !== undefined
+      ? runTypeMode(options, template)
+      : runZodMode(options, template);
 };
 
 // The wizard's readline seam: process.stdin for answers, STDERR for
