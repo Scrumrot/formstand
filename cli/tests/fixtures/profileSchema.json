@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Profile",
+  "type": "object",
+  "required": ["firstName", "bio", "isAdmin", "role", "address", "contacts"],
+  "properties": {
+    "firstName": { "type": "string" },
+    "age": { "type": "number" },
+    "bio": { "type": ["string", "null"] },
+    "isAdmin": { "type": "boolean" },
+    "role": { "type": "string", "enum": ["admin", "editor", "viewer"] },
+    "birthday": { "type": "string", "format": "date" },
+    "address": {
+      "type": "object",
+      "required": ["street", "city"],
+      "properties": {
+        "street": { "type": "string" },
+        "city": { "type": "string" },
+        "zip": { "type": "string" }
+      }
+    },
+    "contacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["email", "phone", "kind"],
+        "properties": {
+          "email": { "type": "string" },
+          "phone": { "type": ["string", "null"] },
+          "kind": { "type": "string", "enum": ["home", "work"] }
+        }
+      }
+    }
+  }
+}

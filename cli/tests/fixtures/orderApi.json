@@ -1,0 +1,111 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Order API", "version": "1.0.0" },
+  "paths": {
+    "/orders": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Order" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Order": {
+        "type": "object",
+        "required": ["id", "customer", "payment"],
+        "properties": {
+          "id": { "type": "string" },
+          "quantity": {
+            "type": "integer",
+            "default": 1,
+            "description": "How many units"
+          },
+          "channel": {
+            "type": "string",
+            "enum": ["web", "phone"],
+            "default": "web"
+          },
+          "riskProfile": { "type": "string", "default": ["not", "a", "primitive"] },
+          "customer": { "$ref": "#/components/schemas/Customer" },
+          "payment": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/CardPayment" },
+              { "$ref": "#/components/schemas/InvoicePayment" }
+            ],
+            "discriminator": { "propertyName": "method" }
+          },
+          "status": {
+            "oneOf": [
+              { "const": "draft", "description": "Not yet placed" },
+              { "const": "placed" },
+              { "const": "shipped" }
+            ]
+          },
+          "coordinates": {
+            "type": "array",
+            "prefixItems": [{ "type": "number" }, { "type": "number" }]
+          },
+          "notes": { "type": ["string", "null"], "title": "Internal notes" },
+          "legacyDiscount": { "type": "number", "nullable": true },
+          "deliveredAt": {
+            "oneOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "parent": { "$ref": "#/components/schemas/Order" },
+          "external": { "$ref": "https://example.com/other.json#/Thing" },
+          "attributes": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          },
+          "legacyTuple": {
+            "type": "array",
+            "items": [{ "type": "string" }, { "type": "number" }]
+          }
+        }
+      },
+      "Customer": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Person" },
+          {
+            "type": "object",
+            "properties": { "vip": { "type": "boolean" } },
+            "required": ["vip"]
+          }
+        ]
+      },
+      "Person": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "email": { "type": "string", "format": "email" }
+        }
+      },
+      "CardPayment": {
+        "type": "object",
+        "required": ["method", "cardNumber"],
+        "properties": {
+          "method": { "const": "card" },
+          "cardNumber": { "type": "string" }
+        }
+      },
+      "InvoicePayment": {
+        "type": "object",
+        "required": ["method"],
+        "properties": {
+          "method": { "const": "invoice" },
+          "poNumber": { "type": "string" }
+        }
+      }
+    }
+  }
+}
