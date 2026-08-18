@@ -1,6 +1,6 @@
 # formstand-cli
 
-Generate [formstand](https://scrumrot.github.io/formstand/) form components from a zod schema or a TypeScript type.
+Generate [formstand](https://scrumrot.github.io/formstand/) form components from a zod schema, a TypeScript type, or a JSON Schema / OpenAPI document.
 
 ```bash
 npm install --save-dev formstand-cli    # the binary is named formstand-gen
@@ -11,7 +11,7 @@ npm install --save-dev formstand-cli    # the binary is named formstand-gen
 It is a one-shot generator. The file it writes is yours: no markers, no regeneration
 magic, and nothing in the output imports from this package.
 
-## Two modes
+## Three modes
 
 **Zod mode (default).** Point it at a module that exports a zod schema and it prints a
 complete, compilable component bound to that schema:
@@ -33,6 +33,14 @@ formstand-gen src/types.ts --type Profile --out src/ProfileForm.tsx
 # writes src/profileSchema.ts (override with --schema-out) and src/ProfileForm.tsx
 ```
 
+**JSON Schema mode.** Point it at a `.json` file holding a JSON Schema (2020-12) or an
+OpenAPI 3.x document. Like type mode, it generates the zod schema beside the component;
+`--schema` picks a component schema by name, or anything else by `#/...` pointer:
+
+```bash
+formstand-gen api.json --schema Order --out src/OrderForm.tsx
+```
+
 Without `--out`, output streams to stdout with `// --- file:` headers. Warnings go to
 stderr, so redirection stays clean, and writes are all-or-nothing: if any destination
 exists and `--force` isn't set, nothing is written.
@@ -43,6 +51,7 @@ exists and `--force` isn't set, nothing is written.
 | --- | --- |
 | `--export <name>` | which export holds the zod schema |
 | `--type <TypeName>` | generate from a TS type or interface instead |
+| `--schema <name\|#/pointer>` | `.json` input: which schema in the document to generate from |
 | `--ui <kit>` | `plain` (default), `mui[@5\|6\|7\|9]`, `shadcn`, `chakra`, `mantine`, `antd` |
 | `--layout single\|module` | one file (default), or a feature-module folder |
 | `--sections flat\|panel\|collapsible` | section chrome, default `flat` |
@@ -51,12 +60,13 @@ exists and `--force` isn't set, nothing is written.
 | `--form-prop` | the page owns the form: adds a `form` prop and exports a `use{Name}Form()` hook |
 | `--name <MyForm>` | component name, default derived from the schema or type |
 | `--out <file>` | write here instead of stdout; names the folder under `--layout module` |
-| `--schema-out <file>` | type mode: where the generated schema goes |
+| `--schema-out <file>` | type and `.json` modes: where the generated schema goes |
 | `--max-depth <n>` | nesting budget before a level degrades to a string plus a TODO |
 | `--config <file>` | config file, default `formstand.config.{ts,mts,js,mjs}` |
 | `--template <file>` | a custom template for a kit formstand doesn't ship; `--layout single` only |
 | `--watch` | regenerate whenever the input changes; requires `--out` |
 | `--force` | overwrite existing output files |
+| `--wizard` | ask the flag questions interactively, one at a time; runs alone |
 | `--help` | usage |
 
 Every flag is documented in full on the

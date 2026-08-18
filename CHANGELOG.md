@@ -1,5 +1,27 @@
 # Changelog
 
+## formstand-cli Unreleased
+
+### Added
+
+- **JSON Schema and OpenAPI inputs.** A `.json` input file is read as a
+  bare JSON Schema (2020-12) or an OpenAPI 3.x document: a third
+  front-end into the same IR, following type mode's path, so the CLI
+  generates the zod schema beside the component (`--schema-out` places
+  it; `--layout module` makes it the module's `schema.ts`). The new
+  `--schema` flag selects inside the document: a component schema name,
+  or a full `#/...` JSON pointer that can reach an operation's request
+  body. What translates: `properties`/`required`, `enum`/`const`,
+  `oneOf` string consts, discriminated `oneOf` into `useVariantField`
+  unions, `allOf` object merging, `$ref` chains, `prefixItems` tuples,
+  `format: date`/`date-time` as date fields, primitive `default`s into
+  `initialValues`, `description` as helper text, `title` as the label,
+  and every nullable dialect (3.1 type arrays, 3.0 `nullable: true`,
+  `oneOf` with a null branch). Everything else degrades to the loud TODO
+  fallback; Swagger 2.0 and YAML are refused with conversion hints. The
+  wizard understands `.json` inputs too, asking `--schema` in place of
+  the zod-or-type question.
+
 ## formstand-cli 0.12.0 — 2026-08-18
 
 ### Added

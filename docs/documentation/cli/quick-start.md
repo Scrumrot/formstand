@@ -41,6 +41,14 @@ npx formstand-gen src/types.ts --type Profile --out src/ProfileForm.tsx --schema
 
 The type is expanded through the TypeScript compiler. Primitives, `Date`, string-literal unions (rendered as selects), arrays, nested objects, `?`-optional and `| null` properties all map cleanly. A member's leading JSDoc description is carried into the generated schema as `.describe()`, which then becomes the control's helper text.
 
+## From a JSON Schema or OpenAPI document
+
+```bash
+npx formstand-gen api.json --schema Order --out src/OrderForm.tsx
+```
+
+A `.json` input is read as a JSON Schema (the 2020-12 dialect) or an OpenAPI 3.x document. Like type mode, the input carries no runtime validator, so the CLI generates the zod schema beside the component. `--schema` picks the schema out of an OpenAPI document: a component name, or a full `#/...` JSON pointer for anything a name cannot reach, such as an operation's request body. A document with exactly one component schema needs no flag. See the [keyword mapping](./reference#json-schema-and-openapi-inputs) for what translates and what degrades.
+
 ## Where the output goes
 
 | You pass | What happens |
@@ -48,7 +56,7 @@ The type is expanded through the TypeScript compiler. Primitives, `Date`, string
 | nothing | the component streams to stdout, so you can pipe it anywhere |
 | `--out FILE` | written there, parent directories created as needed |
 | `--out DIR` with `--layout module` | a feature folder, see [Layouts](./layouts#module-layout) |
-| `--schema-out FILE` (type mode) | the generated zod schema goes here, defaulting to `<schemaName>.ts` next to `--out` |
+| `--schema-out FILE` (type and `.json` modes) | the generated zod schema goes here, defaulting to `<schemaName>.ts` next to `--out` |
 
 Notes and warnings go to stderr, so redirecting stdout stays clean. Writes are all-or-nothing: if any destination already exists and `--force` isn't set, nothing is written at all.
 

@@ -10,6 +10,7 @@ formstand-gen <input file> [flags]
 | --- | --- |
 | `--export NAME` | which export holds the zod schema (zod mode); `default` works. Falls back to the default export, then the sole schema export |
 | `--type NAME` | expand this TypeScript type or interface instead, generating the schema too |
+| `--schema NAME\|#/pointer` | `.json` input: which schema to generate from, as a component schema name or a full `#/...` JSON pointer. Required when an OpenAPI document declares several component schemas. See [JSON Schema and OpenAPI inputs](#json-schema-and-openapi-inputs) |
 | `--ui plain\|mui[@5\|6\|7\|9]\|shadcn\|chakra\|mantine\|antd` | output style, default `plain`. See [UI kits](./ui-kits) |
 | `--layout single\|module` | one file (default) or a feature-module folder. See [Layouts](./layouts#module-layout) |
 | `--sections flat\|panel\|collapsible` | section chrome, default `flat` |
@@ -18,7 +19,7 @@ formstand-gen <input file> [flags]
 | `--form-prop` | the page owns the form: adds a `form` prop and exports a `use{Name}Form()` hook. See [`--form-prop`](./layouts#form-prop-the-page-owns-the-form) |
 | `--name MyForm` | component name, default derived from the schema or type name |
 | `--out FILE` | write here instead of stdout; names the folder under `--layout module`. Parent directories are created |
-| `--schema-out FILE` | type mode: where the generated zod schema goes, default `<schemaName>.ts` next to `--out` |
+| `--schema-out FILE` | type and `.json` modes: where the generated zod schema goes, default `<schemaName>.ts` next to `--out` |
 | `--max-depth N` | nesting budget before a level degrades to a string plus a TODO. Default is derived from the typed-path budget as `9 + 2 = 11`, so path-budget degradation always wins over walker truncation. Also the recursion backstop and the bound on nested-array row extraction |
 | `--config FILE` | config file, default `formstand.config.{ts,mts,js,mjs}` in the working directory. See [Config](./config) |
 | `--template FILE` | a custom template module for a kit formstand doesn't ship. `--layout single` only, and it overrides `--ui`. See [Templates](./templates) |
@@ -31,7 +32,7 @@ Without `--out`, code goes to stdout while notes and warnings go to stderr, so r
 
 ## The wizard
 
-`formstand-gen --wizard` walks through the questions the flags answer, one at a time: which file, zod export or TS type, which kit, which layout, section chrome, columns, name, and where to write. Enter accepts the default shown on every question, invalid answers re-ask instead of exiting, an existing output target offers `--force` on the spot, and the interview ends by printing the composed `formstand-gen` command before asking to run it, so the run is reproducible without the wizard from then on.
+`formstand-gen --wizard` walks through the questions the flags answer, one at a time: which file, zod export or TS type (a `.json` input skips that question and asks `--schema` instead), which kit, which layout, section chrome, columns, name, and where to write. Enter accepts the default shown on every question, invalid answers re-ask instead of exiting, an existing output target offers `--force` on the spot, and the interview ends by printing the composed `formstand-gen` command before asking to run it, so the run is reproducible without the wizard from then on.
 
 Three properties worth relying on. It is strictly opt-in: nothing prompts from a bare `formstand-gen` or a TTY check, so scripts and CI keep their contract. It takes the flag alone: a half-flags, half-questions run would have two sources of truth, so any other flag beside `--wizard` is an error. And every prompt writes to stderr, so a run that ends streaming the component to stdout stays cleanly pipeable; the answers can even be piped in on stdin, one per line.
 
@@ -54,6 +55,32 @@ Tuples (`z.tuple([...])`, or `[A, B]` in type mode) render fixed positional cont
 Arrays nested inside array rows extract a `useFieldArray`-owning row component at **every** level, recursively, in both layouts, bounded by `--max-depth`. Each enclosing row's index threads down as a `p0`, `p1`, and so on prop, so `teams[] › members[] › phones[]` all generate. Single-file emits a child `{Stem}Rows` component with a typed `form` prop above the main component; module layout emits a `Row` and `Rows` pair per level in the section file.
 
 `date` fields are fully supported on formstand 0.9 and newer: plain output emits `<DateField>`, and every kit adapter binds a native date input through `dateToInputText` and `parseDateText`.
+
+## JSON Schema and OpenAPI inputs
+
+A `.json` input file switches the front-end: the document is read as a bare JSON Schema (the 2020-12 dialect) or an OpenAPI 3.x document, and the same pipeline runs on the result. The input carries no runtime validator, so the CLI emits a zod schema beside the component exactly as type mode does, with `--schema-out` placing it and `--layout module` making it the module's `schema.ts`.
+
+**Selecting a schema.** A bare `--schema Name` is looked up under `#/components/schemas`, then `$defs`, then `definitions`. A full `#/...` JSON pointer reaches anything else, such as an operation's request body: `#/paths/~1orders/post/requestBody/content/application~1json/schema` (per JSON pointer rules, `~1` escapes a `/` inside a segment). An OpenAPI document with exactly one component schema needs no flag at all; with several, the error lists what is available. A bare JSON Schema file is itself the schema, so `--schema` is only needed to pick something else out of it.
+
+**What translates.**
+
+| Keyword | Generated |
+| --- | --- |
+| `type: "string"` | text field; `format: date` or `date-time` becomes a date field |
+| `enum` of strings, `const`, `oneOf` of string consts | select carrying the options |
+| `type: "number"` or `"integer"` | number field |
+| `type: "object"` with `properties` | a section; `required` sets which fields are optional |
+| `type: "array"` with `items` | a `useFieldArray` row section |
+| `prefixItems` | a tuple with fixed positional controls |
+| `oneOf` with an OpenAPI `discriminator` | a discriminated union bound through `useVariantField` |
+| `allOf` of object schemas | one merged section (properties merge, `required` lists union) |
+| `type: ["X", "null"]`, `nullable: true`, or `oneOf` with a null branch | a nullable field, whichever dialect spells it |
+| `default` (JSON primitives) | seeds `initialValues` |
+| `description` / `title` | helper text / the field's label |
+
+`$ref` resolves within the document, including through `allOf` and `oneOf` branches. Both nullable dialects are honored wherever they appear, so 3.0 documents work without a dialect flag.
+
+**What degrades.** The same loud TODO fallback as everywhere else, mirrored on stderr: external `$ref`s, recursive `$ref`s, objects with only `additionalProperties` or `patternProperties` (records have no fixed fields to bind), draft-07 tuples spelled as an `items` array (use `prefixItems`), multi-type arrays like `["string", "number"]`, `allOf` with non-object branches, and `oneOf`/`anyOf` without a discriminator or string consts. Non-primitive `default`s start blank with a warning. Swagger 2.0 documents are refused with a conversion hint, and YAML input is refused too: convert it to JSON first (`npx js-yaml api.yaml > api.json`).
 
 ## How unsupported shapes degrade
 

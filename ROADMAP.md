@@ -4,8 +4,8 @@ A living plan for **formstand** (the library) and **formstand-cli** (the
 generator), ordered by intent, not promise. Items move between horizons as
 reality votes. Shipped work graduates to the [CHANGELOG](./CHANGELOG.md).
 
-_Last updated: 2026-08-06 (formstand 0.15.0, formstand-cli 0.10.1 plus the
-unreleased container-layout work on `main`)._
+_Last updated: 2026-08-18 (formstand 0.15.2, formstand-cli 0.12.0 plus the
+unreleased JSON Schema front-end on `main`)._
 
 ## Shipped since 0.9 (2026-07-10 to 2026-07-31)
 
@@ -55,7 +55,7 @@ the CLI from two UI targets to six, and make the docs match.
 - Schema builder paste-zod mode: paste a `z.object(...)` and it is evaluated
   in the browser against the bundled zod, complementing paste-a-TS-type.
 
-**Since then (0.14 through 0.15.2, formstand-cli 0.11.1, and unreleased
+**Since then (0.14 through 0.15.2, formstand-cli 0.12.0, and unreleased
 work on `main`)**
 
 - `formstand/devtools` (0.14.0): an in-page panel with per-field rows, both
@@ -70,38 +70,29 @@ work on `main`)**
   own Row/Col, Grid/Grid.Col, and Grid components; and the review's four
   edge-config bugs shipped fixed, with tuple-only and root-union schemas in
   the matrix so that class cannot recur.
-- Per-field layout placement, phase 2 (CLI, unreleased): `span` in the
+- Per-field layout placement, phase 2 (formstand-cli 0.12.0): `span` in the
   config `fields` block places a field in its section's grid ("full" or a
   column count), emitted in each backend's own dialect through the
   `Backend.gridChild`/`spanCellFor` seam the container migration prepared.
   Placements with no grid to act on are loud generation-time errors.
-- The CLI wizard (unreleased): `formstand-gen --wizard` asks the flag
-  questions one at a time and ends by printing the composed command, so the
-  run is reproducible without it. Both roadmap constraints held: strictly
+- The CLI wizard (formstand-cli 0.12.0): `formstand-gen --wizard` asks the
+  flag questions one at a time and ends by printing the composed command, so
+  the run is reproducible without it. Both roadmap constraints held: strictly
   opt-in (the flag runs alone, never a TTY sniff, prompts on stderr so
   stdout output stays pipeable), and zero new dependencies — numbered
   readline lists over a hand-rolled buffer, no prompts library.
+- JSON Schema and OpenAPI inputs (CLI, unreleased): the third front-end
+  into the IR. A `.json` input reads as a 2020-12 schema or an OpenAPI 3.x
+  document, `--schema` selects by component name or `#/...` pointer, and
+  the zod schema is generated beside the component the way type mode
+  already does. The roadmap's fidelity questions resolved as: `allOf`
+  merges object branches, discriminated `oneOf` becomes the IR union,
+  string-const `oneOf` becomes an enum, both nullable dialects are honored
+  wherever they appear (no dialect flag), date formats become date fields,
+  and the rest degrades to the loud TODO fallback. YAML stays out to keep
+  the zero-dependency stance; the error names the conversion.
 
 ## Now
-
-- **More schema inputs: JSON Schema and OpenAPI.** The CLI reads two sources
-  today, a zod schema export and a TS type, through two front-ends
-  (`fromZod`, `fromType`) that meet in one IR every emitter consumes. A JSON
-  Schema front-end is a third door into the same IR, and it follows the type
-  mode's path rather than zod mode's: the input carries no runtime validator,
-  so the generator emits a zod schema beside the component the way
-  `--schema-out` already does for TS types.
-
-  OpenAPI is mostly a pointer exercise on top: 3.1 component schemas *are*
-  JSON Schema, so the work is selecting which one (a flag naming
-  `#/components/schemas/X` or an operation's request body) plus `$ref`
-  resolution. The design questions are mapping fidelity, not plumbing: which
-  keywords translate cleanly (`allOf` merging, `oneOf` as unions, string
-  `format`s), which degrade to the existing TODO-comment fallback
-  (`patternProperties`, tuple `items` arrays), and 3.0's `nullable: true`
-  dialect versus 3.1's type arrays. This also serves the larger aim of the
-  CLI as a generator agents drive: an agent holding an OpenAPI spec should
-  get a typed form from it without hand-translating the schema first.
 
 - **StackBlitz links.** "Open in StackBlitz" from docs examples and playground
   tabs, seeded with the demo source plus formstand from npm.
@@ -152,6 +143,11 @@ work on `main`)**
   extension would add store discovery, a page bridge, and cross-context
   messaging to reach forms without a component in the tree. Only worth it once
   the panel's shape has settled.
+- **YAML input for the JSON Schema mode.** OpenAPI documents travel as YAML
+  at least as often as JSON, but reading them means a yaml dependency, and
+  the CLI carries two dependencies on purpose. Deliberately out for now;
+  the error message names the one-line conversion. Revisit if the mode
+  gets real use.
 - **`--path-depth` flag.** `createForm` can widen its typed-path budget, but
   the CLI has no matching flag, so generated bindings past nine segments
   degrade to a TODO even when the form could type them.
