@@ -9,7 +9,7 @@ import {
   composeWizardCommand,
   runWizard,
 } from "../src/wizard";
-import { fixturesDir, freshTmpDir } from "./helpers";
+import { fixturesDir, freshTmpDir, openApiFixture } from "./helpers";
 
 // The --wizard interview: scripted-answer runs (no TTY, no child process —
 // the WizardIo seam is the whole point), the composed-command semantics
@@ -54,6 +54,7 @@ const BASE: WizardAnswers = {
   mode: "zod",
   exportName: "",
   typeName: "",
+  schema: "",
   ui: "plain",
   layout: "single",
   sections: "flat",
@@ -107,6 +108,24 @@ describe("composeWizardArgs", () => {
       "--form-prop",
       "--force",
     ]);
+  });
+
+  it("gates --schema to json mode; --schema-out covers json mode too", () => {
+    expect(
+      composeWizardArgs({ ...BASE, input: "api.json", mode: "json", schema: "Order" }),
+    ).toEqual(["api.json", "--schema", "Order"]);
+    // schema answered but the mode is zod: no --schema.
+    expect(composeWizardArgs({ ...BASE, schema: "Order" })).toEqual([
+      "src/schema.ts",
+    ]);
+    expect(
+      composeWizardArgs({
+        ...BASE,
+        input: "api.json",
+        mode: "json",
+        schemaOut: "x.ts",
+      }),
+    ).toEqual(["api.json", "--schema-out", "x.ts"]);
   });
 
   it("gates --export to zod mode and --schema-out to type mode + single file", () => {
@@ -232,6 +251,47 @@ describe("runWizard", () => {
     });
   });
 
+  it("a .json input skips the mode question and asks --schema instead", async () => {
+    const { io, said } = scriptedIo([
+      "api.json",
+      "Order", // --schema
+      "", // ui
+      "", // layout
+      "", // sections
+      "", // columns
+      "", // name
+      "", // out
+      "", // schema-out (json mode + single file asks it)
+      "", // live
+      "", // form-prop
+      "", // generate now
+    ]);
+    const outcome = await runWizard(io);
+    expect(outcome).toEqual({
+      kind: "run",
+      argv: ["api.json", "--schema", "Order"],
+    });
+    expect(
+      said.some((line) => line.includes("JSON Schema / OpenAPI document")),
+    ).toBe(true);
+    // The zod/type question never appears — the extension IS the mode.
+    expect(
+      said.some((line) => line.includes("Where does the form's shape come from")),
+    ).toBe(false);
+  });
+
+  it("a YAML input re-asks with the conversion hint", async () => {
+    const { io, said } = scriptedIo([
+      "api.yaml",
+      ...DEFAULT_WALK, // start over with the valid .ts walk
+    ]);
+    const outcome = await runWizard(io);
+    expect(outcome.kind).toBe("run");
+    expect(
+      said.some((line) => line.includes("YAML is not supported yet")),
+    ).toBe(true);
+  });
+
   it("the module layout requires an output folder", async () => {
     const { io, said } = scriptedIo(
       [
@@ -297,6 +357,32 @@ describe("main --wizard", () => {
     expect(
       said.some((line) => line.startsWith("  formstand-gen ")),
     ).toBe(true);
+  });
+
+  it("drives a .json generation end to end through the composed argv", async () => {
+    const dir = freshTmpDir("wizard-json-e2e");
+    const out = path.join(dir, "OrderForm.tsx");
+    const { io } = scriptedIo(
+      [
+        openApiFixture,
+        "Order", // --schema
+        "", // plain
+        "", // single
+        "", // flat
+        "", // 1 column
+        "", // name (derived)
+        out,
+        "", // schema-out (next to --out)
+        "", // live
+        "", // form-prop
+        "", // generate now (default yes)
+      ],
+      (filePath) => fs.existsSync(filePath),
+    );
+    const code = await main(["--wizard"], io);
+    expect(code).toBe(0);
+    expect(fs.readFileSync(out, "utf8")).toContain("export const OrderForm");
+    expect(fs.existsSync(path.join(dir, "orderSchema.ts"))).toBe(true);
   });
 
   it("an interview the input cuts short exits 1, not a hang", async () => {

@@ -31,9 +31,13 @@ export type WizardIo = Readonly<{
 
 export type WizardAnswers = Readonly<{
   input: string;
-  mode: "zod" | "type";
+  // "json" is never offered as a choice — a .json input file IS the mode
+  // (the same extension dispatch the flag path uses), so the interview
+  // detects it and swaps the zod/type questions for the --schema one.
+  mode: "zod" | "type" | "json";
   exportName: string;
   typeName: string;
+  schema: string;
   ui: string;
   layout: "single" | "module";
   sections: "flat" | "panel" | "collapsible";
@@ -53,10 +57,11 @@ export type WizardOutcome =
 const quote = (arg: string): string =>
   /[\s"']/.test(arg) ? JSON.stringify(arg) : arg;
 
-// Defaults are omitted, --export only applies in zod mode, --schema-out
-// only in type mode with the single-file layout — the exact rules the
-// playground's command builder models (buildCommand in
-// CliCommandBuilder.tsx); the two must not drift.
+// Defaults are omitted, --export only applies in zod mode, --schema only
+// in json mode, --schema-out only in the generated-schema modes (type and
+// json) with the single-file layout — the exact rules the playground's
+// command builder models (buildCommand in CliCommandBuilder.tsx); the two
+// must not drift.
 export const composeWizardArgs = (
   answers: WizardAnswers,
 ): readonly string[] => [
@@ -67,13 +72,16 @@ export const composeWizardArgs = (
   ...(answers.mode === "zod" && answers.exportName !== ""
     ? ["--export", answers.exportName]
     : []),
+  ...(answers.mode === "json" && answers.schema !== ""
+    ? ["--schema", answers.schema]
+    : []),
   ...(answers.ui !== "plain" ? ["--ui", answers.ui] : []),
   ...(answers.layout !== "single" ? ["--layout", answers.layout] : []),
   ...(answers.sections !== "flat" ? ["--sections", answers.sections] : []),
   ...(answers.columns !== "1" ? ["--columns", answers.columns] : []),
   ...(answers.name !== "" ? ["--name", answers.name] : []),
   ...(answers.out !== "" ? ["--out", answers.out] : []),
-  ...(answers.mode === "type" &&
+  ...((answers.mode === "type" || answers.mode === "json") &&
   answers.layout === "single" &&
   answers.schemaOut !== ""
     ? ["--schema-out", answers.schemaOut]
@@ -167,7 +175,11 @@ const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
 const askInput = async (io: WizardIo): Promise<string> => {
   const value = await askText(io, "Schema or types file", "", (candidate) =>
-    candidate === "" ? "the input file is required" : undefined,
+    candidate === ""
+      ? "the input file is required"
+      : /\.ya?ml$/i.test(candidate)
+        ? "YAML is not supported yet — convert it to JSON first (e.g. npx js-yaml api.yaml > api.json)"
+        : undefined,
   );
   if (io.fileExists(value)) return value;
   const anyway = await askYesNo(
@@ -210,15 +222,23 @@ export const runWizard = async (io: WizardIo): Promise<WizardOutcome> => {
   io.say("");
 
   const input = await askInput(io);
-  const mode = (await askChoice(
-    io,
-    "Where does the form's shape come from?",
-    [
-      { value: "zod", label: "a zod schema export" },
-      { value: "type", label: "a TypeScript type or interface (--type)" },
-    ],
-    "zod",
-  )) as WizardAnswers["mode"];
+  // A .json input IS the mode — asking "zod or type?" about a document
+  // neither applies to would be a trick question.
+  const jsonInput = /\.json$/i.test(input);
+  if (jsonInput) {
+    io.say("  .json input: generating from a JSON Schema / OpenAPI document.");
+  }
+  const mode = jsonInput
+    ? "json"
+    : ((await askChoice(
+        io,
+        "Where does the form's shape come from?",
+        [
+          { value: "zod", label: "a zod schema export" },
+          { value: "type", label: "a TypeScript type or interface (--type)" },
+        ],
+        "zod",
+      )) as WizardAnswers["mode"]);
   const exportName =
     mode === "zod"
       ? await askText(
@@ -231,6 +251,14 @@ export const runWizard = async (io: WizardIo): Promise<WizardOutcome> => {
     mode === "type"
       ? await askText(io, "Exported type name (--type)", "", (candidate) =>
           candidate === "" ? "type mode needs an exported type name" : undefined,
+        )
+      : "";
+  const schema =
+    mode === "json"
+      ? await askText(
+          io,
+          'Schema to generate (--schema: a component name or "#/..." pointer, Enter = the sole component schema)',
+          "",
         )
       : "";
   const ui = await askChoice(io, "UI kit (--ui)?", UI_CHOICES, "plain");
@@ -274,7 +302,7 @@ export const runWizard = async (io: WizardIo): Promise<WizardOutcome> => {
   );
   const { out, force } = await askOut(io, layout);
   const schemaOut =
-    mode === "type" && layout === "single"
+    (mode === "type" || mode === "json") && layout === "single"
       ? await askText(
           io,
           "Generated schema file (--schema-out, Enter puts it next to --out)",
@@ -297,6 +325,7 @@ export const runWizard = async (io: WizardIo): Promise<WizardOutcome> => {
     mode,
     exportName,
     typeName,
+    schema,
     ui,
     layout,
     sections,
