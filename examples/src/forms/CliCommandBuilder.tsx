@@ -59,14 +59,24 @@ type Values = z.input<typeof schema>;
 const quote = (arg: string): string =>
   /[\s"']/.test(arg) ? JSON.stringify(arg) : arg;
 
+// One-shot runners resolve a PACKAGE by the name they are given, and the
+// package is formstand-cli while formstand-gen is only its binary — a bare
+// "yarn dlx formstand-gen" 404s against the registry. Each runner has its
+// own spelling for "fetch package X, run binary Y"; npx's -p form also
+// keeps working after formstand-cli is installed locally.
+const RUNNER_PREFIX: Readonly<Record<Values["runner"], string>> = {
+  npx: "npx -p formstand-cli formstand-gen",
+  "pnpm dlx": "pnpm --package=formstand-cli dlx formstand-gen",
+  "yarn dlx": "yarn dlx -p formstand-cli formstand-gen",
+};
+
 // Mirrors the CLI's actual flag semantics: defaults are omitted, --export
 // only applies in zod mode, --type switches to type mode, and --schema-out
 // only exists for type mode with the single-file layout (module layout puts
 // the schema in the module's schema.ts).
 const buildCommand = (values: Values): string =>
   [
-    values.runner,
-    "formstand-gen",
+    RUNNER_PREFIX[values.runner],
     quote(values.input.trim() === "" ? "<input.ts>" : values.input),
     ...(values.mode === "type" && values.typeName.trim() !== ""
       ? ["--type", quote(values.typeName)]

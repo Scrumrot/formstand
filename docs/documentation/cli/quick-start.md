@@ -7,6 +7,8 @@ npx formstand-gen --help
 
 The package installs a binary named `formstand-gen`. Your project supplies zod v4 and formstand itself; the CLI ships neither, and nothing it generates imports from the CLI.
 
+Running one-shot without installing works too, but the runner must be told the package name, because the package (`formstand-cli`) and the binary (`formstand-gen`) differ: `npx -p formstand-cli formstand-gen`, `pnpm --package=formstand-cli dlx formstand-gen`, or `yarn dlx -p formstand-cli formstand-gen`. A bare `yarn dlx formstand-gen` asks the registry for a package that does not exist.
+
 ## From a zod schema
 
 Point it at a file that exports a schema. The schema is loaded and introspected at runtime using **your** copy of zod, so the output reflects exactly what the schema says, including optionality, nullability, defaults, and enum options.

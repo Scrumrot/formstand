@@ -6,6 +6,10 @@ Generate [formstand](https://scrumrot.github.io/formstand/) form components from
 npm install --save-dev formstand-cli    # the binary is named formstand-gen
 ```
 
+One-shot runners need the package named, since the package and the binary differ:
+`npx -p formstand-cli formstand-gen`, `pnpm --package=formstand-cli dlx formstand-gen`,
+or `yarn dlx -p formstand-cli formstand-gen`.
+
 **Full docs: [scrumrot.github.io/formstand/documentation/cli](https://scrumrot.github.io/formstand/documentation/cli/)** · **[Try it in the browser](https://scrumrot.github.io/formstand/examples/#/schema-builder)**
 
 It is a one-shot generator. The file it writes is yours: no markers, no regeneration
