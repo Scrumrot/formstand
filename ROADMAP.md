@@ -4,8 +4,7 @@ A living plan for **formstand** (the library) and **formstand-cli** (the
 generator), ordered by intent, not promise. Items move between horizons as
 reality votes. Shipped work graduates to the [CHANGELOG](./CHANGELOG.md).
 
-_Last updated: 2026-08-18 (formstand 0.15.2, formstand-cli 0.12.0 plus the
-unreleased JSON Schema front-end on `main`)._
+_Last updated: 2026-09-03 (formstand 0.15.2, formstand-cli 0.13.0)._
 
 ## Shipped since 0.9 (2026-07-10 to 2026-07-31)
 
@@ -55,8 +54,7 @@ the CLI from two UI targets to six, and make the docs match.
 - Schema builder paste-zod mode: paste a `z.object(...)` and it is evaluated
   in the browser against the bundled zod, complementing paste-a-TS-type.
 
-**Since then (0.14 through 0.15.2, formstand-cli 0.12.0, and unreleased
-work on `main`)**
+**Since then (0.14 through 0.15.2, and formstand-cli 0.13.0)**
 
 - `formstand/devtools` (0.14.0): an in-page panel with per-field rows, both
   error channels shown separately, a live `diff()`, and snapshot/restore.
@@ -81,7 +79,7 @@ work on `main`)**
   opt-in (the flag runs alone, never a TTY sniff, prompts on stderr so
   stdout output stays pipeable), and zero new dependencies — numbered
   readline lists over a hand-rolled buffer, no prompts library.
-- JSON Schema and OpenAPI inputs (CLI, unreleased): the third front-end
+- JSON Schema and OpenAPI inputs (formstand-cli 0.13.0): the third front-end
   into the IR. A `.json` input reads as a 2020-12 schema or an OpenAPI 3.x
   document, `--schema` selects by component name or `#/...` pointer, and
   the zod schema is generated beside the component the way type mode
