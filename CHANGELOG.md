@@ -22,6 +22,17 @@
   wizard understands `.json` inputs too, asking `--schema` in place of
   the zod-or-type question.
 
+### Fixed
+
+- **A PascalCase schema export no longer collides with its module type
+  alias.** `export const MySchema` derives the form name MyForm, whose
+  schema type alias was also named MySchema, so the module barrel
+  exported two different MySchemas (the value from `schema.ts`, the type
+  from `types.ts`) and the generated `index.ts` failed to compile with
+  TS2308. The alias now yields the colliding name to the user's value
+  and becomes `MySchemaType`, both in `types.ts` and in the
+  `--form-prop` component that consumes it.
+
 ## formstand-cli 0.12.0 — 2026-08-18
 
 ### Added

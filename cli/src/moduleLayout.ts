@@ -106,16 +106,24 @@ type Naming = Readonly<{
   hook: (suffix: string) => string; // hook("Field") -> useProfileField
 }>;
 
-const namingFor = (formName: string): Naming => {
+const namingFor = (formName: string, schemaExportName?: string): Naming => {
   const stripped = formName.replace(/Form$/, "");
   const prefix = pascalCase(stripped.length === 0 ? formName : stripped);
+  // A PascalCase schema export ("MySchema") produces this exact derived name
+  // by construction (the default form name comes from that export), and the
+  // index barrel would then export two different MySchemas — the value from
+  // ./schema and the type from ./types — which is a TS2308 ambiguity, not a
+  // legal value/type merge. The alias yields the name to the user's value
+  // and takes a -Type suffix instead.
+  const schemaAlias = `${prefix}Schema`;
   return {
     formName,
     prefix,
     factoryArg: camelCase(prefix),
     formConst: `${camelCase(prefix)}Form`,
     valuesType: `${prefix}Values`,
-    schemaType: `${prefix}Schema`,
+    schemaType:
+      schemaAlias === schemaExportName ? `${prefix}SchemaType` : schemaAlias,
     hook: (suffix) => `use${prefix}${suffix}`,
   };
 };
@@ -3887,7 +3895,7 @@ export const emitModuleForm = (
   const visual = options.visual ?? DEFAULT_VISUAL;
   const scaffold = scaffoldOf(options);
   const root = assertObjectRoot(options.ir);
-  const naming = namingFor(options.formName);
+  const naming = namingFor(options.formName, options.schemaImport.name);
   const plan = buildPlan(root, naming);
   const adapter = adapterFile(ui, collectUsage(root), options.muiVersion);
 

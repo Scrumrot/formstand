@@ -24,6 +24,7 @@ import { profileSchema } from "./fixtures/profileSchema";
 import { hostileSchema } from "./fixtures/hostileSchema";
 import { collidingSchema } from "./fixtures/collidingSchema";
 import { leafFreeSchema } from "./fixtures/leafFreeSchema";
+import { MySchema } from "./fixtures/MySchema";
 
 // Emit a module for a named fixture schema into `dir`, write every file
 // preserving the folder structure, and return the files + written paths.
@@ -109,6 +110,51 @@ describe("emitModuleForm", () => {
   // library source with strict on and zero diagnostics.
   it("the emitted module typechecks against the library source", () => {
     expect(typecheckDiagnostics(written)).toEqual([]);
+  });
+});
+
+describe("emitModuleForm pascal-case schema export", () => {
+  // "MySchema" derives MyForm, whose schema type alias is... MySchema. The
+  // barrel then exported two different MySchemas (the value from ./schema,
+  // the type from ./types) — a TS2308 ambiguity, since export-star cannot
+  // merge a value and a type across modules.
+  const dir = freshTmpDir("module-pascal-export");
+  const { files, written } = generateModule(MySchema, "MySchema", "MyForm", dir);
+
+  it("the schema type alias yields the colliding name to the value", () => {
+    const types = files.find((f) => f.path === "types.ts");
+    expect(types?.content).toContain(
+      "export type MySchemaType = typeof MySchema;",
+    );
+    expect(types?.content).not.toContain("export type MySchema =");
+  });
+
+  it("the whole module (barrel included) typechecks", () => {
+    expect(typecheckDiagnostics(written)).toEqual([]);
+  });
+
+  it("--form-prop consumes the renamed alias and still typechecks", () => {
+    const propDir = freshTmpDir("module-pascal-export-prop");
+    const propFiles = emitModuleForm({
+      ir: fromZod(MySchema),
+      formName: "MyForm",
+      ui: "plain",
+      schemaImport: {
+        name: "MySchema",
+        from: moduleSpecifier(propDir, path.join(fixturesDir, "MySchema.ts")),
+        kind: "named",
+      },
+      formProp: true,
+    });
+    const propWritten = propFiles.map((file) => {
+      const dest = path.join(propDir, file.path);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, file.content, "utf8");
+      return dest;
+    });
+    const component = propFiles.find((f) => f.path === "MyForm.tsx");
+    expect(component?.content).toContain("form: Form<MySchemaType>;");
+    expect(typecheckDiagnostics(propWritten)).toEqual([]);
   });
 });
 
