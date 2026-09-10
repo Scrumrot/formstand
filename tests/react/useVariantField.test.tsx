@@ -212,3 +212,80 @@ describe("useVariantField", () => {
     expect(result.current.value).toBe("x");
   });
 });
+
+// A union AS the array row item — the airfield-maps shape that exposed the
+// gap: UnionValueAt resolved paths through `keyof` only, so any array-index
+// segment (a literal "0" or the `${number}` a template path produces)
+// collapsed VariantKeys to never and row unions were unbindable.
+const rowSchema = z.object({
+  pavements: z.array(
+    z.discriminatedUnion("pavementType", [
+      z.object({
+        pavementType: z.literal("runway"),
+        designator: z.string(),
+        length: z.number(),
+      }),
+      z.object({ pavementType: z.literal("taxiway"), name: z.string() }),
+    ]),
+  ),
+});
+
+describe("useVariantField on array-row union paths", () => {
+  const setupRow = (index: number) =>
+    renderHook(() => {
+      const form = useForm(rowSchema, {
+        initialValues: {
+          pavements: [{ pavementType: "runway", designator: "09L", length: 3200 }],
+        },
+      });
+      return {
+        form,
+        kind: useField(form, `pavements.${index}.pavementType`),
+        designator: useVariantField(form, `pavements.${index}`, "designator"),
+        length: useVariantField(form, `pavements.${index}`, "length"),
+        name: useVariantField(form, `pavements.${index}`, "name"),
+      };
+    });
+
+  it("binds template-indexed row paths, typed per declaring variant", () => {
+    const { result } = setupRow(0);
+    expect(result.current.designator.path).toBe("pavements.0.designator");
+    expect(result.current.designator.value).toBe("09L");
+    expectTypeOf(result.current.designator.value).toEqualTypeOf<
+      string | undefined
+    >();
+    expectTypeOf(result.current.length.value).toEqualTypeOf<
+      number | undefined
+    >();
+    expectTypeOf(result.current.name.value).toEqualTypeOf<string | undefined>();
+
+    act(() => result.current.designator.setValue("27R"));
+    expect(result.current.form.getState().values.pavements[0]).toEqual({
+      pavementType: "runway",
+      designator: "27R",
+      length: 3200,
+    });
+  });
+
+  it("still rejects non-variant and common keys on row paths", () => {
+    renderHook(() => {
+      const form = useForm(rowSchema, {
+        initialValues: { pavements: [] },
+      });
+      // @ts-expect-error "nope" is not a variant field of the row union
+      useVariantField(form, `pavements.${0}`, "nope");
+      // @ts-expect-error the discriminant is common — plain useField binds it
+      useVariantField(form, `pavements.${0}`, "pavementType");
+      return null;
+    });
+  });
+
+  it("literal numeric segments resolve the same element type", () => {
+    renderHook(() => {
+      const form = useForm(rowSchema, { initialValues: { pavements: [] } });
+      const designator = useVariantField(form, "pavements.0", "designator");
+      expectTypeOf(designator.value).toEqualTypeOf<string | undefined>();
+      return null;
+    });
+  });
+});

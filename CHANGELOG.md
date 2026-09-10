@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **`useVariantField` accepts row-indexed union paths.** A discriminated
+  union that is an array's row item was unbindable: `UnionValueAt`
+  resolved paths through `keyof` only, so any array-index segment (a
+  template `` `pavements.${number}` `` or a literal `"pavements.0"`)
+  collapsed the variant-key set to `never` and the `field` argument
+  rejected everything. The type machinery now resolves the array element
+  through numeric segments, so a row component binds
+  `useVariantField(form, `` `pavements.${index}` ``, "designator")` fully
+  typed, in both the plain and the `createFormHooks`-bound flavors.
+  Runtime behavior was always correct; only the types refused. Found by
+  the airfield-maps trial, whose generated TODO pointed at exactly this
+  call.
+
+## formstand-cli Unreleased
+
+### Fixed
+
+- **The array-row union TODO gives honest advice.** The single-file
+  spelling claimed the union was "not supported"; the module spelling
+  recommended a `useVariantField` call that did not typecheck before the
+  library fix above. Both now describe the working binding and name the
+  formstand 0.16+ floor for row-indexed union paths.
+
 ## formstand-cli 0.14.0 — 2026-09-10
 
 ### Added

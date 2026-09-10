@@ -1678,7 +1678,7 @@ const fieldLines = (
           : unions.get(prefix.text + field.name);
         return entry === undefined
           ? [
-              `${ind(level)}{/* TODO: discriminated union ${commentText(q(prefix.text + field.name))} inside an array row is not supported; extract it by hand */}`,
+              `${ind(level)}{/* TODO: discriminated union ${commentText(q(prefix.text + field.name))} inside an array row is not generated; bind the discriminant with useField and each variant-only field with useVariantField on the row path (row-indexed union paths need formstand 0.16+) */}`,
             ]
           : cell("fullRow", (lvl) => {
               // Inside a kit grid the union's bare controls ride one cell;

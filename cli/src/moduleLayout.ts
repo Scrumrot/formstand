@@ -3033,7 +3033,7 @@ const objectSectionFile = (
           // A union nested inside an object section: only top-level unions
           // get a generated section; deeper ones are left to extract by hand.
           return [
-            `${indent}{/* TODO: discriminated union ${commentText(q(at.join(".")))} — only top-level unions are generated; bind the discriminant with ${naming.hook("Field")} and its variant fields with ${naming.hook("VariantField")} */}`,
+            `${indent}{/* TODO: discriminated union ${commentText(q(at.join(".")))} — only top-level unions are generated; bind the discriminant with ${naming.hook("Field")} and its variant fields with ${naming.hook("VariantField")} (row-indexed union paths need formstand 0.16+) */}`,
           ];
         case "tuple":
           // Only a top-level tuple gets a generated section; a nested one is

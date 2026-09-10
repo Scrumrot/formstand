@@ -103,6 +103,15 @@ function PaymentFields({ form }: { form: Form<typeof schema> }) {
 
 `useVariantField(form, unionPath, field)` types the result as the field's value across the variants that declare it, widened with `| undefined`, since the field is absent while a different variant is active. A field name no variant declares, or the discriminant itself, is a compile error. Call it unconditionally (React's rules) and render the matching fields based on the discriminant. `createFormHooks` exposes a bound `use{Name}VariantField`, and `formstand-gen` generates this shape for discriminated-union fields.
 
+The union path can be row-indexed. A union that is an **array's row item** binds the same way from inside a row component, with a template path:
+
+```tsx
+const kind = useField(form, `pavements.${index}.pavementType`);
+const designator = useVariantField(form, `pavements.${index}`, "designator");
+```
+
+Both the `` `pavements.${number}` `` template and a literal `"pavements.0"` resolve the row's variant keys (formstand 0.16 and newer; older versions collapse the field argument to `never` on any indexed path).
+
 ## `NumberField` and partial entries
 
 A controlled `<input type="number">` coerces away intermediate text like `-` or `1e` mid-keystroke. `NumberField` avoids this by rendering a `type="text"` input with `inputMode="decimal"` and keeping the raw text locally while you type:

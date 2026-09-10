@@ -62,11 +62,28 @@ export type UnionValueAt<TValues, P extends string> = P extends keyof TValues
     // — VariantKeys would then leak EVERY key (discriminant included) and
     // the whole guard inverts. Strip the nullish part first.
     NonNullable<TValues[P]>
-  : P extends `${infer Head}.${infer Tail}`
-    ? Head extends keyof TValues
-      ? UnionValueAt<NonNullable<TValues[Head]>, Tail>
-      : never
-    : never;
+  : TValues extends readonly (infer Item)[]
+    ? // Array rows: a numeric segment — a literal "0" or the `${number}`
+      // a template path like `pavements.${index}` produces — selects the
+      // ELEMENT type, so a union that IS the row item resolves the same
+      // way a static object path does. (`keyof` above cannot do this:
+      // an array's numeric index signature is `number`, and the string
+      // segment types never extend it.) Without this branch every
+      // row-indexed union path collapsed the field keys to `never`,
+      // making unions inside array rows unbindable — the exact wall the
+      // generated array-row TODO used to steer people into.
+      P extends `${number}`
+      ? NonNullable<Item>
+      : P extends `${infer Head}.${infer Tail}`
+        ? Head extends `${number}`
+          ? UnionValueAt<NonNullable<Item>, Tail>
+          : never
+        : never
+    : P extends `${infer Head}.${infer Tail}`
+      ? Head extends keyof TValues
+        ? UnionValueAt<NonNullable<TValues[Head]>, Tail>
+        : never
+      : never;
 
 // The readable-error trap-guard, mirroring useField's/useFieldArray's: an
 // explicit type argument (`useVariantField<string>(typedForm, "payment",
