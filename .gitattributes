@@ -1,0 +1,3 @@
+# The depth-budget golden fixture is compared byte-for-byte against the
+# emitter (LF); autocrlf must not rewrite it on a Windows checkout.
+cli/tests/fixtures/threeLevelModule.expected.txt eol=lf
