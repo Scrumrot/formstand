@@ -65,7 +65,7 @@ export const DuplicateTagsSection = ({
       ))}
       {rows.error ? <p role="alert">{rows.error[0]}</p> : null}
       <button type="button" onClick={() => rows.push(emptyDuplicateTagsItem)}>
-        {"Add duplicate tags"}
+        {"Add duplicate tag"}
       </button>
     </fieldset>
   );

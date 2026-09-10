@@ -51,6 +51,8 @@ Reach for it when the form is big enough that a single file stops being pleasant
 
 `--columns 1|2|3` spaces fields evenly inside each section. Nested sections always span the full row.
 
+Chrome frames **sections**, meaning nested objects and arrays. A scalar or union at the schema's root is not a section, so it renders as a plain stacked control between the framed ones, which can read half-styled next to `panel` or `collapsible` chrome. If a root field should sit inside a panel, group it into a nested object; the generator deliberately never invents a wrapper the schema does not describe.
+
 ## `--live`: forms with no submit
 
 Some forms are not submitted at all. A search panel, a filter bar, or a map that redraws as you type wants the values continuously, not on a button press.

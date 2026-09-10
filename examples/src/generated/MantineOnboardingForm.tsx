@@ -390,7 +390,7 @@ export const MantineOnboardingForm = () => {
                 <Text role="alert" c="red">{emergencyContactsArray.error[0]}</Text>
               ) : null}
               <Button type="button" variant="outline" size="sm" onClick={() => emergencyContactsArray.push(emptyEmergencyContactsItem)}>
-                {"Add emergency contacts"}
+                {"Add emergency contact"}
               </Button>
             </Grid.Col>
           </Grid>

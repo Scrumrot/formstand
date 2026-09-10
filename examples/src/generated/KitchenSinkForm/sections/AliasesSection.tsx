@@ -65,7 +65,7 @@ export const AliasesSection = ({
       ))}
       {rows.error ? <p role="alert">{rows.error[0]}</p> : null}
       <button type="button" onClick={() => rows.push(emptyAliasesItem)}>
-        {"Add aliases"}
+        {"Add alias"}
       </button>
     </fieldset>
   );

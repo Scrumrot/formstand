@@ -359,7 +359,7 @@ export const ChakraOnboardingForm = () => {
               <Text role="alert" color="red.500">{emergencyContactsArray.error[0]}</Text>
             ) : null}
             <Button type="button" variant="outline" size="sm" onClick={() => emergencyContactsArray.push(emptyEmergencyContactsItem)}>
-              {"Add emergency contacts"}
+              {"Add emergency contact"}
             </Button>
           </Card.Body>
         </Card.Root>

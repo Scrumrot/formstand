@@ -67,7 +67,7 @@ const expectOnboardingForm = (ui: ReactElement): void => {
   // Array binding: the generated add/remove drives useFieldArray. "Name"
   // is an exact-match query, so it cannot collide with "First Name".
   expect(screen.queryAllByLabelText("Name")).toHaveLength(0);
-  const add = screen.getByRole("button", { name: "Add emergency contacts" });
+  const add = screen.getByRole("button", { name: "Add emergency contact" });
   fireEvent.click(add);
   fireEvent.click(add);
   expect(screen.getAllByLabelText("Name")).toHaveLength(2);
@@ -127,7 +127,7 @@ const expectArrayLevelError = async (ui: ReactElement): Promise<void> => {
   expect(error.closest('[role="alert"]')).not.toBeNull();
 
   fireEvent.click(
-    screen.getByRole("button", { name: "Add emergency contacts" }),
+    screen.getByRole("button", { name: "Add emergency contact" }),
   );
   const name = screen.getAllByLabelText("Name")[0] as HTMLInputElement;
   fireEvent.change(name, { target: { value: "Grace" } });

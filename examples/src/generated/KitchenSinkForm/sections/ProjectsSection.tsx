@@ -69,7 +69,7 @@ const ProjectsTagsRows = ({
       ))}
       {rows.error ? <p role="alert">{rows.error[0]}</p> : null}
       <button type="button" onClick={() => rows.push(emptyProjectsTagsItem)}>
-        {"Add tags"}
+        {"Add tag"}
       </button>
     </fieldset>
   );
@@ -130,7 +130,7 @@ export const ProjectsSection = ({
       ))}
       {rows.error ? <p role="alert">{rows.error[0]}</p> : null}
       <button type="button" onClick={() => rows.push(emptyProjectsItem)}>
-        {"Add projects"}
+        {"Add project"}
       </button>
     </fieldset>
   );

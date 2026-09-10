@@ -68,7 +68,15 @@ Both layouts thread the options prop from the top-level component down, includin
 
 A [custom template](./templates) owns per-kind rendering, but an overridden field has opted out of its kind, so the override wins for that field and the template keeps every other one.
 
-`component: "autocomplete"` is the only flavor today. The shape leaves room for more.
+### `component: "textarea"`
+
+The second flavor: a multi-line control for a **string** field, with the binding unchanged. Reach for it when a field is prose rather than a value, a cover letter or internal notes, especially one that already earned `span: "full"`:
+
+```ts
+"candidate.coverLetter": { component: "textarea", span: "full" },
+```
+
+Each kit renders its own multi-line control: mui a `TextField multiline minRows={3}`, mantine / chakra / shadcn their `Textarea` components, antd `Input.TextArea`, and plain a small in-file `TextareaField` over a native `<textarea>`. `optionsProp` is rejected with a textarea, since nothing would consume options, and an enum is rejected too, since a textarea would abandon its option list.
 
 ## Per-field layout placement
 

@@ -422,7 +422,7 @@ export const AntdOnboardingForm = () => {
                 </Typography.Text>
               ) : null}
               <Button htmlType="button" size="small" onClick={() => emergencyContactsArray.push(emptyEmergencyContactsItem)}>
-                {"Add emergency contacts"}
+                {"Add emergency contact"}
               </Button>
             </Col>
           </Row>

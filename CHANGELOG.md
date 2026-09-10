@@ -1,5 +1,41 @@
 # Changelog
 
+## formstand-cli Unreleased
+
+### Added
+
+- **`component: "textarea"` in the config `fields` block.** The second
+  override flavor: a multi-line control for string fields, the binding
+  unchanged. Each kit renders its own control (mui `TextField multiline`,
+  mantine/chakra/shadcn `Textarea`, antd `Input.TextArea`, plain a native
+  `<textarea>`), and it composes with `span` in one entry, so a
+  `span: "full"` cover letter can finally look like one. `optionsProp`
+  and enum targets are rejected loudly.
+- **JSON Schema defaults and string formats reach the generated
+  validator.** A document `default` now emits `.default(value)` in the
+  generated zod schema beside the `initialValues` seed it already fed,
+  and `format: email`/`uri`/`uuid` emits `z.email()`/`z.url()`/
+  `z.uuid()` while the control stays a text field. The emitted schema is
+  the runtime source of truth, so it no longer drops contracts the
+  source document carried. Note zod's `.default()` makes the input
+  optional by design.
+
+### Fixed
+
+- **An optional union starts empty and its select can clear it.** An
+  optional/nullable discriminated union was seeded with its first
+  variant, so an untouched form submitted a variant the user never
+  chose, and the discriminant select offered no way back. The union now
+  starts `undefined`/`null`, and its select reads the discriminant but
+  writes the whole union: the empty choice clears it, a tag starts that
+  variant blank. mui's select gains an explicit None item; shadcn's
+  Radix select cannot hold an empty item, so there the fixed seed alone
+  closes the phantom-submit bug. Required unions are unchanged.
+- **Array add buttons read as the action they perform.** "Add
+  references" becomes "Add reference": a conservative singularizer on
+  the label's last word, with irregulars passing through unchanged.
+- **A union variant with one field no longer wraps it in a fragment.**
+
 ## formstand-cli 0.13.0 — 2026-09-03
 
 ### Added

@@ -84,7 +84,7 @@ describe("generated KitchenSinkForm (untouched --layout module output)", () => {
     );
     expect(rows("Aliases")).toHaveLength(0);
 
-    clickAdd("Add aliases", 3);
+    clickAdd("Add alias", 3);
     expect(rows("Aliases")).toHaveLength(3);
 
     const firstRemove = rows("Aliases")[0]?.querySelector("button");
@@ -100,14 +100,14 @@ describe("generated KitchenSinkForm (untouched --layout module output)", () => {
         <KitchenSinkForm />
       </StrictMode>,
     );
-    clickAdd("Add projects", 2);
+    clickAdd("Add project", 2);
     expect(rows("Projects")).toHaveLength(2);
 
     // Each project row extracts its own tags array component.
-    expect(screen.getAllByRole("button", { name: "Add tags" })).toHaveLength(
+    expect(screen.getAllByRole("button", { name: "Add tag" })).toHaveLength(
       2,
     );
-    clickAdd("Add tags", 2);
+    clickAdd("Add tag", 2);
     expect(rows("Tags")).toHaveLength(2);
     expect(console.error).not.toHaveBeenCalled();
   });
@@ -134,21 +134,21 @@ describe("generated NestedArrayStressForm (untouched --layout module output)", (
         <NestedArrayStressForm />
       </StrictMode>,
     );
-    clickAdd("Add teams", 2);
+    clickAdd("Add team", 2);
     expect(rows("Teams")).toHaveLength(2);
 
     // One members array per team row; fill the first team.
     expect(
-      screen.getAllByRole("button", { name: "Add members" }),
+      screen.getAllByRole("button", { name: "Add member" }),
     ).toHaveLength(2);
-    clickAdd("Add members", 2);
+    clickAdd("Add member", 2);
     expect(rows("Members")).toHaveLength(2);
 
     // One phones array per member row; fill the first member.
     expect(
-      screen.getAllByRole("button", { name: "Add phones" }),
+      screen.getAllByRole("button", { name: "Add phone" }),
     ).toHaveLength(2);
-    clickAdd("Add phones", 3);
+    clickAdd("Add phone", 3);
     expect(rows("Phones")).toHaveLength(3);
 
     // Removing a phone touches only the innermost level.
@@ -182,7 +182,7 @@ describe("generated NestedArrayStressForm (untouched --layout module output)", (
     );
     // Every row holds the identical value ("") — distinct row ids are the
     // only thing standing between this and a React duplicate-key warning.
-    clickAdd("Add duplicate tags", 4);
+    clickAdd("Add duplicate tag", 4);
     expect(rows("Duplicate Tags")).toHaveLength(4);
 
     const removeSecond = rows("Duplicate Tags")[1]?.querySelector("button");

@@ -43,6 +43,7 @@ Three properties worth relying on. It is strictly opt-in: nothing prompts from a
 - **One bound control per field**, picked from the field's kind.
 - **Nested objects** as sections, framed by `--sections`.
 - **Arrays** via `useFieldArray`, with stable row keys, add and remove buttons, and a typed empty-item constant.
+- **Discriminated unions** as a discriminant select plus one conditional block per variant, bound through `useVariantField`. A required union starts as its first variant; an optional or nullable union starts **empty** and its select is clearable: the empty choice writes the whole union back to `undefined`/`null`, and picking a tag starts that variant blank. The one exception is shadcn, whose Radix select cannot hold an empty item, so there the union starts empty but cannot be re-cleared from the select.
 - **Descriptions as helper text**, from `.describe()`, `.meta({ description })`, or JSDoc in type mode. See [Descriptions](./config#descriptions-become-helper-text).
 - **A submit handler and a button** disabled while submitting, unless `--live` replaces the whole scaffold with a values subscription.
 
@@ -66,7 +67,7 @@ A `.json` input file switches the front-end: the document is read as a bare JSON
 
 | Keyword | Generated |
 | --- | --- |
-| `type: "string"` | text field; `format: date` or `date-time` becomes a date field |
+| `type: "string"` | text field; `format: date` or `date-time` becomes a date field; `format: email`, `uri`, or `uuid` stays a text field but emits `z.email()` / `z.url()` / `z.uuid()` in the generated schema |
 | `enum` of strings, `const`, `oneOf` of string consts | select carrying the options |
 | `type: "number"` or `"integer"` | number field |
 | `type: "object"` with `properties` | a section; `required` sets which fields are optional |
@@ -75,7 +76,7 @@ A `.json` input file switches the front-end: the document is read as a bare JSON
 | `oneOf` with an OpenAPI `discriminator` | a discriminated union bound through `useVariantField` |
 | `allOf` of object schemas | one merged section (properties merge, `required` lists union) |
 | `type: ["X", "null"]`, `nullable: true`, or `oneOf` with a null branch | a nullable field, whichever dialect spells it |
-| `default` (JSON primitives) | seeds `initialValues` |
+| `default` (JSON primitives) | seeds `initialValues` **and** emits `.default(value)` in the generated schema, so a server-side parse of an omitted field defaults the way the document said (note zod's `.default()` makes the input optional) |
 | `description` / `title` | helper text / the field's label |
 
 `$ref` resolves within the document, including through `allOf` and `oneOf` branches. Both nullable dialects are honored wherever they appear, so 3.0 documents work without a dialect flag.

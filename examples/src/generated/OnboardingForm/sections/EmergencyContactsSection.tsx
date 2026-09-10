@@ -76,7 +76,7 @@ export const EmergencyContactsSection = ({
             <Typography role="alert" color="error">{rows.error[0]}</Typography>
           ) : null}
           <Button type="button" onClick={() => rows.push(emptyEmergencyContactsItem)}>
-            {"Add emergency contacts"}
+            {"Add emergency contact"}
           </Button>
           </Grid>
         </Grid>
