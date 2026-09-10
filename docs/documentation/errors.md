@@ -53,6 +53,8 @@ Note the asymmetry: `setError` and `setErrors` touch only the server channel, bu
 
 From a field, `useField` exposes the same surface scoped to its path: `field.setError("taken")` (a single string or an array, same as `form.setError`) and `field.clearError()`.
 
+For display, `field.firstError` is the first message or `undefined`, covering both the missing entry and the empty array, so a helper line is just `{field.firstError}` with no hand-rolled `error?.[0]` guard. The full `field.error` array stays available when you want every message.
+
 ## When a server error is released
 
 A server verdict describes a specific value. It's automatically released when:

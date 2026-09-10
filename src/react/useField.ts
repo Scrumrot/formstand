@@ -60,6 +60,11 @@ export type UseFieldReturn<TValue> = Readonly<{
   // to "the initial value was null" for schema-less FieldFormApi forms.
   emptyValue: null | undefined;
   error: readonly string[] | undefined;
+  // The first error message, or undefined when the channel is empty — the
+  // display shorthand every adapter otherwise re-derives by hand (the
+  // `error?.[0]`-with-empty-array-guard helper each generated kit adapter
+  // used to open with).
+  firstError: string | undefined;
   touched: boolean;
   dirty: boolean;
   isValidating: boolean;
@@ -296,6 +301,8 @@ export function useField<TValue = unknown>(
       initialValue: slice.initialValue,
       emptyValue,
       error: slice.error,
+      // `?.[0]` covers both the undefined channel and an empty array.
+      firstError: slice.error?.[0],
       touched: slice.touched,
       dirty: slice.dirty,
       isValidating: slice.isValidating,

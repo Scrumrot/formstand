@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added
+
+- **`field.firstError`.** The first error message or `undefined`, derived
+  on `UseFieldReturn` — the display shorthand every consumer (and every
+  generated kit adapter) re-derived by hand as `error?.[0]` with an
+  empty-array guard. `{field.firstError}` is now the whole helper line;
+  the full `field.error` array is unchanged beside it. The CLI keeps
+  emitting its own helper for now so generated code stays runnable on
+  older formstand; a future major of the generated adapters can lean on
+  this instead.
+
 ### Fixed
 
 - **`useVariantField` accepts row-indexed union paths.** A discriminated
