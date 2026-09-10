@@ -112,6 +112,22 @@ const designator = useVariantField(form, `pavements.${index}`, "designator");
 
 Both the `` `pavements.${number}` `` template and a literal `"pavements.0"` resolve the row's variant keys (formstand 0.16 and newer; older versions collapse the field argument to `never` on any indexed path).
 
+## Composite fields: `useFields`
+
+One control backed by several schema paths — a coordinate pair behind a single map-driven input, a range's min and max, a date span — binds them together with `useFields`:
+
+```tsx
+const location = useFields(form, ["latitude", "longitude"]);
+const [latitude, longitude] = location.fields; // full, typed field bindings
+
+<DmsInput lat={latitude} lng={longitude} onBlur={location.onBlur} />
+<span>{location.firstError}</span>             // the combined error line
+```
+
+Each element of `fields` is a complete `useField` result, position-typed from the tuple, so it spreads into the same prop builders and components a solo binding would. The wrapper adds the combined view: `error` merges every path's messages in path order and dedupes them, so a cross-field `superRefine` that stamps both paths reads once; `firstError` is its display shorthand; `touched`, `dirty`, and `isValidating` answer "any of them"; and `onBlur` blurs every path under the form's validation mode, so the composite behaves like one control losing focus.
+
+The paths tuple is part of the hook contract: it expands to exactly that many `useField` calls, so its length and order must be stable across renders. Pass a literal or a module-level constant — a tuple that changes length throws React's own hooks-count error at the offending render.
+
 ## `NumberField` and partial entries
 
 A controlled `<input type="number">` coerces away intermediate text like `-` or `1e` mid-keystroke. `NumberField` avoids this by rendering a `type="text"` input with `inputMode="decimal"` and keeping the raw text locally while you type:

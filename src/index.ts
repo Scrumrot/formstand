@@ -74,6 +74,9 @@ export {
   useSubmitCount,
 } from "./react/useFormFlags";
 export { useField } from "./react/useField";
+// Composite fields: one control over several schema paths, with a combined
+// error channel — see useFields' header for the stable-arity contract.
+export { useFields, type UseFieldsReturn } from "./react/useFields";
 export { useVariantField } from "./react/useVariantField";
 export type {
   UseFieldReturn,

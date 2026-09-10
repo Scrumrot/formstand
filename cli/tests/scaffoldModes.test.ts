@@ -358,9 +358,13 @@ describe("scaffold-mode flags and config", () => {
     expect(code).not.toContain('type="submit"');
   });
 
-  it("--live --form-prop through the CLI, module layout", async () => {
+  it("--form-prop with the module layout is rejected; --live still works", async () => {
     const dir = freshTmpDir("scaffold-flags-module");
     const out = path.join(dir, "ProfileForm");
+    // The module's fields are pre-wired to its own singleton, so the form
+    // prop was decorative at best — the CLI now refuses the pair (the
+    // programmatic emitModuleForm surface keeps the option; see the
+    // emitter tests above).
     expect(
       await main([
         zodFixture,
@@ -371,10 +375,11 @@ describe("scaffold-mode flags and config", () => {
         "--out",
         out,
       ]),
+    ).toBe(1);
+    expect(fs.existsSync(path.join(out, "ProfileForm.tsx"))).toBe(false);
+    expect(
+      await main([zodFixture, "--layout", "module", "--live", "--out", out]),
     ).toBe(0);
-    const form = fs.readFileSync(path.join(out, "ProfileForm.tsx"), "utf8");
-    expect(form).toContain("form: Form<ProfileSchema>;");
-    expect(form).toContain("onValuesChange?: (values: ProfileValues) => void;");
     expect(fs.readFileSync(path.join(out, "hooks.ts"), "utf8")).toContain(
       'mode: "onChange",',
     );

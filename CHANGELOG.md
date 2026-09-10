@@ -4,6 +4,16 @@
 
 ### Added
 
+- **`useFields`: composite fields.** One control backed by several schema
+  paths (a coordinate pair behind a DMS input, a range, a date span)
+  binds them in one call: `useFields(form, ["latitude", "longitude"])`
+  returns the position-typed tuple of full field bindings plus the
+  combined view — `error` merged in path order and deduped (a
+  cross-field `superRefine` stamping both paths reads once),
+  `firstError`, any-of-them `touched`/`dirty`/`isValidating`, and one
+  `onBlur` covering every path. The paths tuple must be render-stable;
+  React itself throws its hooks-count error otherwise, at the exact
+  render that broke the contract.
 - **`field.firstError`.** The first error message or `undefined`, derived
   on `UseFieldReturn` — the display shorthand every consumer (and every
   generated kit adapter) re-derived by hand as `error?.[0]` with an
