@@ -1,4 +1,4 @@
-import { camelCase, camelIdent, pascalCase } from "./casing";
+import { camelCase, camelIdent, pascalCase, singularize } from "./casing";
 import {
   DEFAULT_VISUAL,
   type EmitFormOptions,
@@ -2880,7 +2880,7 @@ const nestedArrayComponents = (
     ...shell.listError,
     ...shell.addButton(
       `() => rows.push(${emptyName})`,
-      `Add ${entry.label.toLowerCase()}`,
+      `Add ${singularize(entry.label).toLowerCase()}`,
     ),
     ...wrap.close,
     "  );",
@@ -3533,7 +3533,7 @@ const arraySectionFile = (
                 ...shell.listError,
                 ...shell.addButton(
                   `() => rows.push(${emptyName})`,
-                  `Add ${section.label.toLowerCase()}`,
+                  `Add ${singularize(section.label).toLowerCase()}`,
                 ),
                 `      ${cells.fullRow[1]}`,
               ]
@@ -3549,7 +3549,7 @@ const arraySectionFile = (
                 ...shell.listError,
                 ...shell.addButton(
                   `() => rows.push(${emptyName})`,
-                  `Add ${section.label.toLowerCase()}`,
+                  `Add ${singularize(section.label).toLowerCase()}`,
                 ),
               ];
         })(),
@@ -3878,34 +3878,55 @@ const unionSectionFile = (
         "      ",
       ),
     ),
-    ...spec.variants.flatMap((variant) => [
-      `      {${discriminantVar}.value === ${q(variant.tag)} && (`,
-      "        <>",
-      ...variant.fields.flatMap((field): readonly string[] => {
-        if (isUnaddressable(field.name)) {
-          return [
-            `          {/* TODO: field ${commentText(q(field.name))} skipped — "." in a key is not path-addressable (see formstand docs) */}`,
+    ...spec.variants.flatMap((variant) => {
+      // Common fields already rendered above; only variant-only fields here.
+      const rendered = variant.fields.filter(
+        (field) => !commonBindingNames.has(field.name),
+      );
+      const inner = (indent: string): readonly string[] =>
+        rendered.flatMap((field): readonly string[] => {
+          if (isUnaddressable(field.name)) {
+            return [
+              `${indent}{/* TODO: field ${commentText(q(field.name))} skipped — "." in a key is not path-addressable (see formstand docs) */}`,
+            ];
+          }
+          const binding = bindingByName.get(field.name);
+          return binding === undefined
+            ? [
+                `${indent}{/* TODO: nested ${field.spec.kind} ${commentText(q(`${path}.${field.name}`))} inside a union variant — extract it by hand */}`,
+              ]
+            : leafControl(
+                ui,
+                field.spec,
+                binding.varName,
+                jsxText(field.label),
+                `{${binding.varName}.path}`,
+                indent,
+              );
+        });
+      // One real element needs no fragment; a lone TODO comment still does
+      // (`cond && ({/* ... */})` is an empty parenthesized expression) —
+      // same rule as the single-file unionLines.
+      const first = rendered[0];
+      const single =
+        rendered.length === 1 &&
+        first !== undefined &&
+        !isUnaddressable(first.name) &&
+        bindingByName.has(first.name);
+      return single
+        ? [
+            `      {${discriminantVar}.value === ${q(variant.tag)} && (`,
+            ...inner("        "),
+            "      )}",
+          ]
+        : [
+            `      {${discriminantVar}.value === ${q(variant.tag)} && (`,
+            "        <>",
+            ...inner("          "),
+            "        </>",
+            "      )}",
           ];
-        }
-        // Common fields already rendered above; only variant-only fields here.
-        if (commonBindingNames.has(field.name)) return [];
-        const binding = bindingByName.get(field.name);
-        return binding === undefined
-          ? [
-              `          {/* TODO: nested ${field.spec.kind} ${commentText(q(`${path}.${field.name}`))} inside a union variant — extract it by hand */}`,
-            ]
-          : leafControl(
-              ui,
-              field.spec,
-              binding.varName,
-              jsxText(field.label),
-              `{${binding.varName}.path}`,
-              "          ",
-            );
-      }),
-      "        </>",
-      "      )}",
-    ]),
+    }),
   ];
 
   const leafSpecs = [

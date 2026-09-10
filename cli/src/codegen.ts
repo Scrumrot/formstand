@@ -1,4 +1,4 @@
-import { pascalCase } from "./casing";
+import { pascalCase, singularize } from "./casing";
 import {
   FORMSTAND_PATH_DEPTH,
   NESTING_LIMIT_TODO,
@@ -1536,27 +1536,40 @@ const unionLines = (
     ...entry.commonBindings.flatMap((binding) =>
       backend.variantLeaf(binding.spec, binding.varName, binding.label, level),
     ),
-    ...entry.variants.flatMap((variant) => [
-      `${ind(level)}{${entry.discriminantVar}.value === ${q(variant.tag)} && (`,
-      `${ind(level + 1)}<>`,
-      ...variant.fields.flatMap((field): readonly string[] => {
-        // Common fields already rendered above; only variant-only fields here.
-        if (entry.commonBindingNames.has(field.name)) return [];
-        const binding = entry.bindingByName.get(field.name);
-        return binding === undefined
-          ? [
-              `${ind(level + 2)}{/* TODO: nested ${field.spec.kind} ${commentText(q(`${entry.path}.${field.name}`))} inside a union variant — extract it by hand */}`,
-            ]
-          : backend.variantLeaf(
-              field.spec,
-              binding.varName,
-              field.label,
-              level + 2,
-            );
-      }),
-      `${ind(level + 1)}</>`,
-      `${ind(level)})}`,
-    ]),
+    ...entry.variants.flatMap((variant) => {
+      // Common fields already rendered above; only variant-only fields here.
+      const rendered = variant.fields.filter(
+        (field) => !entry.commonBindingNames.has(field.name),
+      );
+      const inner = (lvl: number): readonly string[] =>
+        rendered.flatMap((field): readonly string[] => {
+          const binding = entry.bindingByName.get(field.name);
+          return binding === undefined
+            ? [
+                `${ind(lvl)}{/* TODO: nested ${field.spec.kind} ${commentText(q(`${entry.path}.${field.name}`))} inside a union variant — extract it by hand */}`,
+              ]
+            : backend.variantLeaf(field.spec, binding.varName, field.label, lvl);
+        });
+      // One real element needs no fragment. A lone TODO comment still does:
+      // `cond && ({/* ... */})` is an empty parenthesized expression, which
+      // does not parse — the fragment is what makes the comment legal JSX.
+      const single =
+        rendered.length === 1 &&
+        entry.bindingByName.has(rendered[0]?.name ?? "");
+      return single
+        ? [
+            `${ind(level)}{${entry.discriminantVar}.value === ${q(variant.tag)} && (`,
+            ...inner(level + 1),
+            `${ind(level)})}`,
+          ]
+        : [
+            `${ind(level)}{${entry.discriminantVar}.value === ${q(variant.tag)} && (`,
+            `${ind(level + 1)}<>`,
+            ...inner(level + 2),
+            `${ind(level + 1)}</>`,
+            `${ind(level)})}`,
+          ];
+    }),
   ];
 };
 
@@ -2477,7 +2490,7 @@ const plainBackend = (
     // module layout's list shell renders.
     `${ind(level + 1)}{${entry.hookName}.error ? <p role="alert">{${entry.hookName}.error[0]}</p> : null}`,
     `${ind(level + 1)}<button type="button" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
-    `${ind(level + 2)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
+    `${ind(level + 2)}${jsxText(`Add ${singularize(entry.label).toLowerCase()}`)}`,
     `${ind(level + 1)}</button>`,
     `${ind(level)}${visual.sections === "collapsible" ? "</details>" : "</section>"}`,
   ],
@@ -3652,7 +3665,7 @@ const muiBackend = (
       `${ind(spanBase + 1)}<Typography role="alert" color="error">{${entry.hookName}.error[0]}</Typography>`,
       `${ind(spanBase)}) : null}`,
       `${ind(spanBase)}<Button type="button" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
-      `${ind(spanBase + 1)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
+      `${ind(spanBase + 1)}${jsxText(`Add ${singularize(entry.label).toLowerCase()}`)}`,
       `${ind(spanBase)}</Button>`,
       ...(cols === 1 ? [] : [`${ind(base)}${fullRowCell[1]}`]),
       ...sectionClose(level),
@@ -4107,7 +4120,7 @@ const shadcnBackend = (
       `${ind(base + 1)}className="w-fit"`,
       `${ind(base + 1)}onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}`,
       `${ind(base)}>`,
-      `${ind(base + 1)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
+      `${ind(base + 1)}${jsxText(`Add ${singularize(entry.label).toLowerCase()}`)}`,
       `${ind(base)}</Button>`,
       ...(visual.sections === "collapsible"
         ? [`${ind(level + 1)}</div>`, `${ind(level)}</details>`]
@@ -4663,7 +4676,7 @@ const chakraBackend = (
       `${ind(base + 1)}<Text role="alert" color="red.500">{${entry.hookName}.error[0]}</Text>`,
       `${ind(base)}) : null}`,
       `${ind(base)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
-      `${ind(base + 1)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
+      `${ind(base + 1)}${jsxText(`Add ${singularize(entry.label).toLowerCase()}`)}`,
       `${ind(base)}</Button>`,
       ...sectionClose(level),
     ];
@@ -5177,7 +5190,7 @@ const mantineBackend = (
       `${ind(spanBase + 1)}<Text role="alert" c="red">{${entry.hookName}.error[0]}</Text>`,
       `${ind(spanBase)}) : null}`,
       `${ind(spanBase)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
-      `${ind(spanBase + 1)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
+      `${ind(spanBase + 1)}${jsxText(`Add ${singularize(entry.label).toLowerCase()}`)}`,
       `${ind(spanBase)}</Button>`,
       ...(cols === 1 ? [] : [`${ind(base)}</Grid.Col>`]),
       ...sectionClose(level),
@@ -5821,7 +5834,7 @@ const antdBackend = (
       `${ind(spanBase + 1)}</Typography.Text>`,
       `${ind(spanBase)}) : null}`,
       `${ind(spanBase)}<Button htmlType="button" size="small" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
-      `${ind(spanBase + 1)}${jsxText(`Add ${entry.label.toLowerCase()}`)}`,
+      `${ind(spanBase + 1)}${jsxText(`Add ${singularize(entry.label).toLowerCase()}`)}`,
       `${ind(spanBase)}</Button>`,
       ...(cols === 1 ? [] : [`${ind(base)}</Col>`]),
       ...sectionClose(level),

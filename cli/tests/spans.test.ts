@@ -59,7 +59,7 @@ describe("span config parsing", () => {
     // optionsProp feeds a component override; without one it is dead config.
     expect(() =>
       parseFieldOverrides({ "employment.notes": { optionsProp: true, span: 2 } }, "cfg"),
-    ).toThrow(/optionsProp requires a component override/);
+    ).toThrow(/optionsProp requires component "autocomplete"/);
   });
 
   it("accepts span alone, and span beside a component override", () => {

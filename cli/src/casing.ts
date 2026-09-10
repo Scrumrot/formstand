@@ -54,3 +54,40 @@ export const camelIdent = (name: string): string => {
 };
 
 export const isReservedWord = (name: string): boolean => RESERVED.has(name);
+
+// "References" → "Reference", for the array add-button copy ("Add
+// reference" reads as the action it performs; "Add references" reads like
+// a bulk import). A heuristic, deliberately conservative: the common
+// English plural spellings reverse cleanly, irregulars (children, people)
+// and anything it cannot classify pass through unchanged — a plural
+// surviving is copy polish lost, a mangled singular would be a bug. Only
+// the LAST word changes ("Job Openings" → "Job Opening").
+export const singularize = (label: string): string => {
+  const words = label.split(" ");
+  const last = words[words.length - 1] ?? "";
+  const lower = last.toLowerCase();
+  const singularLast = ((): string => {
+    // -us/-is words (status, campus, analysis, axis) are singulars that
+    // happen to end in s.
+    if (
+      lower.length <= 3 ||
+      !lower.endsWith("s") ||
+      lower.endsWith("ss") ||
+      lower.endsWith("us") ||
+      lower.endsWith("is")
+    ) {
+      return last;
+    }
+    if (lower.endsWith("ies")) return `${last.slice(0, -3)}y`;
+    // boxes/batches/addresses; the stem check keeps "notes"/"phones" on
+    // the plain strip-the-s path below.
+    if (
+      lower.endsWith("es") &&
+      /(?:s|x|z|ch|sh)$/.test(lower.slice(0, -2))
+    ) {
+      return last.slice(0, -2);
+    }
+    return last.slice(0, -1);
+  })();
+  return [...words.slice(0, -1), singularLast].join(" ");
+};

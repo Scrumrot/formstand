@@ -127,7 +127,7 @@ const TeamsMembersPhonesRows = ({
       ))}
       {rows.error ? <p role="alert">{rows.error[0]}</p> : null}
       <button type="button" onClick={() => rows.push(emptyTeamsMembersPhonesItem)}>
-        {"Add phones"}
+        {"Add phone"}
       </button>
     </fieldset>
   );
@@ -181,7 +181,7 @@ const TeamsMembersRows = ({
       ))}
       {rows.error ? <p role="alert">{rows.error[0]}</p> : null}
       <button type="button" onClick={() => rows.push(emptyTeamsMembersItem)}>
-        {"Add members"}
+        {"Add member"}
       </button>
     </fieldset>
   );
@@ -232,7 +232,7 @@ export const TeamsSection = ({
       ))}
       {rows.error ? <p role="alert">{rows.error[0]}</p> : null}
       <button type="button" onClick={() => rows.push(emptyTeamsItem)}>
-        {"Add teams"}
+        {"Add team"}
       </button>
     </fieldset>
   );
