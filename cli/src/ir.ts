@@ -11,7 +11,11 @@ import { capitalize, splitWords } from "./casing";
 // field in its section's multi-column grid. An override may carry either
 // or both.
 export type FieldOverrideSpec = Readonly<{
-  component?: "autocomplete";
+  // "autocomplete": free text with suggestions (strict select-from-list
+  // remains the enum/Select path). "textarea": multi-line free text — the
+  // binding is unchanged, only the control widens (a span: "full" cover
+  // letter rendered as a one-line input was the dogfooding gap).
+  component?: "autocomplete" | "textarea";
   // Present when the generated component takes a `{name}: readonly string[]`
   // prop feeding the suggestions (required for plain string fields — no
   // other options source exists; optional for enums, where it REPLACES the

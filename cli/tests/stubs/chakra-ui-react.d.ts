@@ -72,6 +72,19 @@ export declare const Input: (
   }>,
 ) => ReactElement;
 
+// The textarea override's control: Input's surface on a textarea element.
+export declare const Textarea: (
+  props: Readonly<{
+    name?: string;
+    value?: string;
+    rows?: number;
+    onChange?: (
+      event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+    ) => void;
+    onBlur?: () => void;
+  }>,
+) => ReactElement;
+
 export declare const Field: Readonly<{
   Root: (
     props: Readonly<{ invalid?: boolean; children?: ReactNode }>,

@@ -32,6 +32,25 @@ export declare const TextInput: (
   }>,
 ) => ReactElement;
 
+// The textarea override's control: TextInput's surface on a textarea
+// element (rows instead of type/inputMode; the real 9.x .d.ts is proven by
+// the cli/matrix harness).
+export declare const Textarea: (
+  props: Readonly<{
+    label?: ReactNode;
+    description?: ReactNode;
+    error?: ReactNode;
+    name?: string;
+    value?: string;
+    rows?: number;
+    "aria-invalid"?: true | undefined;
+    onChange?: (
+      event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+    ) => void;
+    onBlur?: () => void;
+  }>,
+) => ReactElement;
+
 // Mirrors the real Autocomplete surface the emitter binds: value-shaped
 // (value: string, onChange: (value: string) => void), data accepting a
 // readonly array, native label/description/error props, and onBlur (the

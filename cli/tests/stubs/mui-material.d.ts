@@ -104,6 +104,10 @@ export declare const AccordionDetails: (
 export type TextFieldProps = Readonly<{
   fullWidth?: boolean;
   select?: boolean;
+  // The textarea override renders TextField multiline (real MUI accepts
+  // both; the matrix proves the real .d.ts).
+  multiline?: boolean;
+  minRows?: number;
   type?: string;
   label?: ReactNode;
   name?: string;

@@ -34,6 +34,24 @@ declare module "@/components/ui/checkbox" {
   ) => ReactElement;
 }
 
+declare module "@/components/ui/textarea" {
+  import type { ChangeEvent, ReactElement } from "react";
+  // The textarea override's control: Input's surface on a textarea element.
+  export const Textarea: (
+    props: Readonly<{
+      id?: string;
+      name?: string;
+      value?: string;
+      rows?: number;
+      "aria-invalid"?: boolean;
+      onChange?: (
+        event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+      ) => void;
+      onBlur?: () => void;
+    }>,
+  ) => ReactElement;
+}
+
 declare module "@/components/ui/input" {
   import type { ChangeEvent, ReactElement } from "react";
   export const Input: (

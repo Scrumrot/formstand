@@ -27,6 +27,7 @@ import {
   collectUsage,
   commentText,
   isAutocompleteLeaf,
+  isTextareaLeaf,
   describedLeafKinds,
   emitInitialValues,
   gridChakraProps,
@@ -451,6 +452,52 @@ const baseLeafImports = (
           {
             from: "../adapter",
             names: ["FieldError", "shadcnTextInputProps"],
+          },
+        ];
+    }
+  }
+  // The textarea override keeps the string binding but swaps the element,
+  // so it swaps the import set the same way (string leaves only).
+  if (isTextareaLeaf(spec)) {
+    switch (ui) {
+      case "plain":
+        return [{ from: "formstand", names: ["textInputProps"] }];
+      case "mui":
+        return [
+          { from: "@mui/material", names: ["TextField"] },
+          { from: "../adapter", names: [kitScalarBinding("mui", "string")] },
+        ];
+      case "mantine":
+        return [
+          { from: "@mantine/core", names: ["Textarea"] },
+          {
+            from: "../adapter",
+            names: [kitScalarBinding("mantine", "string")],
+          },
+        ];
+      case "antd":
+        return [
+          { from: "antd", names: ["Flex", "Input"] },
+          {
+            from: "../adapter",
+            names: ["FieldError", kitScalarBinding("antd", "string")],
+          },
+        ];
+      case "chakra":
+        return [
+          { from: "@chakra-ui/react", names: ["Field", "Textarea"] },
+          {
+            from: "../adapter",
+            names: [kitScalarBinding("chakra", "string"), "fieldError"],
+          },
+        ];
+      case "shadcn":
+        return [
+          { from: "@/components/ui/label", names: ["Label"] },
+          { from: "@/components/ui/textarea", names: ["Textarea"] },
+          {
+            from: "../adapter",
+            names: ["FieldError", kitScalarBinding("shadcn", "string")],
           },
         ];
     }
@@ -880,17 +927,19 @@ const leafJsx = (
               ),
               `${indent}    </select>`,
             ]
-          : [
-              `${indent}    <input {...${
-                spec.kind === "number"
-                  ? "numberInputProps"
-                  : spec.kind === "boolean"
-                    ? "checkboxProps"
-                    : spec.kind === "date"
-                      ? "dateInputProps"
-                      : "textInputProps"
-              }(${varName})} />`,
-            ];
+          : isTextareaLeaf(spec)
+            ? [`${indent}    <textarea rows={3} {...textInputProps(${varName})} />`]
+            : [
+                `${indent}    <input {...${
+                  spec.kind === "number"
+                    ? "numberInputProps"
+                    : spec.kind === "boolean"
+                      ? "checkboxProps"
+                      : spec.kind === "date"
+                        ? "dateInputProps"
+                        : "textInputProps"
+                }(${varName})} />`,
+              ];
       // The always-visible muted helper line — plain keeps the description
       // in its own slot next to the error line (mirrors the single-file
       // backend's plainLeaf policy and its "zf-help" styling hook).
@@ -953,9 +1002,13 @@ const leafJsx = (
             `${indent}<TextField fullWidth label=${labelAttr} {...${kitScalarBinding("mui", "date")}(${varName})}${helper} />`,
           ];
         default:
-          return [
-            `${indent}<TextField fullWidth label=${labelAttr} {...${kitScalarBinding("mui", "string")}(${varName})}${helper} />`,
-          ];
+          return isTextareaLeaf(spec)
+            ? [
+                `${indent}<TextField fullWidth multiline minRows={3} label=${labelAttr} {...${kitScalarBinding("mui", "string")}(${varName})}${helper} />`,
+              ]
+            : [
+                `${indent}<TextField fullWidth label=${labelAttr} {...${kitScalarBinding("mui", "string")}(${varName})}${helper} />`,
+              ];
       }
     }
     case "mantine": {
@@ -993,9 +1046,13 @@ const leafJsx = (
             "mantine",
             spec.kind === "date" ? "date" : "string",
           );
-          return [
-            `${indent}<TextInput label=${labelAttr}${descAttr} {...${builder}(${varName})} />`,
-          ];
+          return isTextareaLeaf(spec)
+            ? [
+                `${indent}<Textarea rows={3} label=${labelAttr}${descAttr} {...${builder}(${varName})} />`,
+              ]
+            : [
+                `${indent}<TextInput label=${labelAttr}${descAttr} {...${builder}(${varName})} />`,
+              ];
         }
       }
     }
@@ -1055,10 +1112,13 @@ const leafJsx = (
             "antd",
             spec.kind === "date" ? "date" : "string",
           );
+          const control = isTextareaLeaf(spec)
+            ? `${indent}  <Input.TextArea id=${id} rows={3} {...${builder}(${varName})} />`
+            : `${indent}  <Input id=${id} {...${builder}(${varName})} />`;
           return [
             `${indent}<Flex vertical gap="small">`,
             `${indent}  <label htmlFor=${id}>${labelAttr}</label>`,
-            `${indent}  <Input id=${id} {...${builder}(${varName})} />`,
+            control,
             ...descLines,
             `${indent}  <FieldError field={${varName}} />`,
             `${indent}</Flex>`,
@@ -1124,10 +1184,13 @@ const leafJsx = (
             "chakra",
             spec.kind === "date" ? "date" : "string",
           );
+          const control = isTextareaLeaf(spec)
+            ? `${indent}  <Textarea rows={3} {...${builder}(${varName})} />`
+            : `${indent}  <Input {...${builder}(${varName})} />`;
           return [
             `${indent}<Field.Root invalid={fieldError(${varName}) !== undefined}>`,
             `${indent}  <Field.Label>${labelAttr}</Field.Label>`,
-            `${indent}  <Input {...${builder}(${varName})} />`,
+            control,
             ...descLines,
             `${indent}  <Field.ErrorText>{fieldError(${varName})}</Field.ErrorText>`,
             `${indent}</Field.Root>`,
@@ -1191,10 +1254,13 @@ const leafJsx = (
                 ? "date"
                 : "string",
           );
+          const control = isTextareaLeaf(spec)
+            ? `${indent}  <Textarea id=${id} rows={3} {...${builder}(${varName})} />`
+            : `${indent}  <Input id=${id} {...${builder}(${varName})} />`;
           return [
             `${indent}<div className="grid gap-2">`,
             `${indent}  <Label htmlFor=${id}>${labelAttr}</Label>`,
-            `${indent}  <Input id=${id} {...${builder}(${varName})} />`,
+            control,
             ...descLines,
             `${indent}  <FieldError field={${varName}} />`,
             `${indent}</div>`,

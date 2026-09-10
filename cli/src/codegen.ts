@@ -615,7 +615,16 @@ const zodExpr = (spec: FieldSpec, level: number): string => {
   // .default() makes the INPUT optional, so a required-with-default source
   // field deliberately re-walks as optional — the default is the truer
   // contract for an omitted value than a required-key error.
-  const dflt = isScalarSpec(spec) ? defaultLiteral(spec) : undefined;
+  // Spelled as kind checks (not isScalarSpec, which returns a plain
+  // boolean) so the union narrows to ScalarSpec for defaultLiteral.
+  const dflt =
+    spec.kind === "string" ||
+    spec.kind === "number" ||
+    spec.kind === "boolean" ||
+    spec.kind === "date" ||
+    spec.kind === "enum"
+      ? defaultLiteral(spec)
+      : undefined;
   const withDefault =
     dflt === undefined ? withOptional : `${withOptional}.default(${dflt})`;
   // Outermost, after the wrappers — where fromZod's outermost-wins capture
@@ -652,6 +661,10 @@ export type KindUsage = Readonly<{
   // default Bound components and their imports must not be pulled in by an
   // override-only schema.
   autocomplete: boolean;
+  // A field carries a "textarea" override: same string binding, wider
+  // control. Counts here and NOT under string, so the plain TextField /
+  // kit text components are not imported by a textarea-only schema.
+  textarea: boolean;
 }>;
 
 const NO_USAGE: KindUsage = {
@@ -662,6 +675,7 @@ const NO_USAGE: KindUsage = {
   enum: false,
   union: false,
   autocomplete: false,
+  textarea: false,
 };
 
 const mergeUsage = (a: KindUsage, b: KindUsage): KindUsage => ({
@@ -672,6 +686,7 @@ const mergeUsage = (a: KindUsage, b: KindUsage): KindUsage => ({
   enum: a.enum || b.enum,
   union: a.union || b.union,
   autocomplete: a.autocomplete || b.autocomplete,
+  textarea: a.textarea || b.textarea,
 });
 
 // Whether this leaf renders the autocomplete override control instead of its
@@ -679,6 +694,12 @@ const mergeUsage = (a: KindUsage, b: KindUsage): KindUsage => ({
 // validates that loudly). Shared with the module layout.
 export const isAutocompleteLeaf = (spec: FieldSpec): boolean =>
   spec.override?.component === "autocomplete";
+
+// Whether this leaf renders the textarea override control (string leaves
+// only — applyFieldOverrides validates that loudly). Same swap rule as the
+// autocomplete: the override wins over the kind's default control.
+export const isTextareaLeaf = (spec: FieldSpec): boolean =>
+  spec.override?.component === "textarea";
 
 // The options EXPRESSION an autocomplete leaf feeds its control: the
 // generated component's `{name}Options` prop when the override declares one,
@@ -733,7 +754,9 @@ export const collectUsage = (spec: FieldSpec, count = 0): KindUsage => {
       // default — count it as autocomplete only.
       return isAutocompleteLeaf(spec)
         ? { ...NO_USAGE, autocomplete: true }
-        : { ...NO_USAGE, [spec.kind]: true };
+        : isTextareaLeaf(spec)
+          ? { ...NO_USAGE, textarea: true }
+          : { ...NO_USAGE, [spec.kind]: true };
   }
 };
 
@@ -1173,7 +1196,9 @@ export const collectStaticUsage = (spec: FieldSpec, count = 0): KindUsage => {
       // the Bound autocomplete component, not its kind's default.
       return isAutocompleteLeaf(spec)
         ? { ...NO_USAGE, autocomplete: true }
-        : { ...NO_USAGE, [spec.kind]: true };
+        : isTextareaLeaf(spec)
+          ? { ...NO_USAGE, textarea: true }
+          : { ...NO_USAGE, [spec.kind]: true };
   }
 };
 
@@ -2105,6 +2130,15 @@ const plainLeaf = (
       ...desc,
     ];
   }
+  // The textarea override: the in-file TextareaField (see the preamble)
+  // instead of formstand's single-line TextField.
+  if (isTextareaLeaf(spec)) {
+    return [
+      ...todo,
+      `${ind(level)}<TextareaField form={form} ${attr} ${jsxAttr("label", label)} />`,
+      ...desc,
+    ];
+  }
   switch (spec.kind) {
     case "string":
       return [
@@ -2276,6 +2310,32 @@ const plainAutocompleteBody = (
   "};",
 ];
 
+// The textarea override's in-file component: same textInputProps binding
+// (its handler already accepts textarea events), same zf markup and error
+// line as the autocomplete component above.
+const PLAIN_TEXTAREA_BODY: readonly string[] = [
+  "type TextareaFieldProps = Readonly<{",
+  "  form: FieldFormApi;",
+  "  path: string;",
+  "  label: string;",
+  "}>;",
+  "",
+  "const TextareaField = ({ form, path, label }: TextareaFieldProps) => {",
+  "  const field = useField<string | null | undefined>(form, path);",
+  "  return (",
+  '    <div className="zf-field">',
+  '      <label className="zf-label">',
+  "        {label}",
+  "        <textarea rows={3} {...textInputProps(field)} />",
+  "      </label>",
+  "      {field.error?.[0] !== undefined ? (",
+  '        <p role="alert">{field.error?.[0]}</p>',
+  "      ) : null}",
+  "    </div>",
+  "  );",
+  "};",
+];
+
 const plainBackend = (
   visual: VisualOptions,
   scaffold: ScaffoldOptions,
@@ -2321,12 +2381,14 @@ const plainBackend = (
       ...builderImports,
       // The in-file AutocompleteField (autocomplete override) binds through
       // textInputProps + useField; dedupe against the union builders above.
-      ...(staticUsage.autocomplete &&
+      ...((staticUsage.autocomplete || staticUsage.textarea) &&
       !builderImports.includes("textInputProps")
         ? ["textInputProps"]
         : []),
       ...(arrays.length > 0 ? ["useFieldArray"] : []),
-      ...(usage.union || staticUsage.autocomplete ? ["useField"] : []),
+      ...(usage.union || staticUsage.autocomplete || staticUsage.textarea
+        ? ["useField"]
+        : []),
       ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
       "useForm",
       ...(scaffold.live ? [] : ["useIsSubmitting"]),
@@ -2336,13 +2398,16 @@ const plainBackend = (
       `import { z } from "zod";`,
       "import {",
       ...formstandImports.map((name) => `  ${name},`),
-      // FieldFormApi types the in-file AutocompleteField's form prop.
-      ...(staticUsage.autocomplete ? ["  type FieldFormApi,"] : []),
+      // FieldFormApi types the in-file AutocompleteField's and
+      // TextareaField's form props.
+      ...(staticUsage.autocomplete || staticUsage.textarea
+        ? ["  type FieldFormApi,"]
+        : []),
       `} from "formstand";`,
     ];
   },
-  preamble: (_usage, staticUsage) =>
-    staticUsage.autocomplete
+  preamble: (_usage, staticUsage) => [
+    ...(staticUsage.autocomplete
       ? [
           [
             "// ---- autocomplete override (config fields) ---------------------------------",
@@ -2351,7 +2416,17 @@ const plainBackend = (
           ].join("\n"),
           "",
         ]
-      : [],
+      : []),
+    ...(staticUsage.textarea
+      ? [
+          [
+            "// ---- textarea override (config fields) -------------------------------------",
+            ...PLAIN_TEXTAREA_BODY,
+          ].join("\n"),
+          "",
+        ]
+      : []),
+  ],
   leaf: plainLeaf,
   variantLeaf: plainVariantLeaf,
   objectSection: (label, level, body) =>
@@ -2778,6 +2853,13 @@ const boundLeaf =
         `${ind(level)}/>`,
       ];
     }
+    // The textarea override: same string binding, multi-line control.
+    if (isTextareaLeaf(spec)) {
+      return [
+        ...todo,
+        `${ind(level)}<BoundTextareaField form={form} ${attr} ${jsxAttr("label", label)}${desc} />`,
+      ];
+    }
     switch (spec.kind) {
       case "string":
         return [
@@ -3061,7 +3143,8 @@ export const muiAdapterSection = (
     usage.date ||
     usage.number ||
     usage.enum ||
-    usage.autocomplete;
+    usage.autocomplete ||
+    usage.textarea;
   const textAdapter = [
     "",
     `${exp}const muiTextFieldProps = <T extends string | null | undefined>(`,
@@ -3167,7 +3250,8 @@ export const muiAdapterSection = (
   return [
     "// ---- formstand → MUI adapter ----------------------------------------------",
     ...(needsError ? withExportPrefix(FIELD_ERROR_HELPER, exp) : []),
-    ...(usage.string ? textAdapter : []),
+    // The textarea override binds through the same text builder.
+    ...(usage.string || usage.textarea ? textAdapter : []),
     ...(usage.number ? numberAdapter : []),
     ...(usage.date ? dateAdapter : []),
     ...(usage.enum ? selectAdapter : []),
@@ -3317,9 +3401,37 @@ const muiBoundComponents = (
     "  );",
     "};",
   ];
+  // The textarea override: the same text binding on a multiline TextField.
+  const textarea = withDescription
+    ? [
+        "",
+        "const BoundTextareaField = ({ form, path, label, description }: BoundFieldProps) => {",
+        "  const field = useField<string | null | undefined>(form, path);",
+        "  return (",
+        "    <TextField",
+        "      fullWidth",
+        "      multiline",
+        "      minRows={3}",
+        "      label={label}",
+        `      {...${kitScalarBinding("mui", "string")}(field)}`,
+        "      helperText={fieldError(field) ?? description}",
+        "    />",
+        "  );",
+        "};",
+      ]
+    : [
+        "",
+        "const BoundTextareaField = ({ form, path, label }: BoundFieldProps) => {",
+        "  const field = useField<string | null | undefined>(form, path);",
+        "  return (",
+        `    <TextField fullWidth multiline minRows={3} label={label} {...${kitScalarBinding("mui", "string")}(field)} />`,
+        "  );",
+        "};",
+      ];
   return [
     ...propsType,
     ...(usage.string ? text : []),
+    ...(usage.textarea ? textarea : []),
     ...(usage.number ? number : []),
     ...(usage.date ? date : []),
     ...(usage.enum ? select : []),
@@ -3467,7 +3579,8 @@ const muiBackend = (
       usage.date ||
       usage.number ||
       usage.enum ||
-      usage.autocomplete
+      usage.autocomplete ||
+      usage.textarea
         ? ["TextField"]
         : []),
       ...(usage.autocomplete ? ["type TextFieldProps"] : []),
@@ -3612,7 +3725,10 @@ export const shadcnAdapterSection = (usage: KindUsage, exp = ""): string => {
     "  name: field.path,",
     '  value: field.value ?? "",',
     '  "aria-invalid": ariaInvalid(field),',
-    "  onChange: (e: ChangeEvent<HTMLInputElement>) => {",
+    // The textarea override spreads this same builder, so its handler
+    // widens to the textarea element only when that override is in play —
+    // a handler over the union is assignable to both components.
+    `  onChange: (e: ChangeEvent<HTMLInputElement${usage.textarea ? " | HTMLTextAreaElement" : ""}>) => {`,
     "    const text = e.target.value;",
     '    field.setValue((text === "" && field.emptyValue === null ? null : text) as T);',
     "  },",
@@ -3683,8 +3799,11 @@ export const shadcnAdapterSection = (usage: KindUsage, exp = ""): string => {
     "// ---- formstand → shadcn/ui adapter -----------------------------------------",
     ...(hasLeaf ? withExportPrefix(errorHelper, exp) : []),
     // The autocomplete override binds the same text adapter — its
-    // suggestions ride a native <datalist> on the Input.
-    ...(usage.string || usage.autocomplete ? textAdapter : []),
+    // suggestions ride a native <datalist> on the Input — and so does the
+    // textarea override (same binding, wider control).
+    ...(usage.string || usage.autocomplete || usage.textarea
+      ? textAdapter
+      : []),
     ...(usage.number ? numberAdapter : []),
     ...(usage.date ? dateAdapter : []),
     ...(usage.enum ? selectAdapter : []),
@@ -3718,6 +3837,21 @@ const shadcnBoundComponents = (
     '    <div className="grid gap-2">',
     "      <Label htmlFor={path}>{label}</Label>",
     `      <Input id={path} {...${kitScalarBinding("shadcn", "string")}(field)} />`,
+    ...descLines,
+    "      <FieldError field={field} />",
+    "    </div>",
+    "  );",
+    "};",
+  ];
+  // The textarea override: same text binding on the multi-line component.
+  const textareaField = [
+    "",
+    `const BoundTextareaField = (${params}: BoundFieldProps) => {`,
+    "  const field = useField<string | null | undefined>(form, path);",
+    "  return (",
+    '    <div className="grid gap-2">',
+    "      <Label htmlFor={path}>{label}</Label>",
+    `      <Textarea id={path} rows={3} {...${kitScalarBinding("shadcn", "string")}(field)} />`,
     ...descLines,
     "      <FieldError field={field} />",
     "    </div>",
@@ -3840,6 +3974,7 @@ const shadcnBoundComponents = (
     ...(usage.enum ? select : []),
     ...(usage.boolean ? checkbox : []),
     ...(usage.autocomplete ? autocomplete : []),
+    ...(usage.textarea ? textareaField : []),
   ].join("\n");
 };
 
@@ -3888,7 +4023,11 @@ const shadcnBackend = (
       // no useState import here. The autocomplete override binds the text
       // adapter, so it needs ChangeEvent (and Input) too.
       ...reactImportLines(
-        usage.string || usage.date || usage.number || usage.autocomplete,
+        usage.string ||
+          usage.date ||
+          usage.number ||
+          usage.autocomplete ||
+          usage.textarea,
         false,
         scaffold.live,
       ),
@@ -3913,6 +4052,9 @@ const shadcnBackend = (
             "  SelectValue,",
             `} from "@/components/ui/select";`,
           ]
+        : []),
+      ...(usage.textarea
+        ? [`import { Textarea } from "@/components/ui/textarea";`]
         : []),
       ...kitFormstandImportLines(usage, arrays, root, scaffold),
       `import { z } from "zod";`,
@@ -4030,7 +4172,8 @@ export const chakraAdapterSection = (usage: KindUsage, exp = ""): string => {
     usage.date ||
     usage.number ||
     usage.enum ||
-    usage.autocomplete;
+    usage.autocomplete ||
+    usage.textarea;
   const textAdapter = [
     "",
     `${exp}const chakraTextInputProps = <T extends string | null | undefined>(`,
@@ -4038,7 +4181,9 @@ export const chakraAdapterSection = (usage: KindUsage, exp = ""): string => {
     ") => ({",
     "  name: field.path,",
     '  value: field.value ?? "",',
-    "  onChange: (e: ChangeEvent<HTMLInputElement>) => {",
+    // The textarea override spreads this same builder; the handler widens
+    // to the textarea element only when that override is in play.
+    `  onChange: (e: ChangeEvent<HTMLInputElement${usage.textarea ? " | HTMLTextAreaElement" : ""}>) => {`,
     "    const text = e.target.value;",
     '    field.setValue((text === "" && field.emptyValue === null ? null : text) as T);',
     "  },",
@@ -4112,7 +4257,10 @@ export const chakraAdapterSection = (usage: KindUsage, exp = ""): string => {
     // suggestions ride a native <datalist> on the Input (chakra's Combobox
     // is Ark's collection-API compound component; see the Bound component's
     // comment for why the DOM-shaped datalist is the generated binding).
-    ...(usage.string || usage.autocomplete ? textAdapter : []),
+    // The textarea override binds it too (same binding, wider control).
+    ...(usage.string || usage.autocomplete || usage.textarea
+      ? textAdapter
+      : []),
     ...(usage.number ? numberAdapter : []),
     ...(usage.date ? dateAdapter : []),
     ...(usage.enum ? selectAdapter : []),
@@ -4248,11 +4396,27 @@ const chakraBoundComponents = (
     "  );",
     "};",
   ];
+  // The textarea override: same text binding on chakra's Textarea.
+  const textareaField = [
+    "",
+    `const BoundTextareaField = (${params}: BoundFieldProps) => {`,
+    "  const field = useField<string | null | undefined>(form, path);",
+    "  return (",
+    "    <Field.Root invalid={fieldError(field) !== undefined}>",
+    "      <Field.Label>{label}</Field.Label>",
+    `      <Textarea rows={3} {...${kitScalarBinding("chakra", "string")}(field)} />`,
+    ...descLines,
+    "      <Field.ErrorText>{fieldError(field)}</Field.ErrorText>",
+    "    </Field.Root>",
+    "  );",
+    "};",
+  ];
   return [
     ...propsType,
     ...(usage.string
       ? input(kitScalarBinding("chakra", "string"), "string | null | undefined")
       : []),
+    ...(usage.textarea ? textareaField : []),
     ...(usage.number ? number : []),
     ...(usage.date
       ? input(kitScalarBinding("chakra", "date"), "Date | null | undefined")
@@ -4429,7 +4593,8 @@ const chakraBackend = (
       usage.date ||
       usage.number ||
       usage.enum ||
-      usage.autocomplete
+      usage.autocomplete ||
+      usage.textarea
         ? ["Field"]
         : []),
       ...(hasSection ? ["Heading"] : []),
@@ -4441,6 +4606,7 @@ const chakraBackend = (
       ...(usage.boolean ? ["Switch"] : []),
       // Text renders each array's list-level error line.
       ...(arrays.length > 0 ? ["Text"] : []),
+      ...(usage.textarea ? ["Textarea"] : []),
     ];
     return [
       // The Switch adapter's onCheckedChange is a details callback, so only
@@ -4653,7 +4819,8 @@ export const mantineAdapterSection = (usage: KindUsage, exp = ""): string => {
   return [
     "// ---- formstand → Mantine adapter -------------------------------------------",
     ...(needsError ? withExportPrefix(FIELD_ERROR_HELPER, exp) : []),
-    ...(usage.string ? textAdapter : []),
+    // The textarea override binds through the same text builder.
+    ...(usage.string || usage.textarea ? textAdapter : []),
     ...(usage.number ? numberAdapter : []),
     ...(usage.date ? dateAdapter : []),
     ...(usage.enum ? selectAdapter : []),
@@ -4742,6 +4909,14 @@ const mantineBoundComponents = (
     "  );",
     "};",
   ];
+  // The textarea override: same text binding on Mantine's Textarea.
+  const textareaField = [
+    "",
+    `const BoundTextareaField = (${params}: BoundFieldProps) => {`,
+    "  const field = useField<string | null | undefined>(form, path);",
+    `  return <Textarea rows={3} label={label}${descAttr} {...${kitScalarBinding("mantine", "string")}(field)} />;`,
+    "};",
+  ];
   return [
     ...propsType,
     ...(usage.string
@@ -4751,6 +4926,7 @@ const mantineBoundComponents = (
           "string | null | undefined",
         )
       : []),
+    ...(usage.textarea ? textareaField : []),
     ...(usage.number ? number : []),
     ...(usage.date
       ? input(
@@ -4918,6 +5094,7 @@ const mantineBackend = (
       // Text renders each array's list-level error line.
       ...(arrays.length > 0 ? ["Text"] : []),
       ...(usage.string || usage.date || usage.number ? ["TextInput"] : []),
+      ...(usage.textarea ? ["Textarea"] : []),
       ...(hasSection ? ["Title"] : []),
     ];
     return [
@@ -4929,7 +5106,8 @@ const mantineBackend = (
           usage.date ||
           usage.number ||
           usage.enum ||
-          usage.boolean,
+          usage.boolean ||
+          usage.textarea,
         usage.number,
         scaffold.live,
       ),
@@ -5103,7 +5281,9 @@ export const antdAdapterSection = (usage: KindUsage, exp = ""): string => {
     "  name: field.path,",
     '  value: field.value ?? "",',
     "  status: fieldStatus(field),",
-    "  onChange: (e: ChangeEvent<HTMLInputElement>) => {",
+    // The textarea override spreads this same builder; the handler widens
+    // to the textarea element only when that override is in play.
+    `  onChange: (e: ChangeEvent<HTMLInputElement${usage.textarea ? " | HTMLTextAreaElement" : ""}>) => {`,
     "    const text = e.target.value;",
     '    field.setValue((text === "" && field.emptyValue === null ? null : text) as T);',
     "  },",
@@ -5210,7 +5390,8 @@ export const antdAdapterSection = (usage: KindUsage, exp = ""): string => {
   return [
     "// ---- formstand → Ant Design adapter ----------------------------------------",
     ...(needsError ? withExportPrefix(errorHelper, exp) : []),
-    ...(usage.string ? textAdapter : []),
+    // The textarea override binds through the same text builder.
+    ...(usage.string || usage.textarea ? textAdapter : []),
     ...(usage.number ? numberAdapter : []),
     ...(usage.date ? dateAdapter : []),
     ...(usage.enum ? selectAdapter : []),
@@ -5333,6 +5514,21 @@ const antdBoundComponents = (
     "  );",
     "};",
   ];
+  // The textarea override: same text binding on antd's Input.TextArea.
+  const textareaField = [
+    "",
+    `const BoundTextareaField = (${params}: BoundFieldProps) => {`,
+    "  const field = useField<string | null | undefined>(form, path);",
+    "  return (",
+    '    <Flex vertical gap="small">',
+    "      <label htmlFor={path}>{label}</label>",
+    `      <Input.TextArea id={path} rows={3} {...${kitScalarBinding("antd", "string")}(field)} />`,
+    ...descLines,
+    "      <FieldError field={field} />",
+    "    </Flex>",
+    "  );",
+    "};",
+  ];
   return [
     ...propsType,
     ...(usage.string
@@ -5342,6 +5538,7 @@ const antdBoundComponents = (
           "string | null | undefined",
         )
       : []),
+    ...(usage.textarea ? textareaField : []),
     ...(usage.number ? number : []),
     ...(usage.date
       ? input(
@@ -5525,7 +5722,8 @@ const antdBackend = (
       usage.date ||
       usage.number ||
       usage.enum ||
-      usage.autocomplete;
+      usage.autocomplete ||
+      usage.textarea;
     const antdImports = [
       ...(usage.autocomplete ? ["AutoComplete"] : []),
       // --live drops the submit button; arrays still render add/remove.
@@ -5538,7 +5736,10 @@ const antdBackend = (
       // leaves for their label/control/error column.
       "Flex",
       ...(hasSection && visual.columns > 1 ? ["Row"] : []),
-      ...(usage.string || usage.date || usage.number ? ["Input"] : []),
+      // Input.TextArea rides the same Input import.
+      ...(usage.string || usage.date || usage.number || usage.textarea
+        ? ["Input"]
+        : []),
       ...(usage.enum ? ["Select"] : []),
       // Typography.Title heads sections; Typography.Text renders the
       // explicit error line (no Form.Item means no built-in error slot)
@@ -5549,7 +5750,7 @@ const antdBackend = (
       // Select's adapter is value-shaped and Checkbox speaks antd's own
       // CheckboxChangeEvent, so only the Input adapters need ChangeEvent.
       ...reactImportLines(
-        usage.string || usage.date || usage.number,
+        usage.string || usage.date || usage.number || usage.textarea,
         usage.number,
         scaffold.live,
       ),
@@ -5885,6 +6086,30 @@ const templateBoundComponents = (
     ...(staticUsage.autocomplete
       ? templateAutocompleteComponent(withDescription)
       : []),
+    // The textarea override is a kit-rendering concern templates do not
+    // model, so it falls back to plain's markup (templates inherit plain's
+    // scaffold anyway) under the Bound name the shared leaf emits.
+    ...(staticUsage.textarea
+      ? [
+          [
+            "",
+            "const BoundTextareaField = ({ form, path, label }: BoundFieldProps) => {",
+            "  const field = useField<string | null | undefined>(form, path);",
+            "  return (",
+            '    <div className="zf-field">',
+            '      <label className="zf-label">',
+            "        {label}",
+            "        <textarea rows={3} {...textInputProps(field)} />",
+            "      </label>",
+            "      {field.error?.[0] !== undefined ? (",
+            '        <p role="alert">{field.error?.[0]}</p>',
+            "      ) : null}",
+            "    </div>",
+            "  );",
+            "};",
+          ].join("\n"),
+        ]
+      : []),
   ].join("\n");
 
 // A variant control (the discriminant select or a union variant field):
@@ -5973,9 +6198,11 @@ const templateBackend = (
       // through the plain prop builder, so the builder imports track TOTAL
       // usage (not just the union-control usage the plain backend gates on).
       const builderImports = [
-        // The autocomplete override binds textInputProps too (dedupe when
-        // plain strings are also present).
-        ...(usage.string || usage.autocomplete ? ["textInputProps"] : []),
+        // The autocomplete and textarea overrides bind textInputProps too
+        // (dedupe when plain strings are also present).
+        ...(usage.string || usage.autocomplete || usage.textarea
+          ? ["textInputProps"]
+          : []),
         ...(usage.number ? ["numberInputProps"] : []),
         ...(usage.date ? ["dateInputProps"] : []),
         ...(usage.boolean ? ["checkboxProps"] : []),

@@ -29,7 +29,9 @@ import type { FieldSpec, NamedField } from "./ir";
 // independent axis: layout placement in the section's multi-column grid.
 // An entry must carry at least one of the two.
 export type FieldOverrideConfig = Readonly<{
-  component?: "autocomplete";
+  // "autocomplete" (string/enum) or "textarea" (string only — the binding
+  // is unchanged, the control just grows lines; options make no sense).
+  component?: "autocomplete" | "textarea";
   // string fields: REQUIRED (the options are data — an airport list — so
   // the generated component must accept them as a prop). enum fields:
   // optional; when true the prop REPLACES the baked-in enum values.
@@ -42,7 +44,7 @@ export type FieldOverrideConfig = Readonly<{
 
 export type FieldOverrides = Readonly<Record<string, FieldOverrideConfig>>;
 
-const OVERRIDE_COMPONENTS = ["autocomplete"] as const;
+const OVERRIDE_COMPONENTS = ["autocomplete", "textarea"] as const;
 
 // Shape-validate the config block the same way the CLI validates its other
 // config keys: loudly, at load time, before any schema is walked.
@@ -92,9 +94,11 @@ export const parseFieldOverrides = (
           `${from}: fields["${path}"].optionsProp must be a boolean`,
         );
       }
-      if (optionsProp !== undefined && component === undefined) {
+      // Only the autocomplete flavor consumes options; a textarea (or a
+      // span-only entry) claiming a prop would emit an unused prop.
+      if (optionsProp !== undefined && component !== "autocomplete") {
         throw new Error(
-          `${from}: fields["${path}"].optionsProp requires a component override to feed`,
+          `${from}: fields["${path}"].optionsProp requires component "autocomplete" to feed`,
         );
       }
       const span = override["span"];
@@ -119,7 +123,7 @@ export const parseFieldOverrides = (
         {
           ...(component === undefined
             ? {}
-            : { component: component as "autocomplete" }),
+            : { component: component as "autocomplete" | "textarea" }),
           ...(optionsProp === undefined ? {} : { optionsProp }),
           // The exact union, not FieldOverrideConfig["span"]: indexing an
           // optional property re-adds undefined, which the
@@ -309,7 +313,7 @@ type ResolvedOverride = Readonly<{
 }>;
 
 type FieldOverrideSpecInput = Readonly<{
-  component?: "autocomplete";
+  component?: "autocomplete" | "textarea";
   optionsPropName?: string;
   span?: number | "full";
 }>;
@@ -366,7 +370,10 @@ export const applyFieldOverrides = (
       const { spec } = match;
       const wantsComponent = config.component !== undefined;
       const problems = [
-        ...(wantsComponent &&
+        // Per-flavor kind rules: autocomplete upgrades strings and enums;
+        // textarea widens a string control only (an enum in a textarea
+        // would abandon its option list).
+        ...(config.component === "autocomplete" &&
         (!isScalarSpec(spec) || (spec.kind !== "string" && spec.kind !== "enum"))
           ? [
               overrideError(
@@ -377,6 +384,14 @@ export const applyFieldOverrides = (
                     ? ` (to override the rows, use "${path}.*")`
                     : ""
                 }`,
+              ),
+            ]
+          : []),
+        ...(config.component === "textarea" && spec.kind !== "string"
+          ? [
+              overrideError(
+                path,
+                `component "textarea" applies to string fields only, but this field is kind "${spec.kind}"`,
               ),
             ]
           : []),
@@ -396,7 +411,9 @@ export const applyFieldOverrides = (
               ),
             ]
           : []),
-        ...(wantsComponent && spec.kind === "string" && config.optionsProp !== true
+        ...(config.component === "autocomplete" &&
+        spec.kind === "string" &&
+        config.optionsProp !== true
           ? [
               overrideError(
                 path,
@@ -493,10 +510,10 @@ export const applyFieldOverrides = (
       const spanPart = config.span === undefined ? {} : { span: config.span };
       const componentPart =
         config.component === undefined ? {} : { component: config.component };
-      // Only a component override feeds from an options prop; a span-only
-      // entry on a string field must NOT claim one.
+      // Only the AUTOCOMPLETE override feeds from an options prop; a
+      // textarea or a span-only entry on a string field must NOT claim one.
       const wantsProp =
-        config.component !== undefined &&
+        config.component === "autocomplete" &&
         (match.spec.kind === "string" || config.optionsProp === true);
       if (!wantsProp) {
         return {

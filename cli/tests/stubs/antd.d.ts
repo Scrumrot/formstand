@@ -15,7 +15,7 @@ import type {
   ReactNode,
 } from "react";
 
-export declare const Input: (
+export declare const Input: ((
   props: Readonly<{
     id?: string;
     name?: string;
@@ -26,7 +26,23 @@ export declare const Input: (
     onChange?: (event: ChangeEvent<HTMLInputElement>) => void;
     onBlur?: () => void;
   }>,
-) => ReactElement;
+) => ReactElement) & {
+  // The textarea override renders Input.TextArea (a static member on the
+  // real component; its handler speaks the textarea element).
+  TextArea: (
+    props: Readonly<{
+      id?: string;
+      name?: string;
+      value?: string;
+      rows?: number;
+      status?: "error" | "warning" | "" | undefined;
+      onChange?: (
+        event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+      ) => void;
+      onBlur?: () => void;
+    }>,
+  ) => ReactElement;
+};
 
 // antd's own change event: DOM-ish (target.checked), but not a React
 // ChangeEvent — mirrors antd/es/checkbox's CheckboxChangeEvent.
