@@ -61,6 +61,7 @@ const edgeFile = path.join(matrixDir, "edgeSchemas.ts");
 const edgeSchemas = await jiti.import(pathToFileURL(edgeFile).href);
 const tupleOnlyIr = api.fromZod(edgeSchemas.tupleOnlySchema);
 const rootUnionIr = api.fromZod(edgeSchemas.rootUnionSchema);
+const clearableUnionIr = api.fromZod(edgeSchemas.clearableUnionSchema);
 
 // A described twin of the kitchen sink: a description on every scalar leaf
 // (containers recursed, union variant fields and tuple elements included),
@@ -108,6 +109,11 @@ const overridesIr = api.applyFieldOverrides(
     title: { component: "autocomplete", optionsProp: true },
     plan: { component: "autocomplete" },
     "contact.address.city": { component: "autocomplete", optionsProp: true },
+    // The textarea flavor rides the same variant: proves each kit's
+    // multi-line control (mui TextField multiline, mantine/chakra/shadcn
+    // Textarea, antd Input.TextArea, plain's in-file component) accepts the
+    // shared text builder against the real .d.ts.
+    "contact.address.street": { component: "textarea" },
     "projects.*.name": { component: "autocomplete", optionsProp: true },
     "projects.*.tags.*": { component: "autocomplete", optionsProp: true },
     "aliases.*": { component: "autocomplete", optionsProp: true },
@@ -418,6 +424,25 @@ const generateKit = ({ alias, emitSingle, moduleUi, moduleExtra, probe }) => {
     // value-shaped, chakra/shadcn/plain datalist) against the real .d.ts,
     // plus the options-prop threading through rows and nested extractions.
     single("KitchenSinkOverrides", overridesIr, "kitchenSinkSchema"),
+    // Optional + nullable unions: the clearable-select wrapper (a spread of
+    // the discriminant field with a widened setValue) must satisfy each
+    // kit's select-prop builder against the real .d.ts, in both layouts.
+    single(
+      "ClearableUnions",
+      clearableUnionIr,
+      "clearableUnionSchema",
+      undefined,
+      undefined,
+      "../edgeSchemas",
+    ),
+    ...moduleForm(
+      "ClearableUnions",
+      clearableUnionIr,
+      "clearableUnionSchema",
+      "ClearableUnionsForm",
+      undefined,
+      "../../edgeSchemas",
+    ),
     ...moduleForm(
       "KitchenSinkOverrides",
       overridesIr,

@@ -41,3 +41,26 @@ export const rootUnionSchema = z.object({
     }),
   ]),
 });
+
+// The clearable-union fixture: an optional and a nullable discriminated
+// union side by side. Their seeds start empty (undefined/null) and the
+// discriminant select writes the WHOLE union through the emitted wrapper,
+// so each kit's select binding must accept the wrapper object (a spread of
+// the field plus a widened setValue) against the real .d.ts — plus mui's
+// explicit None item. The single-field "full" variant also exercises the
+// fragment elision (one rendered element, no <>).
+export const clearableUnionSchema = z.object({
+  label: z.string(),
+  insurance: z
+    .discriminatedUnion("plan", [
+      z.object({ plan: z.literal("basic"), cap: z.number() }),
+      z.object({ plan: z.literal("full"), provider: z.string() }),
+    ])
+    .optional(),
+  escalation: z
+    .discriminatedUnion("channel", [
+      z.object({ channel: z.literal("email"), address: z.string() }),
+      z.object({ channel: z.literal("pager"), rotation: z.string() }),
+    ])
+    .nullable(),
+});
