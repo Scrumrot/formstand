@@ -30,6 +30,19 @@
 
 ## formstand-cli Unreleased
 
+### Changed
+
+- **`--form-prop` is single-file only.** With `--layout module` the
+  fields are pre-wired to the module's own singleton, so the `form`
+  prop was decorative when it told the truth and silently split state
+  when it lied (the dev-mode guard existed to catch the lie). The CLI
+  now rejects the combination with the fix in the message: the page
+  already owns the module's form by importing the exported instance and
+  driving it directly. The wizard stops asking the question under the
+  module layout, and the playground's command builder disables the
+  checkbox. The programmatic `emitModuleForm` surface keeps the option
+  for callers who accept the singleton contract knowingly.
+
 ### Fixed
 
 - **The array-row union TODO gives honest advice.** The single-file

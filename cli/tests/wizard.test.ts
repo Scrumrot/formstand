@@ -306,7 +306,8 @@ describe("runWizard", () => {
         "", // out: required for module — re-asks
         "src/ProfileForm",
         "", // live
-        "", // form-prop
+        // No form-prop question: the module layout rejects the flag, so
+        // the interview never asks it.
         "", // generate now
       ],
       // Only the input exists, so the fresh output folder asks nothing.

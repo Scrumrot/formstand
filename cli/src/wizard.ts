@@ -314,11 +314,17 @@ export const runWizard = async (io: WizardIo): Promise<WizardOutcome> => {
     "Live mode — no submit scaffold, values stream to an onValuesChange prop (--live)",
     false,
   );
-  const formProp = await askYesNo(
-    io,
-    "Page owns the form — component takes a form prop (--form-prop)",
-    false,
-  );
+  // Single-file only: the module layout's form is a singleton the page
+  // already owns by importing it, so the CLI rejects the combination —
+  // never compose a question whose answer cannot run.
+  const formProp =
+    layout === "single"
+      ? await askYesNo(
+          io,
+          "Page owns the form — component takes a form prop (--form-prop)",
+          false,
+        )
+      : false;
 
   const answers: WizardAnswers = {
     input,

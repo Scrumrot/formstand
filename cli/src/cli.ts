@@ -126,9 +126,9 @@ Options:
                       mode to "onChange" instead of "onBlur"
   --form-prop         the page owns the form: the component takes a typed
                       "form" prop instead of creating one, and the useForm
-                      scaffold is emitted as an exported use{Name}Form hook
-                      (--layout module: pass the module's exported form
-                      instance, e.g. profileForm)
+                      scaffold is emitted as an exported use{Name}Form hook.
+                      --layout single only: the module layout's form is a
+                      singleton the page already owns by importing it
   --template <file>   custom template module (default-export defineTemplate)
                       for a UI kit formstand doesn't ship — overrides the
                       per-kind field rendering, inheriting the plain form
@@ -1223,6 +1223,16 @@ export const main = async (
         if (options.template !== undefined && options.layout === "module") {
           stderr(
             "error: custom templates support --layout single only (module support is planned)",
+          );
+          return 1;
+        }
+        // The module layout's fields are pre-wired to the module's own
+        // singleton, so a form prop there is decorative at best and a lie
+        // at worst (the dev-mode guard existed to catch the lie). The page
+        // already owns that form by importing it.
+        if (options.formProp && options.layout === "module") {
+          stderr(
+            "error: --form-prop does not combine with --layout module — the module's form is a singleton the page already owns: import the exported instance (e.g. profileForm) and drive it directly (reset, adoptValues, handleSubmit)",
           );
           return 1;
         }

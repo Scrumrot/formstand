@@ -96,7 +96,10 @@ const buildCommand = (values: Values): string =>
       ? ["--schema-out", quote(values.schemaOut)]
       : []),
     ...(values.live ? ["--live"] : []),
-    ...(values.formProp ? ["--form-prop"] : []),
+    // Single-file only: the CLI rejects --form-prop with --layout module
+    // (the module's form is a singleton the page already owns by import),
+    // so the builder never composes the rejected pair.
+    ...(values.formProp && values.layout !== "module" ? ["--form-prop"] : []),
     ...(values.force ? ["--force"] : []),
   ].join(" ");
 
@@ -278,9 +281,19 @@ export const CliCommandBuilder = () => {
           <input {...checkboxProps(live)} />
           Live mode — no submit scaffold, values-subscription prop (--live)
         </label>
-        <label className="row" style={{ gap: 8 }}>
-          <input {...checkboxProps(formProp)} />
-          Page owns the form — component takes a form prop (--form-prop)
+        <label
+          className="row"
+          style={{ gap: 8, opacity: layout.value === "module" ? 0.5 : 1 }}
+        >
+          <input
+            {...checkboxProps(formProp)}
+            disabled={layout.value === "module"}
+          />
+          Page owns the form — component takes a form prop (--form-prop
+          {layout.value === "module"
+            ? "; single-file only — the module's form is a singleton the page imports"
+            : ""}
+          )
         </label>
         <label className="row" style={{ gap: 8 }}>
           <input {...checkboxProps(force)} />

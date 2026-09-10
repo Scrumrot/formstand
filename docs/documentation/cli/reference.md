@@ -16,7 +16,7 @@ formstand-gen <input file> [flags]
 | `--sections flat\|panel\|collapsible` | section chrome, default `flat` |
 | `--columns 1\|2\|3` | field columns inside each section, default `1`. Nested sections span the full row |
 | `--live` | no submit scaffold; adds an `onValuesChange` prop and defaults the mode to `"onChange"`. See [`--live`](./layouts#live-forms-with-no-submit) |
-| `--form-prop` | the page owns the form: adds a `form` prop and exports a `use{Name}Form()` hook. See [`--form-prop`](./layouts#form-prop-the-page-owns-the-form) |
+| `--form-prop` | the page owns the form: adds a `form` prop and exports a `use{Name}Form()` hook. Single-file only; the module layout's form is a singleton the page imports. See [`--form-prop`](./layouts#form-prop-the-page-owns-the-form) |
 | `--name MyForm` | component name, default derived from the schema or type name |
 | `--out FILE` | write here instead of stdout; names the folder under `--layout module`. Parent directories are created |
 | `--schema-out FILE` | type and `.json` modes: where the generated zod schema goes, default `<schemaName>.ts` next to `--out` |

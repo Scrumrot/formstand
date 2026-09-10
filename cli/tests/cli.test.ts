@@ -108,6 +108,11 @@ describe("cli main", () => {
     expect(await main([zodFixture, "--columns", "4"])).toBe(1);
     expect(await main([zodFixture, "--columns"])).toBe(1);
     expect(await main([zodFixture, "--export", "nope", "--out", "x.tsx"])).toBe(1);
+    // --form-prop is single-file only: the module's form is a singleton
+    // the page already owns by importing it.
+    expect(
+      await main([zodFixture, "--layout", "module", "--form-prop", "--out", "x"]),
+    ).toBe(1);
     expect(await main(["--help"])).toBe(0);
   });
 
