@@ -151,7 +151,7 @@ const IDENT_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 // "__proto__" must be a COMPUTED key: in an object literal both `__proto__:`
 // and `"__proto__":` are the prototype setter (zero own keys), so the
 // emitted schema shape and initialValues would silently drop the field.
-const propKey = (name: string): string =>
+export const propKey = (name: string): string =>
   name === "__proto__"
     ? `["__proto__"]`
     : IDENT_RE.test(name)
@@ -497,9 +497,14 @@ export const emitInitialValues = (spec: FieldSpec, level = 0): string => {
     // element is addressable at its static index.
     case "tuple":
       return `[${spec.elements.map((el) => emitInitialValues(el, level)).join(", ")}]`;
-    // A union starts as its first variant, concretely shaped: the
-    // discriminant set to that variant's tag, its fields blank.
+    // A REQUIRED union starts as its first variant, concretely shaped: the
+    // discriminant set to that variant's tag, its fields blank. An
+    // optional/nullable union starts empty instead — seeding a variant the
+    // user never chose would SUBMIT that variant (zod strips nothing it
+    // can parse), which dogfooding caught as a phantom escalation object.
     case "union": {
+      if (spec.optional) return "undefined";
+      if (spec.nullable) return "null";
       const first = spec.variants[0];
       if (first === undefined) return "{}";
       const lines = [
@@ -530,8 +535,11 @@ export const blankNeedsCast = (spec: FieldSpec): boolean => {
     case "tuple":
       return spec.elements.some((el) => blankNeedsCast(el));
     // The blank draft materializes the first variant only, so its fields
-    // decide the cast (the discriminant is a plain string literal).
+    // decide the cast (the discriminant is a plain string literal). An
+    // optional/nullable union starts undefined/null, which genuinely
+    // satisfies its input type.
     case "union": {
+      if (spec.optional || spec.nullable) return false;
       const first = spec.variants[0];
       return (
         first !== undefined && first.fields.some((f) => blankNeedsCast(f.spec))
@@ -901,6 +909,15 @@ export type UnionEntry = Readonly<{
   // Names bound as common (skipped inside the per-variant blocks).
   commonBindingNames: ReadonlySet<string>;
   variants: readonly UnionSpec["variants"][number][];
+  // Present for an optional/nullable union: the discriminant select becomes
+  // CLEARABLE. It reads the discriminant but writes the WHOLE union through
+  // a wrapper (selectVar) over the whole-union field hook (unionVar) — the
+  // empty choice clears back to this literal, a tag starts that variant
+  // blank. Writing only the discriminant key would leave a half-variant
+  // object behind that the user never chose (and could never remove).
+  clearable?: Readonly<{ emptyLiteral: "undefined" | "null" }> | undefined;
+  unionVar?: string | undefined;
+  selectVar?: string | undefined;
 }>;
 
 type RawUnionEntry = Readonly<{ segments: readonly string[]; spec: UnionSpec }>;
@@ -938,6 +955,32 @@ const unionEntry = (
 ): Readonly<{ entry: UnionEntry; used: ReadonlySet<string> }> => {
   const path = raw.segments.join(".");
   const discriminantVar = camelJoin([...raw.segments, raw.spec.discriminant]);
+  // An optional/nullable union gets the clearable-select machinery: a
+  // whole-union field hook plus a select wrapper var, both deduped like
+  // every other hoisted identifier.
+  const clearable = raw.spec.optional
+    ? ({ emptyLiteral: "undefined" } as const)
+    : raw.spec.nullable
+      ? ({ emptyLiteral: "null" } as const)
+      : undefined;
+  const clearableVars =
+    clearable === undefined
+      ? undefined
+      : ((): Readonly<{ unionVar: string; selectVar: string; used: ReadonlySet<string> }> => {
+          const seeded = new Set([...seed, discriminantVar]);
+          const union = allocateBindingVar(camelJoin(raw.segments), false, seeded);
+          const withUnion = new Set([...seeded, ...union.reserved]);
+          const select = allocateBindingVar(
+            `${discriminantVar}Select`,
+            false,
+            withUnion,
+          );
+          return {
+            unionVar: union.varName,
+            selectVar: select.varName,
+            used: new Set([...withUnion, ...select.reserved]),
+          };
+        })();
   const commonNames = unionCommonFieldNames(raw.spec);
   // Distinct scalar field names across the variants each get one binding,
   // deduped against the discriminant var and every array/union identifier
@@ -949,7 +992,10 @@ const unionEntry = (
     bindings: readonly UnionFieldBinding[];
     seen: ReadonlySet<string>;
   }> = {
-    used: new Set([...seed, discriminantVar]),
+    used:
+      clearableVars === undefined
+        ? new Set([...seed, discriminantVar])
+        : clearableVars.used,
     commonBindings: [],
     bindings: [],
     seen: new Set<string>(),
@@ -996,6 +1042,9 @@ const unionEntry = (
         collected.commonBindings.map((binding) => binding.name),
       ),
       variants: [...raw.spec.variants],
+      clearable,
+      unionVar: clearableVars?.unionVar,
+      selectVar: clearableVars?.selectVar,
     },
   };
 };
@@ -1026,6 +1075,31 @@ const unionHooks = (
 ): readonly string[] =>
   unions.flatMap((entry) => [
     `${ind(level)}const ${entry.discriminantVar} = useField(form, ${q(entry.discriminantPath)});`,
+    // A clearable union's select wrapper: reads the discriminant, writes
+    // the whole union. The kit select-prop builders only touch value/
+    // setValue/onBlur/path, so one wrapper serves every kit.
+    ...(entry.clearable === undefined ||
+    entry.unionVar === undefined ||
+    entry.selectVar === undefined
+      ? []
+      : [
+          `${ind(level)}const ${entry.unionVar} = useField(form, ${q(entry.path)});`,
+          `${ind(level)}// The union is ${entry.clearable.emptyLiteral === "null" ? "nullable" : "optional"}: the select reads the discriminant but`,
+          `${ind(level)}// writes the WHOLE union — the empty choice clears it, a tag starts`,
+          `${ind(level)}// that variant blank (validation reports its gaps on submit). Writing`,
+          `${ind(level)}// only the discriminant key would leave a half-variant object behind`,
+          `${ind(level)}// that was never really chosen.`,
+          `${ind(level)}const ${entry.selectVar} = {`,
+          `${ind(level + 1)}...${entry.discriminantVar},`,
+          `${ind(level + 1)}setValue: (tag: string | null | undefined): void => {`,
+          `${ind(level + 2)}${entry.unionVar}.setValue(`,
+          `${ind(level + 3)}(tag == null || tag === ""`,
+          `${ind(level + 4)}? ${entry.clearable.emptyLiteral}`,
+          `${ind(level + 4)}: { ${propKey(entry.discriminant)}: tag }) as typeof ${entry.unionVar}.value,`,
+          `${ind(level + 2)});`,
+          `${ind(level + 1)}},`,
+          `${ind(level)}};`,
+        ]),
     ...entry.commonBindings.map(
       (binding) =>
         `${ind(level)}const ${binding.varName} = useField(form, ${q(`${entry.path}.${binding.name}`)});`,
@@ -1331,6 +1405,12 @@ type Backend = Readonly<{
     fieldVar: string,
     label: string,
     level: number,
+    // True for a CLEARABLE union's discriminant select: the kit should
+    // offer an explicit empty choice. Only mui needs to act on it (its
+    // select has no empty row by default); plain/mantine/chakra/antd
+    // always render one, and shadcn's Radix select cannot hold an
+    // empty-string item at all (the seed alone keeps it honest there).
+    noneChoice?: boolean,
   ) => readonly string[];
   // The emitted number-props HOOK name (kit backends only): number controls
   // bind through useState-backed raw-text state, so union NUMBER bindings
@@ -1417,7 +1497,15 @@ const unionLines = (
     nullable: false,
   };
   return [
-    ...backend.variantLeaf(discriminantSpec, entry.discriminantVar, label, level),
+    ...backend.variantLeaf(
+      discriminantSpec,
+      // Clearable unions bind the wrapped select (writes the whole union);
+      // required unions keep the plain discriminant binding.
+      entry.selectVar ?? entry.discriminantVar,
+      label,
+      level,
+      entry.clearable !== undefined,
+    ),
     // Common fields exist in every variant, so they render once, outside the
     // per-variant blocks — bound with useField (useVariantField rejects them).
     ...entry.commonBindings.flatMap((binding) =>
@@ -2796,6 +2884,7 @@ const muiVariantLeaf = (
   fieldVar: string,
   label: string,
   level: number,
+  noneChoice = false,
 ): readonly string[] => {
   // A described variant field inlines its literal into MUI's one helper-text
   // slot, after the adapter spread — same swap rule as the Bound components
@@ -2815,6 +2904,12 @@ const muiVariantLeaf = (
     case "enum":
       return [
         `${ind(level)}<TextField select fullWidth ${jsxAttr("label", label)} {...muiSelectProps(${fieldVar})}${helper}>`,
+        // A clearable union's discriminant select gets the explicit empty
+        // choice mui otherwise lacks (the other kits' native selects always
+        // render one).
+        ...(noneChoice
+          ? [`${ind(level + 1)}<MenuItem value="">{"None"}</MenuItem>`]
+          : []),
         ...spec.options.map(
           (option) =>
             `${ind(level + 1)}<MenuItem value=${jsxText(option)}>${jsxText(labelFromName(option))}</MenuItem>`,

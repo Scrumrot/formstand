@@ -493,3 +493,107 @@ describe("bug C3: a kind used only inside a union imports no leaf component", ()
     expect(typecheckDiagnostics([...written, shadcnStubFile])).toEqual([]);
   });
 });
+
+describe("clearable unions: optional/nullable unions start empty", () => {
+  const clearableSchema = z.object({
+    label: z.string(),
+    insurance: z
+      .discriminatedUnion("plan", [
+        z.object({ plan: z.literal("basic"), cap: z.number() }),
+        z.object({ plan: z.literal("full"), provider: z.string() }),
+      ])
+      .optional(),
+  });
+  const nullableSchema = z.object({
+    insurance: z
+      .discriminatedUnion("plan", [
+        z.object({ plan: z.literal("basic"), cap: z.number() }),
+      ])
+      .nullable(),
+  });
+
+  it("seeds undefined/null instead of a phantom first variant", () => {
+    // The dogfooding bug: an untouched form SUBMITTED the first variant
+    // (zod parses the seeded object), even though the user never chose it.
+    expect(emitInitialValues(fromZod(clearableSchema))).toContain(
+      "insurance: undefined,",
+    );
+    expect(emitInitialValues(fromZod(nullableSchema))).toContain(
+      "insurance: null,",
+    );
+    // A REQUIRED union keeps its concrete first-variant seed.
+    expect(emitInitialValues(fromZod(unionSchema))).toContain('method: "card",');
+  });
+
+  it("the select reads the discriminant but writes the whole union", () => {
+    const code = emitMuiForm({
+      ir: fromZod(clearableSchema),
+      formName: "ShipmentForm",
+      schemaImport: { name: "shipmentSchema", from: "./schema", kind: "named" },
+    });
+    // The wrapper: empty choice clears, a tag starts that variant blank.
+    expect(code).toContain('const insurance = useField(form, "insurance");');
+    expect(code).toContain("const insurancePlanSelect = {");
+    expect(code).toContain(": { plan: tag }) as typeof insurance.value,");
+    // mui's select gains the explicit empty choice it otherwise lacks.
+    expect(code).toContain('<MenuItem value="">{"None"}</MenuItem>');
+    // The select binds the wrapper, not the raw discriminant field.
+    expect(code).toContain("muiSelectProps(insurancePlanSelect)");
+  });
+
+  it("a required union keeps the plain discriminant binding and no None item", () => {
+    const code = emitMuiForm({
+      ir: fromZod(unionSchema),
+      formName: "CheckoutForm",
+      schemaImport: { name: "unionSchema", from: "./schema", kind: "named" },
+    });
+    expect(code).toContain("muiSelectProps(paymentMethod)");
+    expect(code).not.toContain('<MenuItem value="">{"None"}</MenuItem>');
+    expect(code).not.toContain("paymentMethodSelect");
+  });
+
+  it("single-file clearable output typechecks against the mui stub", () => {
+    const dir = freshTmpDir("union-clearable-mui");
+    const schemaFile = path.join(dir, "shipmentSchema.ts");
+    fs.writeFileSync(
+      schemaFile,
+      emitZodSchema(fromZod(clearableSchema), "shipmentSchema"),
+      "utf8",
+    );
+    const out = path.join(dir, "ShipmentForm.tsx");
+    fs.writeFileSync(
+      out,
+      emitMuiForm({
+        ir: fromZod(clearableSchema),
+        formName: "ShipmentForm",
+        schemaImport: { name: "shipmentSchema", from: "./shipmentSchema", kind: "named" },
+      }),
+      "utf8",
+    );
+    expect(typecheckDiagnostics([schemaFile, out], muiStubPaths)).toEqual([]);
+  });
+
+  it("module layout mirrors the wrapper and typechecks", () => {
+    const dir = freshTmpDir("union-clearable-module");
+    const files = emitModuleForm({
+      ir: fromZod(clearableSchema),
+      formName: "ShipmentForm",
+      ui: "mui",
+      schemaImport: { name: "shipmentSchema", from: "./schemaSource", kind: "named" },
+      schemaSource: emitZodSchema(fromZod(clearableSchema), "shipmentSchema"),
+    });
+    const section = files.find((f) => f.path === "sections/InsuranceSection.tsx");
+    expect(section?.content).toContain("const planSelect = {");
+    expect(section?.content).toContain(": { plan: tag }) as typeof insurance.value,");
+    expect(section?.content).toContain("muiSelectProps(planSelect)");
+    const hooks = files.find((f) => f.path === "hooks.ts");
+    expect(hooks?.content).toContain("insurance: undefined,");
+    const written = files.map((file) => {
+      const dest = path.join(dir, file.path);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, file.content, "utf8");
+      return dest;
+    });
+    expect(typecheckDiagnostics(written, muiStubPaths)).toEqual([]);
+  });
+});

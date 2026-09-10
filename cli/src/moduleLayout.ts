@@ -40,6 +40,7 @@ import {
   muiAdapterSection,
   overDepthBudget,
   pathSegmentCount,
+  propKey,
   q,
   reactImportLines,
   shadcnAdapterSection,
@@ -856,6 +857,11 @@ const leafJsx = (
   labelAttr: string,
   idAttr: string | undefined,
   indent: string,
+  // True for a CLEARABLE union's discriminant select (see
+  // unionSectionFile): only mui acts on it — its select has no empty row
+  // by default, while the native-select kits always render one and
+  // shadcn's Radix select cannot hold an empty-string item.
+  noneChoice = false,
 ): readonly string[] => {
   // The autocomplete override swaps the whole control, string or enum.
   if (isAutocompleteLeaf(spec)) {
@@ -927,6 +933,9 @@ const leafJsx = (
         case "enum":
           return [
             `${indent}<TextField select fullWidth label=${labelAttr} {...muiSelectProps(${varName})}${helper}>`,
+            ...(noneChoice
+              ? [`${indent}  <MenuItem value="">{"None"}</MenuItem>`]
+              : []),
             ...spec.options.map(
               (option) =>
                 `${indent}  <MenuItem value=${jsxText(option)}>${jsxText(labelFromName(option))}</MenuItem>`,
@@ -1205,6 +1214,7 @@ const leafControl = (
   labelAttr: string,
   idAttr: string | undefined,
   indent: string,
+  noneChoice = false,
 ): readonly string[] => [
   ...todoTexts(spec).map((text) => `${indent}{/* TODO: ${text} */}`),
   // The override-site documentation comment (same production as the
@@ -1212,7 +1222,7 @@ const leafControl = (
   ...(isAutocompleteLeaf(spec)
     ? [`${indent}{/* ${autocompleteSiteComment(spec)} */}`]
     : []),
-  ...leafJsx(ui, spec, varName, labelAttr, idAttr, indent),
+  ...leafJsx(ui, spec, varName, labelAttr, idAttr, indent, noneChoice),
 ];
 
 // ---------------------------------------------------------------------------
@@ -3693,6 +3703,34 @@ const unionSectionFile = (
   const path = section.key;
   const discriminantVar = camelIdent(spec.discriminant);
   const discriminantPath = `${path}.${spec.discriminant}`;
+  // An optional/nullable union gets a CLEARABLE select: it reads the
+  // discriminant but writes the whole union through a wrapper over the
+  // whole-union field hook — mirroring the single-file unionHooks.
+  const clearable = spec.optional
+    ? ("undefined" as const)
+    : spec.nullable
+      ? ("null" as const)
+      : undefined;
+  const clearableVars =
+    clearable === undefined
+      ? undefined
+      : ((): Readonly<{ unionVar: string; selectVar: string; used: ReadonlySet<string> }> => {
+          const seeded = new Set<string>([discriminantVar]);
+          const base =
+            camelIdent(path).length === 0 ? "union" : camelIdent(path);
+          const union = allocateBindingVar(base, false, seeded);
+          const withUnion = new Set([...seeded, ...union.reserved]);
+          const select = allocateBindingVar(
+            `${discriminantVar}Select`,
+            false,
+            withUnion,
+          );
+          return {
+            unionVar: union.varName,
+            selectVar: select.varName,
+            used: new Set([...withUnion, ...select.reserved]),
+          };
+        })();
   const commonNames = unionCommonFieldNames(spec);
 
   // Scalar variant fields, deduped by name, split into common keys (bound with
@@ -3735,7 +3773,7 @@ const unionSectionFile = (
         };
       },
       {
-        used: new Set<string>([discriminantVar]),
+        used: clearableVars?.used ?? new Set<string>([discriminantVar]),
         seen: new Set<string>(),
         common: [],
         variant: [],
@@ -3757,10 +3795,11 @@ const unionSectionFile = (
     ...leafControl(
       ui,
       discriminantSpec,
-      discriminantVar,
+      clearableVars?.selectVar ?? discriminantVar,
       jsxText(section.label),
       `{${discriminantVar}.path}`,
       "      ",
+      clearable !== undefined,
     ),
     // Common fields exist in every variant → render once, outside the blocks.
     ...commonBindings.flatMap((binding) =>
@@ -3857,6 +3896,26 @@ const unionSectionFile = (
       "  // block renders. Every variant field hook is called unconditionally",
       "  // (React's rules).",
       `  const ${discriminantVar} = ${naming.hook("Field")}(${q(discriminantPath)});`,
+      ...(clearable === undefined || clearableVars === undefined
+        ? []
+        : [
+            `  const ${clearableVars.unionVar} = ${naming.hook("Field")}(${q(path)});`,
+            `  // The union is ${clearable === "null" ? "nullable" : "optional"}: the select reads the discriminant but`,
+            "  // writes the WHOLE union — the empty choice clears it, a tag starts",
+            "  // that variant blank (validation reports its gaps on submit). Writing",
+            "  // only the discriminant key would leave a half-variant object behind",
+            "  // that was never really chosen.",
+            `  const ${clearableVars.selectVar} = {`,
+            `    ...${discriminantVar},`,
+            "    setValue: (tag: string | null | undefined): void => {",
+            `      ${clearableVars.unionVar}.setValue(`,
+            '        (tag == null || tag === ""',
+            `          ? ${clearable}`,
+            `          : { ${propKey(spec.discriminant)}: tag }) as typeof ${clearableVars.unionVar}.value,`,
+            "      );",
+            "    },",
+            "  };",
+          ]),
       ...commonBindings.map(
         (binding) =>
           `  const ${binding.varName} = ${naming.hook("Field")}(${q(`${path}.${binding.name}`)});`,
