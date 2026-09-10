@@ -550,7 +550,10 @@ const zodExpr = (spec: FieldSpec, level: number): string => {
   const base = ((): string => {
     switch (spec.kind) {
       case "string":
-        return "z.string()";
+        // A carried format emits zod's top-level validator (z.email(), not
+        // the deprecated z.string().email() spelling); the bound control
+        // stays a plain text input — the constraint belongs to validation.
+        return spec.format === undefined ? "z.string()" : `z.${spec.format}()`;
       case "number":
         return "z.number()";
       case "boolean":
@@ -594,11 +597,24 @@ const zodExpr = (spec: FieldSpec, level: number): string => {
   })();
   const withNullable = spec.nullable ? `${base}.nullable()` : base;
   const withOptional = spec.optional ? `${withNullable}.optional()` : withNullable;
+  // A captured default becomes part of the generated validator, not just
+  // the initialValues seed: the schema is the runtime source of truth, so
+  // a server-side parse of an omitted field should default the way the
+  // source document said. Guarded by the same kind-matching literal rule
+  // the initialValues seeding uses (defaultLiteral), so the two cannot
+  // disagree. Only the generated-schema modes reach here with a default
+  // (zod mode never re-emits; fromType never captures one). Note zod's
+  // .default() makes the INPUT optional, so a required-with-default source
+  // field deliberately re-walks as optional — the default is the truer
+  // contract for an omitted value than a required-key error.
+  const dflt = isScalarSpec(spec) ? defaultLiteral(spec) : undefined;
+  const withDefault =
+    dflt === undefined ? withOptional : `${withOptional}.default(${dflt})`;
   // Outermost, after the wrappers — where fromZod's outermost-wins capture
   // reads it back, so a type-mode JSDoc description round-trips.
   return spec.description === undefined
-    ? withOptional
-    : `${withOptional}.describe(${q(spec.description)})`;
+    ? withDefault
+    : `${withDefault}.describe(${q(spec.description)})`;
 };
 
 export const emitZodSchema = (ir: FieldSpec, schemaName = "schema"): string =>

@@ -45,6 +45,11 @@ describe("cli json schema mode", () => {
     // The discriminated oneOf survived the round trip into a real validator.
     expect(schema).toContain('z.discriminatedUnion("method"');
     expect(schema).toContain('z.enum(["draft", "placed", "shipped"])');
+    // Document defaults and string formats reach the VALIDATOR, not just
+    // the initialValues seed — the schema is the runtime source of truth.
+    expect(schema).toContain('.default(1)');
+    expect(schema).toContain('z.enum(["web", "phone"]).optional().default("web")');
+    expect(schema).toContain("z.email()");
     // Component + generated schema typecheck against the real library —
     // including the union, tuple, date, and TODO-degraded fields.
     expect(typecheckDiagnostics([schemaOut, out])).toEqual([]);

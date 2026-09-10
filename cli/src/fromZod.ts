@@ -19,6 +19,10 @@ type Flags = Readonly<{ optional: boolean; nullable: boolean }>;
 
 type ZodDefLike = Readonly<{
   type?: unknown;
+  // zod v4's top-level string formats (z.email() etc.) keep type "string"
+  // and carry the format name here; .string().email() does NOT (its check
+  // lives in the checks array), so only the top-level spellings round-trip.
+  format?: unknown;
   innerType?: unknown;
   shape?: unknown;
   element?: unknown;
@@ -224,8 +228,15 @@ const walkNode = (
   const nextSeen: ReadonlySet<unknown> = new Set([...seen, schema]);
   const type = typeof def.type === "string" ? def.type : "<unknown>";
   switch (type) {
-    case "string":
-      return { kind: "string", ...flags };
+    case "string": {
+      // Carry the three formats the generated schema can emit back
+      // (emitZodSchema round-trips them as z.email()/z.url()/z.uuid());
+      // other formats (ipv4, emoji, ...) stay plain strings.
+      const format = def.format;
+      return format === "email" || format === "url" || format === "uuid"
+        ? { kind: "string", format, ...flags }
+        : { kind: "string", ...flags };
+    }
     case "number":
     case "int":
       return { kind: "number", ...flags };

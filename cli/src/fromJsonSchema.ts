@@ -443,12 +443,26 @@ const walkNode = (
   switch (typed.type) {
     case "string": {
       const format = schema["format"];
-      // date/date-time carry calendar semantics a date control serves better
-      // than free text; every other format (email, uri, uuid, ...) stays a
-      // string — its constraint belongs to validation, not the control.
-      return format === "date" || format === "date-time"
-        ? { kind: "date", ...withNull }
-        : { kind: "string", ...withNull };
+      // date/date-time carry calendar semantics a date control serves
+      // better than free text. email/uri/uuid stay TEXT CONTROLS but ride
+      // into the generated validator (z.email()/z.url()/z.uuid()) — the
+      // constraint belongs to validation, and the emitted schema is the
+      // runtime source of truth, so dropping it would silently weaken the
+      // document's contract. Every other format stays a plain string.
+      if (format === "date" || format === "date-time") {
+        return { kind: "date", ...withNull };
+      }
+      const zodFormat =
+        format === "email"
+          ? ("email" as const)
+          : format === "uri" || format === "url"
+            ? ("url" as const)
+            : format === "uuid"
+              ? ("uuid" as const)
+              : undefined;
+      return zodFormat === undefined
+        ? { kind: "string", ...withNull }
+        : { kind: "string", format: zodFormat, ...withNull };
     }
     case "number":
     case "integer":

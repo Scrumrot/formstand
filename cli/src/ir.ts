@@ -74,8 +74,17 @@ export type UnionVariant = Readonly<{
   fields: readonly NamedField[];
 }>;
 
+// The three top-level zod string formats the generated schema can carry
+// (z.email() / z.url() / z.uuid()). The control stays a plain text input
+// either way — a format is a validation concern, not a widget choice — so
+// only emitZodSchema consumes this. Set by fromJsonSchema (JSON Schema
+// `format`) and captured by fromZod from the top-level format schemas, so
+// the emitted validator round-trips; fromType never sets it (TS types
+// carry no formats).
+export type StringFormat = "email" | "url" | "uuid";
+
 export type FieldSpec =
-  | (SharedSpecProps & Readonly<{ kind: "string" }>)
+  | (SharedSpecProps & Readonly<{ kind: "string"; format?: StringFormat }>)
   | (SharedSpecProps & Readonly<{ kind: "number" }>)
   | (SharedSpecProps & Readonly<{ kind: "boolean" }>)
   | (SharedSpecProps & Readonly<{ kind: "date" }>)

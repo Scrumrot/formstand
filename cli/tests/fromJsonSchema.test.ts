@@ -79,8 +79,11 @@ describe("fromJsonSchema — OpenAPI documents", () => {
     ]);
     expect(fieldOf(customer, "name").spec.optional).toBe(false);
     expect(fieldOf(customer, "vip").spec.optional).toBe(false);
-    // format: email is a validation concern, not a control — stays a string.
-    expect(fieldOf(customer, "email").spec.kind).toBe("string");
+    // format: email stays a text CONTROL, but rides into the IR so the
+    // generated validator emits z.email().
+    const email = fieldOf(customer, "email").spec;
+    if (email.kind !== "string") throw new Error("expected string");
+    expect(email.format).toBe("email");
   });
 
   it("reads a discriminated oneOf as the IR union", () => {
