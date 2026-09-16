@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.16.0 — 2026-09-16
 
 ### Added
 
@@ -38,7 +38,7 @@
   the airfield-maps trial, whose generated TODO pointed at exactly this
   call.
 
-## formstand-cli Unreleased
+## formstand-cli 0.15.0 — 2026-09-16
 
 ### Changed
 
