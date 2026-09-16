@@ -62,6 +62,7 @@ const edgeSchemas = await jiti.import(pathToFileURL(edgeFile).href);
 const tupleOnlyIr = api.fromZod(edgeSchemas.tupleOnlySchema);
 const rootUnionIr = api.fromZod(edgeSchemas.rootUnionSchema);
 const clearableUnionIr = api.fromZod(edgeSchemas.clearableUnionSchema);
+const unionRowsIr = api.fromZod(edgeSchemas.unionRowsSchema);
 
 // A described twin of the kitchen sink: a description on every scalar leaf
 // (containers recursed, union variant fields and tuple elements included),
@@ -434,6 +435,23 @@ const generateKit = ({ alias, emitSingle, moduleUi, moduleExtra, probe }) => {
       undefined,
       undefined,
       "../edgeSchemas",
+    ),
+    // Union array rows: the extracted {Stem}Row component per kit.
+    single(
+      "UnionRows",
+      unionRowsIr,
+      "unionRowsSchema",
+      undefined,
+      undefined,
+      "../edgeSchemas",
+    ),
+    ...moduleForm(
+      "UnionRows",
+      unionRowsIr,
+      "unionRowsSchema",
+      "UnionRowsForm",
+      undefined,
+      "../../edgeSchemas",
     ),
     ...moduleForm(
       "ClearableUnions",

@@ -357,8 +357,8 @@ describe("bug C1: a field common to every variant binds with useField", () => {
   });
 });
 
-describe("bug C2: an array of discriminated unions (module layout)", () => {
-  it("emits a TODO row, never textInputProps on the union field, and typechecks", () => {
+describe("an array of discriminated unions generates its row (was bug C2's TODO)", () => {
+  it("plain module: the row binds the discriminant and variant fields on row paths", () => {
     const dir = freshTmpDir("c2-module-plain");
     const written = emitModuleFor(
       arrayUnionSchema,
@@ -371,13 +371,16 @@ describe("bug C2: an array of discriminated unions (module layout)", () => {
       path.join(dir, "sections", "MethodsSection.tsx"),
       "utf8",
     );
-    expect(section).toContain("array item is a union");
-    expect(section).not.toContain("textInputProps");
-    // No scalar row binding is emitted for the union item.
-    expect(section).not.toContain("`methods.${index}`");
-    // The row binds no field, so useXField must NOT be imported — an unused
-    // import would break a consumer's noUnusedLocals (the C3-class bug).
-    expect(section).not.toContain("useArrayUnionSchemaField,");
+    // The C2-era TODO is gone: the row binds for real (formstand 0.16+
+    // resolves the row-indexed union path types).
+    expect(section).not.toContain("array item is a union");
+    expect(section).toContain(
+      "const kind = usePaymentField(`methods.${index}.kind`);",
+    );
+    expect(section).toContain(
+      "const cardNumber = usePaymentVariantField(`methods.${index}`, \"cardNumber\");",
+    );
+    expect(section).toContain('{kind.value === "card" && (');
     expect(typecheckDiagnostics(written, {}, { noUnusedLocals: true })).toEqual(
       [],
     );
@@ -595,5 +598,44 @@ describe("clearable unions: optional/nullable unions start empty", () => {
       return dest;
     });
     expect(typecheckDiagnostics(written, muiStubPaths)).toEqual([]);
+  });
+});
+
+describe("single-file union array rows extract a Row component", () => {
+  it("plain: MethodsRow binds the row union and the file typechecks", () => {
+    const dir = freshTmpDir("union-rows-single-plain");
+    const file = emitSingleFor(
+      emitPlainForm,
+      arrayUnionSchema,
+      "arrayUnionSchema",
+      "arrayUnionSchema.ts",
+      dir,
+    );
+    const code = fs.readFileSync(file, "utf8");
+    // The child component: hooks cannot run inside rows.map, so the row
+    // takes form + index and binds the row-indexed union paths.
+    expect(code).toContain("const MethodsRow = ({");
+    expect(code).toContain(
+      "const methodsKind = useField(form, `methods.${index}.kind`);",
+    );
+    expect(code).toContain(
+      "const methodsCardNumber = useVariantField(form, `methods.${index}`, \"cardNumber\");",
+    );
+    expect(code).toContain("<MethodsRow form={form} index={index} />");
+    expect(typecheckDiagnostics([file], {}, { noUnusedLocals: true })).toEqual(
+      [],
+    );
+  });
+
+  it("mui: the row hoists number props and typechecks against the stub", () => {
+    const dir = freshTmpDir("union-rows-single-mui");
+    const file = emitSingleFor(
+      emitMuiForm,
+      arrayUnionSchema,
+      "arrayUnionSchema",
+      "arrayUnionSchema.ts",
+      dir,
+    );
+    expect(typecheckDiagnostics([file], muiStubPaths)).toEqual([]);
   });
 });

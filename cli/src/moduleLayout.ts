@@ -3357,18 +3357,85 @@ const arraySectionFile = (
     return { field, varName };
   });
 
-  // A discriminated-union item can't be bound at a dynamic array-row path
-  // (useVariantField needs a static union path), so it emits no leaf control,
-  // no scalar row binding, and no union-only builder import — just a TODO,
-  // mirroring the single-file backend's unreachable-container handling.
   const scalarItem = isScalarSpec(spec.item);
+
+  // A union ITEM binds its row the way a static union section does, but on
+  // the ROW-INDEXED path (typed since formstand 0.16): the discriminant and
+  // common keys with the bound field hook, variant-only keys with the bound
+  // variant hook. Same partition/var rules as unionSectionFile, allocated
+  // against the row component's own scope.
+  const unionItem = spec.item.kind === "union" ? spec.item : undefined;
+  const unionRow =
+    unionItem === undefined
+      ? undefined
+      : (() => {
+          const commonNames = unionCommonFieldNames(unionItem);
+          const discriminantVar = camelIdent(unionItem.discriminant);
+          used.add(discriminantVar);
+          const partitioned = unionItem.variants
+            .flatMap((variant) => variant.fields)
+            .filter(
+              (field) =>
+                !isUnaddressable(field.name) && isScalarSpec(field.spec),
+            )
+            .reduce<
+              Readonly<{
+                seen: ReadonlySet<string>;
+                common: readonly UnionSectionBinding[];
+                variant: readonly UnionSectionBinding[];
+              }>
+            >(
+              (acc, field) => {
+                if (acc.seen.has(field.name)) return acc;
+                const base =
+                  camelIdent(field.name).length === 0
+                    ? "value"
+                    : camelIdent(field.name);
+                const { varName, reserved } = allocateBindingVar(
+                  base,
+                  field.spec.kind === "number",
+                  used,
+                );
+                reserved.forEach((n) => used.add(n));
+                const binding = {
+                  name: field.name,
+                  label: field.label,
+                  spec: field.spec,
+                  varName,
+                };
+                return {
+                  seen: new Set([...acc.seen, field.name]),
+                  common: commonNames.has(field.name)
+                    ? [...acc.common, binding]
+                    : acc.common,
+                  variant: commonNames.has(field.name)
+                    ? acc.variant
+                    : [...acc.variant, binding],
+                };
+              },
+              { seen: new Set<string>(), common: [], variant: [] },
+            );
+          const discriminantSpec: FieldSpec = {
+            kind: "enum",
+            options: unionItem.variants.map((variant) => variant.tag),
+            optional: false,
+            nullable: false,
+          };
+          return { discriminantVar, discriminantSpec, ...partitioned };
+        })();
 
   const rowSpecs =
     spec.item.kind === "object"
       ? itemLeaves.map((f) => f.spec)
       : scalarItem
         ? [spec.item]
-        : [];
+        : unionRow !== undefined
+          ? [
+              unionRow.discriminantSpec,
+              ...unionRow.common.map((b) => b.spec),
+              ...unionRow.variant.map((b) => b.spec),
+            ]
+          : [];
 
   const dynamicId = (name: string | undefined): string =>
     name === undefined
@@ -3385,7 +3452,19 @@ const arraySectionFile = (
         ? [
             `  const field = ${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}\`);`,
           ]
-        : [];
+        : unionRow !== undefined
+          ? [
+              `  const ${unionRow.discriminantVar} = ${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}.${templateEscape(unionItem?.discriminant ?? "")}\`);`,
+              ...unionRow.common.map(
+                (binding) =>
+                  `  const ${binding.varName} = ${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}.${templateEscape(binding.name)}\`);`,
+              ),
+              ...unionRow.variant.map(
+                (binding) =>
+                  `  const ${binding.varName} = ${naming.hook("VariantField")}(\`${templateEscape(section.key)}.\${index}\`, ${q(binding.name)});`,
+              ),
+            ]
+          : [];
 
   const rowBody =
     spec.item.kind === "object"
@@ -3415,12 +3494,82 @@ const arraySectionFile = (
           ? [
               `      <${arrayItemEntry.stem}Rows p0={index}${optionsPropsAttrs(rowItemOptionsProps(arrayItemEntry.item))} />`,
             ]
-          : [
-              // A discriminated-union or tuple item can't bind at a dynamic
-              // array-row path (useVariantField needs a static union path), so
-              // it emits just a TODO.
-              `      {/* TODO: array item is a ${spec.item.kind} — bind its fields by hand with ${naming.hook("VariantField")} (dynamic array-row paths aren't generated) */}`,
-            ];
+          : unionRow !== undefined && unionItem !== undefined
+            ? [
+                // The row union: discriminant select, common fields once,
+                // then one conditional block per variant — the same shape
+                // unionSectionFile renders, from the row-bound vars.
+                ...leafControl(
+                  ui,
+                  unionRow.discriminantSpec,
+                  unionRow.discriminantVar,
+                  jsxText(section.label),
+                  `{${unionRow.discriminantVar}.path}`,
+                  "      ",
+                ),
+                ...unionRow.common.flatMap((binding) =>
+                  leafControl(
+                    ui,
+                    binding.spec,
+                    binding.varName,
+                    jsxText(binding.label),
+                    `{${binding.varName}.path}`,
+                    "      ",
+                  ),
+                ),
+                ...unionItem.variants.flatMap((variant) => {
+                  const commonNames = new Set(
+                    unionRow.common.map((b) => b.name),
+                  );
+                  const byName = new Map(
+                    unionRow.variant.map((b) => [b.name, b]),
+                  );
+                  const rendered = variant.fields.filter(
+                    (field) => !commonNames.has(field.name),
+                  );
+                  const inner = (indent: string): readonly string[] =>
+                    rendered.flatMap((field): readonly string[] => {
+                      const binding = byName.get(field.name);
+                      return binding === undefined
+                        ? [
+                            `${indent}{/* TODO: nested ${field.spec.kind} ${commentText(q(`${section.key}.${field.name}`))} inside a union variant — extract it by hand */}`,
+                          ]
+                        : leafControl(
+                            ui,
+                            field.spec,
+                            binding.varName,
+                            jsxText(field.label),
+                            `{${binding.varName}.path}`,
+                            indent,
+                          );
+                    });
+                  // Same single-element fragment elision as every other
+                  // union emission site.
+                  const first = rendered[0];
+                  const single =
+                    rendered.length === 1 &&
+                    first !== undefined &&
+                    byName.has(first.name);
+                  return single
+                    ? [
+                        `      {${unionRow.discriminantVar}.value === ${q(variant.tag)} && (`,
+                        ...inner("        "),
+                        "      )}",
+                      ]
+                    : [
+                        `      {${unionRow.discriminantVar}.value === ${q(variant.tag)} && (`,
+                        "        <>",
+                        ...inner("          "),
+                        "        </>",
+                        "      )}",
+                      ];
+                }),
+              ]
+            : [
+                // A tuple item can't bind at a dynamic array-row path (its
+                // positions are static indices of a FIXED shape) — a TODO.
+                `      {/* TODO: array item is a ${spec.item.kind} — bind its positions by hand */}`,
+              ];
 
   const imports = mergeImports([
     ...rowSpecs.flatMap((s) => leafImports(ui, s)),
@@ -3459,6 +3608,11 @@ const arraySectionFile = (
       `  ${naming.hook("FieldArray")},`,
       `  ${naming.hook("IsDirty")},`,
       `  ${naming.hook("IsValid")},`,
+      // A union item's variant-only fields bind with the variant hook on
+      // the row-indexed path.
+      ...(unionRow !== undefined && unionRow.variant.length > 0
+        ? [`  ${naming.hook("VariantField")},`]
+        : []),
       `} from "../hooks";`,
       `import type { ${naming.valuesType} } from "../types";`,
       "",
@@ -3493,7 +3647,12 @@ const arraySectionFile = (
             }))
           : scalarItem
             ? [{ varName: "field", spec: spec.item }]
-            : [],
+            : unionRow !== undefined
+              ? [...unionRow.common, ...unionRow.variant].map((binding) => ({
+                  varName: binding.varName,
+                  spec: binding.spec,
+                }))
+              : [],
       ),
       "  return (",
       ...shell.rowOpen,

@@ -1,5 +1,20 @@
 # Changelog
 
+## formstand-cli Unreleased
+
+### Added
+
+- **Union array rows generate.** A discriminated union that is an
+  array's row item — the shape the airfield-maps trial hand-wrote — now
+  compiles to a `{Stem}Row` component per row instead of a TODO, in
+  both layouts: the discriminant and common fields bind with the field
+  hook, variant-only fields with the variant hook, all on the
+  row-indexed path (`methods.${index}`), with the same conditional
+  variant blocks, fragment elision, and hoisted number-props hooks a
+  static union gets. Needs formstand 0.16 for the row-indexed variant
+  path types. A union or tuple nested as a FIELD inside a row object,
+  and a tuple row item, keep their TODOs.
+
 ## 0.16.0 — 2026-09-16
 
 ### Added

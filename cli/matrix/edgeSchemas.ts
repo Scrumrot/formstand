@@ -64,3 +64,22 @@ export const clearableUnionSchema = z.object({
     ])
     .nullable(),
 });
+
+// A union AS the array row item: the generated {Stem}Row binds the
+// discriminant with the field hook and each variant-only field with the
+// variant hook on the ROW-INDEXED path (formstand 0.16+), so every kit's
+// row rendering — including the hoisted number-props hook inside the row
+// component — must typecheck against the real .d.ts, in both layouts.
+export const unionRowsSchema = z.object({
+  reference: z.string(),
+  methods: z.array(
+    z.discriminatedUnion("kind", [
+      z.object({
+        kind: z.literal("card"),
+        cardNumber: z.string(),
+        installments: z.number(),
+      }),
+      z.object({ kind: z.literal("paypal"), email: z.string() }),
+    ]),
+  ),
+});

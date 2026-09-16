@@ -1796,10 +1796,75 @@ const arraySectionLines = (
         ? [depthTodoLine(rowPath, ind(level + 3))]
         : isScalarSpec(entry.item)
           ? backend.leaf(entry.item, pathAttr(rowPrefix, ""), entry.label, level + 3)
-          : [
-              `${ind(level + 3)}{/* TODO: ${entry.item.kind} array-item in ${commentText(q(entry.path))} rows — extract a row component with its own useFieldArray */}`,
-            ];
+          : entry.item.kind === "union"
+            ? [
+                `${ind(level + 3)}${emitUnionRow(backend, entry, ctx)}`,
+              ]
+            : [
+                `${ind(level + 3)}{/* TODO: ${entry.item.kind} array-item in ${commentText(q(entry.path))} rows — extract a row component with its own useFieldArray */}`,
+              ];
   return backend.arraySection(entry, level, rowBody);
+};
+
+// A union AS the array's row item compiles to a child `{Stem}Row`
+// component, for the same reason nested arrays extract: the bindings are
+// hooks, and hooks cannot run inside rows.map. The row takes `form` +
+// `index`, binds the discriminant and every common field with useField and
+// each variant-only field with useVariantField ON THE ROW-INDEXED PATH
+// (`methods.${index}` — typed since formstand 0.16), and renders through
+// the same variantLeaf machinery a static union uses. The component is
+// appended to ctx.components; this returns the row's reference element.
+const emitUnionRow = (
+  backend: Backend,
+  entry: ArrayEntry,
+  ctx: NestedCtx,
+): string => {
+  const spec = entry.item as UnionSpec;
+  const segments = entry.path.split(".");
+  const base = pascalJoin(segments);
+  const suffix = identifierSuffix(`${base}Row`, ctx.used);
+  const compName = `${base}Row${suffix}`;
+  ctx.used.add(compName);
+  // The union binding vars, allocated with the same partition/dedupe rules
+  // as a static union — the seed is the component's own scope.
+  const { entry: u } = unionEntry(
+    { segments, spec },
+    new Set(["form", "index"]),
+  );
+  const rowTemplate = `${templateEscape(entry.path)}.\${index}`;
+  const numberVars =
+    backend.numberPropsHook === undefined
+      ? []
+      : [...u.commonBindings, ...u.bindings].filter(
+          (binding) => binding.spec.kind === "number",
+        );
+  const component = [
+    `const ${compName} = ({`,
+    "  form,",
+    "  index,",
+    `}: Readonly<{ form: Form<typeof ${ctx.schemaName}>; index: number }>) => {`,
+    `  const ${u.discriminantVar} = useField(form, \`${rowTemplate}.${templateEscape(spec.discriminant)}\`);`,
+    ...u.commonBindings.map(
+      (binding) =>
+        `  const ${binding.varName} = useField(form, \`${rowTemplate}.${templateEscape(binding.name)}\`);`,
+    ),
+    ...u.bindings.map(
+      (binding) =>
+        `  const ${binding.varName} = useVariantField(form, \`${rowTemplate}\`, ${q(binding.name)});`,
+    ),
+    ...numberVars.map(
+      (binding) =>
+        `  const ${binding.varName}NumberProps = ${backend.numberPropsHook ?? ""}(${binding.varName});`,
+    ),
+    "  return (",
+    `${ind(2)}<>`,
+    ...unionLines(backend, u, entry.label, 3),
+    `${ind(2)}</>`,
+    "  );",
+    "};",
+  ];
+  ctx.components.push([...component]);
+  return `<${compName} form={form} index={index} />`;
 };
 
 // A nested array inside an array row compiles to a child `{Stem}Rows`

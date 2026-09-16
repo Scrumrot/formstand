@@ -43,7 +43,7 @@ Three properties worth relying on. It is strictly opt-in: nothing prompts from a
 - **One bound control per field**, picked from the field's kind.
 - **Nested objects** as sections, framed by `--sections`.
 - **Arrays** via `useFieldArray`, with stable row keys, add and remove buttons, and a typed empty-item constant.
-- **Discriminated unions** as a discriminant select plus one conditional block per variant, bound through `useVariantField`. A required union starts as its first variant; an optional or nullable union starts **empty** and its select is clearable: the empty choice writes the whole union back to `undefined`/`null`, and picking a tag starts that variant blank. The one exception is shadcn, whose Radix select cannot hold an empty item, so there the union starts empty but cannot be re-cleared from the select.
+- **Discriminated unions** as a discriminant select plus one conditional block per variant, bound through `useVariantField`. A required union starts as its first variant; an optional or nullable union starts **empty** and its select is clearable: the empty choice writes the whole union back to `undefined`/`null`, and picking a tag starts that variant blank. The one exception is shadcn, whose Radix select cannot hold an empty item, so there the union starts empty but cannot be re-cleared from the select. A union that is an **array's row item** generates a `{Stem}Row` component per row, bound on the row-indexed path (formstand 0.16 and newer).
 - **Descriptions as helper text**, from `.describe()`, `.meta({ description })`, or JSDoc in type mode. See [Descriptions](./config#descriptions-become-helper-text).
 - **A submit handler and a button** disabled while submitting, unless `--live` replaces the whole scaffold with a values subscription.
 
@@ -89,7 +89,7 @@ The generator never emits silently broken code. Anything outside the supported s
 
 - **Unsupported zod kinds** (unions of objects, records, maps) and **unsupported type shapes** (generics, callable types, methods) become a text field with a `// TODO` comment naming what was skipped.
 - **Non-scalar tuple elements** and a tuple's **variadic rest** (`z.tuple([...], rest)`) degrade to a TODO at that position. The fixed scalar positions still generate.
-- **A non-array shape inside an array row**, meaning a nested object, union, or tuple, stays a TODO.
+- **A discriminated union that IS the array's row item** generates a `{Stem}Row` component per row: the discriminant and common fields bind with `useField`, variant-only fields with `useVariantField`, all on the row-indexed path (needs formstand 0.16). A union or tuple nested **as a field inside** a row object, and a tuple row item, stay TODOs.
 - **Recursive schemas** written with zod's getter idiom are cut off with a TODO rather than a stack overflow. The walkers carry a seen-set, which catches a directly self-referential schema, plus the `--max-depth` budget as the backstop for getters that mint a fresh schema on each access. The IR is always finite.
 - **Field names containing `.`** are not path-addressable in formstand, since paths split on dots. The key stays in the schema and in `initialValues`, but its binding is replaced by a TODO comment and the CLI warns on stderr.
 - **Hostile names** (quotes, backticks, braces) are escaped per context. Generated output is typechecked against the real library in the CLI's own CI.
