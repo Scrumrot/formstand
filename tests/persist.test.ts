@@ -283,3 +283,42 @@ describe("persistForm default storage fallback", () => {
     globalThis.localStorage.removeItem(KEY);
   });
 });
+
+// Regression (2026-09 library review, core #2): a draft WRITTEN with a
+// version is the {__v, values} wrapper. If the app later ships WITHOUT the
+// version option, nothing detected the wrapper — its keys don't overlap
+// the reference shape, so conflictsWith stayed quiet and the WRAPPER
+// OBJECT was adopted as form values, then re-persisted (self-sustaining
+// corruption). A versioned draft under a version-less config is discarded.
+describe("version-downgrade drafts are discarded, not adopted", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("a versioned wrapper is never applied when the config drops version", () => {
+    const storage = memoryStorage();
+    const writer = createForm(schema, { initialValues });
+    const writerHandle = persistForm(writer, {
+      key: KEY,
+      storage,
+      version: 2,
+      debounceMs: 0,
+    });
+    writer.setValue("title", "typed");
+    vi.advanceTimersByTime(1);
+    expect(storage.map.get(KEY)).toContain('"__v":2');
+    writerHandle.dispose();
+
+    // The downgraded app: same key, no version option.
+    const reader = createForm(schema, { initialValues });
+    const readerHandle = persistForm(reader, { key: KEY, storage });
+    const values = reader.getState().values;
+    // Not adopted: the form still holds its initials, not the wrapper.
+    expect(values).toEqual(initialValues);
+    expect(Object.hasOwn(values as object, "__v")).toBe(false);
+    readerHandle.dispose();
+  });
+});

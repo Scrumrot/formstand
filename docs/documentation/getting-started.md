@@ -73,7 +73,7 @@ const NameInput = ({ form }: { form: Form<typeof schema> }) => {
   return (
     <>
       <input {...textInputProps(name)} />
-      {name.touched && name.error ? <span>{name.error[0]}</span> : null}
+      {name.touched ? <span>{name.firstError}</span> : null}
     </>
   );
 };

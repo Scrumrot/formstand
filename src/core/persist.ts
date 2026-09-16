@@ -166,6 +166,24 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
         parsed !== null &&
         "__v" in parsed;
       if (options.version !== undefined && !versioned) return false;
+      // The config-downgrade hole: a draft WRITTEN with a version is the
+      // {__v, values} wrapper, and if the app later ships without the
+      // version option, nothing above catches it — the wrapper's keys
+      // don't overlap the reference shape, so conflictsWith stays quiet
+      // and the WRAPPER OBJECT gets adopted as form values (then
+      // re-persisted, making the corruption self-sustaining). A versioned
+      // draft under a version-less config is a contract the current app
+      // no longer declares: discard it, like every other draft the config
+      // cannot vouch for.
+      if (
+        options.version === undefined &&
+        typeof parsed === "object" &&
+        parsed !== null &&
+        Object.hasOwn(parsed, "__v") &&
+        Object.hasOwn(parsed, "values")
+      ) {
+        return false;
+      }
       const wrapper = parsed as unknown as {
         readonly __v?: unknown;
         readonly values?: unknown;

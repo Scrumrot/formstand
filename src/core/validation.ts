@@ -214,7 +214,12 @@ export const schemaHasPath = (schema: z.ZodType, path: string): boolean => {
     if (head === undefined) return true;
     if (s instanceof z.ZodObject) {
       const shape: Readonly<Record<string, z.ZodType | undefined>> = s.shape;
-      const child = shape[String(head)];
+      // Own-key read: a bare index would walk the prototype chain, so
+      // "constructor" would resolve to Object's constructor and read as a
+      // declared key of the shape.
+      const child = Object.hasOwn(shape, String(head))
+        ? shape[String(head)]
+        : undefined;
       if (child !== undefined) return walk(child, rest, budget - 1);
       // A loose/catchall object accepts keys beyond the shape (a ZodNever
       // catchall — strictObject — rejects them like a closed shape does).
@@ -253,7 +258,13 @@ export const fieldSchemaAtPath = (
     if (current instanceof z.ZodObject && typeof segment === "string") {
       const shape: Readonly<Record<string, z.ZodType | undefined>> =
         current.shape;
-      return shape[segment] ?? null;
+      // Own-key read, like every other walk in the library: a bare index
+      // resolves "constructor"/"__proto__" through the prototype chain to
+      // a non-schema value, which then CRASHES the reduce (def.checks on a
+      // function; safeParse on Object.prototype) — and the subschema cache
+      // would keep the poisoned entry. Runtime-built paths (server error
+      // fields mapped onto validateField) are the realistic entry point.
+      return Object.hasOwn(shape, segment) ? (shape[segment] ?? null) : null;
     }
     if (current instanceof z.ZodArray && typeof segment === "number") {
       return current.element as z.ZodType;

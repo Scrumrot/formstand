@@ -53,3 +53,38 @@ describe("server errors keyed at __proto__", () => {
     expect(form.getState().errors["__proto__"]).toEqual(["bad key"]);
   });
 });
+
+// Regression (2026-09 library review, core #1): fieldSchemaAtPath and
+// schemaHasPath read the ZodObject shape with a bare index, so a prototype
+// key in a RUNTIME-BUILT path ("user.constructor.x" from mapping server
+// error fields, an own "__proto__" key from JSON.parse of server data)
+// resolved Object's constructor / Object.prototype as a "schema" and the
+// walk then CRASHED — and the subschema cache kept the poisoned entry.
+describe("validateField with prototype-key paths", () => {
+  const schema = z.object({
+    user: z.object({ name: z.string() }),
+  });
+
+  it("a constructor segment neither crashes nor resolves a schema", () => {
+    const form = createForm(schema, {
+      initialValues: { user: { name: "" } },
+    });
+    // Must not throw; the unknown path falls through the same way any
+    // schema-less path does.
+    expect(() =>
+      form.validateField("user.constructor.x" as never),
+    ).not.toThrow();
+    expect(() => form.validateField("user.constructor" as never)).not.toThrow();
+  });
+
+  it("an own __proto__ key in values neither crashes nor validates", () => {
+    const form = createForm(schema, {
+      initialValues: { user: { name: "" } },
+    });
+    // JSON.parse creates an OWN __proto__ key (no prototype pollution) —
+    // the realistic server-data entry point.
+    form.setValues(JSON.parse('{"user":{"name":"x"},"__proto__":{"y":1}}'));
+    expect(() => form.validateField("__proto__" as never)).not.toThrow();
+    expect(() => form.validateField("__proto__.y" as never)).not.toThrow();
+  });
+});

@@ -2,10 +2,16 @@
 
 This page covers the five bound input components (`TextField`, `NumberField`, `DateField`, `CheckboxField`, `SelectField`), the accessibility wiring they ship with, the prop builders for custom markup, `NumberField`'s partial-entry behavior, and how cleared inputs decide between `null` and `undefined`.
 
-## The four components
+## The five components
 
 ```tsx
-import { TextField, NumberField, CheckboxField, SelectField } from "formstand";
+import {
+  TextField,
+  NumberField,
+  DateField,
+  CheckboxField,
+  SelectField,
+} from "formstand";
 
 <TextField form={form} path="email" label="Email" type="email" />
 <NumberField form={form} path="age" label="Age" />

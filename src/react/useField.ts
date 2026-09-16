@@ -16,6 +16,7 @@ import { getAtPath } from "../core/path";
 import type { FormState } from "../core/types";
 import {
   type FieldValidationResult,
+  type SettledFieldValidationResult,
   emptyValueForSchema,
   fieldSchemaAtPath,
 } from "../core/validation";
@@ -36,7 +37,11 @@ export type FieldFormApi = Readonly<{
   setError(path: string, errors: string | readonly string[]): void;
   clearErrors(path?: string): void;
   validateField(path: string): FieldValidationResult;
-  validateFieldAsync(path: string): Promise<FieldValidationResult>;
+  // Settled by contract: an awaited pass can never resolve "pending" —
+  // the promise IS the pending state, and a resolved {kind: "pending"}
+  // would carry a promise that never runs. Custom implementations were
+  // always expected to resolve settled; the type now says so.
+  validateFieldAsync(path: string): Promise<SettledFieldValidationResult>;
 }>;
 
 export type FieldPathArg<TValues> =
@@ -74,7 +79,8 @@ export type UseFieldReturn<TValue> = Readonly<{
   setError: (errors: string | readonly string[]) => void;
   clearError: () => void;
   validate: () => FieldValidationResult;
-  validateAsync: () => Promise<FieldValidationResult>;
+  // Settled: awaited passes never resolve "pending" (see FieldFormApi).
+  validateAsync: () => Promise<SettledFieldValidationResult>;
   onBlur: () => void;
 }>;
 
@@ -213,9 +219,24 @@ export function useField<TValue = unknown>(
       if (debounceTimerRef.current !== null) {
         clearTimeout(debounceTimerRef.current);
       }
+      // The pending timer is invisible to the store, so a reset() /
+      // adoptValues() inside the debounce window cannot cancel it the way
+      // it invalidates in-flight validation (the ownership tokens) — the
+      // fire would claim a FRESH token and re-commit errors onto the
+      // pristine form. Two fire-time guards close it: a pristine form
+      // (values IS initialValues by reference — exactly what reset and
+      // adoptValues leave behind) never receives a debounced commit, and
+      // a path whose value changed since scheduling is stale (the write
+      // that changed it scheduled its own validation, or was a
+      // restore/reset to different values). Scheduling runs after
+      // setValue, so the captured value is the keystroke being validated.
+      const scheduled = getAtPath(form.store.getState().values, path);
       debounceTimerRef.current = setTimeout(() => {
-        void form.validateFieldAsync(path);
         debounceTimerRef.current = null;
+        const state = form.store.getState();
+        if (state.values === state.initialValues) return;
+        if (!Object.is(getAtPath(state.values, path), scheduled)) return;
+        void form.validateFieldAsync(path);
       }, debounceMs);
       return;
     }

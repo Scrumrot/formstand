@@ -26,7 +26,7 @@ This page maps the react-hook-form API you know onto its formstand counterpart, 
 | `formState.isSubmitted` / `submitCount` | `useSubmitCount(form)` (`> 0` ≙ `isSubmitted`) |
 | `formState.isValid` / `isValidating` | `useIsValid(form)` / `state.isValidatingForm` and per-field `state.isValidating[path]` |
 | `useFieldArray({ control, name })` | `useFieldArray(form, "items")`, with the item type inferred from the schema and the same stable-identity story: `fields[i].id` as the React key, plus `push`/`remove`/`insert`/`move`/`swap`. There is no `prepend` or `update`; use `insert(0, item)` and `setValue("items.2", item)`. See [Field arrays](./field-arrays) |
-| `mode` / `reValidateMode` | same option names, one semantic difference; see below |
+| `mode` / `reValidateMode` | same option names, but **the default differs**: react-hook-form defaults to `onSubmit`, formstand to `onBlur` — omit `mode` and your fields start validating on blur. Plus one semantic difference; see below |
 | `<Controller render={...} />` / `useController` | no controller: `useField` plus a small adapter that maps `UseFieldReturn` onto your UI kit's props. The [MUI demos](./examples#material-ui) show the full pattern |
 
 ## The differences behind the names
@@ -38,6 +38,10 @@ In react-hook-form, `setError` and validation write the same `errors` object and
 ### `reset` has no `keepDirty`
 
 Dirtiness in formstand is never stored. A field is dirty exactly while its value differs from `initialValues` at that path, and `reset` makes those equal by definition, so a kept dirty flag would contradict every field-level read. If you used `keepDirty` to survive a rebase of the baseline, `form.adoptValues(values)` is the real operation: it swaps `values` *and* `initialValues` mid-session while preserving `touched` and `submitCount`. See [reset vs adoptValues](./state#reset-vs-adoptvalues).
+
+### The default mode is `onBlur`, not `onSubmit`
+
+react-hook-form waits for the first submit by default; formstand validates on blur by default. A ported form that omits `mode` will start showing errors as fields lose focus — pass `mode: "onSubmit"` to keep the react-hook-form timing.
 
 ### `mode: "onChange"` really means change
 

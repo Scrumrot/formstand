@@ -1,5 +1,44 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **`validateField` no longer crashes on prototype-key paths.** The
+  schema walk read the ZodObject shape with a bare index, so a
+  runtime-built path like `"user.constructor.x"` (server error fields
+  mapped onto `validateField`) resolved Object's constructor as a
+  "schema" and threw — and the subschema cache kept the poisoned entry.
+  Both walks now do own-key reads, like every other walk in the library.
+- **Persist discards version-downgrade drafts instead of adopting the
+  wrapper.** A draft written with `version: n` is a `{__v, values}`
+  wrapper; if the app later shipped without the `version` option, the
+  wrapper's keys evaded the shape guard and the wrapper OBJECT became
+  the form's values, then re-persisted. A versioned draft under a
+  version-less config is now discarded like any other draft the config
+  cannot vouch for.
+- **Debounced validation no longer survives `reset()`.** A pending
+  debounce timer fired after `reset()`/`adoptValues()` and re-committed
+  errors onto the pristine form. The fire now bails when the form is
+  pristine (values is the initialValues reference) or when the path's
+  value changed since scheduling; an unrelated field's edit inside the
+  window still lets the pending validation run.
+- **Array ops accept a null-valued nullable array.** `arrayPush` on a
+  `.nullable()` array field holding `null` warned and silently no-op'd,
+  while `undefined` created the array — even though the op item types
+  are built on `NonNullable<...>` precisely so nullable arrays accept
+  ops. Both empties now start the op from `[]`.
+
+### Changed
+
+- **Awaited async validation is typed settled.** `validateAsync` and
+  `validateFieldAsync` (and `useField`'s `validateAsync`) resolved a
+  union carrying a `"pending"` arm that can never occur — the promise IS
+  the pending state — forcing every exhaustive `switch` to carry a dead
+  case. All three now resolve the `Settled*` result types
+  `validateFieldsAsync` always had. A `switch` that handled `"pending"`
+  on an awaited result will now fail to compile; delete the dead arm.
+
 ## formstand-cli 0.16.0 — 2026-09-16
 
 ### Added

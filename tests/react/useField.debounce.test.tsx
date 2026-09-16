@@ -109,3 +109,85 @@ describe("useField with debounceMs option", () => {
     expect(refineCalls).toEqual([]);
   });
 });
+
+// Regression (2026-09 library review, react #1): the pending debounce
+// timer is invisible to the store, so reset() inside the window could not
+// cancel it — the fire claimed a FRESH ownership token, read the
+// post-reset values, and re-committed errors onto the pristine form
+// ~debounceMs later. Two fire-time guards close it: a pristine form
+// (values IS initialValues by reference) never receives a debounced
+// commit, and a path whose value changed since scheduling is stale.
+describe("debounced validation does not survive reset()", () => {
+  beforeEach(() => {
+    refineCalls.length = 0;
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const requiredSchema = z.object({
+    name: z.string().min(1, "required"),
+  });
+
+  it("reset inside the debounce window leaves the pristine form clean", async () => {
+    const { result } = renderHook(() => {
+      const form = useForm(requiredSchema, {
+        initialValues: { name: "" },
+        mode: "onChange",
+      });
+      return { form, name: useField(form, "name", { debounceMs: 300 }) };
+    });
+
+    act(() => {
+      result.current.name.setValue("a");
+    });
+    act(() => {
+      // Invalid again — a debounced validation is now pending.
+      result.current.name.setValue("");
+    });
+    act(() => {
+      result.current.form.reset();
+    });
+    expect(result.current.form.getState().errors).toEqual({});
+
+    await act(async () => {
+      vi.advanceTimersByTime(400);
+      await vi.runAllTimersAsync();
+    });
+    // The fire bailed: no error resurrected on the untouched form.
+    expect(result.current.form.getState().errors).toEqual({});
+  });
+
+  it("an unrelated field's edit does not starve a pending validation", async () => {
+    const twoField = z.object({
+      name: z.string().min(1, "required"),
+      other: z.string(),
+    });
+    const { result } = renderHook(() => {
+      const form = useForm(twoField, {
+        initialValues: { name: "x", other: "" },
+        mode: "onChange",
+      });
+      return {
+        form,
+        name: useField(form, "name", { debounceMs: 300 }),
+        other: useField(form, "other"),
+      };
+    });
+
+    act(() => {
+      result.current.name.setValue("");
+    });
+    act(() => {
+      // A DIFFERENT path changes inside the window: the pending
+      // validation's own value is untouched, so it must still run.
+      result.current.other.setValue("edit");
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(400);
+      await vi.runAllTimersAsync();
+    });
+    expect(result.current.form.getState().errors["name"]).toEqual(["required"]);
+  });
+});

@@ -231,10 +231,15 @@ export type Form<
   validateFields: (
     paths: readonly FieldPath<z.input<TSchema>, D>[],
   ) => FieldsValidationResult;
-  validateAsync: () => Promise<ValidationResult<z.output<TSchema>>>;
+  // Settled result types, deliberately: an AWAITED async pass can never
+  // resolve "pending" (the promise IS the pending state), and the wider
+  // union forced every exhaustive switch to carry a dead case — against
+  // this codebase's own no-default-arm ethos. validateFieldsAsync below
+  // was always typed this way; these two now match.
+  validateAsync: () => Promise<SettledValidationResult<z.output<TSchema>>>;
   validateFieldAsync: (
     path: ErrorPath<z.input<TSchema>, D>,
-  ) => Promise<FieldValidationResult>;
+  ) => Promise<SettledFieldValidationResult>;
   validateFieldsAsync: (
     paths: readonly FieldPath<z.input<TSchema>, D>[],
   ) => Promise<SettledFieldsValidationResult>;
@@ -1009,7 +1014,12 @@ export const createForm = <
     indexInBounds?: (length: number) => boolean,
   ): void => {
     const current = getAtPath(store.getState().values, path);
-    if (current !== undefined && !Array.isArray(current)) {
+    // null passes like undefined: it is the canonical empty of a NULLABLE
+    // array field (emptyValue), and the op item types are built on
+    // NonNullable<FieldValue<...>> precisely so nullable/optional arrays
+    // accept ops — refusing null made those calls typecheck and then
+    // silently no-op at runtime. Both empties start the op from [].
+    if (current !== undefined && current !== null && !Array.isArray(current)) {
       console.warn(
         `[formstand] array op on "${path}" but the value at that path is not an array (got ${typeof current}). Operation skipped.`,
       );

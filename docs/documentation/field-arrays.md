@@ -101,7 +101,7 @@ Constraints on the array itself (`z.array(...).min(1)`, `.max(n)`, a `.refine` o
 {tracks.error ? <p role="alert">{tracks.error[0]}</p> : null}
 ```
 
-The hook's ops keep this error live: once the validation gate is open (after a failed submit in the default `onSubmit` mode, or immediately in `onChange` mode), `push` past a `max(n)` raises the error and `push`-ing the missing row under a `min(1)` clears it, with no second submit needed. Custom `FieldArrayFormApi` implementations opt in by providing the optional `validateField(path)` member; without it, ops simply skip revalidation ([API notes](./api/utilities#the-structural-form-interfaces)).
+The hook's ops keep this error live: once the validation gate is open (after the first blur in the default `onBlur` mode, after a failed submit in `onSubmit` mode, or immediately in `onChange` mode), `push` past a `max(n)` raises the error and `push`-ing the missing row under a `min(1)` clears it, with no second submit needed. Custom `FieldArrayFormApi` implementations opt in by providing the optional `validateField(path)` member; without it, ops simply skip revalidation ([API notes](./api/utilities#the-structural-form-interfaces)).
 
 ## Metadata follows rows
 

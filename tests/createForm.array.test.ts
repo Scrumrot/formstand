@@ -145,3 +145,19 @@ describe("array ops re-key meta maps", () => {
     expect(form.getState().errors["users"]).toBeDefined();
   });
 });
+
+// Regression (2026-09 library review, core #3): a NULL-valued nullable
+// array field refused every array op with a warning, while undefined
+// created the array — even though the op item types are built on
+// NonNullable<FieldValue<...>> precisely so nullable arrays accept ops.
+// Both empties now start the op from [].
+describe("array ops on a null-valued nullable array field", () => {
+  it("push onto null creates the array like push onto undefined", () => {
+    const schema = z.object({
+      items: z.array(z.object({ label: z.string() })).nullable(),
+    });
+    const form = createForm(schema, { initialValues: { items: null } });
+    form.arrayPush("items", { label: "first" });
+    expect(form.getState().values.items).toEqual([{ label: "first" }]);
+  });
+});
