@@ -75,9 +75,17 @@ export type UnionValueAt<TValues, P extends string> = P extends keyof TValues
       P extends `${number}`
       ? NonNullable<Item>
       : P extends `${infer Head}.${infer Tail}`
-        ? Head extends `${number}`
-          ? UnionValueAt<NonNullable<Item>, Tail>
-          : never
+        ? // Tuple positionality first: a tuple's keyof carries its literal
+          // indices, so "wrap.0.pay" resolves element 0's OWN shape
+          // instead of the all-elements union `Item` (whose keyof
+          // collapses to common keys and killed the variant-key set). A
+          // plain array's keyof has no numeric-string members, so it
+          // falls through to the element branch unchanged.
+          Head extends keyof TValues
+          ? UnionValueAt<NonNullable<TValues[Head]>, Tail>
+          : Head extends `${number}`
+            ? UnionValueAt<NonNullable<Item>, Tail>
+            : never
         : never
     : P extends `${infer Head}.${infer Tail}`
       ? Head extends keyof TValues

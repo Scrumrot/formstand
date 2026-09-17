@@ -4,6 +4,24 @@
 
 ### Fixed
 
+- **Tuples resolve positionally in the typed paths.** Tuples fell into
+  the generic-array arms of `FieldPath` and `UnionValueAt`, which union
+  every element — so nested paths under heterogeneous tuples were
+  rejected (`"hetero.0.a"` unbindable), out-of-range indices
+  (`"coord.5"`) accepted with a lying element type, and a discriminated
+  union below a tuple position unbindable through `useVariantField`.
+  Both types gained a tuple arm keyed on the literal indices; `"coord.0"`
+  spellings the CLI generates are unchanged.
+- **Platform containers are path leaves.** `File`/`Blob` (matched
+  structurally, so no DOM lib requirement), `Map`, `Set`, `WeakMap`,
+  `WeakSet`, `Promise`, and functions no longer descend as records:
+  bogus sub-paths like `"file.name"` or `"meta.size"` used to
+  type-check, and a `setValue` through one would have spread the
+  instance into a plain object.
+- **Literal dotted keys are no longer offered as paths.** A key named
+  `"a.b"` appeared in `FieldPath` but resolved to `never` (the runtime
+  walk splits on `"."`), so the offer was the lie; it is now excluded
+  where it is offered rather than where it resolves.
 - **`validateField` no longer crashes on prototype-key paths.** The
   schema walk read the ZodObject shape with a bare index, so a
   runtime-built path like `"user.constructor.x"` (server error fields

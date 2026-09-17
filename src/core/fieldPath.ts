@@ -1,3 +1,14 @@
+// A structural stand-in for Blob/File: the DOM type names cannot be
+// referenced here (the core must compile for lib:["es*"] SSR consumers with
+// no DOM lib), and no form value shaped like an object literal carries this
+// exact trio including an arrayBuffer METHOD — so the approximation only
+// ever matches the platform objects it is meant to.
+type BlobLike = Readonly<{
+  size: number;
+  type: string;
+  arrayBuffer: () => Promise<unknown>;
+}>;
+
 type LeafType =
   | string
   | number
@@ -7,7 +18,19 @@ type LeafType =
   | null
   | undefined
   | Date
-  | RegExp;
+  | RegExp
+  // Platform containers are VALUES, not records to path into: descending
+  // them offered bogus sub-paths ("file.name", "map.size") that type-check,
+  // and a setValue through one would spread it into a plain object —
+  // silently breaking instanceof validation and the dirty comparison.
+  // ReadonlyMap/ReadonlySet also catch Map/Set; functions catch callables.
+  | ReadonlyMap<unknown, unknown>
+  | ReadonlySet<unknown>
+  | WeakMap<object, unknown>
+  | WeakSet<object>
+  | Promise<unknown>
+  | ((...args: never[]) => unknown)
+  | BlobLike;
 
 type IsRecord<T> = T extends LeafType
   ? false
@@ -18,6 +41,17 @@ type IsRecord<T> = T extends LeafType
       : false;
 
 type IsArray<T> = T extends readonly unknown[] ? true : false;
+
+// A tuple has a LITERAL length; a plain array's length is `number`. The
+// distinction matters because a tuple must resolve positionally: the
+// generic array arm's `infer U` unions every element, so a heterogeneous
+// tuple would lose each position's own shape (and `keyof` of that union
+// collapses to the common keys — nothing, for distinct shapes).
+type IsTuple<T> = T extends readonly unknown[]
+  ? number extends T["length"]
+    ? false
+    : true
+  : false;
 
 // Decrement table for the depth budget. Its length bounds the largest
 // usable `pathDepth`: indices 0..25 support budgets up to D = 25 (already
@@ -96,27 +130,48 @@ export type FieldPath<T, D extends number = DefaultPathDepth> =
 
 type FieldPathRec<T, D extends number> = [D] extends [0]
   ? never
-  : IsArray<T> extends true
-    ? T extends readonly (infer U)[]
-      ?
-          | `${number}`
-          | (IsRecord<NonNullable<U>> extends true
-              ? `${number}.${FieldPathRec<NonNullable<U>, Prev[D]>}`
-              : IsArray<NonNullable<U>> extends true
-                ? `${number}.${FieldPathRec<NonNullable<U>, Prev[D]>}`
-                : never)
-      : never
-    : IsRecord<T> extends true
-      ? {
-          [K in keyof T & string]:
-            | K
-            | (IsRecord<NonNullable<T[K]>> extends true
+  : IsTuple<T> extends true
+    ? // A tuple's paths are its LITERAL indices, resolved positionally —
+      // "hetero.0.a" reaches element 0's own shape, and an out-of-range
+      // index ("coord.5") is simply not offered. This arm must run before
+      // the generic array arm (a tuple is a readonly unknown[] too).
+      {
+        [K in keyof T & `${number}`]:
+          | K
+          | (IsRecord<NonNullable<T[K]>> extends true
+              ? `${K}.${FieldPathRec<NonNullable<T[K]>, Prev[D]>}`
+              : IsArray<NonNullable<T[K]>> extends true
                 ? `${K}.${FieldPathRec<NonNullable<T[K]>, Prev[D]>}`
-                : IsArray<NonNullable<T[K]>> extends true
-                  ? `${K}.${FieldPathRec<NonNullable<T[K]>, Prev[D]>}`
-                  : never);
-        }[keyof T & string]
-      : never;
+                : never);
+      }[keyof T & `${number}`]
+    : IsArray<T> extends true
+      ? T extends readonly (infer U)[]
+        ?
+            | `${number}`
+            | (IsRecord<NonNullable<U>> extends true
+                ? `${number}.${FieldPathRec<NonNullable<U>, Prev[D]>}`
+                : IsArray<NonNullable<U>> extends true
+                  ? `${number}.${FieldPathRec<NonNullable<U>, Prev[D]>}`
+                  : never)
+        : never
+      : IsRecord<T> extends true
+        ? {
+            [K in keyof T & string]:
+              // A literal dotted key is NOT path-addressable: the runtime
+              // walk splits on ".", so offering "a.b" for a key named
+              // "a.b" would bind a path that reads nothing (FieldValue
+              // already resolved it to never — the offer was the lie).
+              K extends `${string}.${string}`
+                ? never
+                :
+                    | K
+                    | (IsRecord<NonNullable<T[K]>> extends true
+                        ? `${K}.${FieldPathRec<NonNullable<T[K]>, Prev[D]>}`
+                        : IsArray<NonNullable<T[K]>> extends true
+                          ? `${K}.${FieldPathRec<NonNullable<T[K]>, Prev[D]>}`
+                          : never);
+          }[keyof T & string]
+        : never;
 
 // Tuples must resolve POSITIONALLY before the generic array arm runs: a
 // tuple is a readonly unknown[] too, and `infer U` there unions every
