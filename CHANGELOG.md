@@ -2,8 +2,48 @@
 
 ## Unreleased
 
+### Added
+
+- **`form.addErrors(errors)`.** The merge-many sibling of `setError`:
+  takes a server response's own runtime-keyed error map as-is and merges
+  it into the server channel — no per-key `FieldPath` cast, no
+  `setErrors` wholesale replacement. An empty array removes its key,
+  like `setError`. The docs' own examples now use it.
+- **`SubmitOptions.onError` and a dev-mode swallowed-failure warning.**
+  A throwing submit handler resolves `{kind: "error"}` writing no state
+  anywhere, so the fire-and-forget `handleSubmit` form could swallow a
+  save failure completely — button re-enables, zero feedback. `onError`
+  is the save-failure hook mirroring `onInvalid`, and dev builds warn
+  when an unobserved handler failure resolves without one.
+- **`useFieldArray` parity with its siblings.** The return gains `path`,
+  `firstError`, and the array-level server channel (`setError` /
+  `clearError`) — a "too many rows" verdict from the API is set and
+  cleared from the hook that owns the array. Custom `FieldArrayFormApi`
+  implementations opt in via the optional `setError`/`clearErrors`
+  members (same contract as the optional `validateField`).
+- **`useIsValidating(form, path?)`.** The boolean-only in-flight flag,
+  form-level (whole-form pass or any field) or scoped to a subtree —
+  previously reachable only through a selector, asymmetric with
+  `useIsSubmitting`.
+- **`usePersistForm(form, options)`.** The React lifecycle wrapper
+  `persistForm` was missing: owns the mount/dispose effect (StrictMode
+  safe), returns a reference-stable handle safe to close over in submit
+  handlers, and reads options when the subscription starts (the
+  `useForm` locked-options rule).
+- **`createFormHooks` binds the newer hooks.** `use{Name}Values`,
+  `use{Name}Fields` (position-typed like the plain `useFields`), and
+  `use{Name}IsValidating` join the factory.
+
 ### Fixed
 
+- **`numberInputProps` keeps the value on a partial entry.** The
+  `type="number"` builder wrote `emptyValue` for BOTH empty and invalid
+  text, so a transient "-" or "1e" nulled the field mid-keystroke
+  (error flash, dirty flip) — diverging from `useNumberInput`'s
+  deliberate keep-the-value semantics. Invalid now keeps the stored
+  value; empty still clears. (Browsers report `""` for badInput on
+  number inputs, so `useNumberInput` remains the binding that preserves
+  every keystroke.)
 - **Tuples resolve positionally in the typed paths.** Tuples fell into
   the generic-array arms of `FieldPath` and `UnionValueAt`, which union
   every element — so nested paths under heterogeneous tuples were

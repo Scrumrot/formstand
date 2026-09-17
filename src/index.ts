@@ -40,6 +40,9 @@ export type {
 export { shouldValidateOn } from "./core/mode";
 export type { ValidationMode, ValidationTrigger } from "./core/mode";
 export { persistForm } from "./core/persist";
+// The React lifecycle wrapper: owns the mount/dispose effect (StrictMode
+// safe) and returns a reference-stable handle.
+export { usePersistForm } from "./react/usePersistForm";
 export type {
   PersistStorage,
   PersistOptions,
@@ -70,6 +73,7 @@ export { useFormError } from "./react/useFormError";
 export {
   useIsDirty,
   useIsValid,
+  useIsValidating,
   useIsSubmitting,
   useSubmitCount,
 } from "./react/useFormFlags";

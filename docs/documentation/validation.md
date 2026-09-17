@@ -96,7 +96,7 @@ With `debounceMs` set, each triggering interaction resets a timer; when it fires
 
 ```tsx
 <span>
-  {username.isValidating ? "checking..." : username.error?.[0]}
+  {username.isValidating ? "checking..." : username.firstError}
 </span>
 ```
 
@@ -117,7 +117,7 @@ Async validation is guarded on two axes, so out-of-order network responses can't
 - **Per-path sequence counters.** Each async pass takes a sequence number for its path; a result only writes if it's still the latest pass for that path. A stale "username taken" response can't overwrite a newer "ok".
 - **Values-reference guard.** Each pass records the `values` reference it validated. If `values` changed during the await (`setValue`, `reset`, `adoptValues`, and so on), the write is dropped, because the result describes values that no longer exist.
 
-In-flight state is observable: field-level passes set `state.isValidating[path]` (surfaced as `useField(...).isValidating`), and whole-form async passes set the `state.isValidatingForm` boolean.
+In-flight state is observable: field-level passes set `state.isValidating[path]` (surfaced as `useField(...).isValidating`), and whole-form async passes set the `state.isValidatingForm` boolean. `useIsValidating(form)` reads both as one boolean-only subscription — "is anything checking right now" for a global spinner — and `useIsValidating(form, "shipping")` scopes it to a subtree, same prefix semantics as `useIsDirty`/`useIsValid`. `createFormHooks` exposes the bound `use{Name}IsValidating`.
 
 ## Performance model
 

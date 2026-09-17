@@ -10,9 +10,15 @@ Map a failed request onto fields with `setError`; the [server channel](./errors)
 const onSubmit = form.handleSubmit(async (data) => {
   const res = await api.createUser(data);
   if (!res.ok) {
-    // e.g. { username: "already taken" }
-    Object.entries(res.fieldErrors).forEach(([path, message]) =>
-      form.setError(path as FieldPath<Values>, message),
+    // e.g. { username: "already taken" } — addErrors takes the server's
+    // runtime-keyed map as-is, no per-path casts
+    form.addErrors(
+      Object.fromEntries(
+        Object.entries(res.fieldErrors).map(([path, message]) => [
+          path,
+          [message],
+        ]),
+      ),
     );
     // On a multi-form page, pass your <form> element (e.g. via a ref) so the
     // search, including the root-error fallback, stays inside this form:

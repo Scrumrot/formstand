@@ -15,12 +15,24 @@ That ownership split *is* the preservation guarantee. A background `validateAsyn
 form.handleSubmit(async (data) => {
   const res = await api.create(data);
   if (!res.ok) {
-    for (const err of res.errors) {
-      // setError's path is typed; a server-provided string needs a cast
-      form.setError(err.field as FieldPath<z.input<typeof schema>>, err.message);
-    }
+    // addErrors takes the server's own runtime-keyed shape — no casts.
+    form.addErrors(
+      Object.fromEntries(res.errors.map((err) => [err.field, [err.message]])),
+    );
   }
 });
+```
+
+And because a submit handler that **throws** resolves `{kind: "error"}` without writing any state, wire the save-failure path explicitly — pass `onError` and the form shows something instead of silently re-enabling the button (dev builds warn when an unobserved handler failure resolves):
+
+```ts
+<form
+  onSubmit={form.handleSubmit(
+    async (data) => await api.create(data), // network failure throws
+    undefined,
+    { onError: () => form.setError("", "Could not save — try again") },
+  )}
+>
 ```
 
 ## The derived `errors` map
@@ -43,6 +55,10 @@ form.setError("username", []);                  // empty array removes the entry
 
 form.setErrors({ username: ["taken"], "": ["account limit reached"] });
 // replaces the WHOLE server channel (schema errors persist until the next pass)
+
+form.addErrors({ username: ["taken"], "": ["account limit reached"] });
+// MERGES into the server channel — the shape a server response already has,
+// runtime string keys and all, so mapping field errors needs no per-key cast
 
 form.clearErrors("address");  // clears BOTH channels at "address" and its descendants
 form.clearErrors("");         // clears just the root "" entry

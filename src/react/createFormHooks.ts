@@ -26,10 +26,13 @@ import {
   useFieldArray,
 } from "./useFieldArray";
 import { useFormError } from "./useFormError";
+import { useFormValues } from "./useFormValues";
+import { type UseFieldsReturn, useFields } from "./useFields";
 import {
   useIsDirty,
   useIsSubmitting,
   useIsValid,
+  useIsValidating,
   useSubmitCount,
 } from "./useFormFlags";
 import {
@@ -122,10 +125,27 @@ export type FormHooks<
     [K in `use${Capitalize<N>}Error`]: () => readonly string[] | undefined;
   } & { [K in `use${Capitalize<N>}IsDirty`]: BoundUseFlag<TSchema, D> } & {
     [K in `use${Capitalize<N>}IsValid`]: BoundUseFlag<TSchema, D>;
-  } & { [K in `use${Capitalize<N>}IsSubmitting`]: () => boolean } & {
+  } & { [K in `use${Capitalize<N>}IsValidating`]: BoundUseFlag<TSchema, D> } & {
+    [K in `use${Capitalize<N>}IsSubmitting`]: () => boolean;
+  } & {
     [K in `use${Capitalize<N>}SubmitCount`]: () => number;
+  } & { [K in `use${Capitalize<N>}Values`]: () => z.input<TSchema> } & {
+    [K in `use${Capitalize<N>}Fields`]: BoundUseFields<TSchema, D>;
   }
 >;
+
+// The bound composite-fields hook: same const-inferred tuple and
+// position-typed fields as the plain useFields.
+export type BoundUseFields<
+  TSchema extends z.ZodType,
+  D extends PathDepth = DefaultPathDepth,
+> = <const P extends readonly FieldPath<z.input<TSchema>, D>[]>(
+  paths: P,
+) => UseFieldsReturn<{
+  readonly [K in keyof P]: UseFieldReturn<
+    FieldValue<z.input<TSchema>, P[K] & string>
+  >;
+}>;
 
 // Runtime twin of TypeScript's Capitalize<N> (ASCII names; a leading
 // non-letter passes through unchanged in both).
@@ -184,7 +204,20 @@ export const createFormHooks = <
   const useBoundIsValid = (path?: string): boolean =>
     useIsValid(structural, path);
 
+  const useBoundIsValidating = (path?: string): boolean =>
+    useIsValidating(structural, path);
+
   const useBoundIsSubmitting = (): boolean => useIsSubmitting(structural);
+
+  const useBoundValues = (): unknown => useFormValues(structural);
+
+  const useBoundFields = (
+    paths: readonly string[],
+  ): UseFieldsReturn<readonly UseFieldReturn<unknown>[]> =>
+    useFields(
+      structural as FieldFormApi & { readonly schema?: undefined },
+      paths,
+    );
 
   const useBoundSubmitCount = (): number => useSubmitCount(structural);
 
@@ -201,7 +234,10 @@ export const createFormHooks = <
     [`use${prefix}Error`]: useBoundError,
     [`use${prefix}IsDirty`]: useBoundIsDirty,
     [`use${prefix}IsValid`]: useBoundIsValid,
+    [`use${prefix}IsValidating`]: useBoundIsValidating,
     [`use${prefix}IsSubmitting`]: useBoundIsSubmitting,
     [`use${prefix}SubmitCount`]: useBoundSubmitCount,
+    [`use${prefix}Values`]: useBoundValues,
+    [`use${prefix}Fields`]: useBoundFields,
   } as FormHooks<TSchema, N, D>;
 };

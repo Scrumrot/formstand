@@ -47,6 +47,14 @@ export type FieldArrayFormApi = Readonly<{
   // stale. NOTE for custom implementations: a hand-rolled FieldArrayFormApi
   // without this member still works — the ops simply skip revalidation.
   validateField?(path: string): FieldValidationResult;
+  // OPTIONAL like validateField, same custom-implementation contract: when
+  // present (createForm always provides them), the hook exposes the
+  // array-level server-error channel — a "too many rows" verdict from the
+  // API is set and cleared from the hook that owns the array, the same
+  // symmetry useField has had all along. Absent members make the returned
+  // setError/clearError no-ops.
+  setError?(path: string, errors: string | readonly string[]): void;
+  clearErrors?(path?: string): void;
 }>;
 
 export type FieldArrayEntry<TItem> = Readonly<{
@@ -55,10 +63,20 @@ export type FieldArrayEntry<TItem> = Readonly<{
 }>;
 
 export type UseFieldArrayReturn<TItem> = Readonly<{
+  // The resolved array path — the same convenience useField exposes.
+  path: string;
   fields: readonly FieldArrayEntry<TItem>[];
   items: readonly TItem[];
   length: number;
   error: readonly string[] | undefined;
+  // The first array-level message, or undefined — same shorthand as
+  // useField.firstError (the docs used to hand-roll error[0] here).
+  firstError: string | undefined;
+  // The array-level server channel, scoped to this path (see the
+  // FieldArrayFormApi note: no-ops on custom implementations without the
+  // optional members).
+  setError: (errors: string | readonly string[]) => void;
+  clearError: () => void;
   push: (item: TItem) => void;
   remove: (index: number) => void;
   insert: (index: number, item: TItem) => void;
@@ -461,18 +479,33 @@ export function useFieldArray<TItem = unknown>(
     [items, ids],
   );
 
+  const setError = useCallback(
+    // Same string-shorthand normalization as useField.setError, so custom
+    // implementations typed for readonly string[] never receive a bare
+    // string.
+    (errors: string | readonly string[]) =>
+      form.setError?.(path, typeof errors === "string" ? [errors] : errors),
+    [form, path],
+  );
+
+  const clearError = useCallback(() => form.clearErrors?.(path), [form, path]);
+
   return useMemo(
     () => ({
+      path,
       fields,
       items,
       length: items.length,
       error,
+      firstError: error?.[0],
+      setError,
+      clearError,
       push,
       remove,
       insert,
       move,
       swap,
     }),
-    [fields, items, error, push, remove, insert, move, swap],
+    [path, fields, items, error, setError, clearError, push, remove, insert, move, swap],
   );
 }

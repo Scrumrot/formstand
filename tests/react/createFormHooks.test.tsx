@@ -38,6 +38,9 @@ describe("createFormHooks", () => {
         "useInvoiceIsValid",
         "useInvoiceIsSubmitting",
         "useInvoiceSubmitCount",
+        "useInvoiceIsValidating",
+        "useInvoiceValues",
+        "useInvoiceFields",
       ].sort(),
     );
     expectTypeOf(hooks).toHaveProperty("useInvoiceField");

@@ -22,7 +22,7 @@ const UsersEditor = ({ form }: { form: Form<typeof schema> }) => {
       {users.fields.map((field, i) => (
         <UserRow key={field.id} form={form} index={i} onRemove={() => users.remove(i)} />
       ))}
-      {users.error ? <p role="alert">{users.error[0]}</p> : null}
+      {users.firstError ? <p role="alert">{users.firstError}</p> : null}
       <button type="button" onClick={() => users.push({ email: "", name: "" })}>
         Add user
       </button>
@@ -36,7 +36,8 @@ The hook returns:
 - `fields`: `readonly { id: string; value: TItem }[]`; use `field.id` as the React `key`.
 - `items`: the raw array values (`readonly TItem[]`).
 - `length`: the current length.
-- `error`: the **array-level** error, for example from `z.array().min(1)`, keyed at the array's own path.
+- `error`: the **array-level** error, for example from `z.array().min(1)`, keyed at the array's own path — plus `firstError`, the first message or `undefined`, same shorthand as `useField`.
+- `path`: the resolved array path, and `setError(errors)` / `clearError()`: the array-level server channel, so a "too many rows" verdict from your API is set and cleared from the hook that owns the array (same semantics as `field.setError`).
 - `push(item)`, `remove(index)`, `insert(index, item)`, `move(from, to)`, `swap(a, b)`: wrappers over the form's `arrayPush`, `arrayRemove`, `arrayInsert`, `arrayMove`, and `arraySwap` that also **revalidate the array path** when the form's validation mode calls for it, under the same gate as a field edit (`mode`, `reValidateMode`, submit state). That is why an array-level error like `min(1)` clears the moment a row is added rather than on the next submit. The imperative `form.arrayPush(...)` family stays validation-silent, exactly like `form.setValue`, because event-driven validation belongs to the hooks.
 
 With a `Form<TSchema>` and a typed path, including template paths like `` `albums.${index}.tracks` ``, `TItem` is **inferred from the schema** and needs no type argument. The explicit `useFieldArray<TItem>(form, path)` form is for schema-less `FieldFormApi` forms, where there is nothing to infer from. Passing it alongside a typed form is a compile error that tells you the fix: the path argument is blamed with `"Remove the explicit type argument: a schema-typed form infers the item type from the path"` (see [Typed paths](./typed-paths#paths-are-inferred-from-the-schema)). Dynamic paths via a selector function return `UseFieldArrayReturn<unknown>`, like `useField`.
@@ -82,7 +83,7 @@ const AlbumRow = ({ form, index }: { form: Form<typeof schema>; index: number })
       {tracks.fields.map((field, trackIndex) => (
         <TrackRow key={field.id} form={form} albumIndex={index} trackIndex={trackIndex} />
       ))}
-      {tracks.error ? <p role="alert">{tracks.error[0]}</p> : null}
+      {tracks.firstError ? <p role="alert">{tracks.firstError}</p> : null}
       <button type="button" onClick={() => tracks.push({ title: "", durationMin: 1 })}>
         + add track
       </button>
@@ -98,7 +99,7 @@ Both directions work: `form.arrayPush("albums.0.tracks", track)` mutates the inn
 Constraints on the array itself (`z.array(...).min(1)`, `.max(n)`, a `.refine` on the array) produce errors keyed at the array's path, exposed as `useFieldArray(...).error` and distinct from per-row errors like `albums.0.tracks.1.title`:
 
 ```tsx
-{tracks.error ? <p role="alert">{tracks.error[0]}</p> : null}
+{tracks.firstError ? <p role="alert">{tracks.firstError}</p> : null}
 ```
 
 The hook's ops keep this error live: once the validation gate is open (after the first blur in the default `onBlur` mode, after a failed submit in `onSubmit` mode, or immediately in `onChange` mode), `push` past a `max(n)` raises the error and `push`-ing the missing row under a `min(1)` clears it, with no second submit needed. Custom `FieldArrayFormApi` implementations opt in by providing the optional `validateField(path)` member; without it, ops simply skip revalidation ([API notes](./api/utilities#the-structural-form-interfaces)).

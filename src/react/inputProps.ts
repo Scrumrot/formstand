@@ -112,6 +112,15 @@ export const numberInputProps = <T extends number | null | undefined>(
   "aria-invalid": ariaInvalid(field),
   onChange: (e) => {
     const parsed = parseNumberText(e.target.value);
+    // "invalid" is a PARTIAL entry (a lone "-", "1e") — keep the stored
+    // value untouched, matching useNumberInput's deliberate semantics,
+    // instead of writing emptyValue mid-keystroke (which flashed a
+    // required error and flipped dirty while the user was still typing).
+    // "empty" still clears to emptyValue. Note browsers report "" for
+    // badInput on type="number", so some partial entries arrive as
+    // "empty" regardless — useNumberInput (a text input with its own raw
+    // state) remains the binding that preserves every keystroke.
+    if (parsed.kind === "invalid") return;
     field.setValue(
       (parsed.kind === "number" ? parsed.value : field.emptyValue) as T,
     );

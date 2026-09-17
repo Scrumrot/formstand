@@ -68,7 +68,10 @@ describe("numberInputProps", () => {
     expect(result.current.age.value).toBeUndefined();
   });
 
-  it("rejects NaN input by setting undefined", () => {
+  it("keeps the stored value on unparseable input", () => {
+    // Partial entries ("-", "1e", pasted junk) must not clobber the value
+    // mid-keystroke — matching useNumberInput's semantics. Only genuinely
+    // EMPTY text clears to emptyValue.
     const { result } = renderHook(() => {
       const form = useForm(schema, { initialValues: { age: 1 } });
       return { form, age: useField(form, "age") };
@@ -78,6 +81,13 @@ describe("numberInputProps", () => {
     act(() => {
       props.onChange({
         target: { value: "abc" },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+    expect(result.current.age.value).toBe(1);
+
+    act(() => {
+      numberInputProps(result.current.age).onChange({
+        target: { value: "" },
       } as unknown as React.ChangeEvent<HTMLInputElement>);
     });
     expect(result.current.age.value).toBeUndefined();

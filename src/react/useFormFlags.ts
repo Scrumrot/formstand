@@ -70,6 +70,38 @@ export function useIsValid(form: FormStateApi, path?: string): boolean {
   });
 }
 
+// Whether async validation is in flight — form-level (a whole-form pass,
+// or any field's own pass) or scoped to a path subtree, boolean-only like
+// the sibling flags. The form-level read was previously reachable only
+// through a selector, asymmetric with useIsSubmitting.
+export function useIsValidating(
+  form: FormStateApi & { readonly schema?: undefined },
+  path?: string,
+): boolean;
+export function useIsValidating<
+  TSchema extends z.ZodType,
+  P extends FieldPath<z.input<TSchema>, D>,
+  D extends PathDepth = DefaultPathDepth,
+>(form: Form<TSchema, D>, path?: P): boolean;
+export function useIsValidating(form: FormStateApi, path?: string): boolean {
+  return useStore(form.store, (state) => {
+    if (path === undefined || path === "") {
+      if (state.isValidatingForm) return true;
+    }
+    // Same first-hit loop rationale as useIsValid: this selector re-runs
+    // on every store change over a usually-empty map.
+    for (const k in state.isValidating) {
+      if (
+        state.isValidating[k] === true &&
+        (path === undefined || path === "" || isPathOrChild(k, path))
+      ) {
+        return true;
+      }
+    }
+    return false;
+  });
+}
+
 export const useIsSubmitting = (form: FormStateApi): boolean =>
   useStore(form.store, (state) => state.isSubmitting);
 

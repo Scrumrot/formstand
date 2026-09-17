@@ -91,6 +91,11 @@ export type InvalidSubmitHandler = (errors: ErrorMap) => void;
 
 export type SubmitOptions = Readonly<{
   force?: boolean;
+  // Called when onValid throws or rejects (the "error" SubmitResult) — the
+  // save-failure hook, mirroring onInvalid for the validation side. The
+  // result still resolves {kind: "error"}, so imperative submit() callers
+  // can keep switching on it instead.
+  onError?: (error: unknown) => void;
 }>;
 
 // "valid": validation passed and onValid ran to completion. "invalid":
@@ -200,6 +205,13 @@ export type Form<
     errors: string | readonly string[],
   ) => void;
   setErrors: (errors: ErrorMap) => void;
+  // The merge-many sibling of setError: server responses arrive as a MAP
+  // of runtime-keyed field errors, and mapping them one setError at a time
+  // forced a typed-path cast per call (the docs' own examples did), while
+  // setErrors REPLACES the whole channel and cannot be used incrementally.
+  // The server channel is inherently runtime-keyed, so this takes the map
+  // as-is; an empty array removes its key, like setError.
+  addErrors: (errors: ErrorMap) => void;
   clearErrors: (path?: ErrorPath<z.input<TSchema>, D>) => void;
   // The patch type omits `errors`: the merged map is derived from
   // schemaErrors/serverErrors, so writing it directly is unrepresentable for
@@ -1174,6 +1186,7 @@ export const createForm = <
         // A throwing onValid is the caller's failure, not a validation
         // verdict: resolve with it (so handleSubmit-as-event-handler never
         // leaves an unhandled rejection) and write no error state.
+        submitOptions?.onError?.(error);
         return { kind: "error", error };
       }
       return { kind: "valid", data: result.data };
@@ -1330,6 +1343,21 @@ export const createForm = <
       store.setState((state) => ({
         ...state,
         ...errorChannels(state, { serverErrors: errors }),
+      })),
+    addErrors: (errors) =>
+      store.setState((state) => ({
+        ...state,
+        ...errorChannels(state, {
+          serverErrors: Object.entries(errors).reduce<ErrorMap>(
+            // Computed keys throughout, so a server field named
+            // "__proto__" lands as an own property like everywhere else.
+            (acc, [key, list]) =>
+              list === undefined || list.length === 0
+                ? omitKey(acc, key)
+                : { ...acc, [key]: list },
+            state.serverErrors,
+          ),
+        }),
       })),
     clearErrors: (path?: string) =>
       store.setState((state) => {
@@ -1538,7 +1566,24 @@ export const createForm = <
       (onValid, onInvalid, opts) =>
       async (event) => {
         event?.preventDefault();
-        return submit(onValid, onInvalid, opts);
+        const result = await submit(onValid, onInvalid, opts);
+        // The event-handler form is fire-and-forget: nobody reads the
+        // resolved result, so a save failure with no onError handler
+        // would otherwise vanish COMPLETELY — no state, no rejection, no
+        // log — and the button just re-enables. Dev builds say so once
+        // per occurrence; production stays silent by design (resolving
+        // instead of rejecting is the documented contract).
+        if (
+          result.kind === "error" &&
+          opts?.onError === undefined &&
+          process.env.NODE_ENV !== "production"
+        ) {
+          console.warn(
+            "[formstand] submit handler threw and nothing observed it — the form shows no feedback. Pass { onError } to handleSubmit (or setError inside your handler):",
+            result.error,
+          );
+        }
+        return result;
       },
     diff: () => {
       const state = store.getState();
