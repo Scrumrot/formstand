@@ -23,7 +23,7 @@ export const muiTextFieldProps = <T extends string | null | undefined>(
   helperText: fieldError(field),
   onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const text = e.target.value;
-    field.setValue((text === "" && field.emptyValue === null ? null : text) as T);
+    field.setValue((text === "" && field.clearable ? field.emptyValue : text) as T);
   },
   onBlur: field.onBlur,
 });
@@ -102,7 +102,7 @@ export const muiSelectProps = <T extends string | null | undefined>(
   helperText: fieldError(field),
   onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const next = e.target.value;
-    field.setValue((next === "" && field.emptyValue === null ? null : next) as T);
+    field.setValue((next === "" && field.clearable ? field.emptyValue : next) as T);
   },
   onBlur: field.onBlur,
 });

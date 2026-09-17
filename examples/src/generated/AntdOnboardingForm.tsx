@@ -107,7 +107,7 @@ const antdTextInputProps = <T extends string | null | undefined>(
   status: fieldStatus(field),
   onChange: (e: ChangeEvent<HTMLInputElement>) => {
     const text = e.target.value;
-    field.setValue((text === "" && field.emptyValue === null ? null : text) as T);
+    field.setValue((text === "" && field.clearable ? field.emptyValue : text) as T);
   },
   onBlur: field.onBlur,
 });
