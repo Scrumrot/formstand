@@ -30,6 +30,7 @@ import hooksFactorySrc from "../forms/HooksFactoryForm.tsx?raw";
 import invoiceSrc from "../forms/InvoiceForm.tsx?raw";
 import nestedArraysSrc from "../forms/NestedArraysForm.tsx?raw";
 import nestedSrc from "../forms/NestedForm.tsx?raw";
+import actionsSrc from "../forms/ActionsForm.tsx?raw";
 import optimisticSrc from "../forms/OptimisticForm.tsx?raw";
 import perfSrc from "../forms/PerfBenchmarkForm.tsx?raw";
 import serverSrc from "../forms/ServerErrorsForm.tsx?raw";
@@ -182,6 +183,7 @@ const sources = {
   server: single("ServerErrorsForm.tsx", serverSrc),
   autosave: single("AutosaveForm.tsx", autosaveSrc),
   dependent: single("DependentFieldsForm.tsx", dependentSrc),
+  actions: single("ActionsForm.tsx", actionsSrc),
   optimistic: single("OptimisticForm.tsx", optimisticSrc),
   file: single("FileUploadForm.tsx", fileSrc),
   derived: single("DerivedFieldForm.tsx", derivedSrc),

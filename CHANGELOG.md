@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **The React 19 form-actions bridge.** `useFormAction(form, onValid,
+  options?)` returns an action for `<form action={...}>` that validates
+  first and hands the handler parsed `z.output` data (plus the raw
+  `FormData` last, for file pickers and uncontrolled co-inputs) under
+  the full submit lifecycle — isSubmitting/submitCount, errors written
+  and marked touched on failure, `onInvalid`/`onError` mirroring
+  `handleSubmit`, the same dev warning when a failure resolves
+  unobserved, and a reference-stable identity. `useFormActionState(form,
+  action, initialState, options?)` is `useActionState` with
+  schema-validated data: the handler's `(prevState, data, formData)`
+  shape lets a `"use server"` function slot straight in, and invalid,
+  skipped, or throwing submissions keep the previous state, because
+  field errors already live in the form store. Client-side integration
+  by design: no-JS progressive enhancement bypasses any client wrapper,
+  so that path validates server-side with the same zod schema.
+
 ## 0.18.0 — 2026-09-17
 
 ### Changed

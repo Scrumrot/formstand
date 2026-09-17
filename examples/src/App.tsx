@@ -45,6 +45,7 @@ import { OnboardingForm } from "./forms/OnboardingForm";
 import { InvoiceForm } from "./forms/InvoiceForm";
 import { NestedArraysForm } from "./forms/NestedArraysForm";
 import { NestedForm } from "./forms/NestedForm";
+import { ActionsForm } from "./forms/ActionsForm";
 import { OptimisticForm } from "./forms/OptimisticForm";
 import { PerfBenchmarkForm } from "./forms/PerfBenchmarkForm";
 import { SchemaBuilder } from "./forms/SchemaBuilder/SchemaBuilder";
@@ -225,6 +226,7 @@ const TABS: readonly Tab[] = [
     label: "Optimistic",
     render: () => <OptimisticForm />,
   },
+  { key: "actions", label: "Actions", render: () => <ActionsForm /> },
   { key: "file", label: "File upload", render: () => <FileUploadForm /> },
   { key: "derived", label: "Derived", render: () => <DerivedFieldForm /> },
   { key: "tag", label: "Tags", render: () => <TagInputForm /> },
@@ -392,6 +394,7 @@ const GROUP_OF: Readonly<Record<TabKey, GroupTitle>> = {
   autosave: "Patterns",
   dependent: "Patterns",
   optimistic: "Patterns",
+  actions: "Patterns",
   file: "Patterns",
   derived: "Patterns",
   tag: "Patterns",
@@ -450,6 +453,8 @@ const BLURBS: Readonly<Record<TabKey, string>> = {
     "Draft persistence with watchValues + localStorage, restored on mount, with dirtyFields() reporting what changed.",
   dependent: "Cross-field reactions with watchValue.",
   optimistic: "Optimistic UI with snapshot()/restore() rollback.",
+  actions:
+    "React 19 form actions: useFormActionState validates before the action runs and keeps the last verdict.",
   file: "File inputs and validating File values.",
   derived:
     "Computed values via selectors — consistent by construction, never stored.",

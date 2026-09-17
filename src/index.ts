@@ -51,6 +51,17 @@ export type {
 } from "./core/persist";
 
 export { useForm } from "./react/useForm";
+// The React 19 form-actions bridge: <form action> / useActionState with
+// schema-validated data and the full submit lifecycle.
+export {
+  useFormAction,
+  useFormActionState,
+} from "./react/useFormAction";
+export type {
+  FormActionHandler,
+  FormActionStateHandler,
+  FormActionOptions,
+} from "./react/useFormAction";
 export { createFormContext } from "./react/FormContext";
 export { createFormHooks } from "./react/createFormHooks";
 export type {
