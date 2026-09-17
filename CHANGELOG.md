@@ -1,5 +1,24 @@
 # Changelog
 
+## formstand-cli Unreleased
+
+### Added
+
+- **Containers inside array rows generate.** The remaining row-shape
+  TODO matrix is gone (formstand 0.17 types the paths): a tuple as the
+  row item or as a row-object field binds its positions inline at static
+  sub-indices (`points.${index}.0`, `segments.${index}.span.1`); a
+  discriminated union as a row-object FIELD binds on the holed template
+  (`invoices.${p0}.pay`), optional/nullable ones keeping the clearable
+  select; an array-of-arrays item extracts an inner Rows component; and
+  the same shapes under nested arrays work at any depth, union items
+  included (`teams.${p0}.methods.${index}`). Single-file extracts a
+  child component per site that needs hooks (rows render inside
+  rows.map); the module layout binds in the Row component, which already
+  is one. The one shape that still degrades to a TODO is a container
+  inside a union variant — binding it needs variant sub-paths the
+  library does not type.
+
 ## 0.17.0 — 2026-09-17
 
 ### Added

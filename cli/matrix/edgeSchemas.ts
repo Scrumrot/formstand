@@ -83,3 +83,30 @@ export const unionRowsSchema = z.object({
     ]),
   ),
 });
+
+// Containers nested INSIDE rows (formstand 0.17+ path types): a tuple row
+// item (positions at static sub-indices, number elements riding each kit's
+// hoisted number hook), a union as a row-object FIELD (holed template
+// `rows.${p0}.pay`), a tuple row field, an array-of-arrays item, and a
+// union item under a nested array (two holes). Every kit's extracted or
+// in-Row bindings must typecheck against the real .d.ts, in both layouts.
+export const rowContainersSchema = z.object({
+  points: z.array(z.tuple([z.number(), z.number()])),
+  grid: z.array(z.array(z.number())),
+  rows: z.array(
+    z.object({
+      name: z.string(),
+      span: z.tuple([z.number(), z.number()]),
+      pay: z.discriminatedUnion("kind", [
+        z.object({ kind: z.literal("card"), amount: z.number() }),
+        z.object({ kind: z.literal("cash"), note: z.string() }),
+      ]),
+      marks: z.array(
+        z.discriminatedUnion("mode", [
+          z.object({ mode: z.literal("a"), x: z.string() }),
+          z.object({ mode: z.literal("b"), y: z.number() }),
+        ]),
+      ),
+    }),
+  ),
+});

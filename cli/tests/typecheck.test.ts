@@ -31,6 +31,7 @@ import { leafFreeSchema } from "./fixtures/leafFreeSchema";
 import { tupleSchema } from "./fixtures/tupleSchema";
 import { nestedArraySchema } from "./fixtures/nestedArraySchema";
 import { describedSchema } from "./fixtures/describedSchema";
+import { rowContainersSchema } from "./fixtures/rowContainersSchema";
 
 type Emitter = (options: EmitFormOptions) => string;
 
@@ -108,6 +109,7 @@ const fixturesFor = (
   leafFree: Readonly<{ file: string; code: string }>;
   tuple: Readonly<{ file: string; code: string }>;
   nestedArray: Readonly<{ file: string; code: string }>;
+  rowContainers: Readonly<{ file: string; code: string }>;
   described: Readonly<{ file: string; code: string }>;
   panel: Readonly<{ file: string; code: string }>;
   collapsible: Readonly<{ file: string; code: string }>;
@@ -127,6 +129,15 @@ const fixturesFor = (
     nestedArraySchema,
     "nestedArraySchema",
     "NestedArrayForm",
+    dir,
+  );
+  // Containers inside rows (tuple/array items, union/tuple row fields, the
+  // same under nested arrays): holed template paths in every backend.
+  const rowContainers = generate(
+    emit,
+    rowContainersSchema,
+    "rowContainersSchema",
+    "RowContainersForm",
     dir,
   );
   // The .describe()/.meta() helper-text fixture: every kit's description
@@ -180,6 +191,7 @@ const fixturesFor = (
     leafFree,
     tuple,
     nestedArray,
+    rowContainers,
     described,
     panel,
     collapsible,
@@ -191,6 +203,7 @@ const fixturesFor = (
       leafFree.file,
       tuple.file,
       nestedArray.file,
+      rowContainers.file,
       described.file,
       panel.file,
       collapsible.file,

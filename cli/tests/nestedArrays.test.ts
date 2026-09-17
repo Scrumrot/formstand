@@ -172,7 +172,7 @@ describe("nested arrays in the module layout", () => {
     );
     // A non-array shape (an object) inside an array row still stays a TODO.
     expect(contacts?.content).toContain(
-      '{/* TODO: nested object "contacts.${index}.home" — extract a row component with its own hook */}',
+      '{/* TODO: nested object "contacts.${index}.home" — bind it by hand */}',
     );
   });
 

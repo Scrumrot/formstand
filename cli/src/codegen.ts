@@ -233,14 +233,13 @@ export const depthTodoLine = (path: string, indent: string): string =>
 // the warnings promise depth TODOs the file doesn't contain.
 export type DepthWarningFrontier = Readonly<{
   // Does the emitter descend into an array item that is ITSELF a container
-  // (an array-of-arrays)? The module layout extracts an inner Rows component
-  // (emitting depth TODOs inside it); the single-file layout degrades the
-  // whole item to the generic extract-a-row TODO.
+  // (an array-of-arrays)? Both layouts now extract an inner Rows component
+  // (emitting depth TODOs inside it).
   descendsArrayItemContainers: boolean;
   // Does the emitter recurse into an OBJECT field of an array row? The
   // single-file layout lays row-object fields out inline (nested objects
-  // included); the module layout degrades non-scalar, non-array row fields
-  // to a generic bind-by-hand TODO.
+  // included); the module layout degrades a nested OBJECT row field to a
+  // generic bind-by-hand TODO (unions and tuples extract or inline).
   descendsRowObjects: boolean;
 }>;
 
@@ -249,7 +248,7 @@ export const depthWarningFrontier = (
 ): DepthWarningFrontier =>
   layout === "module"
     ? { descendsArrayItemContainers: true, descendsRowObjects: false }
-    : { descendsArrayItemContainers: false, descendsRowObjects: true };
+    : { descendsArrayItemContainers: true, descendsRowObjects: true };
 
 // The over-budget paths in an IR, mirroring the emitters' boundary decisions
 // through the SAME overDepthBudget predicate the walkers consult — one entry
@@ -1671,14 +1670,42 @@ const fieldLines = (
             );
       }
       case "union": {
-        // Unions inside an array row bind dynamic paths useVariantField can't
-        // express; they stay a TODO (collectUnions skips them too).
-        const entry = prefix.dynamic
-          ? undefined
-          : unions.get(prefix.text + field.name);
+        if (prefix.dynamic) {
+          // A union FIELD of an array row extracts a child component, for
+          // the same reason nested arrays do: its bindings are hooks, and
+          // hooks cannot run inside rows.map. The enclosing row's index
+          // threads in as the next hole (pN), so the component binds the
+          // holed template (`invoices.${p0}.pay` — typed since formstand
+          // 0.16/0.17). collectUnions still skips dynamic paths; the
+          // component allocates its own binding vars.
+          const nextHole = `p${prefix.holes.length}`;
+          const unionTemplate =
+            prefix.text.replaceAll("${index}", `\${${nextHole}}`) +
+            templateEscape(field.name);
+          const compName = emitUnionComponent(
+            backend,
+            {
+              unionTemplate,
+              spec,
+              label: field.label,
+              holes: [...prefix.holes, nextHole],
+              nameSuffix: "Union",
+            },
+            ctx,
+          );
+          const refAttrs = [
+            "form={form}",
+            ...prefix.holes.map((hole) => `${hole}={${hole}}`),
+            `${nextHole}={index}`,
+          ].join(" ");
+          return cell("fullRow", (lvl) => [
+            `${ind(lvl)}<${compName} ${refAttrs} />`,
+          ]);
+        }
+        const entry = unions.get(prefix.text + field.name);
         return entry === undefined
           ? [
-              `${ind(level)}{/* TODO: discriminated union ${commentText(q(prefix.text + field.name))} inside an array row is not generated; bind the discriminant with useField and each variant-only field with useVariantField on the row path (row-indexed union paths need formstand 0.16+) */}`,
+              `${ind(level)}{/* TODO: discriminated union ${commentText(q(prefix.text + field.name))} was not collected; bind the discriminant with useField and each variant-only field with useVariantField */}`,
             ]
           : cell("fullRow", (lvl) => {
               // Inside a kit grid the union's bare controls ride one cell;
@@ -1765,6 +1792,31 @@ const fieldLines = (
     }
   });
 
+// Tuple ROW positions render inline: each position is a leaf at a static
+// numeric sub-index of the row path (`points.${index}.0`), and leaves bind
+// through components (Bound*Field / kit wrappers), so rows.map needs no
+// hooks for them. Non-scalar positions keep a per-element TODO, same as a
+// static tuple's.
+const tupleRowLines = (
+  backend: Backend,
+  rowPrefix: PathPrefix,
+  label: string,
+  elements: readonly FieldSpec[],
+  lvl: number,
+): readonly string[] =>
+  elements.flatMap((element, i): readonly string[] =>
+    isScalarSpec(element)
+      ? backend.leaf(
+          element,
+          pathAttr(rowPrefix, String(i)),
+          `${label} ${i + 1}`,
+          lvl,
+        )
+      : [
+          `${ind(lvl)}{/* TODO: tuple element ${i} (${element.kind}) at ${commentText(q(rowPrefix.text + String(i)))} isn't scalar — bind it by hand */}`,
+        ],
+  );
+
 const arraySectionLines = (
   backend: Backend,
   entry: ArrayEntry,
@@ -1780,14 +1832,14 @@ const arraySectionLines = (
     valueTypeExpr: entry.itemTypeExpr,
   };
   // A scalar item binds one control per row; an object item lays its fields
-  // out inline (nested arrays among them extract into child components). A
-  // non-scalar item (an array-of-arrays, or an array of tuples/unions) can't
-  // bind at the row's dynamic path — a TODO rather than an empty row.
+  // out inline (nested arrays among them extract into child components); a
+  // union item extracts a Row component, a tuple item binds its positions
+  // inline, and an array item (array-of-arrays) extracts an inner Rows
+  // component threaded this row's index as p0.
   // A row binds one segment past the list path (`list.${index}`), so it can
   // exceed the FieldPath budget even when the list hook binds — and then the
   // depth TODO must be the advice (extraction is impossible within budget),
-  // not the generic extract-a-row one. overBudgetFieldPaths mirrors both
-  // decisions exactly.
+  // not extraction. overBudgetFieldPaths mirrors both decisions exactly.
   const rowPath = `${templateEscape(entry.path)}.\${index}`;
   const rowBody: readonly string[] =
     entry.item.kind === "object"
@@ -1798,40 +1850,101 @@ const arraySectionLines = (
           ? backend.leaf(entry.item, pathAttr(rowPrefix, ""), entry.label, level + 3)
           : entry.item.kind === "union"
             ? [
-                `${ind(level + 3)}${emitUnionRow(backend, entry, ctx)}`,
+                `${ind(level + 3)}<${emitUnionComponent(
+                  backend,
+                  {
+                    unionTemplate: rowPath,
+                    spec: entry.item,
+                    label: entry.label,
+                    holes: ["index"],
+                    nameSuffix: "Row",
+                  },
+                  ctx,
+                )} form={form} index={index} />`,
               ]
-            : [
-                `${ind(level + 3)}{/* TODO: ${entry.item.kind} array-item in ${commentText(q(entry.path))} rows — extract a row component with its own useFieldArray */}`,
-              ];
+            : entry.item.kind === "tuple"
+              ? tupleRowLines(
+                  backend,
+                  rowPrefix,
+                  entry.label,
+                  entry.item.elements,
+                  level + 3,
+                )
+              : ((): readonly string[] => {
+                  // Array-of-arrays: the inner list extracts its own Rows
+                  // component, exactly like a nested array under an object
+                  // row — the outer row's index is its p0.
+                  const item = entry.item as Extract<FieldSpec, { kind: "array" }>;
+                  const itemOptionsProps = collectOptionsProps(item.item).map(
+                    (option) => option.name,
+                  );
+                  const compName = emitRowsComponent(
+                    backend,
+                    {
+                      listTemplate: rowPath.replace("${index}", "${p0}"),
+                      label: entry.label,
+                      item: item.item,
+                      holes: ["p0"],
+                      itemTypeExpr: `NonNullable<${entry.itemTypeExpr}>[number]`,
+                      itemOptionsProps,
+                    },
+                    arrays,
+                    unions,
+                    ctx,
+                  );
+                  const refAttrs = [
+                    "form={form}",
+                    "p0={index}",
+                    ...itemOptionsProps.map((name) => `${name}={${name}}`),
+                  ].join(" ");
+                  return [`${ind(level + 3)}<${compName} ${refAttrs} />`];
+                })();
   return backend.arraySection(entry, level, rowBody);
 };
 
-// A union AS the array's row item compiles to a child `{Stem}Row`
-// component, for the same reason nested arrays extract: the bindings are
-// hooks, and hooks cannot run inside rows.map. The row takes `form` +
-// `index`, binds the discriminant and every common field with useField and
-// each variant-only field with useVariantField ON THE ROW-INDEXED PATH
-// (`methods.${index}` — typed since formstand 0.16), and renders through
-// the same variantLeaf machinery a static union uses. The component is
-// appended to ctx.components; this returns the row's reference element.
-const emitUnionRow = (
+// A union bound INSIDE rows.map compiles to a child component, for the
+// same reason nested arrays extract: the bindings are hooks, and hooks
+// cannot run inside rows.map. One production serves every site — the union
+// AS a row item (`shapes.${index}`, top-level or nested) and the union as
+// a FIELD of a row object (`invoices.${p0}.pay`). The component takes
+// `form` plus one number prop per hole in the union's template path, binds
+// the discriminant and every common field with useField and each
+// variant-only field with useVariantField ON THE HOLED TEMPLATE (typed
+// since formstand 0.16/0.17), and renders through the same variantLeaf
+// machinery a static union uses. An optional/nullable union gets the same
+// clearable-select wrapper a static one does. The component is appended to
+// ctx.components; this returns its name (the caller builds the reference,
+// since only it knows which enclosing vars fill the holes).
+const emitUnionComponent = (
   backend: Backend,
-  entry: ArrayEntry,
+  args: Readonly<{
+    // The union's own path as a pre-escaped template with live holes.
+    unionTemplate: string;
+    spec: UnionSpec;
+    label: string;
+    // The component's index props, in path order (["index"], ["p0","index"]).
+    holes: readonly string[];
+    // "Row" for a union row item, "Union" for a union row-object field.
+    nameSuffix: "Row" | "Union";
+  }>,
   ctx: NestedCtx,
 ): string => {
-  const spec = entry.item as UnionSpec;
-  const segments = entry.path.split(".");
-  const base = pascalJoin(segments);
-  const suffix = identifierSuffix(`${base}Row`, ctx.used);
-  const compName = `${base}Row${suffix}`;
+  // Field segments (holes stripped) name the component and seed the binding
+  // vars — same hole-body scan rationale as pathSegmentCount.
+  const segments = args.unionTemplate
+    .replace(/\$\{[^{}]+\}/g, "")
+    .split(".")
+    .filter((segment) => segment.length > 0);
+  const base = `${pascalJoin(segments)}${args.nameSuffix}`;
+  const compName = `${base}${identifierSuffix(base, ctx.used)}`;
   ctx.used.add(compName);
   // The union binding vars, allocated with the same partition/dedupe rules
   // as a static union — the seed is the component's own scope.
   const { entry: u } = unionEntry(
-    { segments, spec },
-    new Set(["form", "index"]),
+    { segments, spec: args.spec },
+    new Set(["form", ...args.holes]),
   );
-  const rowTemplate = `${templateEscape(entry.path)}.\${index}`;
+  const t = args.unionTemplate;
   const numberVars =
     backend.numberPropsHook === undefined
       ? []
@@ -1841,16 +1954,43 @@ const emitUnionRow = (
   const component = [
     `const ${compName} = ({`,
     "  form,",
-    "  index,",
-    `}: Readonly<{ form: Form<typeof ${ctx.schemaName}>; index: number }>) => {`,
-    `  const ${u.discriminantVar} = useField(form, \`${rowTemplate}.${templateEscape(spec.discriminant)}\`);`,
+    ...args.holes.map((hole) => `  ${hole},`),
+    `}: Readonly<{ ${[
+      `form: Form<typeof ${ctx.schemaName}>`,
+      ...args.holes.map((hole) => `${hole}: number`),
+    ].join("; ")} }>) => {`,
+    `  const ${u.discriminantVar} = useField(form, \`${t}.${templateEscape(args.spec.discriminant)}\`);`,
+    // The clearable-select wrapper, exactly as unionHooks emits it for a
+    // static union, on the holed template.
+    ...(u.clearable === undefined ||
+    u.unionVar === undefined ||
+    u.selectVar === undefined
+      ? []
+      : [
+          `  const ${u.unionVar} = useField(form, \`${t}\`);`,
+          `  // The union is ${u.clearable.emptyLiteral === "null" ? "nullable" : "optional"}: the select reads the discriminant but`,
+          "  // writes the WHOLE union — the empty choice clears it, a tag starts",
+          "  // that variant blank (validation reports its gaps on submit). Writing",
+          "  // only the discriminant key would leave a half-variant object behind",
+          "  // that was never really chosen.",
+          `  const ${u.selectVar} = {`,
+          `    ...${u.discriminantVar},`,
+          "    setValue: (tag: string | null | undefined): void => {",
+          `      ${u.unionVar}.setValue(`,
+          '        (tag == null || tag === ""',
+          `          ? ${u.clearable.emptyLiteral}`,
+          `          : { ${propKey(args.spec.discriminant)}: tag }) as typeof ${u.unionVar}.value,`,
+          "      );",
+          "    },",
+          "  };",
+        ]),
     ...u.commonBindings.map(
       (binding) =>
-        `  const ${binding.varName} = useField(form, \`${rowTemplate}.${templateEscape(binding.name)}\`);`,
+        `  const ${binding.varName} = useField(form, \`${t}.${templateEscape(binding.name)}\`);`,
     ),
     ...u.bindings.map(
       (binding) =>
-        `  const ${binding.varName} = useVariantField(form, \`${rowTemplate}\`, ${q(binding.name)});`,
+        `  const ${binding.varName} = useVariantField(form, \`${t}\`, ${q(binding.name)});`,
     ),
     ...numberVars.map(
       (binding) =>
@@ -1858,13 +1998,13 @@ const emitUnionRow = (
     ),
     "  return (",
     `${ind(2)}<>`,
-    ...unionLines(backend, u, entry.label, 3),
+    ...unionLines(backend, u, args.label, 3),
     `${ind(2)}</>`,
     "  );",
     "};",
   ];
   ctx.components.push([...component]);
-  return `<${compName} form={form} index={index} />`;
+  return compName;
 };
 
 // A nested array inside an array row compiles to a child `{Stem}Rows`
@@ -1893,6 +2033,55 @@ const emitNestedRows = (
   const listTemplate =
     prefix.text.replaceAll("${index}", `\${${nextHole}}`) +
     templateEscape(field.name);
+  const compName = emitRowsComponent(
+    backend,
+    {
+      listTemplate,
+      label: field.label,
+      item,
+      holes: [...prefix.holes, nextHole],
+      itemTypeExpr: `NonNullable<${prefix.valueTypeExpr}[${q(field.name)}]>[number]`,
+      itemOptionsProps,
+    },
+    arrays,
+    unions,
+    ctx,
+  );
+  const refAttrs = [
+    "form={form}",
+    ...prefix.holes.map((hole) => `${hole}={${hole}}`),
+    `${nextHole}={index}`,
+    ...itemOptionsProps.map((name) => `${name}={${name}}`),
+  ].join(" ");
+  return [`${ind(level)}<${compName} ${refAttrs} />`];
+};
+
+// The extracted Rows component behind every array that must render inside
+// rows.map: nested arrays under object rows, and container row items
+// (array-of-arrays), at any depth. It takes `form` plus one number prop per
+// enclosing hole (p0..pN), runs its own useFieldArray on the holed list
+// template, and renders rows through the same backend.arraySection + row
+// dispatch a top-level array gets — so every item kind (object fields,
+// scalars, unions, tuples, deeper arrays) is handled identically wherever
+// the array sits. Returns the component's name; the caller builds the
+// reference, since only it knows which enclosing vars fill the holes.
+const emitRowsComponent = (
+  backend: Backend,
+  args: Readonly<{
+    // Pre-escaped list template with live holes (`teams.${p0}.marks`).
+    listTemplate: string;
+    label: string;
+    item: FieldSpec;
+    // The component's index props, in path order.
+    holes: readonly string[];
+    itemTypeExpr: string;
+    itemOptionsProps: readonly string[];
+  }>,
+  arrays: ReadonlyMap<string, ArrayEntry>,
+  unions: ReadonlyMap<string, UnionEntry>,
+  ctx: NestedCtx,
+): string => {
+  const { listTemplate, item, itemTypeExpr, itemOptionsProps } = args;
   // Field segments (holes stripped) name the component and hook. Braces are
   // excluded from the hole body for the same linear-scan reason as
   // pathSegmentCount above.
@@ -1901,19 +2090,32 @@ const emitNestedRows = (
     .split(".")
     .filter((segment) => segment.length > 0);
   const base = pascalJoin(segments);
-  const suffix = identifierSuffix(base, ctx.used);
+  const camel = camelJoin(segments);
+  // The suffix must leave every derived MODULE-SCOPE name free, not just
+  // the stem: an array-of-arrays' inner Rows strips to the same segments
+  // as its outer list, whose top-level entry already claimed
+  // `empty{Stem}Item` / `{Stem}Item` / `{stem}Array` via arrayIdents — so
+  // probing only the stem would redeclare the empty-item const.
+  const free = (s: string): boolean =>
+    !ctx.used.has(`${base}${s}`) &&
+    !ctx.used.has(`${base}${s}Rows`) &&
+    !ctx.used.has(`${base}${s}Item`) &&
+    !ctx.used.has(`empty${base}${s}Item`) &&
+    !ctx.used.has(`${camel}${s}Array`);
+  const next = (n: number): string => (free(`${n}`) ? `${n}` : next(n + 1));
+  const suffix = free("") ? "" : next(2);
   const stem = `${base}${suffix}`;
-  ctx.used.add(stem);
   const compName = `${stem}Rows`;
-  const hookName = `${camelJoin(segments)}${suffix}Array`;
+  const hookName = `${camel}${suffix}Array`;
   const emptyName = `empty${stem}Item`;
-  const itemTypeExpr = `NonNullable<${prefix.valueTypeExpr}[${q(field.name)}]>[number]`;
+  [stem, compName, `${stem}Item`, emptyName, hookName].forEach((name) =>
+    ctx.used.add(name),
+  );
 
-  const childHoles = [...prefix.holes, nextHole];
   const childPrefix: PathPrefix = {
     dynamic: true,
     text: `${listTemplate}.\${index}.`,
-    holes: childHoles,
+    holes: args.holes,
     valueTypeExpr: itemTypeExpr,
   };
   // Same budget rule as arraySectionLines: a row binds one segment past the
@@ -1926,14 +2128,64 @@ const emitNestedRows = (
       : overDepthBudget(item, pathSegmentCount(rowPath))
         ? [depthTodoLine(rowPath, ind(5))]
         : isScalarSpec(item)
-          ? backend.leaf(item, pathAttr(childPrefix, ""), field.label, 5)
-          : [
-              `${ind(5)}{/* TODO: ${item.kind} array-item in ${commentText(q(listTemplate))} rows — extract it by hand */}`,
-            ];
+          ? backend.leaf(item, pathAttr(childPrefix, ""), args.label, 5)
+          : item.kind === "union"
+            ? [
+                `${ind(5)}<${emitUnionComponent(
+                  backend,
+                  {
+                    unionTemplate: rowPath,
+                    spec: item,
+                    label: args.label,
+                    holes: [...args.holes, "index"],
+                    nameSuffix: "Row",
+                  },
+                  ctx,
+                )} form={form} ${[
+                  ...args.holes.map((hole) => `${hole}={${hole}}`),
+                  "index={index}",
+                ].join(" ")} />`,
+              ]
+            : item.kind === "tuple"
+              ? tupleRowLines(
+                  backend,
+                  childPrefix,
+                  args.label,
+                  item.elements,
+                  5,
+                )
+              : ((): readonly string[] => {
+                  // A deeper array-of-arrays: recurse, this row's index as
+                  // the next hole.
+                  const inner = (item as Extract<FieldSpec, { kind: "array" }>)
+                    .item;
+                  const nextHole = `p${args.holes.length}`;
+                  const innerComp = emitRowsComponent(
+                    backend,
+                    {
+                      listTemplate: `${listTemplate}.\${${nextHole}}`,
+                      label: args.label,
+                      item: inner,
+                      holes: [...args.holes, nextHole],
+                      itemTypeExpr: `NonNullable<${itemTypeExpr}>[number]`,
+                      itemOptionsProps,
+                    },
+                    arrays,
+                    unions,
+                    ctx,
+                  );
+                  const refAttrs = [
+                    "form={form}",
+                    ...args.holes.map((hole) => `${hole}={${hole}}`),
+                    `${nextHole}={index}`,
+                    ...itemOptionsProps.map((name) => `${name}={${name}}`),
+                  ].join(" ");
+                  return [`${ind(5)}<${innerComp} ${refAttrs} />`];
+                })();
 
   const synthEntry: ArrayEntry = {
     path: listTemplate,
-    label: field.label,
+    label: args.label,
     item,
     hookName,
     itemTypeName: `${stem}Item`,
@@ -1947,11 +2199,11 @@ const emitNestedRows = (
     "",
     `const ${compName} = ({`,
     "  form,",
-    ...childHoles.map((hole) => `  ${hole},`),
+    ...args.holes.map((hole) => `  ${hole},`),
     ...itemOptionsProps.map((name) => `  ${name},`),
     `}: Readonly<{ ${[
       "form: Form<typeof " + ctx.schemaName + ">",
-      ...childHoles.map((hole) => `${hole}: number`),
+      ...args.holes.map((hole) => `${hole}: number`),
       ...itemOptionsProps.map((name) => `${name}: readonly string[]`),
     ].join("; ")} }>) => {`,
     `  const ${hookName} = useFieldArray(form, \`${listTemplate}\`);`,
@@ -1961,14 +2213,7 @@ const emitNestedRows = (
     "};",
   ];
   ctx.components.push(component);
-
-  const refAttrs = [
-    "form={form}",
-    ...prefix.holes.map((hole) => `${hole}={${hole}}`),
-    `${nextHole}={index}`,
-    ...itemOptionsProps.map((name) => `${name}={${name}}`),
-  ].join(" ");
-  return [`${ind(level)}<${compName} ${refAttrs} />`];
+  return compName;
 };
 
 // The scaffold-mode blocks emitForm assembles around the component: the

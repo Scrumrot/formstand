@@ -63,6 +63,7 @@ const tupleOnlyIr = api.fromZod(edgeSchemas.tupleOnlySchema);
 const rootUnionIr = api.fromZod(edgeSchemas.rootUnionSchema);
 const clearableUnionIr = api.fromZod(edgeSchemas.clearableUnionSchema);
 const unionRowsIr = api.fromZod(edgeSchemas.unionRowsSchema);
+const rowContainersIr = api.fromZod(edgeSchemas.rowContainersSchema);
 
 // A described twin of the kitchen sink: a description on every scalar leaf
 // (containers recursed, union variant fields and tuple elements included),
@@ -450,6 +451,25 @@ const generateKit = ({ alias, emitSingle, moduleUi, moduleExtra, probe }) => {
       unionRowsIr,
       "unionRowsSchema",
       "UnionRowsForm",
+      undefined,
+      "../../edgeSchemas",
+    ),
+    // Containers inside rows: tuple/array items, union/tuple row fields,
+    // unions under nested arrays — the extracted components (single-file)
+    // and in-Row bindings (module) per kit, on holed template paths.
+    single(
+      "RowContainers",
+      rowContainersIr,
+      "rowContainersSchema",
+      undefined,
+      undefined,
+      "../edgeSchemas",
+    ),
+    ...moduleForm(
+      "RowContainers",
+      rowContainersIr,
+      "rowContainersSchema",
+      "RowContainersForm",
       undefined,
       "../../edgeSchemas",
     ),

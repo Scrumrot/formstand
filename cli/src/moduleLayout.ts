@@ -2583,13 +2583,284 @@ const nestedListShell = (
   }
 };
 
+// ——— Row-container pieces ———
+// A union or tuple bound INSIDE a row component, either as the row ITEM or
+// as a FIELD of a row object. Module rows are components, so the hooks
+// hoist right into them — no extraction needed (unlike the single-file
+// layout, whose rows render inline in rows.map and extract child
+// components instead). `bindings` are the hoisted hook consts (number-props
+// hoists included), `body` the "      "-indented JSX, `specs` the bound
+// leaf specs for import collection.
+type RowContainerPieces = Readonly<{
+  bindings: readonly string[];
+  body: readonly string[];
+  specs: readonly FieldSpec[];
+}>;
+
+// The discriminant and common keys bind with the plain bound field hook on
+// the holed template, variant-only keys with the bound variant hook (typed
+// since formstand 0.16/0.17); an optional/nullable union gets the same
+// clearable-select wrapper unionSectionFile emits. A container variant
+// field keeps its TODO — binding inside a variant-only object needs
+// variant sub-paths the library doesn't type.
+const rowUnionPieces = (
+  ui: ModuleUi,
+  naming: Naming,
+  spec: Extract<FieldSpec, Readonly<{ kind: "union" }>>,
+  // The union's own path as a pre-escaped template with live holes, and its
+  // comment spelling for TODO text.
+  template: string,
+  commentBase: string,
+  label: string,
+  // The row component's var scope; reserved names are added to it.
+  usedVars: Set<string>,
+): RowContainerPieces => {
+  const reserve = (
+    base: string,
+    isNumber: boolean,
+  ): string => {
+    const { varName, reserved } = allocateBindingVar(base, isNumber, usedVars);
+    reserved.forEach((name) => usedVars.add(name));
+    return varName;
+  };
+  const discriminantVar = reserve(
+    camelIdent(spec.discriminant).length === 0
+      ? "kind"
+      : camelIdent(spec.discriminant),
+    false,
+  );
+  const clearable = spec.optional
+    ? ("undefined" as const)
+    : spec.nullable
+      ? ("null" as const)
+      : undefined;
+  const clearableVars =
+    clearable === undefined
+      ? undefined
+      : {
+          unionVar: reserve("union", false),
+          selectVar: reserve(`${discriminantVar}Select`, false),
+        };
+  const commonNames = unionCommonFieldNames(spec);
+  const collected = spec.variants
+    .flatMap((variant) => variant.fields)
+    .filter((field) => !isUnaddressable(field.name) && isScalarSpec(field.spec))
+    .reduce<
+      Readonly<{
+        seen: ReadonlySet<string>;
+        common: readonly UnionSectionBinding[];
+        variant: readonly UnionSectionBinding[];
+      }>
+    >(
+      (acc, field) => {
+        if (acc.seen.has(field.name)) return acc;
+        const varName = reserve(
+          camelIdent(field.name).length === 0 ? "value" : camelIdent(field.name),
+          field.spec.kind === "number",
+        );
+        const binding = {
+          name: field.name,
+          label: field.label,
+          spec: field.spec,
+          varName,
+        };
+        const isCommon = commonNames.has(field.name);
+        return {
+          seen: new Set([...acc.seen, field.name]),
+          common: isCommon ? [...acc.common, binding] : acc.common,
+          variant: isCommon ? acc.variant : [...acc.variant, binding],
+        };
+      },
+      { seen: new Set<string>(), common: [], variant: [] },
+    );
+  const bindingByName = new Map(
+    collected.variant.map((binding) => [binding.name, binding]),
+  );
+  const commonBindingNames = new Set(collected.common.map((b) => b.name));
+  const discriminantSpec: FieldSpec = {
+    kind: "enum",
+    options: spec.variants.map((variant) => variant.tag),
+    optional: false,
+    nullable: false,
+  };
+  const bindings = [
+    `  const ${discriminantVar} = ${naming.hook("Field")}(\`${template}.${templateEscape(spec.discriminant)}\`);`,
+    ...(clearable === undefined || clearableVars === undefined
+      ? []
+      : [
+          `  const ${clearableVars.unionVar} = ${naming.hook("Field")}(\`${template}\`);`,
+          `  // The union is ${clearable === "null" ? "nullable" : "optional"}: the select reads the discriminant but`,
+          "  // writes the WHOLE union — the empty choice clears it, a tag starts",
+          "  // that variant blank (validation reports its gaps on submit). Writing",
+          "  // only the discriminant key would leave a half-variant object behind",
+          "  // that was never really chosen.",
+          `  const ${clearableVars.selectVar} = {`,
+          `    ...${discriminantVar},`,
+          "    setValue: (tag: string | null | undefined): void => {",
+          `      ${clearableVars.unionVar}.setValue(`,
+          '        (tag == null || tag === ""',
+          `          ? ${clearable}`,
+          `          : { ${propKey(spec.discriminant)}: tag }) as typeof ${clearableVars.unionVar}.value,`,
+          "      );",
+          "    },",
+          "  };",
+        ]),
+    ...collected.common.map(
+      (binding) =>
+        `  const ${binding.varName} = ${naming.hook("Field")}(\`${template}.${templateEscape(binding.name)}\`);`,
+    ),
+    ...collected.variant.map(
+      (binding) =>
+        `  const ${binding.varName} = ${naming.hook("VariantField")}(\`${template}\`, ${q(binding.name)});`,
+    ),
+    ...numberPropsBindings(ui, [...collected.common, ...collected.variant]),
+  ];
+  const body = [
+    ...leafControl(
+      ui,
+      discriminantSpec,
+      clearableVars?.selectVar ?? discriminantVar,
+      jsxText(label),
+      `{${discriminantVar}.path}`,
+      "      ",
+      clearable !== undefined,
+    ),
+    // Common fields exist in every variant → render once, outside the blocks.
+    ...collected.common.flatMap((binding) =>
+      leafControl(
+        ui,
+        binding.spec,
+        binding.varName,
+        jsxText(binding.label),
+        `{${binding.varName}.path}`,
+        "      ",
+      ),
+    ),
+    ...spec.variants.flatMap((variant) => {
+      const rendered = variant.fields.filter(
+        (field) => !commonBindingNames.has(field.name),
+      );
+      const inner = (indent: string): readonly string[] =>
+        rendered.flatMap((field): readonly string[] => {
+          if (isUnaddressable(field.name)) {
+            return [
+              `${indent}{/* TODO: field ${commentText(q(field.name))} skipped — "." in a key is not path-addressable (see formstand docs) */}`,
+            ];
+          }
+          const binding = bindingByName.get(field.name);
+          return binding === undefined
+            ? [
+                `${indent}{/* TODO: nested ${field.spec.kind} ${commentText(q(`${commentBase}.${field.name}`))} inside a union variant — extract it by hand */}`,
+              ]
+            : leafControl(
+                ui,
+                field.spec,
+                binding.varName,
+                jsxText(field.label),
+                `{${binding.varName}.path}`,
+                indent,
+              );
+        });
+      // One real element needs no fragment; a lone TODO comment still does
+      // (`cond && ({/* ... */})` is an empty parenthesized expression).
+      const first = rendered[0];
+      const single =
+        rendered.length === 1 &&
+        first !== undefined &&
+        !isUnaddressable(first.name) &&
+        bindingByName.has(first.name);
+      return single
+        ? [
+            `      {${discriminantVar}.value === ${q(variant.tag)} && (`,
+            ...inner("        "),
+            "      )}",
+          ]
+        : [
+            `      {${discriminantVar}.value === ${q(variant.tag)} && (`,
+            "        <>",
+            ...inner("          "),
+            "        </>",
+            "      )}",
+          ];
+    }),
+  ];
+  return {
+    bindings,
+    body,
+    specs: [
+      discriminantSpec,
+      ...collected.common.map((binding) => binding.spec),
+      ...collected.variant.map((binding) => binding.spec),
+    ],
+  };
+};
+
+// Tuple positions bind at their static numeric indices under the holed
+// template (`segments.${index}.span.0`), one plain field hook each — no
+// useFieldArray, no add/remove. Non-scalar positions keep a per-element
+// TODO, same as a static tuple section's.
+const rowTuplePieces = (
+  ui: ModuleUi,
+  naming: Naming,
+  spec: Extract<FieldSpec, Readonly<{ kind: "tuple" }>>,
+  template: string,
+  commentBase: string,
+  label: string,
+  usedVars: Set<string>,
+): RowContainerPieces => {
+  const positions = spec.elements.map(
+    (element, i): RowContainerPieces =>
+      isScalarSpec(element)
+        ? ((): RowContainerPieces => {
+            const { varName, reserved } = allocateBindingVar(
+              `value${i}`,
+              element.kind === "number",
+              usedVars,
+            );
+            reserved.forEach((name) => usedVars.add(name));
+            return {
+              bindings: [
+                `  const ${varName} = ${naming.hook("Field")}(\`${template}.${i}\`);`,
+                ...numberPropsBindings(ui, [{ varName, spec: element }]),
+              ],
+              body: leafControl(
+                ui,
+                element,
+                varName,
+                jsxText(`${label} ${i + 1}`),
+                `{${varName}.path}`,
+                "      ",
+              ),
+              specs: [element],
+            };
+          })()
+        : {
+            bindings: [],
+            body: [
+              `      {/* TODO: tuple element ${i} (${element.kind}) at ${commentText(q(`${commentBase}.${i}`))} isn't scalar — bind it by hand */}`,
+            ],
+            specs: [],
+          },
+  );
+  return {
+    // A variadic rest or other walker note on the tuple itself surfaces
+    // ahead of the positions.
+    bindings: positions.flatMap((p) => p.bindings),
+    body: [
+      ...todoTexts(spec).map((text) => `      {/* TODO: ${text} */}`),
+      ...positions.flatMap((p) => p.body),
+    ],
+    specs: positions.flatMap((p) => p.specs),
+  };
+};
+
 // The Row/Rows pair a nested array compiles to — and, recursively, a pair for
 // every array nested inside its item, to arbitrary depth. Each level threads
 // the enclosing rows' indices as props (p0, p1, ...); a bound path carries one
 // hole per enclosing array plus the Row's own `index`. `used` dedupes
 // component stems across the whole tree. The IR is finite (--max-depth), so
-// the recursion always terminates. Non-array, non-scalar shapes inside a row
-// (nested objects, unions, tuples) stay TODO comments.
+// the recursion always terminates. A nested OBJECT inside a row stays a TODO
+// comment; unions and tuples bind through the row-container pieces above.
 type NestedParts = Readonly<{
   lines: readonly string[];
   imports: readonly ImportLine[];
@@ -2682,6 +2953,7 @@ const nestedArrayComponents = (
     body: readonly string[];
     bindings?: readonly string[];
     spec?: FieldSpec;
+    specs?: readonly FieldSpec[];
     part?: NestedParts;
   }>;
   const rowVarUsed = new Set<string>([
@@ -2752,6 +3024,37 @@ const nestedArrayComponents = (
               part: nestedArrayComponents(ui, naming, child, used),
             };
           }
+          // A union or tuple FIELD of the row binds right in the Row
+          // component (rows are components; hooks hoist into them).
+          if (field.spec.kind === "union" || field.spec.kind === "tuple") {
+            const template = `${entry.templateBase}.\${index}.${templateEscape(field.name)}`;
+            const commentBase = `${entry.commentBase}.$\{index}.${field.name}`;
+            const pieces =
+              field.spec.kind === "union"
+                ? rowUnionPieces(
+                    ui,
+                    naming,
+                    field.spec,
+                    template,
+                    commentBase,
+                    field.label,
+                    rowVarUsed,
+                  )
+                : rowTuplePieces(
+                    ui,
+                    naming,
+                    field.spec,
+                    template,
+                    commentBase,
+                    field.label,
+                    rowVarUsed,
+                  );
+            return {
+              body: pieces.body,
+              bindings: pieces.bindings,
+              specs: pieces.specs,
+            };
+          }
           return {
             body: [
               `      {/* TODO: nested ${field.spec.kind} ${commentText(q(`${entry.commentBase}.$\{index}.${field.name}`))} — bind it by hand */}`,
@@ -2773,7 +3076,10 @@ const nestedArrayComponents = (
       ? {
           bindings: objectPieces.flatMap((p) => p.bindings ?? []),
           body: objectPieces.flatMap((p) => p.body),
-          specs: objectPieces.flatMap((p) => (p.spec ? [p.spec] : [])),
+          specs: objectPieces.flatMap((p) => [
+            ...(p.spec ? [p.spec] : []),
+            ...(p.specs ?? []),
+          ]),
           children: objectPieces.flatMap((p) => (p.part ? [p.part] : [])),
         }
       : overDepthBudget(entry.item, rowSegments)
@@ -2822,14 +3128,41 @@ const nestedArrayComponents = (
                   children: [nestedArrayComponents(ui, naming, child, used)],
                 };
               })()
-            : {
-                bindings: [],
-                body: [
-                  `      {/* TODO: array item is a ${entry.item.kind} in ${commentText(q(entry.commentBase))} rows — bind it by hand */}`,
-                ],
-                specs: [],
-                children: [],
-              };
+            : ((): typeof parts => {
+                // A union or tuple as the row ITEM binds right in the Row
+                // component, on the row-indexed template.
+                const template = `${entry.templateBase}.\${index}`;
+                const commentBase = `${entry.commentBase}.$\{index}`;
+                const pieces =
+                  entry.item.kind === "union"
+                    ? rowUnionPieces(
+                        ui,
+                        naming,
+                        entry.item,
+                        template,
+                        commentBase,
+                        entry.label,
+                        rowVarUsed,
+                      )
+                    : rowTuplePieces(
+                        ui,
+                        naming,
+                        entry.item as Extract<
+                          FieldSpec,
+                          Readonly<{ kind: "tuple" }>
+                        >,
+                        template,
+                        commentBase,
+                        entry.label,
+                        rowVarUsed,
+                      );
+                return {
+                  bindings: pieces.bindings,
+                  body: pieces.body,
+                  specs: pieces.specs,
+                  children: [],
+                };
+              })();
 
   const holeParams = entry.holes.map((h) => `  ${h},`);
   const holeTypes = entry.holes.map((h) => `${h}: number`);
@@ -3316,30 +3649,6 @@ const arraySectionFile = (
       : [nestedArrayComponents(ui, naming, arrayItemEntry, nestedUsed)]),
   ];
 
-  const itemExtras =
-    spec.item.kind === "object"
-      ? spec.item.fields.flatMap((field) => {
-          if (isUnaddressable(field.name)) {
-            return [
-              `      {/* TODO: field ${commentText(q(field.name))} skipped — "." in a key is not path-addressable (see formstand docs) */}`,
-            ];
-          }
-          if (field.spec.kind === "array") {
-            const entry = nestedByKey.get(field.name);
-            return entry === undefined
-              ? []
-              : [
-                  `      <${entry.stem}Rows p0={index}${optionsPropsAttrs(rowItemOptionsProps(entry.item))} />`,
-                ];
-          }
-          return isScalarSpec(field.spec)
-            ? []
-            : [
-                `      {/* TODO: nested ${field.spec.kind} ${commentText(q(`${section.key}.$\{index}.${field.name}`))} — extract a row component with its own hook */}`,
-              ];
-        })
-      : [];
-
   const used = new Set<string>(["index", "onRemove", "field", "rows"]);
   const rowVars = itemLeaves.map((field) => {
     // camelIdent, not camelCase: these become const bindings, and a field
@@ -3357,6 +3666,70 @@ const arraySectionFile = (
     return { field, varName };
   });
 
+  // The row's non-leaf fields: nested arrays reference their extracted
+  // Rows, union and tuple fields bind right in the Row (rows are
+  // components; hooks hoist into them), nested objects keep their TODO.
+  const itemExtraPieces: readonly RowContainerPieces[] =
+    spec.item.kind === "object"
+      ? spec.item.fields.map((field): RowContainerPieces => {
+          if (isUnaddressable(field.name)) {
+            return {
+              bindings: [],
+              body: [
+                `      {/* TODO: field ${commentText(q(field.name))} skipped — "." in a key is not path-addressable (see formstand docs) */}`,
+              ],
+              specs: [],
+            };
+          }
+          if (field.spec.kind === "array") {
+            const entry = nestedByKey.get(field.name);
+            return {
+              bindings: [],
+              body:
+                entry === undefined
+                  ? []
+                  : [
+                      `      <${entry.stem}Rows p0={index}${optionsPropsAttrs(rowItemOptionsProps(entry.item))} />`,
+                    ],
+              specs: [],
+            };
+          }
+          if (field.spec.kind === "union" || field.spec.kind === "tuple") {
+            const template = `${templateEscape(section.key)}.\${index}.${templateEscape(field.name)}`;
+            const commentBase = `${section.key}.$\{index}.${field.name}`;
+            return field.spec.kind === "union"
+              ? rowUnionPieces(
+                  ui,
+                  naming,
+                  field.spec,
+                  template,
+                  commentBase,
+                  field.label,
+                  used,
+                )
+              : rowTuplePieces(
+                  ui,
+                  naming,
+                  field.spec,
+                  template,
+                  commentBase,
+                  field.label,
+                  used,
+                );
+          }
+          return {
+            bindings: [],
+            body: isScalarSpec(field.spec)
+              ? []
+              : [
+                  `      {/* TODO: nested ${field.spec.kind} ${commentText(q(`${section.key}.$\{index}.${field.name}`))} — bind it by hand */}`,
+                ],
+            specs: [],
+          };
+        })
+      : [];
+  const itemExtras = itemExtraPieces.flatMap((piece) => piece.body);
+
   const scalarItem = isScalarSpec(spec.item);
 
   // A union ITEM binds its row the way a static union section does, but on
@@ -3364,78 +3737,42 @@ const arraySectionFile = (
   // common keys with the bound field hook, variant-only keys with the bound
   // variant hook. Same partition/var rules as unionSectionFile, allocated
   // against the row component's own scope.
-  const unionItem = spec.item.kind === "union" ? spec.item : undefined;
-  const unionRow =
-    unionItem === undefined
-      ? undefined
-      : (() => {
-          const commonNames = unionCommonFieldNames(unionItem);
-          const discriminantVar = camelIdent(unionItem.discriminant);
-          used.add(discriminantVar);
-          const partitioned = unionItem.variants
-            .flatMap((variant) => variant.fields)
-            .filter(
-              (field) =>
-                !isUnaddressable(field.name) && isScalarSpec(field.spec),
-            )
-            .reduce<
-              Readonly<{
-                seen: ReadonlySet<string>;
-                common: readonly UnionSectionBinding[];
-                variant: readonly UnionSectionBinding[];
-              }>
-            >(
-              (acc, field) => {
-                if (acc.seen.has(field.name)) return acc;
-                const base =
-                  camelIdent(field.name).length === 0
-                    ? "value"
-                    : camelIdent(field.name);
-                const { varName, reserved } = allocateBindingVar(
-                  base,
-                  field.spec.kind === "number",
-                  used,
-                );
-                reserved.forEach((n) => used.add(n));
-                const binding = {
-                  name: field.name,
-                  label: field.label,
-                  spec: field.spec,
-                  varName,
-                };
-                return {
-                  seen: new Set([...acc.seen, field.name]),
-                  common: commonNames.has(field.name)
-                    ? [...acc.common, binding]
-                    : acc.common,
-                  variant: commonNames.has(field.name)
-                    ? acc.variant
-                    : [...acc.variant, binding],
-                };
-              },
-              { seen: new Set<string>(), common: [], variant: [] },
-            );
-          const discriminantSpec: FieldSpec = {
-            kind: "enum",
-            options: unionItem.variants.map((variant) => variant.tag),
-            optional: false,
-            nullable: false,
-          };
-          return { discriminantVar, discriminantSpec, ...partitioned };
-        })();
+  // A union ITEM binds its row the way a static union section does, but on
+  // the ROW-INDEXED path (typed since formstand 0.16); a tuple ITEM binds
+  // its positions at static sub-indices of the row path. Both through the
+  // shared row-container pieces, allocated against the row's own scope.
+  const containerRow: RowContainerPieces | undefined =
+    spec.item.kind === "union"
+      ? rowUnionPieces(
+          ui,
+          naming,
+          spec.item,
+          `${templateEscape(section.key)}.\${index}`,
+          `${section.key}.$\{index}`,
+          section.label,
+          used,
+        )
+      : spec.item.kind === "tuple"
+        ? rowTuplePieces(
+            ui,
+            naming,
+            spec.item,
+            `${templateEscape(section.key)}.\${index}`,
+            `${section.key}.$\{index}`,
+            section.label,
+            used,
+          )
+        : undefined;
 
   const rowSpecs =
     spec.item.kind === "object"
-      ? itemLeaves.map((f) => f.spec)
+      ? [
+          ...itemLeaves.map((f) => f.spec),
+          ...itemExtraPieces.flatMap((piece) => piece.specs),
+        ]
       : scalarItem
         ? [spec.item]
-        : unionRow !== undefined
-          ? [
-              unionRow.discriminantSpec,
-              ...unionRow.common.map((b) => b.spec),
-              ...unionRow.variant.map((b) => b.spec),
-            ]
-          : [];
+        : (containerRow?.specs ?? []);
 
   const dynamicId = (name: string | undefined): string =>
     name === undefined
@@ -3444,27 +3781,18 @@ const arraySectionFile = (
 
   const rowBindings =
     spec.item.kind === "object"
-      ? rowVars.map(
-          ({ field, varName }) =>
-            `  const ${varName} = ${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}.${templateEscape(field.name)}\`);`,
-        )
+      ? [
+          ...rowVars.map(
+            ({ field, varName }) =>
+              `  const ${varName} = ${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}.${templateEscape(field.name)}\`);`,
+          ),
+          ...itemExtraPieces.flatMap((piece) => piece.bindings),
+        ]
       : scalarItem
         ? [
             `  const field = ${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}\`);`,
           ]
-        : unionRow !== undefined
-          ? [
-              `  const ${unionRow.discriminantVar} = ${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}.${templateEscape(unionItem?.discriminant ?? "")}\`);`,
-              ...unionRow.common.map(
-                (binding) =>
-                  `  const ${binding.varName} = ${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}.${templateEscape(binding.name)}\`);`,
-              ),
-              ...unionRow.variant.map(
-                (binding) =>
-                  `  const ${binding.varName} = ${naming.hook("VariantField")}(\`${templateEscape(section.key)}.\${index}\`, ${q(binding.name)});`,
-              ),
-            ]
-          : [];
+        : (containerRow?.bindings ?? []);
 
   const rowBody =
     spec.item.kind === "object"
@@ -3494,82 +3822,7 @@ const arraySectionFile = (
           ? [
               `      <${arrayItemEntry.stem}Rows p0={index}${optionsPropsAttrs(rowItemOptionsProps(arrayItemEntry.item))} />`,
             ]
-          : unionRow !== undefined && unionItem !== undefined
-            ? [
-                // The row union: discriminant select, common fields once,
-                // then one conditional block per variant — the same shape
-                // unionSectionFile renders, from the row-bound vars.
-                ...leafControl(
-                  ui,
-                  unionRow.discriminantSpec,
-                  unionRow.discriminantVar,
-                  jsxText(section.label),
-                  `{${unionRow.discriminantVar}.path}`,
-                  "      ",
-                ),
-                ...unionRow.common.flatMap((binding) =>
-                  leafControl(
-                    ui,
-                    binding.spec,
-                    binding.varName,
-                    jsxText(binding.label),
-                    `{${binding.varName}.path}`,
-                    "      ",
-                  ),
-                ),
-                ...unionItem.variants.flatMap((variant) => {
-                  const commonNames = new Set(
-                    unionRow.common.map((b) => b.name),
-                  );
-                  const byName = new Map(
-                    unionRow.variant.map((b) => [b.name, b]),
-                  );
-                  const rendered = variant.fields.filter(
-                    (field) => !commonNames.has(field.name),
-                  );
-                  const inner = (indent: string): readonly string[] =>
-                    rendered.flatMap((field): readonly string[] => {
-                      const binding = byName.get(field.name);
-                      return binding === undefined
-                        ? [
-                            `${indent}{/* TODO: nested ${field.spec.kind} ${commentText(q(`${section.key}.${field.name}`))} inside a union variant — extract it by hand */}`,
-                          ]
-                        : leafControl(
-                            ui,
-                            field.spec,
-                            binding.varName,
-                            jsxText(field.label),
-                            `{${binding.varName}.path}`,
-                            indent,
-                          );
-                    });
-                  // Same single-element fragment elision as every other
-                  // union emission site.
-                  const first = rendered[0];
-                  const single =
-                    rendered.length === 1 &&
-                    first !== undefined &&
-                    byName.has(first.name);
-                  return single
-                    ? [
-                        `      {${unionRow.discriminantVar}.value === ${q(variant.tag)} && (`,
-                        ...inner("        "),
-                        "      )}",
-                      ]
-                    : [
-                        `      {${unionRow.discriminantVar}.value === ${q(variant.tag)} && (`,
-                        "        <>",
-                        ...inner("          "),
-                        "        </>",
-                        "      )}",
-                      ];
-                }),
-              ]
-            : [
-                // A tuple item can't bind at a dynamic array-row path (its
-                // positions are static indices of a FIXED shape) — a TODO.
-                `      {/* TODO: array item is a ${spec.item.kind} — bind its positions by hand */}`,
-              ];
+          : (containerRow?.body ?? []);
 
   const imports = mergeImports([
     ...rowSpecs.flatMap((s) => leafImports(ui, s)),
@@ -3580,14 +3833,20 @@ const arraySectionFile = (
     ...allNestedParts.flatMap((part) => part.imports),
   ]);
 
-  // useXField is only imported when a row actually binds a field: an
-  // object/scalar item binds one, but a discriminated-union item binds
-  // nothing (its row is a TODO), so importing it would be an unused import
-  // that breaks a consumer's noUnusedLocals.
-  const usesField = [
+  // useXField / useXVariantField are only imported when a binding in this
+  // file actually calls them (an unused import breaks a consumer's
+  // noUnusedLocals) — detected by scanning the emitted lines, so nested
+  // rows' bindings count too.
+  const boundLines = [
     ...rowBindings,
     ...allNestedParts.flatMap((part) => part.lines),
-  ].some((line) => line.includes(`${naming.hook("Field")}(`));
+  ];
+  const usesField = boundLines.some((line) =>
+    line.includes(`${naming.hook("Field")}(`),
+  );
+  const usesVariantField = boundLines.some((line) =>
+    line.includes(`${naming.hook("VariantField")}(`),
+  );
 
   // Options props consumed anywhere in this section's rows (direct row
   // leaves and nested arrays alike): the section declares them, the Row
@@ -3608,11 +3867,9 @@ const arraySectionFile = (
       `  ${naming.hook("FieldArray")},`,
       `  ${naming.hook("IsDirty")},`,
       `  ${naming.hook("IsValid")},`,
-      // A union item's variant-only fields bind with the variant hook on
-      // the row-indexed path.
-      ...(unionRow !== undefined && unionRow.variant.length > 0
-        ? [`  ${naming.hook("VariantField")},`]
-        : []),
+      // A union's variant-only fields (a row item's or a row field's,
+      // nested rows included) bind with the variant hook on the holed path.
+      ...(usesVariantField ? [`  ${naming.hook("VariantField")},`] : []),
       `} from "../hooks";`,
       `import type { ${naming.valuesType} } from "../types";`,
       "",
@@ -3638,6 +3895,8 @@ const arraySectionFile = (
       ...rowOptionsProps.map((name) => `  ${name},`),
       `}: Readonly<{ ${["index: number", "onRemove: () => void", ...optionsPropsTypeFields(rowOptionsProps)].join("; ")} }>) => {`,
       ...rowBindings,
+      // Container rows (union/tuple items and row fields) carry their
+      // number-props hoists inside their own bindings already.
       ...numberPropsBindings(
         ui,
         spec.item.kind === "object"
@@ -3647,12 +3906,7 @@ const arraySectionFile = (
             }))
           : scalarItem
             ? [{ varName: "field", spec: spec.item }]
-            : unionRow !== undefined
-              ? [...unionRow.common, ...unionRow.variant].map((binding) => ({
-                  varName: binding.varName,
-                  spec: binding.spec,
-                }))
-              : [],
+            : [],
       ),
       "  return (",
       ...shell.rowOpen,

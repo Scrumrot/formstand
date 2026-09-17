@@ -427,13 +427,11 @@ describe("warnings stop at each layout's degradation frontier", () => {
     const ir = fromZod(arrayOfArrays);
     const single = emitSingle(ir);
     const moduleJoined = emitModule(ir);
-    // Single-file degrades the container item to the generic TODO — no
-    // depth TODO, so no depth warning either.
-    expect(single).toContain("extract a row component");
-    expect(depthTodoCount(single)).toBe(0);
-    expect(overBudgetFieldPaths(ir, depthWarningFrontier("single"))).toEqual([]);
-    // The module layout descends and emits exactly one depth TODO (the
-    // inner rows' field), mirrored one for one.
+    // Both layouts now extract the inner Rows component and emit exactly
+    // one depth TODO (the inner rows' field), mirrored one for one.
+    const singleWarnings = overBudgetFieldPaths(ir, depthWarningFrontier("single"));
+    expect(singleWarnings).toEqual(["o1.o2.o3.o4.o5.o6.list.*.*.x"]);
+    expect(depthTodoCount(single)).toBe(singleWarnings.length);
     const moduleWarnings = overBudgetFieldPaths(ir, depthWarningFrontier("module"));
     expect(moduleWarnings).toEqual(["o1.o2.o3.o4.o5.o6.list.*.*.x"]);
     expect(depthTodoCount(moduleJoined)).toBe(moduleWarnings.length);
