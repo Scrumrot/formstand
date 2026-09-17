@@ -28,6 +28,7 @@ export {
   // adapters for other UI kits can share it (like numberToInputText /
   // parseNumberText below).
   emptyValueForSchema,
+  isClearableSchema,
 } from "./core/validation";
 export type {
   ValidationResult,

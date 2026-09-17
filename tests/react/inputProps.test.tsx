@@ -29,6 +29,83 @@ describe("textInputProps", () => {
   });
 });
 
+// The clearable contract (0.18): clearing a string-shaped input writes the
+// field's emptyValue exactly when the schema accepts it — optional writes
+// undefined, nullable writes null, defaulted writes undefined — and a
+// REQUIRED string keeps "" so the schema judges a visible value instead of
+// a hole it rejects. This was the documented optional-"" asymmetry; the
+// schema introspection now answers it.
+describe("clearable: cleared inputs write emptyValue when the schema takes it", () => {
+  const schema = z.object({
+    nickname: z.string().optional(),
+    alias: z.string().nullable(),
+    name: z.string(),
+    theme: z.enum(["light", "dark"]).optional(),
+    greeting: z.string().default("hi"),
+  });
+  const bind = () =>
+    renderHook(() => {
+      const form = useForm(schema, {
+        initialValues: { alias: null, name: "n" } as never,
+      });
+      return {
+        form,
+        nickname: useField(form, "nickname"),
+        alias: useField(form, "alias"),
+        name: useField(form, "name"),
+        theme: useField(form, "theme"),
+        greeting: useField(form, "greeting"),
+      };
+    });
+  const type = (
+    props: Readonly<{ onChange: (e: never) => void }>,
+    value: string,
+  ) => {
+    act(() => {
+      (props.onChange as (e: unknown) => void)({ target: { value } });
+    });
+  };
+
+  it("exposes clearable from the schema: optional/nullable/default yes, required no", () => {
+    const { result } = bind();
+    expect(result.current.nickname.clearable).toBe(true);
+    expect(result.current.alias.clearable).toBe(true);
+    expect(result.current.greeting.clearable).toBe(true);
+    expect(result.current.name.clearable).toBe(false);
+  });
+
+  it("an optional string clears to undefined and reads pristine again", () => {
+    const { result } = bind();
+    type(textInputProps(result.current.nickname), "draft");
+    expect(result.current.nickname.value).toBe("draft");
+    type(textInputProps(result.current.nickname), "");
+    expect(result.current.nickname.value).toBe(undefined);
+    expect(result.current.nickname.dirty).toBe(false);
+  });
+
+  it("a nullable string still clears to null", () => {
+    const { result } = bind();
+    type(textInputProps(result.current.alias), "x");
+    type(textInputProps(result.current.alias), "");
+    expect(result.current.alias.value).toBe(null);
+  });
+
+  it("a required string cleared to empty stays the empty string", () => {
+    const { result } = bind();
+    type(textInputProps(result.current.name), "");
+    expect(result.current.name.value).toBe("");
+  });
+
+  it("an optional select clears back to undefined", () => {
+    const { result } = bind();
+    type(selectProps(result.current.theme), "dark");
+    expect(result.current.theme.value).toBe("dark");
+    type(selectProps(result.current.theme), "");
+    expect(result.current.theme.value).toBe(undefined);
+  });
+
+});
+
 describe("numberInputProps", () => {
   const schema = z.object({ age: z.number().optional() });
 

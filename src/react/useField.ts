@@ -18,6 +18,7 @@ import {
   type FieldValidationResult,
   type SettledFieldValidationResult,
   emptyValueForSchema,
+  isClearableSchema,
   fieldSchemaAtPath,
 } from "../core/validation";
 
@@ -64,6 +65,13 @@ export type UseFieldReturn<TValue> = Readonly<{
   // source of truth), undefined when it is optional or unknown. Falls back
   // to "the initial value was null" for schema-less FieldFormApi forms.
   emptyValue: null | undefined;
+  // Whether the schema ACCEPTS that emptyValue (optional / nullable /
+  // defaulted — see isClearableSchema). The string-shaped bindings write
+  // emptyValue on a cleared input only when this is true; a required
+  // string cleared to "" stays "" so the schema judges a visible value
+  // instead of a hole it rejects. Schema-less forms fall back to the same
+  // heuristic as emptyValue: a null initial value reads as clearable.
+  clearable: boolean;
   error: readonly string[] | undefined;
   // The first error message, or undefined when the channel is empty — the
   // display shorthand every adapter otherwise re-derives by hand (the
@@ -194,12 +202,21 @@ export function useField<TValue = unknown>(
   // carries its schema (Form<TSchema> does; a bare FieldFormApi may not).
   const formSchema = (form as Readonly<{ schema?: z.ZodType }>).schema;
   const initialValue = slice.initialValue;
-  const emptyValue = useMemo(() => {
+  const { emptyValue, clearable } = useMemo(() => {
     if (formSchema !== undefined) {
       const sub = fieldSchemaAtPath(formSchema, path);
-      if (sub !== null) return emptyValueForSchema(sub);
+      if (sub !== null) {
+        return {
+          emptyValue: emptyValueForSchema(sub),
+          clearable: isClearableSchema(sub),
+        };
+      }
     }
-    return initialValue === null ? null : undefined;
+    // Schema-less heuristic: a null initial value is the one runtime signal
+    // that null round-trips, so it drives both answers.
+    return initialValue === null
+      ? { emptyValue: null, clearable: true }
+      : { emptyValue: undefined, clearable: false };
   }, [formSchema, path, initialValue]);
 
   const debounceMs = options?.debounceMs;
@@ -321,6 +338,7 @@ export function useField<TValue = unknown>(
       value: slice.value,
       initialValue: slice.initialValue,
       emptyValue,
+      clearable,
       error: slice.error,
       // `?.[0]` covers both the undefined channel and an empty array.
       firstError: slice.error?.[0],
@@ -335,6 +353,6 @@ export function useField<TValue = unknown>(
       validateAsync,
       onBlur,
     }),
-    [slice, emptyValue, setValue, setTouched, setError, clearError, validate, validateAsync, onBlur],
+    [slice, emptyValue, clearable, setValue, setTouched, setError, clearError, validate, validateAsync, onBlur],
   );
 }

@@ -119,22 +119,22 @@ describe("persistForm", () => {
 
     expect(form.getState().values).toEqual(initialValues);
 
-    expect(handle.restore()).toBe(true);
+    expect(handle.load()).toBe(true);
     expect(form.getState().values).toEqual(draft);
-    // Manual restore applies with adopt semantics — the draft reads clean.
+    // A manual load applies with adopt semantics — the draft reads clean.
     expect(form.dirtyFields()).toEqual([]);
   });
 
-  it("restore() returns false without a stored draft", () => {
+  it("load() returns false without a stored draft", () => {
     const storage = memoryStorage();
     const form = makeForm();
     const handle = persistForm(form, { key: KEY, storage, apply: "manual" });
 
-    expect(handle.restore()).toBe(false);
+    expect(handle.load()).toBe(false);
     expect(form.getState().values).toEqual(initialValues);
   });
 
-  it("corrupt JSON in storage: restore() is false and nothing throws", () => {
+  it("corrupt JSON in storage: load() is false and nothing throws", () => {
     const storage = memoryStorage();
     storage.setItem(KEY, "{not json!!!");
     const form = makeForm();
@@ -142,7 +142,7 @@ describe("persistForm", () => {
     const handle = persistForm(form, { key: KEY, storage });
 
     expect(form.getState().values).toEqual(initialValues);
-    expect(handle.restore()).toBe(false);
+    expect(handle.load()).toBe(false);
     expect(form.getState().values).toEqual(initialValues);
   });
 
@@ -204,7 +204,7 @@ describe("persistForm", () => {
       debounceMs: 0,
     });
 
-    expect(handle.restore()).toBe(false);
+    expect(handle.load()).toBe(false);
     expect(() => form.setValue("title", "x")).not.toThrow();
     expect(() => handle.clear()).not.toThrow();
     handle.dispose();

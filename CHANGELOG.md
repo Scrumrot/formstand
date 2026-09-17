@@ -1,5 +1,47 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`PersistHandle.restore()` is now `load()`** (breaking). The method's
+  DEFAULT application is `adoptValues` — a rebase that reads clean — and
+  the old name promised the setValues semantics it only has under
+  `apply: "restore"`. The name now describes what it does; the `apply`
+  mode names are unchanged. `usePersistForm`'s handle follows.
+- **Cleared inputs write `emptyValue` whenever the schema accepts it.**
+  `textInputProps`/`selectProps` (and the bound `TextField`/`SelectField`)
+  used to write the empty value only for nullable fields, so clearing
+  `z.string().optional()` left `""` behind — a documented asymmetry that
+  kept the field dirty against an `undefined` initial and made an optional
+  enum select unclearable. Clearing now writes `undefined` for optional
+  and defaulted fields and `null` for nullable ones; a REQUIRED string
+  cleared to `""` still stays `""`, so the schema judges a visible value
+  instead of a hole it rejects. `SelectField`'s empty option is
+  accordingly selectable for every clearable field, not just nullable
+  ones.
+
+### Added
+
+- **`field.clearable`** on `UseFieldReturn`: whether the schema accepts
+  the field's `emptyValue` (optional, nullable, or defaulted),
+  introspected from the zod schema with the same shallow walk as
+  `emptyValue` so the pair can never disagree. Schema-less forms fall
+  back to the null-initial heuristic. **`isClearableSchema(schema)`** is
+  the exported rule behind it, next to `emptyValueForSchema`.
+
+## formstand-cli Unreleased
+
+### Changed
+
+- **Generated kit adapters clear through `field.clearable`.** The
+  emitted text and select bindings wrote the empty value only for
+  nullable fields, mirroring the library's old rule; they now write
+  `field.emptyValue` whenever `field.clearable` says the schema accepts
+  it, so generated optional fields clear to `undefined` instead of
+  holding `""`. Kit output therefore needs formstand 0.18; regenerate
+  to pick the rule up, or keep the old adapter — both compile.
+
 ## formstand-cli 0.17.0 — 2026-09-17
 
 ### Added

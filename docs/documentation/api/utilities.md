@@ -20,7 +20,7 @@ shouldValidateOn(trigger, mode, reValidateMode, submitAttempted, touched?): bool
 `shouldValidateOn` is the mode-resolution rule the hooks use. `trigger` is `"change"` or `"blur"`, and `reValidateMode` replaces `mode` once `submitAttempted` is true.
 
 ```ts
-persistForm(form, options): PersistHandle   // debounced draft save + restore
+persistForm(form, options): PersistHandle   // debounced draft save + load
 // options: { key, storage?, debounceMs?, apply? }
 ```
 

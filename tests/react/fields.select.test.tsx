@@ -55,20 +55,63 @@ describe("SelectField with an undefined value", () => {
     errorSpy.mockRestore();
   });
 
-  it("shows the placeholder as a disabled empty option", () => {
+  // The optional field is CLEARABLE (0.18): its schema accepts undefined,
+  // so the empty option is a real choice, not a placeholder-only state.
+  it("shows the placeholder as a selectable empty option (optional is clearable)", () => {
     render(<Harness placeholder="Pick a theme" />);
     const option = screen.getByText("Pick a theme") as HTMLOptionElement;
     expect(option.value).toBe("");
-    expect(option.disabled).toBe(true);
+    expect(option.disabled).toBe(false);
   });
 
-  it("drops the implicit empty option once a value is chosen (no placeholder)", () => {
+  it("keeps the empty option after a choice and clears back to undefined", () => {
     render(<Harness />);
     const select = screen.getByLabelText("Theme") as HTMLSelectElement;
     expect(select.options).toHaveLength(3);
     fireEvent.change(select, { target: { value: "light" } });
-    expect(select.options).toHaveLength(2);
+    expect(select.options).toHaveLength(3);
     expect(select.value).toBe("light");
+    fireEvent.change(select, { target: { value: "" } });
+    expect(select.value).toBe("");
+    expect(
+      (captured.form?.getState().values as { theme?: string }).theme,
+    ).toBe(undefined);
+  });
+});
+
+describe("SelectField on a REQUIRED enum (not clearable)", () => {
+  const requiredSchema = z.object({ tier: z.enum(["basic", "pro"]) });
+  const RequiredHarness = ({
+    placeholder,
+  }: Readonly<{ placeholder?: string }>) => {
+    const form = useForm(requiredSchema, { initialValues: {} as never });
+    return (
+      <SelectField
+        form={form}
+        path="tier"
+        label="Tier"
+        {...(placeholder === undefined ? {} : { placeholder })}
+        options={[
+          { value: "basic", label: "Basic" },
+          { value: "pro", label: "Pro" },
+        ]}
+      />
+    );
+  };
+
+  it("keeps the placeholder disabled — no legal blank to clear to", () => {
+    render(<RequiredHarness placeholder="Pick a tier" />);
+    const option = screen.getByText("Pick a tier") as HTMLOptionElement;
+    expect(option.disabled).toBe(true);
+  });
+
+  it("drops the implicit empty option once a value is chosen", () => {
+    render(<RequiredHarness />);
+    const select = screen.getByLabelText("Tier") as HTMLSelectElement;
+    expect(select.options).toHaveLength(3);
+    fireEvent.change(select, { target: { value: "basic" } });
+    expect(select.options).toHaveLength(2);
+    expect(select.value).toBe("basic");
   });
 });
 

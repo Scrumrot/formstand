@@ -371,17 +371,18 @@ export const SelectField = <T extends string, F extends FieldFormApi>({
   const field = useField<T | null | undefined>(form, path);
   const a11y = useFieldA11y(field.error);
   const select = selectProps(field);
-  // A nullable field must be clearable BACK to null through the UI, so its
-  // empty option stays visible after a choice and stays selectable —
-  // selectProps writes null for it. Everywhere else the empty option is
-  // only a placeholder: visible while nothing is chosen, never selectable.
+  // A clearable field (nullable, optional, or defaulted) must be clearable
+  // BACK to its emptyValue through the UI, so its empty option stays
+  // visible after a choice and stays selectable — selectProps writes the
+  // emptyValue for it. Everywhere else the empty option is only a
+  // placeholder: visible while nothing is chosen, never selectable.
   // The value condition derives from selectProps' own coercion (undefined,
   // null, and "" all render as value ""), so any blank the select displays
   // has a matching option by construction. When the options list supplies
   // its OWN ""-valued entry, that explicit option IS the blank state —
   // rendering the implicit one too would duplicate the value, and the
   // browser would select the first (unlabelled) match instead.
-  const clearable = field.emptyValue === null;
+  const clearable = field.clearable;
   const hasExplicitEmptyOption = options.some((opt) => opt.value === "");
   const showEmptyOption =
     !hasExplicitEmptyOption &&

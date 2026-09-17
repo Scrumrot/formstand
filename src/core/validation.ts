@@ -150,6 +150,24 @@ export const emptyValueForSchema = (schema: z.ZodType): null | undefined => {
   return walk(schema, false);
 };
 
+// Whether the schema ACCEPTS its own emptyValue as input — the judgment the
+// string-shaped bindings need before writing it on a cleared input. An
+// optional field takes undefined, a nullable one takes null, and a
+// defaulted/prefaulted one takes undefined too (the default fills it at
+// parse, so clearing reads as "back to the default"). A bare required field
+// does NOT: its emptyValue is undefined only as the library-wide fallback,
+// and writing that would trade a visible "" the schema can at least judge
+// for a hole it rejects — which is why text and select bindings keep "" for
+// non-clearable fields. The check is deliberately as shallow as
+// emptyValueForSchema's walk: a wrapper that hides the optionality from
+// emptyValue (readonly, catch, pipe) hides it here too, so the pair can
+// never disagree about whether the emptyValue is legal.
+export const isClearableSchema = (schema: z.ZodType): boolean =>
+  schema instanceof z.ZodOptional ||
+  schema instanceof z.ZodNullable ||
+  schema instanceof z.ZodDefault ||
+  schema instanceof z.ZodPrefault;
+
 // One unwrap step for the lax structural walk below: wrappers that are
 // transparent to a path (optional/nullable/default/readonly/catch/pipe/...)
 // yield their inner schema; anything else returns null and is judged as-is.

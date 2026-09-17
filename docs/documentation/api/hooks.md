@@ -31,6 +31,7 @@ The pre-0.2 names `useFormState` and `useFormStateShallow` were renamed to `useF
 | `value` | `TValue` | typed via `FieldValue` when the form carries a schema |
 | `initialValue` | `TValue` | the `initialValues` slice `dirty` compares against |
 | `emptyValue` | `null \| undefined` | what a cleared input writes back, introspected from the zod schema (`.nullable()` gives `null`, `.optional()` gives `undefined`), with an initial-value fallback for schema-less forms |
+| `clearable` | `boolean` | whether the schema accepts that `emptyValue` (optional, nullable, or defaulted); the text and select bindings write `emptyValue` on clear only when true, so a required string cleared to `""` stays `""` |
 | `error` | `readonly string[] \| undefined` | from the merged error map |
 | `touched` / `dirty` / `isValidating` | `boolean` | |
 | `setValue(v)` | | writes the value and triggers mode-appropriate validation |

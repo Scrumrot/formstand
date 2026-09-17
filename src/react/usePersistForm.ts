@@ -20,7 +20,7 @@ import {
 // The returned handle is REFERENCE-STABLE across renders and delegates to
 // whichever inner subscription is currently live, so it is safe to close
 // over in submit handlers. Before the mount effect has run (and after
-// unmount) restore() reads false and clear() is a no-op — the same
+// unmount) load() reads false and clear() is a no-op — the same
 // guarded no-throw posture persistForm itself has.
 //
 // Options are read when the subscription (re)starts — on mount, and again
@@ -58,7 +58,7 @@ export const usePersistForm = <
 
   return useMemo(
     () => ({
-      restore: () => inner.current?.restore() ?? false,
+      load: () => inner.current?.load() ?? false,
       clear: () => inner.current?.clear(),
       // dispose stops THIS component's watching early; the effect cleanup
       // still runs its own dispose harmlessly (persistForm's dispose is

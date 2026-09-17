@@ -40,11 +40,11 @@ export type PersistOptions<TSchema extends z.ZodType> = Readonly<{
   // cannot tell those apart. Leaving this unset keeps the stored format
   // exactly as it was, so existing drafts survive an upgrade.
   version?: string | number;
-  // How a found draft is applied on start, and what restore() does later.
+  // How a found draft is applied on start, and what load() does later.
   // "adopt" (default) uses form.adoptValues — the draft becomes the new
   // baseline, so the form reads CLEAN. "restore" uses form.setValues — the
   // draft loads but stays DIRTY vs the original initial values. "manual"
-  // never auto-applies; the caller decides when via the returned restore(),
+  // never auto-applies; the caller decides when via the returned load(),
   // which then applies with adopt semantics (a caller-triggered load is a
   // rebase, not an edit — pick "restore" if you want dirty-vs-initials).
   apply?: "adopt" | "restore" | "manual";
@@ -53,8 +53,11 @@ export type PersistOptions<TSchema extends z.ZodType> = Readonly<{
 export type PersistHandle = Readonly<{
   // Load + apply the stored draft now (see `apply` for the semantics):
   // returns true if a draft existed, parsed, and applied. Corrupt or absent
-  // JSON returns false and never throws.
-  restore: () => boolean;
+  // JSON returns false and never throws. (Named load, not restore: the
+  // DEFAULT application is adoptValues — a rebase that reads clean — and
+  // "restore" promised setValues semantics the method only has when the
+  // apply option asks for them.)
+  load: () => boolean;
   // Delete the stored draft (e.g. after a successful submit). Also cancels
   // any pending debounced write, so a stale draft isn't re-written right
   // after clearing.
@@ -151,9 +154,9 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
     }
   };
 
-  const restore = (): boolean => {
+  const load = (): boolean => {
     // Every storage touch is guarded: private-mode/security errors read as
-    // "no draft", corrupt JSON parses as "no draft" — restore never throws.
+    // "no draft", corrupt JSON parses as "no draft" — load never throws.
     try {
       const raw = storage === null ? null : storage.getItem(options.key);
       if (raw === null) return false;
@@ -243,7 +246,7 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
   // Auto-apply BEFORE subscribing, so applying the draft doesn't immediately
   // schedule a write of the values we just read.
   if (apply !== "manual") {
-    restore();
+    load();
   }
 
   const unsubscribe = form.watchValues((values) => {
@@ -259,7 +262,7 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
   });
 
   return Object.freeze({
-    restore,
+    load,
     clear: () => {
       // Cancel first: a pending debounced write landing after removeItem
       // would silently resurrect the draft.

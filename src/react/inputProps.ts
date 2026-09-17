@@ -55,10 +55,12 @@ const ariaInvalid = (
   field: Readonly<{ error: readonly string[] | undefined }>,
 ): true | undefined => (hasFieldError(field.error) ? true : undefined);
 
-// A cleared input writes back `field.emptyValue` — null when the schema says
-// the field is nullable (useField introspects the form's zod schema), so
-// z.number().nullable() round-trips to a valid blank instead of an undefined
-// the schema rejects.
+// A cleared input writes back `field.emptyValue` when the schema ACCEPTS it
+// (`field.clearable`: optional, nullable, or defaulted — useField introspects
+// the form's zod schema), so z.number().nullable() round-trips to null and
+// z.string().optional() to undefined instead of a lingering "". A required
+// string cleared to "" stays "": writing undefined there would trade a
+// visible value the schema can judge for a hole it rejects.
 
 // Canonical display text for a numeric field value ("" for empty/NaN; null
 // counts as empty so nullable fields don't render the literal text "null").
@@ -94,11 +96,10 @@ export const textInputProps = <T extends string | null | undefined>(
   "aria-invalid": ariaInvalid(field),
   onChange: (e) => {
     const text = e.target.value;
-    // Deleting all text from a nullable field restores null, so it isn't
-    // left permanently dirty (or invalid) by a visual no-op.
-    field.setValue(
-      (text === "" && field.emptyValue === null ? null : text) as T,
-    );
+    // Deleting all text from a clearable field restores its emptyValue
+    // (null or undefined), so it isn't left permanently dirty (or invalid)
+    // by a visual no-op.
+    field.setValue((text === "" && field.clearable ? field.emptyValue : text) as T);
   },
   onBlur: field.onBlur,
 });
@@ -229,9 +230,7 @@ export const selectProps = <T extends string | null | undefined>(
   "aria-invalid": ariaInvalid(field),
   onChange: (e) => {
     const v = e.target.value;
-    field.setValue(
-      (v === "" && field.emptyValue === null ? null : v) as T,
-    );
+    field.setValue((v === "" && field.clearable ? field.emptyValue : v) as T);
   },
   onBlur: field.onBlur,
 });

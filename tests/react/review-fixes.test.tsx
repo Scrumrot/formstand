@@ -52,14 +52,16 @@ describe("SelectField nullable clear-back", () => {
     expect(planState.read?.().plan).toBe(null);
   });
 
-  it("non-nullable enums keep a disabled placeholder", () => {
-    // Optional (emptyValue undefined) — clearing isn't representable in a
-    // select, so the placeholder must stay disabled.
+  it("required enums keep a disabled placeholder", () => {
+    // REQUIRED (not clearable) — there is no legal blank to clear to, so
+    // the placeholder must stay disabled. (An optional enum is clearable
+    // since 0.18 and gets a selectable empty option instead — pinned in
+    // fields.select.test.tsx.)
     const requiredSchema = z.object({
-      theme: z.enum(["light", "dark"]).optional(),
+      theme: z.enum(["light", "dark"]),
     });
     const Harness = () => {
-      const form = useForm(requiredSchema, { initialValues: {} });
+      const form = useForm(requiredSchema, { initialValues: {} as never });
       return (
         <SelectField
           form={form}

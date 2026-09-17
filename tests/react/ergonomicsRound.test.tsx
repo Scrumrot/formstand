@@ -209,7 +209,9 @@ describe("usePersistForm owns the lifecycle", () => {
       form.setValue("note", "after unmount");
       vi.advanceTimersByTime(1);
     });
-    // Disposed on unmount: no further writes.
+    // Disposed on unmount: no further writes, and the stable facade's
+    // load() degrades to false instead of touching a dead subscription.
     expect(storage.map.has("draft")).toBe(false);
+    expect(result.current.load()).toBe(false);
   });
 });

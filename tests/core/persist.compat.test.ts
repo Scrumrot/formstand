@@ -32,7 +32,7 @@ describe("a draft from a different schema shape", () => {
       { initialValues: { contact: { email: "" } } },
     );
     const handle = persistForm(form, { key: "k", storage, apply: "manual" });
-    expect(handle.restore()).toBe(false);
+    expect(handle.load()).toBe(false);
     expect(form.getState().values).toEqual({ contact: { email: "" } });
   });
 
@@ -43,7 +43,7 @@ describe("a draft from a different schema shape", () => {
       { initialValues: { tags: [{ label: "" }] } },
     );
     const handle = persistForm(form, { key: "k", storage, apply: "manual" });
-    expect(handle.restore()).toBe(false);
+    expect(handle.load()).toBe(false);
   });
 
   it("KNOWN LIMIT: an empty initial array cannot vouch for its row shape", () => {
@@ -58,7 +58,7 @@ describe("a draft from a different schema shape", () => {
       { initialValues: { tags: [] } },
     );
     const handle = persistForm(form, { key: "k", storage, apply: "manual" });
-    expect(handle.restore()).toBe(true);
+    expect(handle.load()).toBe(true);
   });
 
   it("does NOT reject a legitimate draft that merely differs in values", () => {
@@ -72,7 +72,7 @@ describe("a draft from a different schema shape", () => {
       { initialValues: { name: "", tags: [] } },
     );
     const handle = persistForm(form, { key: "k", storage, apply: "manual" });
-    expect(handle.restore()).toBe(true);
+    expect(handle.load()).toBe(true);
     expect(form.getState().values.name).toBe("half typed");
   });
 
@@ -85,7 +85,7 @@ describe("a draft from a different schema shape", () => {
       { initialValues: { name: "", bio: undefined } },
     );
     const handle = persistForm(form, { key: "k", storage, apply: "manual" });
-    expect(handle.restore()).toBe(true);
+    expect(handle.load()).toBe(true);
     expect(form.getState().values.bio).toBe("engineer");
   });
 
@@ -100,7 +100,7 @@ describe("a draft from a different schema shape", () => {
       { initialValues: { address: null } },
     );
     const handle = persistForm(form, { key: "k", storage, apply: "manual" });
-    expect(handle.restore()).toBe(true);
+    expect(handle.load()).toBe(true);
     expect(form.getState().values.address).toEqual({ city: "London" });
   });
 
@@ -111,7 +111,7 @@ describe("a draft from a different schema shape", () => {
       { initialValues: { address: { city: "London" } } },
     );
     const handle = persistForm(form, { key: "k", storage, apply: "manual" });
-    expect(handle.restore()).toBe(true);
+    expect(handle.load()).toBe(true);
     expect(form.getState().values.address).toBeNull();
   });
 
@@ -121,7 +121,7 @@ describe("a draft from a different schema shape", () => {
       initialValues: { age: 30 },
     });
     const handle = persistForm(form, { key: "k", storage, apply: "manual" });
-    expect(handle.restore()).toBe(true);
+    expect(handle.load()).toBe(true);
   });
 
   it("restores a half-filled draft the full schema would reject", () => {
@@ -132,7 +132,7 @@ describe("a draft from a different schema shape", () => {
       initialValues: { email: "" },
     });
     const handle = persistForm(form, { key: "k", storage, apply: "manual" });
-    expect(handle.restore()).toBe(true);
+    expect(handle.load()).toBe(true);
     expect(form.getState().values.email).toBe("ad");
   });
 });
@@ -161,7 +161,7 @@ describe("version", () => {
       version: 2,
       apply: "manual",
     });
-    expect(v2.restore()).toBe(false);
+    expect(v2.load()).toBe(false);
     expect(later.getState().values.a).toBe("");
   });
 
@@ -188,7 +188,7 @@ describe("version", () => {
       version: "2026-07",
       apply: "manual",
     });
-    expect(r.restore()).toBe(true);
+    expect(r.load()).toBe(true);
     expect(later.getState().values.a).toBe("kept");
   });
 
@@ -205,7 +205,7 @@ describe("version", () => {
       version: 1,
       apply: "manual",
     });
-    expect(handle.restore()).toBe(false);
+    expect(handle.load()).toBe(false);
   });
 
   it("round-trips values that themselves contain a __v key", () => {
@@ -233,7 +233,7 @@ describe("version", () => {
       version: 1,
       apply: "manual",
     });
-    expect(r.restore()).toBe(true);
+    expect(r.load()).toBe(true);
     expect(later.getState().values.__v).toBe("user data");
   });
 
@@ -250,7 +250,7 @@ describe("version", () => {
       version: 1,
       apply: "manual",
     });
-    expect(handle.restore()).toBe(false);
+    expect(handle.load()).toBe(false);
     expect(form.getState().values.a).toBe("keep me");
   });
 
