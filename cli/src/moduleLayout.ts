@@ -41,6 +41,7 @@ import {
   muiAdapterSection,
   overDepthBudget,
   pathSegmentCount,
+  variantLeavesOf,
   propKey,
   q,
   reactImportLines,
@@ -2642,9 +2643,24 @@ const rowUnionPieces = (
           selectVar: reserve(`${discriminantVar}Select`, false),
         };
   const commonNames = unionCommonFieldNames(spec);
+  // Variant-only container fields flatten to their bindable scalar
+  // leaves as DOTTED names ("size.w" — formstand 0.20 variant
+  // sub-paths); common keys stay scalar-only plain-hook bindings.
+  const baseSegments = pathSegmentCount(template);
   const collected = spec.variants
     .flatMap((variant) => variant.fields)
-    .filter((field) => !isUnaddressable(field.name) && isScalarSpec(field.spec))
+    .flatMap((field): readonly UnionSectionBinding[] =>
+      (commonNames.has(field.name)
+        ? !isUnaddressable(field.name) && isScalarSpec(field.spec)
+          ? [{ name: field.name, label: field.label, spec: field.spec }]
+          : []
+        : variantLeavesOf(field, baseSegments).flatMap((leaf) =>
+            leaf.kind === "leaf"
+              ? [{ name: leaf.name, label: leaf.label, spec: leaf.spec }]
+              : [],
+          )
+      ).map((entry) => ({ ...entry, varName: "" })),
+    )
     .reduce<
       Readonly<{
         seen: ReadonlySet<string>;
@@ -2654,8 +2670,9 @@ const rowUnionPieces = (
     >(
       (acc, field) => {
         if (acc.seen.has(field.name)) return acc;
+        const base = camelCase(field.name.split(".").join(" "));
         const varName = reserve(
-          camelIdent(field.name).length === 0 ? "value" : camelIdent(field.name),
+          base.length === 0 ? "value" : camelIdent(base),
           field.spec.kind === "number",
         );
         const binding = {
@@ -2737,37 +2754,42 @@ const rowUnionPieces = (
       ),
     ),
     ...spec.variants.flatMap((variant) => {
-      const rendered = variant.fields.filter(
-        (field) => !commonBindingNames.has(field.name),
-      );
+      // Variant-only fields flattened to their bindable leaves, exactly
+      // as the binding collection flattened them.
+      const flattened = variant.fields
+        .filter((field) => !commonBindingNames.has(field.name))
+        .flatMap((field) => variantLeavesOf(field, baseSegments));
       const inner = (indent: string): readonly string[] =>
-        rendered.flatMap((field): readonly string[] => {
-          if (isUnaddressable(field.name)) {
-            return [
-              `${indent}{/* TODO: field ${commentText(q(field.name))} skipped — "." in a key is not path-addressable (see formstand docs) */}`,
-            ];
+        flattened.flatMap((leaf): readonly string[] => {
+          switch (leaf.kind) {
+            case "leaf": {
+              const binding = bindingByName.get(leaf.name);
+              return binding === undefined
+                ? []
+                : leafControl(
+                    ui,
+                    leaf.spec,
+                    binding.varName,
+                    jsxText(leaf.label),
+                    `{${binding.varName}.path}`,
+                    indent,
+                  );
+            }
+            case "depth":
+              return [depthTodoLine(`${commentBase}.${leaf.name}`, indent)];
+            case "unsupported":
+              return [
+                `${indent}{/* TODO: nested ${leaf.specKind} ${commentText(q(`${commentBase}.${leaf.name}`))} inside a union variant — extract it by hand */}`,
+              ];
           }
-          const binding = bindingByName.get(field.name);
-          return binding === undefined
-            ? [
-                `${indent}{/* TODO: nested ${field.spec.kind} ${commentText(q(`${commentBase}.${field.name}`))} inside a union variant — extract it by hand */}`,
-              ]
-            : leafControl(
-                ui,
-                field.spec,
-                binding.varName,
-                jsxText(field.label),
-                `{${binding.varName}.path}`,
-                indent,
-              );
         });
       // One real element needs no fragment; a lone TODO comment still does
       // (`cond && ({/* ... */})` is an empty parenthesized expression).
-      const first = rendered[0];
+      const first = flattened[0];
       const single =
-        rendered.length === 1 &&
+        flattened.length === 1 &&
         first !== undefined &&
-        !isUnaddressable(first.name) &&
+        first.kind === "leaf" &&
         bindingByName.has(first.name);
       return single
         ? [
@@ -4215,9 +4237,23 @@ const unionSectionFile = (
   // Scalar variant fields, deduped by name, split into common keys (bound with
   // the plain useXField on `path.name`, since useXVariantField rejects them)
   // and variant-only keys (useXVariantField).
+  // Variant-only container fields flatten to their bindable scalar leaves
+  // as DOTTED names ("size.w" — formstand 0.20 variant sub-paths); common
+  // keys stay scalar-only plain-hook bindings.
+  const unionBaseSegments = pathSegmentCount(path);
   const partitioned = spec.variants
     .flatMap((variant) => variant.fields)
-    .filter((field) => !isUnaddressable(field.name) && isScalarSpec(field.spec))
+    .flatMap((field): readonly Readonly<{ name: string; label: string; spec: FieldSpec }>[] =>
+      commonNames.has(field.name)
+        ? !isUnaddressable(field.name) && isScalarSpec(field.spec)
+          ? [{ name: field.name, label: field.label, spec: field.spec }]
+          : []
+        : variantLeavesOf(field, unionBaseSegments).flatMap((leaf) =>
+            leaf.kind === "leaf"
+              ? [{ name: leaf.name, label: leaf.label, spec: leaf.spec }]
+              : [],
+          ),
+    )
     .reduce<
       Readonly<{
         used: ReadonlySet<string>;
@@ -4228,8 +4264,8 @@ const unionSectionFile = (
     >(
       (acc, field) => {
         if (acc.seen.has(field.name)) return acc;
-        const base =
-          camelIdent(field.name).length === 0 ? "value" : camelIdent(field.name);
+        const camel = camelCase(field.name.split(".").join(" "));
+        const base = camel.length === 0 ? "value" : camelIdent(camel);
         // Number bindings reserve their hoisted `${var}NumberProps` const
         // too (numberPropsBindings emits it next to the field hooks).
         const { varName, reserved } = allocateBindingVar(
@@ -4292,39 +4328,44 @@ const unionSectionFile = (
       ),
     ),
     ...spec.variants.flatMap((variant) => {
-      // Common fields already rendered above; only variant-only fields here.
-      const rendered = variant.fields.filter(
-        (field) => !commonBindingNames.has(field.name),
-      );
+      // Common fields already rendered above; variant-only fields here,
+      // flattened to their bindable leaves ("size.w") exactly as the
+      // binding collection flattened them.
+      const flattened = variant.fields
+        .filter((field) => !commonBindingNames.has(field.name))
+        .flatMap((field) => variantLeavesOf(field, unionBaseSegments));
       const inner = (indent: string): readonly string[] =>
-        rendered.flatMap((field): readonly string[] => {
-          if (isUnaddressable(field.name)) {
-            return [
-              `${indent}{/* TODO: field ${commentText(q(field.name))} skipped — "." in a key is not path-addressable (see formstand docs) */}`,
-            ];
+        flattened.flatMap((leaf): readonly string[] => {
+          switch (leaf.kind) {
+            case "leaf": {
+              const binding = bindingByName.get(leaf.name);
+              return binding === undefined
+                ? []
+                : leafControl(
+                    ui,
+                    leaf.spec,
+                    binding.varName,
+                    jsxText(leaf.label),
+                    `{${binding.varName}.path}`,
+                    indent,
+                  );
+            }
+            case "depth":
+              return [depthTodoLine(`${path}.${leaf.name}`, indent)];
+            case "unsupported":
+              return [
+                `${indent}{/* TODO: nested ${leaf.specKind} ${commentText(q(`${path}.${leaf.name}`))} inside a union variant — extract it by hand */}`,
+              ];
           }
-          const binding = bindingByName.get(field.name);
-          return binding === undefined
-            ? [
-                `${indent}{/* TODO: nested ${field.spec.kind} ${commentText(q(`${path}.${field.name}`))} inside a union variant — extract it by hand */}`,
-              ]
-            : leafControl(
-                ui,
-                field.spec,
-                binding.varName,
-                jsxText(field.label),
-                `{${binding.varName}.path}`,
-                indent,
-              );
         });
       // One real element needs no fragment; a lone TODO comment still does
       // (`cond && ({/* ... */})` is an empty parenthesized expression) —
       // same rule as the single-file unionLines.
-      const first = rendered[0];
+      const first = flattened[0];
       const single =
-        rendered.length === 1 &&
+        flattened.length === 1 &&
         first !== undefined &&
-        !isUnaddressable(first.name) &&
+        first.kind === "leaf" &&
         bindingByName.has(first.name);
       return single
         ? [

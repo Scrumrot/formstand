@@ -931,6 +931,10 @@ export type UnionEntry = Readonly<{
   // Names bound as common (skipped inside the per-variant blocks).
   commonBindingNames: ReadonlySet<string>;
   variants: readonly UnionSpec["variants"][number][];
+  // The union path's own segment count (holes included), so renderers
+  // flatten variant fields through variantLeavesOf exactly as the binding
+  // collection did.
+  baseSegments: number;
   // Present for an optional/nullable union: the discriminant select becomes
   // CLEARABLE. It reads the discriminant but writes the WHOLE union through
   // a wrapper (selectVar) over the whole-union field hook (unionVar) — the
@@ -941,6 +945,88 @@ export type UnionEntry = Readonly<{
   unionVar?: string | undefined;
   selectVar?: string | undefined;
 }>;
+
+// One renderable unit of a variant field, flattened (formstand 0.20
+// variant sub-paths): a "leaf" binds through useVariantField with a
+// DOTTED name relative to the union path ("cardNumber", "size.w",
+// "span.0"); "depth" marks a spot whose full bound path would exceed the
+// FieldPath budget (render the depth TODO); "unsupported" is a shape the
+// variant path types cannot carry bindings for (an array or union inside
+// a variant needs hooks/rows of its own) or a dotted key. The emitters
+// switch on kind with no default arm, so a new kind fails to compile.
+export type VariantLeaf =
+  | Readonly<{ kind: "leaf"; name: string; label: string; spec: FieldSpec }>
+  | Readonly<{ kind: "depth"; name: string }>
+  | Readonly<{ kind: "unsupported"; name: string; specKind: string }>;
+
+// The bindable scalar leaves of ONE variant field: a scalar is itself, an
+// object contributes its scalar leaves as "name.leaf" (recursing), a
+// tuple its scalar positions as "name.0". Labels join along the walk
+// ("Size W"), matching how the leaves read in a flat variant block.
+// `baseSegments` is the union path's own segment count, so depth is
+// judged on the FULL bound path.
+export const variantLeavesOf = (
+  field: NamedField,
+  baseSegments: number,
+): readonly VariantLeaf[] => {
+  const walk = (
+    spec: FieldSpec,
+    name: string,
+    label: string,
+    segments: number,
+  ): readonly VariantLeaf[] => {
+    switch (spec.kind) {
+      case "object":
+        // An object binds one segment past its own path, so it needs
+        // headroom BELOW the budget — the same boundary overDepthBudget
+        // draws; one depth marker at the container, not one per leaf.
+        return segments >= FORMSTAND_PATH_DEPTH
+          ? [{ kind: "depth", name }]
+          : spec.fields.flatMap((child) =>
+              isUnaddressable(child.name)
+                ? [
+                    {
+                      kind: "unsupported" as const,
+                      name: `${name}.${child.name}`,
+                      specKind: "dotted-key",
+                    },
+                  ]
+                : walk(
+                    child.spec,
+                    `${name}.${child.name}`,
+                    `${label} ${child.label}`,
+                    segments + 1,
+                  ),
+            );
+      case "tuple":
+        return segments >= FORMSTAND_PATH_DEPTH
+          ? [{ kind: "depth", name }]
+          : spec.elements.flatMap((element, i) =>
+              isScalarSpec(element)
+                ? walk(element, `${name}.${i}`, `${label} ${i + 1}`, segments + 1)
+                : [
+                    {
+                      kind: "unsupported" as const,
+                      name: `${name}.${i}`,
+                      specKind: element.kind,
+                    },
+                  ],
+            );
+      case "array":
+      case "union":
+        return [{ kind: "unsupported", name, specKind: spec.kind }];
+      // Every remaining kind is a scalar (isScalarSpec's complement): a
+      // deliberate-subset default — the container kinds are the cases.
+      default:
+        return segments > FORMSTAND_PATH_DEPTH
+          ? [{ kind: "depth", name }]
+          : [{ kind: "leaf", name, label, spec }];
+    }
+  };
+  return isUnaddressable(field.name)
+    ? [{ kind: "unsupported", name: field.name, specKind: "dotted-key" }]
+    : walk(field.spec, field.name, field.label, baseSegments + 1);
+};
 
 type RawUnionEntry = Readonly<{ segments: readonly string[]; spec: UnionSpec }>;
 
@@ -974,6 +1060,10 @@ const collectRawUnions = (
 const unionEntry = (
   raw: RawUnionEntry,
   seed: ReadonlySet<string>,
+  // The union path's own segment count — raw.segments.length for static
+  // paths; holed templates (row unions) pass pathSegmentCount(template),
+  // since their stripped naming segments undercount the row indices.
+  baseSegments: number = raw.segments.length,
 ): Readonly<{ entry: UnionEntry; used: ReadonlySet<string> }> => {
   const path = raw.segments.join(".");
   const discriminantVar = camelJoin([...raw.segments, raw.spec.discriminant]);
@@ -1004,10 +1094,13 @@ const unionEntry = (
           };
         })();
   const commonNames = unionCommonFieldNames(raw.spec);
-  // Distinct scalar field names across the variants each get one binding,
+  // Distinct bindable names across the variants each get one binding,
   // deduped against the discriminant var and every array/union identifier
   // already claimed in this component, then split by whether the name is a
-  // common key (useField) or variant-only (useVariantField).
+  // common key (useField) or variant-only (useVariantField). Since
+  // formstand 0.20 a variant-only name may be a DOTTED sub-path
+  // ("size.w", "span.0") — variantLeavesOf flattens container variant
+  // fields into their bindable scalar leaves.
   const initial: Readonly<{
     used: ReadonlySet<string>;
     commonBindings: readonly UnionFieldBinding[];
@@ -1024,10 +1117,22 @@ const unionEntry = (
   };
   const collected = raw.spec.variants
     .flatMap((variant) => variant.fields)
-    .filter((field) => isScalarSpec(field.spec))
+    .flatMap((field): readonly NamedField[] =>
+      commonNames.has(field.name)
+        ? // Common keys bind with plain useField; only scalar ones do
+          // (a common container's sub-paths belong to FieldPath, not here).
+          isScalarSpec(field.spec)
+          ? [field]
+          : []
+        : variantLeavesOf(field, baseSegments).flatMap((leaf) =>
+            leaf.kind === "leaf"
+              ? [{ name: leaf.name, label: leaf.label, spec: leaf.spec }]
+              : [],
+          ),
+    )
     .reduce((acc, field) => {
       if (acc.seen.has(field.name)) return acc;
-      const base = camelJoin([...raw.segments, field.name]);
+      const base = camelJoin([...raw.segments, ...field.name.split(".")]);
       // Number bindings reserve their hoisted `${var}NumberProps` const too
       // (kit backends emit it next to the hooks; see unionHooks) so a field
       // literally named like a derived const can't collide with it.
@@ -1064,6 +1169,7 @@ const unionEntry = (
         collected.commonBindings.map((binding) => binding.name),
       ),
       variants: [...raw.spec.variants],
+      baseSegments,
       clearable,
       unionVar: clearableVars?.unionVar,
       selectVar: clearableVars?.selectVar,
@@ -1536,25 +1642,45 @@ const unionLines = (
       backend.variantLeaf(binding.spec, binding.varName, binding.label, level),
     ),
     ...entry.variants.flatMap((variant) => {
-      // Common fields already rendered above; only variant-only fields here.
-      const rendered = variant.fields.filter(
-        (field) => !entry.commonBindingNames.has(field.name),
-      );
+      // Common fields already rendered above; only variant-only fields
+      // here, flattened to their bindable leaves ("size.w") exactly as the
+      // binding collection flattened them.
+      const flattened = variant.fields
+        .filter((field) => !entry.commonBindingNames.has(field.name))
+        .flatMap((field) => variantLeavesOf(field, entry.baseSegments));
       const inner = (lvl: number): readonly string[] =>
-        rendered.flatMap((field): readonly string[] => {
-          const binding = entry.bindingByName.get(field.name);
-          return binding === undefined
-            ? [
-                `${ind(lvl)}{/* TODO: nested ${field.spec.kind} ${commentText(q(`${entry.path}.${field.name}`))} inside a union variant — extract it by hand */}`,
-              ]
-            : backend.variantLeaf(field.spec, binding.varName, field.label, lvl);
+        flattened.flatMap((leaf): readonly string[] => {
+          switch (leaf.kind) {
+            case "leaf": {
+              const binding = entry.bindingByName.get(leaf.name);
+              // A leaf name shared with a COMMON key is already rendered
+              // above; anything else always collected a binding.
+              return binding === undefined
+                ? []
+                : backend.variantLeaf(
+                    leaf.spec,
+                    binding.varName,
+                    leaf.label,
+                    lvl,
+                  );
+            }
+            case "depth":
+              return [depthTodoLine(`${entry.path}.${leaf.name}`, ind(lvl))];
+            case "unsupported":
+              return [
+                `${ind(lvl)}{/* TODO: nested ${leaf.specKind} ${commentText(q(`${entry.path}.${leaf.name}`))} inside a union variant — extract it by hand */}`,
+              ];
+          }
         });
       // One real element needs no fragment. A lone TODO comment still does:
       // `cond && ({/* ... */})` is an empty parenthesized expression, which
       // does not parse — the fragment is what makes the comment legal JSX.
+      const first = flattened[0];
       const single =
-        rendered.length === 1 &&
-        entry.bindingByName.has(rendered[0]?.name ?? "");
+        flattened.length === 1 &&
+        first !== undefined &&
+        first.kind === "leaf" &&
+        entry.bindingByName.has(first.name);
       return single
         ? [
             `${ind(level)}{${entry.discriminantVar}.value === ${q(variant.tag)} && (`,
@@ -1943,6 +2069,8 @@ const emitUnionComponent = (
   const { entry: u } = unionEntry(
     { segments, spec: args.spec },
     new Set(["form", ...args.holes]),
+    // Holes count as path segments the stripped naming segments miss.
+    pathSegmentCount(args.unionTemplate),
   );
   const t = args.unionTemplate;
   const numberVars =

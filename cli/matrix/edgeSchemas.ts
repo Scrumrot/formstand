@@ -98,7 +98,13 @@ export const rowContainersSchema = z.object({
       name: z.string(),
       span: z.tuple([z.number(), z.number()]),
       pay: z.discriminatedUnion("kind", [
-        z.object({ kind: z.literal("card"), amount: z.number() }),
+        z.object({
+          kind: z.literal("card"),
+          amount: z.number(),
+          // A container inside a variant: dotted sub-path bindings
+          // ("billing.zip", formstand 0.20) ride each kit's leaf controls.
+          billing: z.object({ zip: z.string(), plus4: z.number() }),
+        }),
         z.object({ kind: z.literal("cash"), note: z.string() }),
       ]),
       marks: z.array(

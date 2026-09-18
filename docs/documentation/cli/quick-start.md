@@ -71,7 +71,7 @@ npx formstand-gen src/profileSchema.ts --watch --out src/ProfileForm.tsx
 `--watch` regenerates whenever the input file changes. Paired with a [config file](./config) holding your project defaults, editing the schema rewrites the form as you go, which is the schema-first loop the tool was built for.
 
 ::: warning Version floors
-Kit output (`--ui mui`, `shadcn`, `chakra`, `mantine`, `antd`) imports `parseNumberText` and `numberToInputText`, so it needs formstand 0.3.0 or newer. `--layout module` needs 0.7 for `createFormHooks`. `z.date()` fields need 0.9. A discriminated union as an array's row item needs 0.16 (row-indexed `useVariantField` paths); unions and tuples nested deeper inside rows (row-object fields, nested-array items, tuple positions under holes) need 0.17. Kit output from formstand-cli 0.18 reads `field.clearable` (optional fields clear to `undefined`), so it needs formstand 0.18. Plain single-file output works on 0.2.0.
+Kit output (`--ui mui`, `shadcn`, `chakra`, `mantine`, `antd`) imports `parseNumberText` and `numberToInputText`, so it needs formstand 0.3.0 or newer. `--layout module` needs 0.7 for `createFormHooks`. `z.date()` fields need 0.9. A discriminated union as an array's row item needs 0.16 (row-indexed `useVariantField` paths); unions and tuples nested deeper inside rows (row-object fields, nested-array items, tuple positions under holes) need 0.17. Kit output from formstand-cli 0.18 reads `field.clearable` (optional fields clear to `undefined`), so it needs formstand 0.18. Containers inside union variants generate as dotted variant sub-paths and need formstand 0.20. Plain single-file output works on 0.2.0.
 :::
 
 ## Try it without installing anything

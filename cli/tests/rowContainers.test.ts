@@ -13,12 +13,12 @@ import { freshTmpDir, typecheckDiagnostics } from "./helpers";
 // layout extracts child components where hooks are needed (hooks cannot run
 // inside rows.map — leaves bind through components, unions through an
 // extracted component per site); the module layout binds in the Row
-// component itself, which is already a component. The only surviving TODO
-// is a container INSIDE a union variant, which needs variant sub-paths the
-// library doesn't type. Typechecking of both layouts' output against the
-// real library is pinned by typecheck.test.ts (rowContainersSchema fixture)
-// and the module typecheck below-mentioned suites; these tests pin the
-// emitted SHAPES.
+// component itself, which is already a component. Containers INSIDE a
+// union variant bind too, as dotted variant sub-paths ("billing.zip" —
+// formstand 0.20); only arrays/unions inside a variant still degrade.
+// Typechecking of both layouts' output against the real library is pinned
+// by typecheck.test.ts (rowContainersSchema fixture) and the module
+// typecheck below; these tests pin the emitted SHAPES.
 
 const matrixSchema = z.object({
   points: z.array(z.tuple([z.number(), z.number()])),
@@ -27,7 +27,13 @@ const matrixSchema = z.object({
     z.object({
       ref: z.string(),
       pay: z.discriminatedUnion("kind", [
-        z.object({ kind: z.literal("card"), cardNumber: z.string() }),
+        z.object({
+          kind: z.literal("card"),
+          cardNumber: z.string(),
+          // A container inside a variant: dotted sub-path bindings
+          // (formstand 0.20), the last TODO class the generator carried.
+          billing: z.object({ zip: z.string(), plus4: z.number() }),
+        }),
         z.object({ kind: z.literal("paypal"), email: z.string() }),
       ]),
     }),
@@ -79,6 +85,16 @@ describe("row containers — single-file layout", () => {
     );
     expect(code).toContain("useField(form, `invoices.${p0}.pay.kind`)");
     expect(code).toContain("<InvoicesPayUnion form={form} p0={index} />");
+  });
+
+  it("a container inside a variant binds its leaves as dotted sub-paths", () => {
+    expect(code).toContain(
+      "useVariantField(form, `invoices.${p0}.pay`, \"billing.zip\")",
+    );
+    expect(code).toContain(
+      "useVariantField(form, `invoices.${p0}.pay`, \"billing.plus4\")",
+    );
+    expect(code).not.toContain("inside a union variant");
   });
 
   it("a tuple row-object field binds inline on the row path", () => {

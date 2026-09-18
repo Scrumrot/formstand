@@ -4,6 +4,19 @@
 
 ### Added
 
+- **Variant sub-paths: `useVariantField`'s field argument is a PATH.**
+  `useVariantField(form, "payment", "billing.zip")` reaches inside a
+  variant-only object and `"span.0"` binds a variant-only tuple
+  position — the last shape the typed paths could not carry. The field
+  offer is `VariantFieldPath` (exported): every member's `FieldPath`,
+  minus paths rooted at a common key (those bind with plain `useField`,
+  the discriminant included), riding the same leaf classification,
+  tuple positionality, and depth budget as everywhere else. The value
+  distributes over the members that resolve the path, widened with
+  `| undefined` as before; `VariantFieldValue` now derives through
+  `FieldValue`, and the runtime is unchanged (the joined path always
+  worked — only its type was unreachable).
+
 - **`useFormSteps(form, steps)`: the multi-step story.** One form, one
   schema, and per-step validation scopes: `next()` validates the current
   step's fields (async refines included; the full schema parses, so
@@ -66,6 +79,21 @@
   `emptyValue` so the pair can never disagree. Schema-less forms fall
   back to the null-initial heuristic. **`isClearableSchema(schema)`** is
   the exported rule behind it, next to `emptyValueForSchema`.
+
+## formstand-cli Unreleased
+
+### Added
+
+- **Containers inside union variants generate.** The generator's last
+  TODO class: an object or tuple nested in a variant flattens to its
+  scalar leaves, each bound as a dotted variant sub-path
+  (`useVariantField(form, path, "billing.zip")`, formstand 0.20+) — in
+  both layouts, every emission site (static unions, union rows, union
+  row-object fields, unions under nested arrays), with joined labels
+  ("Billing Zip") and the kit number-props hoists riding along. Depth
+  is judged on the full bound path (a too-deep leaf keeps the depth
+  TODO), and an array or union inside a variant still degrades — their
+  bindings need hooks and row machinery of their own.
 
 ## formstand-cli 0.18.0 — 2026-09-17
 
