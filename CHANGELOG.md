@@ -98,7 +98,7 @@
   back to the null-initial heuristic. **`isClearableSchema(schema)`** is
   the exported rule behind it, next to `emptyValueForSchema`.
 
-## formstand-cli Unreleased
+## formstand-cli 0.19.0 — 2026-09-18
 
 ### Added
 
