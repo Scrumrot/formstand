@@ -92,8 +92,12 @@ the CLI from two UI targets to six, and make the docs match.
 
 ## Now
 
-- **StackBlitz links.** "Open in StackBlitz" from docs examples and playground
-  tabs, seeded with the demo source plus formstand from npm.
+- **StackBlitz links — shipped 2026-09-18.** Every self-contained playground
+  demo has an "Open in StackBlitz" button (the docs examples page reuses the
+  same seed builder in its details blocks): a fresh Vite + React project with
+  the demo's harness-stripped source plus formstand from npm. Kit demos stay
+  gated, honestly: they import sibling adapters that are not part of their
+  displayed file set.
 - **Brand collateral.** OG images for docs and playground pages, and a README
   header. The identity exists; it still doesn't travel.
 - **VitePress 2 migration.** Done and parked: the `chore/vitepress-2` branch

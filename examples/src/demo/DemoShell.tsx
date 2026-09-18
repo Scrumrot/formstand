@@ -11,6 +11,7 @@ import { StateDump } from "../forms/StateDump";
 import { CodeView } from "./CodeView";
 import type { DemoFile } from "./demoSources";
 import { FileTree } from "./FileTree";
+import { canOpenInStackBlitz, openInStackBlitz } from "./stackblitz";
 
 export type DemoShellProps = Readonly<{
   // The demo's group title, name, and one-line description — the shell
@@ -150,6 +151,19 @@ export const DemoShell = ({
             >
               View code
             </button>
+            {/* Only self-contained demos open standalone: kit demos import
+                sibling adapters that are not part of their file set, so
+                the button would hand StackBlitz a broken project. */}
+            {canOpenInStackBlitz(files) ? (
+              <button
+                className="secondary"
+                type="button"
+                title="open this demo as a fresh StackBlitz project"
+                onClick={() => openInStackBlitz(title, files)}
+              >
+                StackBlitz
+              </button>
+            ) : null}
             <CopyLinkButton />
           </div>
         </header>

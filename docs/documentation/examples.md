@@ -56,18 +56,22 @@ The playground bundles its own copies of the shadcn components (they're copy-in 
 Every block below embeds the demo's actual source file at build time, so it can never drift from what the playground runs. Two lines in each demo are playground harness, not library API: `import { useDemoForm } from "../demo/DemoShell"` and the `useDemoForm(form)` call register the demo's form with the playground shell, which is what powers the **View state** panel (rendered by `StateDump.tsx` below). Delete those two lines when copying a demo into your own project; everything else is plain formstand.
 
 ::: details Basic + modes: BasicForm.tsx
+<StackBlitzLink demo="basic" title="Basic + modes" />
 <<< ../../examples/src/forms/BasicForm.tsx
 :::
 
 ::: details Bound fields: BoundFieldsForm.tsx
+<StackBlitzLink demo="bound" title="Bound fields" />
 <<< ../../examples/src/forms/BoundFieldsForm.tsx
 :::
 
 ::: details Form context: ContextForm.tsx
+<StackBlitzLink demo="context" title="Form context" />
 <<< ../../examples/src/forms/ContextForm.tsx
 :::
 
 ::: details Hooks factory: HooksFactoryForm.tsx
+<StackBlitzLink demo="hooksFactory" title="Hooks factory" />
 <<< ../../examples/src/forms/HooksFactoryForm.tsx
 :::
 
@@ -96,62 +100,77 @@ One folder per form: `schema.ts` (zod + select options), `types.ts`, `hooks.ts` 
 :::
 
 ::: details Nested + submit: NestedForm.tsx
+<StackBlitzLink demo="nested" title="Nested + submit" />
 <<< ../../examples/src/forms/NestedForm.tsx
 :::
 
 ::: details Field array: ArrayForm.tsx
+<StackBlitzLink demo="array" title="Field array" />
 <<< ../../examples/src/forms/ArrayForm.tsx
 :::
 
 ::: details Async: AsyncForm.tsx
+<StackBlitzLink demo="async" title="Async" />
 <<< ../../examples/src/forms/AsyncForm.tsx
 :::
 
 ::: details Wizard: WizardForm.tsx
+<StackBlitzLink demo="wizard" title="Wizard" />
 <<< ../../examples/src/forms/WizardForm.tsx
 :::
 
 ::: details Conditional: ConditionalForm.tsx
+<StackBlitzLink demo="conditional" title="Conditional" />
 <<< ../../examples/src/forms/ConditionalForm.tsx
 :::
 
 ::: details Invoice: InvoiceForm.tsx
+<StackBlitzLink demo="invoice" title="Invoice" />
 <<< ../../examples/src/forms/InvoiceForm.tsx
 :::
 
 ::: details Nested arrays: NestedArraysForm.tsx
+<StackBlitzLink demo="nestedArrays" title="Nested arrays" />
 <<< ../../examples/src/forms/NestedArraysForm.tsx
 :::
 
 ::: details Server errors: ServerErrorsForm.tsx
+<StackBlitzLink demo="server" title="Server errors" />
 <<< ../../examples/src/forms/ServerErrorsForm.tsx
 :::
 
 ::: details Autosave: AutosaveForm.tsx
+<StackBlitzLink demo="autosave" title="Autosave" />
 <<< ../../examples/src/forms/AutosaveForm.tsx
 :::
 
 ::: details Dependent: DependentFieldsForm.tsx
+<StackBlitzLink demo="dependent" title="Dependent" />
 <<< ../../examples/src/forms/DependentFieldsForm.tsx
 :::
 
 ::: details Optimistic: OptimisticForm.tsx
+<StackBlitzLink demo="optimistic" title="Optimistic" />
 <<< ../../examples/src/forms/OptimisticForm.tsx
 :::
 
 ::: details File upload: FileUploadForm.tsx
+<StackBlitzLink demo="file" title="File upload" />
 <<< ../../examples/src/forms/FileUploadForm.tsx
 :::
 
 ::: details Derived: DerivedFieldForm.tsx
+<StackBlitzLink demo="derived" title="Derived" />
 <<< ../../examples/src/forms/DerivedFieldForm.tsx
 :::
 
 ::: details Tags: TagInputForm.tsx
+<StackBlitzLink demo="tag" title="Tags" />
 <<< ../../examples/src/forms/TagInputForm.tsx
 :::
 
 ::: details Perf: PerfBenchmarkForm.tsx
+<StackBlitzLink demo="perf" title="Perf" />
 <<< ../../examples/src/forms/PerfBenchmarkForm.tsx
 :::
 
