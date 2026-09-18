@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`useFormSteps(form, steps)`: the multi-step story.** One form, one
+  schema, and per-step validation scopes: `next()` validates the current
+  step's fields (async refines included; the full schema parses, so
+  cross-field rules inside a step fire, with errors scoped to the step)
+  and advances only on clean, marking errored fields touched exactly
+  like a failed submit; `back()` never validates; a forward `goTo()`
+  validates every step on the way and lands on the first one that
+  fails, so clickable step headers cannot skip past an invalid step.
+  `steps` is index-aligned live status (`name`, `visited`, `hasErrors`)
+  for progress UIs. The step index is React state on purpose — it is
+  navigation, not form data. `createFormHooks` binds it as
+  `use{Name}Steps`, and the docs gain a Multi-step forms guide.
+
 ## 0.19.0 — 2026-09-17
 
 ### Added

@@ -443,7 +443,7 @@ const BLURBS: Readonly<Record<TabKey, string>> = {
   async:
     "An async refine username check with debounce, isValidating spinners, and race handling.",
   wizard:
-    "A multi-step form gating each step on its own fields with validateFields.",
+    "Multi-step with useFormSteps: next() gates on the current step, goTo lands on the first invalid step.",
   conditional: "Fields that appear based on other fields' values.",
   invoice: "A larger, realistic form: line-item arrays with derived totals.",
   nestedArrays: "Arrays inside array rows, with ids stable at both levels.",

@@ -88,6 +88,7 @@ export default defineConfig({
             { text: "Errors: schema & server", link: "/documentation/errors" },
             { text: "Bound components", link: "/documentation/components" },
             { text: "Field arrays", link: "/documentation/field-arrays" },
+            { text: "Multi-step forms", link: "/documentation/multi-step" },
             { text: "Form state & lifecycle", link: "/documentation/state" },
             { text: "Recipes", link: "/documentation/recipes" },
             { text: "Devtools", link: "/documentation/devtools" },

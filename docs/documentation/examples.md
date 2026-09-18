@@ -12,7 +12,7 @@ Every feature has a working, interactive demo in the **[live playground](https:/
 | Nested + submit | Nested object paths and the full `handleSubmit` flow | [NestedForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/NestedForm.tsx) |
 | Field array | `useFieldArray` basics: push, remove, reorder with stable row IDs | [ArrayForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/ArrayForm.tsx) |
 | Async | An `async .refine` username check with `debounceMs`, `isValidating` spinners, and race handling | [AsyncForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/AsyncForm.tsx) |
-| Wizard | A multi-step form gating each step on its own fields with `validateFields` | [WizardForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/WizardForm.tsx) |
+| Wizard | Multi-step with [`useFormSteps`](./multi-step): `next()` gates on the current step's fields, step headers `goTo` and land on the first invalid step | [WizardForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/WizardForm.tsx) |
 | Conditional | Fields that appear based on other fields' values | [ConditionalForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/ConditionalForm.tsx) |
 | Invoice | A larger, realistic form: line-item arrays with derived totals | [InvoiceForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/InvoiceForm.tsx) |
 | Nested arrays | Arrays inside array rows, with IDs stable at both levels | [NestedArraysForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/NestedArraysForm.tsx) |

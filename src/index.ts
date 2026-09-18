@@ -51,6 +51,13 @@ export type {
 } from "./core/persist";
 
 export { useForm } from "./react/useForm";
+// The multi-step (wizard) hook: per-step validation scopes over one form.
+export { useFormSteps } from "./react/useFormSteps";
+export type {
+  FormStep,
+  StepStatus,
+  UseFormStepsReturn,
+} from "./react/useFormSteps";
 // The React 19 form-actions bridge: <form action> / useActionState with
 // schema-validated data and the full submit lifecycle.
 export {

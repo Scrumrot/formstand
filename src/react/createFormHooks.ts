@@ -27,6 +27,11 @@ import {
 } from "./useFieldArray";
 import { useFormError } from "./useFormError";
 import { useFormValues } from "./useFormValues";
+import {
+  type FormStep,
+  type UseFormStepsReturn,
+  useFormSteps,
+} from "./useFormSteps";
 import { type UseFieldsReturn, useFields } from "./useFields";
 import {
   useIsDirty,
@@ -131,6 +136,10 @@ export type FormHooks<
     [K in `use${Capitalize<N>}SubmitCount`]: () => number;
   } & { [K in `use${Capitalize<N>}Values`]: () => z.input<TSchema> } & {
     [K in `use${Capitalize<N>}Fields`]: BoundUseFields<TSchema, D>;
+  } & {
+    [K in `use${Capitalize<N>}Steps`]: (
+      steps: readonly FormStep<z.input<TSchema>, D>[],
+    ) => UseFormStepsReturn;
   }
 >;
 
@@ -221,6 +230,10 @@ export const createFormHooks = <
 
   const useBoundSubmitCount = (): number => useSubmitCount(structural);
 
+  const useBoundSteps = (
+    steps: readonly FormStep<z.input<TSchema>, D>[],
+  ): UseFormStepsReturn => useFormSteps(form, steps);
+
   const prefix = capitalize(name ?? "");
   // Computed keys erase to an index signature, so the literal is asserted
   // to the mapped FormHooks type — the real contract, verified by type
@@ -239,5 +252,6 @@ export const createFormHooks = <
     [`use${prefix}SubmitCount`]: useBoundSubmitCount,
     [`use${prefix}Values`]: useBoundValues,
     [`use${prefix}Fields`]: useBoundFields,
+    [`use${prefix}Steps`]: useBoundSteps,
   } as FormHooks<TSchema, N, D>;
 };
