@@ -4,7 +4,7 @@ A living plan for **formstand** (the library) and **formstand-cli** (the
 generator), ordered by intent, not promise. Items move between horizons as
 reality votes. Shipped work graduates to the [CHANGELOG](./CHANGELOG.md).
 
-_Last updated: 2026-09-17 (formstand 0.19.0, formstand-cli 0.18.0)._
+_Last updated: 2026-09-18 (formstand 0.20.0, formstand-cli 0.18.0)._
 
 ## Shipped since 0.9 (2026-07-10 to 2026-07-31)
 
