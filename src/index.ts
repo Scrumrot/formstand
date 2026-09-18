@@ -51,6 +51,14 @@ export type {
 } from "./core/persist";
 
 export { useForm } from "./react/useForm";
+// The raw-text editing pattern behind useNumberInput, generalized to any
+// parsed/formatted value (phone, currency, locale formats).
+export { useMaskedInput } from "./react/useMaskedInput";
+export type {
+  MaskedInputBinding,
+  MaskedInputOptions,
+  MaskedParse,
+} from "./react/useMaskedInput";
 // The multi-step (wizard) hook: per-step validation scopes over one form.
 export { useFormSteps } from "./react/useFormSteps";
 export type {

@@ -55,7 +55,7 @@ useEffect(() => {
 
 ## Multi-step wizard
 
-Gate each step on just its own fields with `validateFields`, so untouched steps stay unvalidated.
+`useFormSteps` is this recipe as a hook — per-step gating, touched-marking on a refused advance, land-on-first-invalid jumps, live per-step status. See [Multi-step forms](./multi-step). The hand-rolled core, when you want to own the navigation state yourself:
 
 ```tsx
 const STEP_FIELDS = [
@@ -70,7 +70,28 @@ const next = async () => {
 };
 ```
 
-For a known-sync schema, `form.validateFields(STEP_FIELDS[step]).kind === "valid"` settles synchronously; on an async schema `validateFields` returns `{ kind: "pending", promise }` instead, so the always-async variant above is the simplest gate that covers both.
+## Masked and formatted inputs
+
+Phone numbers, currency, percentages — anything with a display format — hit the same wall number inputs do: a naive controlled input re-renders the canonical format on every keystroke and eats the separators mid-entry. `useMaskedInput` is `useNumberInput`'s raw-text pattern for any parsed/formatted value: partial entries stay visible without touching the form, complete entries push immediately, blur snaps to the canonical format, and an external write (`reset`, `adoptValues`) wins over local text.
+
+```tsx
+import { useMaskedInput, type MaskedParse } from "formstand";
+
+const parsePhone = (text: string): MaskedParse<string> => {
+  const digits = text.replace(/\D/g, "");
+  if (text.trim() === "") return { kind: "empty" };
+  if (digits.length === 10) return { kind: "value", value: digits };
+  return { kind: "invalid" };  // partial — kept as local text
+};
+const formatPhone = (d: string) => `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+
+const phone = useField(form, "phone");
+const input = useMaskedInput(phone, { parse: parsePhone, format: formatPhone });
+
+<input type="tel" inputMode="tel" {...input} />
+```
+
+The form always holds the PARSED value (the ten digits, the number of cents), never the display text, so the schema validates real data. `"empty"` writes the field's `emptyValue`, the same schema-aware blank every clearing binding uses.
 
 ## Optimistic update with rollback
 

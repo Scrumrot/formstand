@@ -4,6 +4,24 @@
 
 ### Added
 
+- **`useMaskedInput(field, { parse, format })`.** The raw-text editing
+  pattern behind `useNumberInput`, generalized to any parsed/formatted
+  value (phone, currency, locale formats): partial entries stay visible
+  as local text without touching the form, keystrokes that parse push
+  the REAL value immediately (the schema validates data, never display
+  text), `"empty"` writes the field's schema-aware `emptyValue`, blur
+  snaps the display to `format(value)`, and an external write wins over
+  local text. Recipes gains a phone-mask walkthrough.
+- **`formstand/testing`: drive a form in tests the way the hooks do.**
+  `fillField` writes and validates under the CHANGE gate (no-op guard
+  included), `blurField` marks touched and validates under the BLUR
+  gate, `fillAndBlurField` is the edit-then-leave a user performs,
+  `fillFields` applies a fixture object through the full recipe, and
+  `submitForm` hands back the `SubmitResult` to switch on. Tests using
+  the imperative `form.setValue` were skipping the validation gates by
+  design; these helpers restate `useField`'s own recipes over the core
+  API, so a store-level test sees exactly what a rendered input would —
+  without mounting one. Framework-agnostic; new Testing forms guide.
 - **Variant sub-paths: `useVariantField`'s field argument is a PATH.**
   `useVariantField(form, "payment", "billing.zip")` reaches inside a
   variant-only object and `"span.0"` binds a variant-only tuple
