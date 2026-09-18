@@ -98,8 +98,11 @@ the CLI from two UI targets to six, and make the docs match.
   the demo's harness-stripped source plus formstand from npm. Kit demos stay
   gated, honestly: they import sibling adapters that are not part of their
   displayed file set.
-- **Brand collateral.** OG images for docs and playground pages, and a README
-  header. The identity exists; it still doesn't travel.
+- **Brand collateral — shipped 2026-09-18.** OG images for the docs and the
+  playground (1200x630, rendered from scripts/generate-og-images.mjs so the
+  template regenerates them), og/twitter meta wiring on both sites, a
+  self-contained banner.svg served from docs/public, and the README header
+  rebuilt around it (banner + centered badges). The identity travels now.
 - **VitePress 2 migration.** Done and parked: the `chore/vitepress-2` branch
   builds and renders the full site on 2.0.0-alpha.18 (the historic blank-theme
   failure no longer reproduces there; no root cause beyond "fixed in alpha").

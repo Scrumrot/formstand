@@ -1,6 +1,14 @@
-# formstand
+<p align="center">
+  <a href="https://scrumrot.github.io/formstand/">
+    <img src="https://scrumrot.github.io/formstand/banner.svg" alt="formstand: Zod-schema-first form state for React 19, backed by zustand" width="760" />
+  </a>
+</p>
 
-[![CI](https://github.com/Scrumrot/formstand/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Scrumrot/formstand/actions/workflows/ci.yml) [![npm version](https://img.shields.io/npm/v/formstand)](https://www.npmjs.com/package/formstand) [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Scrumrot/formstand/blob/main/LICENSE)
+<p align="center">
+  <a href="https://github.com/Scrumrot/formstand/actions/workflows/ci.yml"><img src="https://github.com/Scrumrot/formstand/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
+  <a href="https://www.npmjs.com/package/formstand"><img src="https://img.shields.io/npm/v/formstand" alt="npm version" /></a>
+  <a href="https://github.com/Scrumrot/formstand/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="license: MIT" /></a>
+</p>
 
 Zod-schema-first form state for React 19, backed by zustand.
 

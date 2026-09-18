@@ -35,6 +35,22 @@ export default defineConfig({
       },
     ],
     ["meta", { property: "og:type", content: "website" }],
+    // Absolute URLs on purpose: scrapers resolve og tags without a base.
+    [
+      "meta",
+      {
+        property: "og:image",
+        content: "https://scrumrot.github.io/formstand/og.png",
+      },
+    ],
+    ["meta", { name: "twitter:card", content: "summary_large_image" }],
+    [
+      "meta",
+      {
+        name: "twitter:image",
+        content: "https://scrumrot.github.io/formstand/og.png",
+      },
+    ],
     ["script", {}, legacyRedirect],
   ],
   lastUpdated: true,
