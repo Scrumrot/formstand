@@ -4,6 +4,11 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: {
     alias: {
+      // Subpath first: a bare string alias rewrites the PREFIX, so the
+      // more specific entry must win before "formstand" swallows it.
+      "formstand/testing": fileURLToPath(
+        new URL("./src/testing/index.ts", import.meta.url),
+      ),
       // Lets tests render the examples app (which imports the published
       // name) against the library source.
       formstand: fileURLToPath(new URL("./src/index.ts", import.meta.url)),

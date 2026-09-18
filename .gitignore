@@ -18,3 +18,4 @@ examples/src/recipes/
 
 # e2e screenshot output (uploaded as CI artifacts, never committed)
 examples/e2e/artifacts/
+tests/.generated/

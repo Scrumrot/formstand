@@ -1,8 +1,15 @@
 # Design: generated tests (`--tests`)
 
-Status: **decided 2026-09-18** — the five open questions below are
-resolved (Tim delegated the calls); the design is ready to implement.
-Nothing here is implemented yet.
+Status: **implemented (v1) 2026-09-18** — `--tests vitest|jest|playwright`,
+the config `tests` block, the plan collector (`testCases.ts`), and both
+emitters (`testsEmit.ts`) shipped, with the emitted spec EXECUTED against
+the library source in the root suite (tests/generatedSpec.test.tsx). One
+v1 scope note against the sketch below: the IR carries no zod check
+metadata (min/max/length) and no authored messages, so the `bound` and
+`arrayMin` case kinds are NOT emitted yet and every assertion is
+presence-shaped — those cases arrive with IR enrichment, honestly,
+rather than guessed. `unionSwitch` is also deferred. The decisions
+section at the end records the five resolved questions.
 
 ## The one-line pitch
 

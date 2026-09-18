@@ -1,5 +1,28 @@
 # Changelog
 
+## formstand-cli Unreleased
+
+### Added
+
+- **Generated tests: `--tests vitest|jest|playwright`.** A spec emitted
+  BESIDE the component, derived from the same schema walk so the two
+  cannot drift. The component spec proves the validation and submit
+  paths: store-level cases ride `formstand/testing` (blank submit
+  reports every blank-invalid field; a valid fill round-trips
+  `schema.parse`; string formats reject and accept their samples), and
+  two render cases prove the DOM wiring by label through the
+  aria-invalid contract. The Playwright spec drives the same flows by
+  role and label, emitted only when the config's
+  `tests.playwright.baseURL` exists. Honest edges by design: presence
+  assertions only (never zod's default prose), kit output without
+  `tests.renderWrapper` emits its render cases as `it.skip` with a
+  stderr warning, `--live`/`--form-prop` skip the render layers with
+  the reason, and an async schema emits its submit cases fully written
+  but `it.skip`, naming the IO to stub. Config gains the `tests` block;
+  specs need `--out` and formstand 0.20 (`formstand/testing`). The
+  emitted spec is EXECUTED against the library source in the repo's own
+  suite, not just typechecked.
+
 ## 0.20.0 — 2026-09-18
 
 ### Added

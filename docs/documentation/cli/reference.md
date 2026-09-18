@@ -83,6 +83,23 @@ A `.json` input file switches the front-end: the document is read as a bare JSON
 
 **What degrades.** The same loud TODO fallback as everywhere else, mirrored on stderr: external `$ref`s, recursive `$ref`s, objects with only `additionalProperties` or `patternProperties` (records have no fixed fields to bind), draft-07 tuples spelled as an `items` array (use `prefixItems`), multi-type arrays like `["string", "number"]`, `allOf` with non-object branches, and `oneOf`/`anyOf` without a discriminator or string consts. Non-primitive `default`s start blank with a warning. Swagger 2.0 documents are refused with a conversion hint, and YAML input is refused too: convert it to JSON first (`npx js-yaml api.yaml > api.json`).
 
+## Generated tests: `--tests`
+
+`--tests vitest` (or `jest` — the same component spec with different globals; or `playwright`, combinable as a comma list) emits a spec **beside the component**, derived from the same schema walk, so the spec and the form cannot drift. The component spec proves the validation and submit paths in two layers: store-level cases ride [`formstand/testing`](../testing) (a blank submit reports every field a blank form cannot satisfy; a valid fill round-trips `schema.parse`; each string format rejects and accepts its samples), and a couple of render cases prove the DOM wiring by **label** through the `aria-invalid` contract. The Playwright spec drives the same flows by role and label, and is emitted only when the config supplies a base URL.
+
+```ts
+// formstand.config.ts
+export default defineConfig({
+  tests: {
+    runners: ["vitest"],                     // the --tests default
+    renderWrapper: "./test/renderWithProviders", // exports RenderWrapper
+    playwright: { baseURL: "http://localhost:5173", route: "/order" },
+  },
+});
+```
+
+The honest edges, by design (see `cli/design/generated-tests.md`): assertions are presence-shaped, never zod's default prose; kit output without a configured `renderWrapper` emits its render cases as `it.skip` with a stderr warning (the generator never emits providers); `--live` and `--form-prop` output skips the render/browser layers with the reason in a comment; an async schema (a zod-mode async refine) emits its submit cases fully written but `it.skip`, naming the IO to stub; and v1 emits no min/max/length cases, because the IR does not carry zod check metadata yet. The spec regenerates **with** the component — the two are one unit — and fills go by label, so a hand-renamed label fails the spec on purpose. Specs need `--out`, and their store-level cases import `formstand/testing` (formstand 0.20+).
+
 ## How unsupported shapes degrade
 
 The generator never emits silently broken code. Anything outside the supported subset degrades loudly, and the file still compiles.

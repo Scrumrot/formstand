@@ -10,6 +10,21 @@ import type { Ui } from "./uiTarget";
 export type { Ui } from "./uiTarget";
 export type Layout = "single" | "module";
 
+// The generated-tests block (design: cli/design/generated-tests.md).
+// `runners` is the --tests default; the rest has no flag spelling — a
+// render wrapper and a browser base URL are project facts, not
+// per-invocation choices.
+export type TestsConfig = Readonly<{
+  runners?: readonly ("vitest" | "jest" | "playwright")[];
+  // Import specifier for the app's render wrapper (a module exporting
+  // `RenderWrapper`), as resolvable FROM THE GENERATED SPEC's location.
+  // Kit output without one emits its render cases as it.skip, loudly.
+  renderWrapper?: string;
+  // Playwright specs are emitted only when a baseURL exists — a browser
+  // spec that guesses its URL is a broken spec with extra steps.
+  playwright?: Readonly<{ baseURL?: string; route?: string }>;
+}>;
+
 export type FormstandConfig = Readonly<{
   // Same spellings as --ui: "plain", "shadcn", "mui" (current major), a
   // pinned "mui@5" | "mui@6" | "mui@7" | "mui@9", "chakra" (v3 — the only
@@ -42,6 +57,8 @@ export type FormstandConfig = Readonly<{
   // prop). A path matching nothing, a non-string/enum target, or a string
   // without optionsProp is a loud generation-time ERROR.
   fields?: FieldOverrides;
+  // Generated tests beside the component (see TestsConfig above).
+  tests?: TestsConfig;
 }>;
 
 // Identity with types — `export default defineConfig({ ui: "mui" })` gets

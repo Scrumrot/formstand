@@ -7,7 +7,7 @@ import { createInterface } from "node:readline/promises";
 import { pathToFileURL } from "node:url";
 import { createJiti } from "jiti";
 import { camelCase, isReservedWord, pascalCase } from "./casing";
-import { type FormstandConfig, type Layout } from "./config";
+import { type FormstandConfig, type Layout, type TestsConfig } from "./config";
 import {
   type UiTarget,
   DEFAULT_MUI_VERSION,
@@ -37,10 +37,13 @@ import {
   emitShadcnForm,
   emitTemplateForm,
   emitZodSchema,
+  collectOptionsProps,
   overBudgetFieldPaths,
   truncatedFieldPaths,
   unaddressableFieldPaths,
 } from "./codegen";
+import { collectTestPlan } from "./testCases";
+import { emitComponentSpec, emitPlaywrightSpec } from "./testsEmit";
 import { fromJsonSchema } from "./fromJsonSchema";
 import { fromType } from "./fromType";
 import { DEFAULT_MAX_DEPTH, fromZod, isZodSchema } from "./fromZod";
@@ -129,6 +132,13 @@ Options:
                       scaffold is emitted as an exported use{Name}Form hook.
                       --layout single only: the module layout's form is a
                       singleton the page already owns by importing it
+  --tests <list>      emit generated specs beside the component: a comma
+                      list of vitest, jest, playwright (vitest and jest are
+                      the same component spec with different globals; pick
+                      one). Store-level cases ride formstand/testing
+                      (formstand >= 0.20); render cases use the config's
+                      tests.renderWrapper; playwright needs
+                      tests.playwright.baseURL in the config. Requires --out.
   --template <file>   custom template module (default-export defineTemplate)
                       for a UI kit formstand doesn't ship — overrides the
                       per-kind field rendering, inheriting the plain form
@@ -209,6 +219,12 @@ type CliOptions = Readonly<{
   maxDepth?: number;
   watch: boolean;
   force: boolean;
+  // --tests: which spec files to emit beside the component (vitest OR
+  // jest for the component spec, plus playwright). Empty = none.
+  tests: readonly ("vitest" | "jest" | "playwright")[];
+  // The config's tests block (renderWrapper / playwright) — config-only,
+  // like `fields`: project facts, not per-invocation choices.
+  testsConfig?: TestsConfig;
 }>;
 
 // What the flag parser produces: the config-mergeable axes stay undefined
@@ -235,6 +251,7 @@ export type ParsedCliOptions = Readonly<{
   maxDepth?: number;
   watch: boolean;
   force: boolean;
+  tests?: readonly ("vitest" | "jest" | "playwright")[];
 }>;
 
 type ParseResult =
@@ -244,6 +261,7 @@ type ParseResult =
 
 type PartialOptions = Readonly<{
   input?: string;
+  tests?: readonly ("vitest" | "jest" | "playwright")[];
   exportName?: string;
   typeName?: string;
   schema?: string;
@@ -302,6 +320,27 @@ const parseRest = (
   if (head === "--force") return parseRest(rest, { ...acc, force: true });
   if (head === "--watch") return parseRest(rest, { ...acc, watch: true });
   if (head === "--live") return parseRest(rest, { ...acc, live: true });
+  if (head === "--tests") {
+    const [value, ...after] = rest;
+    if (value === undefined) {
+      return { kind: "error", message: `missing value for ${head}` };
+    }
+    const names = value.split(",").map((entry) => entry.trim());
+    const known = ["vitest", "jest", "playwright"] as const;
+    const bad = names.find(
+      (entry) => !(known as readonly string[]).includes(entry),
+    );
+    if (bad !== undefined) {
+      return {
+        kind: "error",
+        message: `--tests: unknown runner "${bad}" (expected a comma list of vitest, jest, playwright)`,
+      };
+    }
+    return parseRest(after, {
+      ...acc,
+      tests: [...new Set(names)] as readonly ("vitest" | "jest" | "playwright")[],
+    });
+  }
   if (head === "--form-prop") {
     return parseRest(rest, { ...acc, formProp: true });
   }
@@ -550,6 +589,8 @@ export const resolveOptions = (
     : {}),
   // Config-only (no flag): per-field component overrides.
   ...(config.fields !== undefined ? { fields: config.fields } : {}),
+  tests: parsed.tests ?? config.tests?.runners ?? [],
+  ...(config.tests !== undefined ? { testsConfig: config.tests } : {}),
 });
 
 const visualOf = (options: CliOptions): VisualOptions => ({
@@ -565,6 +606,123 @@ const scaffoldFlagsOf = (
   live: options.live,
   formProp: options.formProp,
 });
+
+// The generated-tests emission for one run (design:
+// cli/design/generated-tests.md): the component spec (vitest or jest),
+// the browser spec when the config carries a baseURL, and the honest
+// degradations — render cases it.skip with the reason when the spec
+// cannot construct the render itself (kit output without a wrapper,
+// --live's missing submit button, --form-prop's page-owned form).
+type TestsEmission = Readonly<{
+  files: readonly Readonly<{ name: string; content: string }>[];
+}>;
+
+// The zod-mode async probe: safeParse THROWS on a schema that needs
+// parseAsync, with the message the library's own detection keys on.
+const probeAsyncSchema = (schema: unknown): boolean => {
+  try {
+    (schema as Readonly<{ safeParse: (v: unknown) => unknown }>).safeParse(
+      {},
+    );
+    return false;
+  } catch (e) {
+    return (
+      e instanceof Error &&
+      /Encountered Promise during synchronous parse/i.test(e.message)
+    );
+  }
+};
+
+const buildTests = (
+  options: CliOptions,
+  args: Readonly<{
+    ir: FieldSpec;
+    formName: string;
+    schemaImport: SchemaImport;
+    componentImport: string;
+    asyncSchema: boolean;
+  }>,
+): TestsEmission => {
+  const componentRunner = options.tests.find(
+    (runner): runner is "vitest" | "jest" =>
+      runner === "vitest" || runner === "jest",
+  );
+  const wantsPlaywright = options.tests.includes("playwright");
+  if (componentRunner === undefined && !wantsPlaywright) {
+    return { files: [] };
+  }
+  const plan = collectTestPlan(args.ir);
+  const kitLike = options.ui.kit !== "plain";
+  const renderWrapper = options.testsConfig?.renderWrapper;
+  const skipRenderReason = options.live
+    ? "--live forms have no submit scaffold; drive the render from your page's own tests, then delete these .skip markers"
+    : options.formProp
+      ? "--form-prop components need the page's form instance; render from your own test via the exported hook, then delete these .skip markers"
+      : kitLike && renderWrapper === undefined
+        ? "kit output renders inside its provider: set tests.renderWrapper in formstand.config.ts, regenerate, and these cases run"
+        : undefined;
+  if (
+    componentRunner !== undefined &&
+    kitLike &&
+    renderWrapper === undefined &&
+    !options.live &&
+    !options.formProp
+  ) {
+    stderr(
+      "warning: --tests on kit output with no tests.renderWrapper configured — render-layer cases emitted as it.skip",
+    );
+  }
+  const spec =
+    componentRunner === undefined
+      ? undefined
+      : emitComponentSpec({
+          runner: componentRunner,
+          formName: args.formName,
+          schemaImport: args.schemaImport,
+          ir: args.ir,
+          plan,
+          componentImport: args.componentImport,
+          ...(renderWrapper !== undefined ? { renderWrapper } : {}),
+          skipRender: skipRenderReason !== undefined,
+          ...(skipRenderReason !== undefined ? { skipRenderReason } : {}),
+          asyncSchema: args.asyncSchema,
+          optionsProps: collectOptionsProps(args.ir).map(
+            (entry) => entry.name,
+          ),
+        });
+  const baseURL = options.testsConfig?.playwright?.baseURL;
+  const e2e = ((): string | undefined => {
+    if (!wantsPlaywright) return undefined;
+    if (options.live) {
+      stderr(
+        "note: --tests playwright skipped for a --live form (no submit button to drive)",
+      );
+      return undefined;
+    }
+    if (baseURL === undefined) {
+      stderr(
+        "note: --tests playwright skipped — set tests.playwright.baseURL in formstand.config.ts (a browser spec that guesses its URL is a broken spec with extra steps)",
+      );
+      return undefined;
+    }
+    return emitPlaywrightSpec({
+      formName: args.formName,
+      plan,
+      baseURL,
+      route: options.testsConfig?.playwright?.route ?? "/",
+    });
+  })();
+  return {
+    files: [
+      ...(spec === undefined
+        ? []
+        : [{ name: `${args.formName}.test.tsx`, content: spec }]),
+      ...(e2e === undefined
+        ? []
+        : [{ name: `${args.formName}.e2e.ts`, content: e2e }]),
+    ],
+  };
+};
 
 // "profileSchema" → "ProfileForm"; "Profile" → "ProfileForm".
 const deriveFormName = (base: string): string => {
@@ -859,16 +1017,31 @@ const runZodMode = async (
   if (options.schemaOut !== undefined) {
     stderr("note: --schema-out is ignored in zod mode (the schema already exists)");
   }
+  const zodTests = (componentImport: string): TestsEmission =>
+    buildTests(options, {
+      ir,
+      formName,
+      schemaImport,
+      componentImport,
+      asyncSchema: probeAsyncSchema(pick.schema),
+    });
   if (options.layout === "module") {
+    const tests = zodTests(`./${formName}`);
     emitModuleOutput(
-      emitModuleForm({
-        ir,
-        formName,
-        schemaImport,
-        ...moduleUiOf(options.ui),
-        visual: visualOf(options),
-        ...scaffoldFlagsOf(options),
-      }),
+      [
+        ...emitModuleForm({
+          ir,
+          formName,
+          schemaImport,
+          ...moduleUiOf(options.ui),
+          visual: visualOf(options),
+          ...scaffoldFlagsOf(options),
+        }),
+        ...tests.files.map((file) => ({
+          path: file.name,
+          content: file.content,
+        })),
+      ],
       options.out,
       options.force,
     );
@@ -881,9 +1054,22 @@ const runZodMode = async (
   );
   if (options.out !== undefined) {
     const outAbs = path.resolve(options.out);
-    assertWritable([outAbs], options.force);
+    const tests = zodTests(
+      `./${path.basename(outAbs).replace(/\.[^.]+$/, "")}`,
+    );
+    const testDests = tests.files.map((file) =>
+      path.join(path.dirname(outAbs), file.name),
+    );
+    assertWritable([outAbs, ...testDests], options.force);
     writeFile(outAbs, code);
     stderr(`wrote ${relToCwd(outAbs)}`);
+    tests.files.forEach((file, i) => {
+      const dest = testDests[i];
+      if (dest !== undefined) {
+        writeFile(dest, file.content);
+        stderr(`wrote ${relToCwd(dest)}`);
+      }
+    });
     return 0;
   }
   stdout(code);
@@ -922,16 +1108,30 @@ const runGeneratedSchemaMode = (
         "note: --schema-out is ignored with --layout module (the schema is the module's schema.ts)",
       );
     }
+    const tests = buildTests(options, {
+      ir,
+      formName,
+      schemaImport: { name: schemaName, from: "./schema", kind: "named" },
+      componentImport: `./${formName}`,
+      // Generated schemas carry no refines, so they always parse sync.
+      asyncSchema: false,
+    });
     emitModuleOutput(
-      emitModuleForm({
-        ir,
-        formName,
-        schemaImport: { name: schemaName, from: "./schema", kind: "named" },
-        schemaSource,
-        ...moduleUiOf(options.ui),
-        visual: visualOf(options),
-        ...scaffoldFlagsOf(options),
-      }),
+      [
+        ...emitModuleForm({
+          ir,
+          formName,
+          schemaImport: { name: schemaName, from: "./schema", kind: "named" },
+          schemaSource,
+          ...moduleUiOf(options.ui),
+          visual: visualOf(options),
+          ...scaffoldFlagsOf(options),
+        }),
+        ...tests.files.map((file) => ({
+          path: file.name,
+          content: file.content,
+        })),
+      ],
       options.out,
       options.force,
     );
@@ -953,12 +1153,30 @@ const runGeneratedSchemaMode = (
       { ir, formName, schemaImport, visual: visualOf(options), ...scaffoldFlagsOf(options) },
       template,
     );
-    // Check BOTH destinations before writing either.
-    assertWritable([schemaOutAbs, outAbs], options.force);
+    const tests = buildTests(options, {
+      ir,
+      formName,
+      schemaImport,
+      componentImport: `./${path.basename(outAbs).replace(/\.[^.]+$/, "")}`,
+      // Generated schemas carry no refines, so they always parse sync.
+      asyncSchema: false,
+    });
+    const testDests = tests.files.map((file) =>
+      path.join(path.dirname(outAbs), file.name),
+    );
+    // Check EVERY destination before writing any.
+    assertWritable([schemaOutAbs, outAbs, ...testDests], options.force);
     writeFile(schemaOutAbs, schemaSource);
     writeFile(outAbs, code);
     stderr(`wrote ${relToCwd(schemaOutAbs)}`);
     stderr(`wrote ${relToCwd(outAbs)}`);
+    tests.files.forEach((file, i) => {
+      const dest = testDests[i];
+      if (dest !== undefined) {
+        writeFile(dest, file.content);
+        stderr(`wrote ${relToCwd(dest)}`);
+      }
+    });
     return 0;
   }
   if (options.schemaOut !== undefined) {
@@ -1233,6 +1451,21 @@ export const main = async (
         if (options.formProp && options.layout === "module") {
           stderr(
             "error: --form-prop does not combine with --layout module — the module's form is a singleton the page already owns: import the exported instance (e.g. profileForm) and drive it directly (reset, adoptValues, handleSubmit)",
+          );
+          return 1;
+        }
+        if (
+          options.tests.includes("vitest") &&
+          options.tests.includes("jest")
+        ) {
+          stderr(
+            "error: --tests vitest and jest are the same component spec with different globals - pick one",
+          );
+          return 1;
+        }
+        if (options.tests.length > 0 && options.out === undefined) {
+          stderr(
+            "error: --tests writes spec files beside the component, so it needs --out",
           );
           return 1;
         }
