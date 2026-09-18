@@ -92,6 +92,7 @@ export default defineConfig({
             { text: "Form state & lifecycle", link: "/documentation/state" },
             { text: "Recipes", link: "/documentation/recipes" },
             { text: "Devtools", link: "/documentation/devtools" },
+            { text: "Testing forms", link: "/documentation/testing" },
             { text: "SSR & Next.js", link: "/documentation/ssr" },
           ],
         },
