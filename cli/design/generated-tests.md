@@ -1,7 +1,8 @@
 # Design: generated tests (`--tests`)
 
-Status: **proposal** — the roadmap sketch worked out to decisions and open
-questions. Nothing here is implemented.
+Status: **decided 2026-09-18** — the five open questions below are
+resolved (Tim delegated the calls); the design is ready to implement.
+Nothing here is implemented yet.
 
 ## The one-line pitch
 
@@ -147,26 +148,40 @@ A case is emitted when it asserts something the schema DEMANDS:
   (execution stays in the repo's own vitest run for the plain backend —
   running six kits' specs would test the kits, not the generator).
 
-## Open questions for Tim
+## Decisions (2026-09-18)
 
-1. **Async refines in specs.** A schema with an async refine makes
-   `submitForm` genuinely async and can hit the network in userland
-   schemas. Emit those cases with a `// TODO: stub your async refine`
-   marker, or skip async-refine cases entirely and note it?
-2. **Message ownership.** When the author wrote no message, is
-   asserting "some error at path" enough, or should the generator
-   emit the zod default text pinned with a loud comment that upgrades
-   may change it? (Proposal says presence-only.)
-3. **Playwright fill strategy for kit widgets.** Native selects fill by
-   role; MUI's Select and Autocomplete need kit-specific interaction
-   sequences. Ship kit interaction snippets per backend (mirroring the
-   adapter machinery), or scope v1 to plain + shadcn (native controls)
-   and mark kit browser specs experimental?
-4. **Where does `renderWrapper` default?** Proposal: no default — bare
-   render for plain, loud TODO for kits. The alternative (generate a
-   providers file) contradicts the generator's no-providers stance.
-5. **Does `--tests` imply regeneration coupling?** If someone edits the
-   generated component by hand (the header says "edit freely"), the
-   spec may assert labels that no longer exist. Proposal: the spec
-   carries the same "yours now" header, and the docs say regenerating
-   either file means regenerating both.
+The former open questions, resolved:
+
+1. **Async refines: probe at generation time; `it.skip` the affected
+   cases with the stub seam named.** The generator runs a blank-set
+   `safeParse` while emitting; the async-parse error marks the schema
+   async. For async schemas, field-level cases swap the gate-reliant
+   fill for an explicit `await form.validateFieldsAsync([path])`, and
+   submit-level cases emit FULLY WRITTEN but as `it.skip` with a
+   comment naming what to stub (the refine's IO). A compiling,
+   correct-reading case the author activates by deleting `.skip` beats
+   both a missing case and a suite that hits the network on arrival.
+2. **Messages: presence-only for authorless constraints.** An authored
+   message asserts its exact text — the project owns it. An authorless
+   constraint asserts only that an error exists at the path; pinning
+   zod's default prose would make every zod upgrade a test-suite
+   incident over text nobody wrote.
+3. **Kit widgets: v1 browser specs are plain + shadcn only.** Kit
+   interaction sequences (portaled selects, autocomplete listboxes) are
+   a per-kit maintenance treadmill against DOM internals the kits do
+   not stabilize. Kit backends still get component specs, with
+   render-layer fills restricted to text-shaped controls (real inputs
+   in every kit) and enum/select proof staying store-level. Kit browser
+   specs are documented as not emitted; revisit on demand.
+4. **`renderWrapper` has no default.** Generating a providers file
+   would contradict the generator's no-providers stance. Plain/shadcn
+   render bare; kit output without a configured wrapper gets a
+   generation-time stderr warning (the depth-warning channel) and its
+   render-layer cases emitted `it.skip` — green but honest, with the
+   store-level cases still running since they need no render.
+5. **Coupling: the pair regenerates as one unit; labels are the drift
+   alarm.** Both files carry the "yours now" header, the CLI writes
+   component and spec together, and the docs say regenerating either
+   means both. No checksum ceremony beyond that: the spec fills by
+   label, labels are schema-derived, so a hand-renamed label breaks the
+   spec loudly — the spec doing its job.
