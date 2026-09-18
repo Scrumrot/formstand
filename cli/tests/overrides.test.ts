@@ -326,16 +326,25 @@ describe("single-file overrides emission", () => {
   const mantine = generateSingle(emitMantineForm, singleIr, "OverridesForm", dirs.mantine);
   const antd = generateSingle(emitAntdForm, singleIr, "OverridesForm", dirs.antd);
 
-  it("every kit's overridden output typechecks (plain with a consumer page)", () => {
-    expect(
-      typecheckDiagnostics([plain.file, writeConsumer(dirs.plain)]),
-    ).toEqual([]);
-    expect(typecheckDiagnostics([mui.file], muiStubPaths)).toEqual([]);
-    expect(typecheckDiagnostics([shadcn.file, shadcnStubFile])).toEqual([]);
-    expect(typecheckDiagnostics([chakra.file], chakraStubPaths)).toEqual([]);
-    expect(typecheckDiagnostics([mantine.file], mantineStubPaths)).toEqual([]);
-    expect(typecheckDiagnostics([antd.file], antdStubPaths)).toEqual([]);
-  });
+  it(
+    "every kit's overridden output typechecks (plain with a consumer page)",
+    () => {
+      expect(
+        typecheckDiagnostics([plain.file, writeConsumer(dirs.plain)]),
+      ).toEqual([]);
+      expect(typecheckDiagnostics([mui.file], muiStubPaths)).toEqual([]);
+      expect(typecheckDiagnostics([shadcn.file, shadcnStubFile])).toEqual([]);
+      expect(typecheckDiagnostics([chakra.file], chakraStubPaths)).toEqual([]);
+      expect(typecheckDiagnostics([mantine.file], mantineStubPaths)).toEqual([]);
+      expect(typecheckDiagnostics([antd.file], antdStubPaths)).toEqual([]);
+    },
+    // Six ts.createProgram passes in one test: each re-parses the library
+    // source, zod, and @types/react from scratch, so a slow CI runner
+    // crosses the 30s suite default (it did, at 30.9s, on the variant
+    // sub-paths PR). The generous ceiling is for runner variance, not
+    // headroom to grow into.
+    120_000,
+  );
 
   it("the component takes the options props (required, readonly) with path comments", () => {
     [plain, mui, shadcn, chakra, mantine, antd].forEach(({ code }) => {
