@@ -102,6 +102,12 @@ export { useField } from "./react/useField";
 export { useFields, type UseFieldsReturn } from "./react/useFields";
 export { useVariantField } from "./react/useVariantField";
 export type {
+  UnionValueAt,
+  VariantFieldPath,
+  VariantFieldValue,
+  VariantKeys,
+} from "./react/useVariantField";
+export type {
   UseFieldReturn,
   FieldFormApi,
   FieldPathArg,

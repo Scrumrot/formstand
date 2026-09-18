@@ -107,7 +107,7 @@ function PaymentFields({ form }: { form: Form<typeof schema> }) {
 }
 ```
 
-`useVariantField(form, unionPath, field)` types the result as the field's value across the variants that declare it, widened with `| undefined`, since the field is absent while a different variant is active. A field name no variant declares, or the discriminant itself, is a compile error. Call it unconditionally (React's rules) and render the matching fields based on the discriminant. `createFormHooks` exposes a bound `use{Name}VariantField`, and `formstand-gen` generates this shape for discriminated-union fields.
+`useVariantField(form, unionPath, field)` types the result as the field's value across the variants that resolve it, widened with `| undefined`, since the field is absent while a different variant is active. Since 0.20 the field argument is a **path**, not just a key: `useVariantField(form, "payment", "billing.zip")` reaches inside a variant-only object, and `"span.0"` binds a position of a variant-only tuple, riding the same typed-path machinery as `useField` (leaf classification and tuple positionality included). A path no variant resolves, or one rooted at a common key (the discriminant included — those bind with plain `useField`), is a compile error. Call it unconditionally (React's rules) and render the matching fields based on the discriminant. `createFormHooks` exposes a bound `use{Name}VariantField`, and `formstand-gen` generates this shape for discriminated-union fields.
 
 The union path can be row-indexed. A union that is an **array's row item** binds the same way from inside a row component, with a template path:
 

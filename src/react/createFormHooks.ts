@@ -16,7 +16,7 @@ import {
 import {
   type UnionValueAt,
   type VariantFieldValue,
-  type VariantKeys,
+  type VariantFieldPath,
   useVariantField,
 } from "./useVariantField";
 import {
@@ -79,12 +79,14 @@ export type BoundUseField<TSchema extends z.ZodType, D extends PathDepth = Defau
   ): UseFieldReturn<FieldValue<z.input<TSchema>, P>>;
 };
 
-// The variant-field accessor bound to the form: the type math (variant-only
-// field keys, value across declaring variants) lives in useVariantField; the
+// The variant-field accessor bound to the form: the type math (variant
+// paths, value across resolving variants) lives in useVariantField; the
 // bound signature just drops the form parameter.
 export type BoundUseVariantField<TSchema extends z.ZodType> = <
   P extends string,
-  TField extends VariantKeys<UnionValueAt<z.input<TSchema>, P>>,
+  // Default depth, matching the unbound hook (see its comment on why the
+  // constraint cannot ride the form's D).
+  TField extends VariantFieldPath<UnionValueAt<z.input<TSchema>, P>>,
 >(
   unionPath: P,
   field: TField,

@@ -1,6 +1,11 @@
 import type { z } from "zod";
 import type { Form } from "../core/createForm";
-import type { DefaultPathDepth, PathDepth } from "../core/fieldPath";
+import type {
+  DefaultPathDepth,
+  FieldPath,
+  FieldValue,
+  PathDepth,
+} from "../core/fieldPath";
 import { type FieldFormApi, type UseFieldReturn, useField } from "./useField";
 
 // Discriminated-union support. A z.discriminatedUnion field types its value
@@ -31,14 +36,23 @@ import { type FieldFormApi, type UseFieldReturn, useField } from "./useField";
 // and their setters fire only for the active variant. formstand-gen's output
 // follows this; hand-written forms must too.
 
-// The value of `field` across the members of union `V` that declare it.
-// Distributes over V: each member contributes V[field] when it has field,
-// never otherwise; the union of those is the result. `| undefined` is added
-// by the caller (the field is absent while another variant is active).
+// The value of variant path `TField` across the members of union `V` that
+// resolve it. Distributes over V: each member contributes its FieldValue
+// when TField is one of ITS typed paths, never otherwise; the union of
+// those is the result. `| undefined` is added by the caller (the field is
+// absent while another variant is active). Since 0.20 TField is a PATH,
+// not just a key — "size.w" reaches inside a variant-only object — so the
+// resolution rides the same FieldPath/FieldValue machinery as useField
+// (leaf classification, tuple positions, and the depth budget included;
+// the budget applies to the path WITHIN the variant, the union path
+// having already been budget-checked by its own binding).
 export type VariantFieldValue<V, TField extends string> = V extends unknown
-  ? TField extends keyof V
-    ? V[TField]
-    : never
+  ? // No FieldPath gate needed: FieldValue resolves a path a member does
+    // not declare to `never` (StepValue's miss arm), so non-declaring
+    // members drop out of the union by themselves — and the constraint
+    // side (VariantFieldPath) already vouches that SOME member declares
+    // it.
+    FieldValue<V, TField>
   : never;
 
 // The variant-only field keys of union `V`: every member's keys minus the
@@ -50,6 +64,22 @@ export type VariantFieldValue<V, TField extends string> = V extends unknown
 type CommonKeys<V> = keyof V;
 type AllKeys<V> = V extends unknown ? keyof V : never;
 export type VariantKeys<V> = Exclude<AllKeys<V>, CommonKeys<V>> & string;
+
+// Every typed path of every member — FieldPath distributes over the union
+// — minus the paths ROOTED at a common key: the discriminant and other
+// common fields (and anything under them) bind with plain useField, so
+// offering them here would just duplicate the plain hook with a widened
+// `| undefined`. What remains is exactly what FieldPath on the union
+// cannot offer: variant-only keys and every path INSIDE them
+// ("cardNumber", "size", "size.w", "lines.0.qty").
+export type VariantFieldPath<
+  V,
+  D extends PathDepth = DefaultPathDepth,
+> = Exclude<
+  V extends unknown ? FieldPath<V, D> : never,
+  (CommonKeys<V> & string) | `${CommonKeys<V> & string}.${string}`
+> &
+  string;
 
 // The paths in `TValues` whose value is a discriminated union — an object
 // whose members don't all share the same keys. Kept permissive (any
@@ -135,7 +165,13 @@ export function useVariantField<TValue = unknown>(
 export function useVariantField<
   TSchema extends z.ZodType,
   P extends string,
-  TField extends VariantKeys<UnionValueAt<z.input<TSchema>, P>>,
+  // The DEFAULT depth budget on purpose, not D: a constraint may not
+  // consume a later type parameter before inference resolves it — TS
+  // substitutes D's CONSTRAINT (the whole PathDepth union) while checking
+  // TField, which collapses the offered paths to never. Variant subtrees
+  // are shallow by construction (they sit under an already-budgeted union
+  // path), so the fixed default costs nothing real.
+  TField extends VariantFieldPath<UnionValueAt<z.input<TSchema>, P>>,
   D extends PathDepth = DefaultPathDepth,
 >(
   form: Form<TSchema, D>,

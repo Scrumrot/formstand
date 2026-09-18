@@ -289,3 +289,87 @@ describe("useVariantField on array-row union paths", () => {
     });
   });
 });
+
+// Variant SUB-paths (0.20): the field argument is a PATH, not just a key —
+// "size.w" reaches inside a variant-only object, positions inside a
+// variant-only tuple bind, and paths rooted at a common key stay excluded
+// (they bind with plain useField). The value distributes over the members
+// that resolve the path, widened with | undefined by the hook.
+describe("variant sub-paths", () => {
+  const subSchema = z.object({
+    shape: z.discriminatedUnion("t", [
+      z.object({ t: z.literal("dot"), r: z.number() }),
+      z.object({
+        t: z.literal("box"),
+        size: z.object({ w: z.number(), h: z.number() }),
+        span: z.tuple([z.number(), z.number()]),
+      }),
+    ]),
+    common: z.string(),
+  });
+  const initialValues = {
+    shape: {
+      t: "box" as const,
+      size: { w: 3, h: 4 },
+      span: [1, 2] as [number, number],
+    },
+    common: "",
+  };
+
+  it("binds inside a variant-only object and tuple", () => {
+    const { result } = renderHook(() => {
+      const form = useForm(subSchema, { initialValues });
+      return {
+        form,
+        w: useVariantField(form, "shape", "size.w"),
+        span1: useVariantField(form, "shape", "span.1"),
+      };
+    });
+    expectTypeOf(result.current.w.value).toEqualTypeOf<number | undefined>();
+    expectTypeOf(result.current.span1.value).toEqualTypeOf<
+      number | undefined
+    >();
+    expect(result.current.w.value).toBe(3);
+    expect(result.current.span1.value).toBe(2);
+
+    act(() => result.current.w.setValue(9));
+    const shape = result.current.form.getState().values.shape;
+    expect(shape.t === "box" && shape.size.w).toBe(9);
+  });
+
+  it("still offers the direct variant keys, container keys included", () => {
+    const { result } = renderHook(() => {
+      const form = useForm(subSchema, { initialValues });
+      return useVariantField(form, "shape", "size");
+    });
+    expectTypeOf(result.current.value).toEqualTypeOf<
+      { w: number; h: number } | undefined
+    >();
+  });
+
+  it("rejects paths rooted at common keys and bogus sub-paths", () => {
+    renderHook(() => {
+      const form = useForm(subSchema, { initialValues });
+      // @ts-expect-error the discriminant is common — plain useField binds it
+      useVariantField(form, "shape", "t");
+      // @ts-expect-error "size.nope" resolves in no variant
+      useVariantField(form, "shape", "size.nope");
+      // @ts-expect-error "span.5" is past the tuple's end
+      useVariantField(form, "shape", "span.5");
+      return null;
+    });
+  });
+
+  it("sub-paths bind on row-indexed union paths too", () => {
+    const rowsSchema = z.object({ shapes: z.array(subSchema.shape.shape) });
+    const { result } = renderHook(() => {
+      const form = useForm(rowsSchema, {
+        initialValues: { shapes: [initialValues.shape] },
+      });
+      const index = 0;
+      return useVariantField(form, `shapes.${index}`, "size.h");
+    });
+    expectTypeOf(result.current.value).toEqualTypeOf<number | undefined>();
+    expect(result.current.value).toBe(4);
+  });
+});
