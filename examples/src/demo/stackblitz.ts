@@ -216,7 +216,7 @@ export const openInStackBlitz = (
     input.value = value;
     form.appendChild(input);
   };
-  add("project[title]", `formstand — ${title}`);
+  add("project[title]", `formstand: ${title}`);
   add(
     "project[description]",
     "A formstand playground demo, seeded with the library from npm.",

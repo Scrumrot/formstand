@@ -87,14 +87,16 @@ export const ActionsForm = () => {
       </div>
 
       {rootError !== undefined ? (
-        <div className="error" style={{ marginBottom: 12 }}>
-          {rootError[0]}
+        // Inside a .field wrapper: the playground scopes .error styling
+        // under .field, so a bare error div renders unstyled.
+        <div className="field" style={{ marginBottom: 12 }}>
+          <span className="error">{rootError[0]}</span>
         </div>
       ) : null}
 
       <p className="subtitle">
-        Last verdict: <strong>{result.status}</strong> — {result.detail}
-        {result.saves > 0 ? ` (${result.saves} saved)` : ""}
+        Last verdict: <strong>{result.status}</strong> ({result.detail}
+        {result.saves > 0 ? `, ${result.saves} saved` : ""})
       </p>
 
       <button className="primary" type="submit" disabled={isPending}>
