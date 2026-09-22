@@ -156,7 +156,11 @@ describe("fromType JSDoc description capture", () => {
 describe("emitZodSchema descriptions", () => {
   it("emits .describe() outermost, after the wrappers", () => {
     const source = emitZodSchema(fromZod(describedSchema), "described");
-    expect(source).toContain('grossWeight: z.number().describe("1,000 lbs"),');
+    // .positive() rides along as .gt(0) since the check-metadata enrichment;
+    // the description still lands outermost, after the bound.
+    expect(source).toContain(
+      'grossWeight: z.number().gt(0).describe("1,000 lbs"),',
+    );
     expect(source).toContain(
       'firstFlight: z.date().optional().describe("maiden flight date"),',
     );

@@ -87,15 +87,40 @@ export type UnionVariant = Readonly<{
 // carry no formats).
 export type StringFormat = "email" | "url" | "uuid";
 
+// Bound metadata captured from zod checks / JSON Schema keywords (the
+// TS-type front-end never sets them - types carry no bounds). Consumed by
+// emitZodSchema (round-tripping generated validators) and the generated
+// tests (bound and array-minimum cases); absent means unconstrained.
+export type StringChecks = Readonly<{
+  minLength?: number;
+  maxLength?: number;
+}>;
+
+export type NumberChecks = Readonly<{
+  min?: number;
+  max?: number;
+  // zod's .gt()/.lt(): the bound itself is illegal.
+  minExclusive?: true;
+  maxExclusive?: true;
+  int?: true;
+}>;
+
+export type ArrayChecks = Readonly<{
+  minLength?: number;
+  maxLength?: number;
+}>;
+
 export type FieldSpec =
-  | (SharedSpecProps & Readonly<{ kind: "string"; format?: StringFormat }>)
-  | (SharedSpecProps & Readonly<{ kind: "number" }>)
+  | (SharedSpecProps &
+      Readonly<{ kind: "string"; format?: StringFormat; checks?: StringChecks }>)
+  | (SharedSpecProps & Readonly<{ kind: "number"; checks?: NumberChecks }>)
   | (SharedSpecProps & Readonly<{ kind: "boolean" }>)
   | (SharedSpecProps & Readonly<{ kind: "date" }>)
   | (SharedSpecProps & Readonly<{ kind: "enum"; options: readonly string[] }>)
   | (SharedSpecProps &
       Readonly<{ kind: "object"; fields: readonly NamedField[] }>)
-  | (SharedSpecProps & Readonly<{ kind: "array"; item: FieldSpec }>)
+  | (SharedSpecProps &
+      Readonly<{ kind: "array"; item: FieldSpec; checks?: ArrayChecks }>)
   // A fixed-arity, heterogeneous positional list (z.tuple / [A, B]). Each
   // element binds at a static numeric-index path (`coord.0`, `coord.1`),
   // unlike an array's variable-length dynamic rows.

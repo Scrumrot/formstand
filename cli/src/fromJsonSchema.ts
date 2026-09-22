@@ -3,6 +3,8 @@ import { DEFAULT_MAX_DEPTH } from "./fromZod";
 import {
   type FieldSpec,
   type NamedField,
+  type NumberChecks,
+  type StringChecks,
   type UnionVariant,
   labelFromName,
 } from "./ir";
@@ -57,6 +59,69 @@ const fallback = (flags: Flags, todo: string): FieldSpec => ({
   ...flags,
   todo,
 });
+
+// Bound keywords ride into the IR only when they are finite numbers: a
+// string-typed "minimum" (seen in hand-written schemas) or Infinity would
+// emit a validator zod rejects at load time. A NaN/absent keyword is simply
+// "unconstrained".
+const finiteKeyword = (value: unknown): number | undefined =>
+  typeof value === "number" && Number.isFinite(value) ? value : undefined;
+
+// The cast is the computed-key idiom: TS types `{ [key]: value }` as
+// `{ [x: string]: number }` and cannot relate `{}` to a generic Partial.
+const boundProps = <K extends string>(
+  key: K,
+  value: number | undefined,
+): Readonly<Partial<Record<K, number>>> =>
+  (value === undefined ? {} : { [key]: value }) as Readonly<
+    Partial<Record<K, number>>
+  >;
+
+// minLength/maxLength (strings) and minItems/maxItems (arrays) share one
+// shape, so one reader serves both; the caller names the keyword pair.
+const lengthChecksOf = (
+  schema: JsonRecord,
+  minKey: string,
+  maxKey: string,
+): StringChecks | undefined => {
+  const checks: StringChecks = {
+    ...boundProps("minLength", finiteKeyword(schema[minKey])),
+    ...boundProps("maxLength", finiteKeyword(schema[maxKey])),
+  };
+  return Object.keys(checks).length === 0 ? undefined : checks;
+};
+
+// Draft 2020-12 exclusiveMinimum/exclusiveMaximum are numbers (draft-04's
+// boolean flag form is ignored: a `true` beside `minimum` would need the
+// bound re-read from `minimum`, and no modern generator emits it). When both
+// an inclusive and an exclusive bound exist, the tighter one wins; ties go
+// exclusive since it is the stricter of the two.
+const numberChecksOf = (
+  schema: JsonRecord,
+  int: boolean,
+): NumberChecks | undefined => {
+  const min = finiteKeyword(schema["minimum"]);
+  const xmin = finiteKeyword(schema["exclusiveMinimum"]);
+  const max = finiteKeyword(schema["maximum"]);
+  const xmax = finiteKeyword(schema["exclusiveMaximum"]);
+  const lower: Pick<NumberChecks, "min" | "minExclusive"> =
+    xmin !== undefined && (min === undefined || xmin >= min)
+      ? { min: xmin, minExclusive: true }
+      : boundProps("min", min);
+  const upper: Pick<NumberChecks, "max" | "maxExclusive"> =
+    xmax !== undefined && (max === undefined || xmax <= max)
+      ? { max: xmax, maxExclusive: true }
+      : boundProps("max", max);
+  const checks: NumberChecks = {
+    ...(int ? { int: true } : {}),
+    ...lower,
+    ...upper,
+  };
+  return Object.keys(checks).length === 0 ? undefined : checks;
+};
+
+const checksProps = <T>(checks: T | undefined): Readonly<{ checks?: T }> =>
+  checks === undefined ? {} : { checks };
 
 // RFC 6901: "/" and "~" in a property name are escaped as ~1 and ~0; ~1
 // must be unescaped first or "~01" would round-trip wrong.
@@ -339,6 +404,7 @@ const arraySpec = (
   return {
     kind: "array",
     item: walk(items, NO_FLAGS, ctx, depth - 1),
+    ...checksProps(lengthChecksOf(schema, "minItems", "maxItems")),
     ...flags,
   };
 };
@@ -460,13 +526,20 @@ const walkNode = (
             : format === "uuid"
               ? ("uuid" as const)
               : undefined;
+      const checks = checksProps(
+        lengthChecksOf(schema, "minLength", "maxLength"),
+      );
       return zodFormat === undefined
-        ? { kind: "string", ...withNull }
-        : { kind: "string", format: zodFormat, ...withNull };
+        ? { kind: "string", ...checks, ...withNull }
+        : { kind: "string", format: zodFormat, ...checks, ...withNull };
     }
     case "number":
     case "integer":
-      return { kind: "number", ...withNull };
+      return {
+        kind: "number",
+        ...checksProps(numberChecksOf(schema, typed.type === "integer")),
+        ...withNull,
+      };
     case "boolean":
       return { kind: "boolean", ...withNull };
     case "object":

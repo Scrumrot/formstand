@@ -1,5 +1,32 @@
 # Changelog
 
+## formstand-cli Unreleased
+
+### Added
+
+- **Check-metadata enrichment.** The IR now carries bounds: `.min()` /
+  `.max()` / `.length()` on strings and arrays, `.min()` / `.max()` /
+  `.gt()` / `.lt()` and `.int()` (or `z.int()`) on numbers, captured by
+  the zod walk, and `minLength` / `maxLength`, `minimum` / `maximum` /
+  `exclusiveMinimum` / `exclusiveMaximum`, `minItems` / `maxItems`, and
+  `type: "integer"` captured by the JSON Schema front-end. When a bound
+  repeats, the tightest wins. Nothing changes in the controls; the
+  schema emitted for type and JSON Schema inputs round-trips the bounds
+  (`z.string().min(3).max(9)`, `z.number().int().gt(0)`,
+  `z.array(...).min(1)`), and the generated tests derive from them: a
+  string with a minimum length and an array with a row minimum join the
+  blank-submit assertions, each bounded string or number gets a probe
+  that rejects a value just past its tightest edge and accepts one
+  inside it, and the valid-values literal honors every bound (strings
+  stretch to the minimum, numbers sit at the lower edge, arrays carry
+  the minimum rows). The repo's executed spec covers all three shapes.
+
+### Changed
+
+- `emitZodSchema` output for a bounded field changes accordingly (a
+  `.positive()` number now emits `z.number().gt(0)`, for instance). The
+  `GeneratedTestPlan` gains `arrayMinPaths` and `boundChecks`.
+
 ## formstand-cli 0.20.0 — 2026-09-18
 
 ### Added

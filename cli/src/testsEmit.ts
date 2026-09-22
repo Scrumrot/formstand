@@ -78,8 +78,38 @@ export const emitComponentSpec = (
     .map((name) => ` ${name}={[]}`)
     .join("");
   const submitSkip = asyncSchema;
-  const hasBlankInvalid =
-    plan.requiredPaths.length > 0 || plan.formatChecks.length > 0;
+  const blankInvalidPaths = [...plan.requiredPaths, ...plan.arrayMinPaths];
+  const hasBlankInvalid = blankInvalidPaths.length > 0;
+
+  // One rejecting/passing probe at a path: the format and bound cases
+  // share the shape, differing only in the title and the literals (format
+  // samples are strings; bound samples are already source text so a
+  // number field gets a number).
+  const probeCase = (
+    title: string,
+    path: string,
+    bad: string,
+    good: string,
+  ): readonly string[] => [
+    "",
+    `  ${itLine(false)}(${q(title)}, async () => {`,
+    "    const form = makeForm();",
+    ...(asyncSchema
+      ? [
+          `    fillField(form, ${q(path)}, ${bad});`,
+          `    await form.validateFieldsAsync([${q(path)}]);`,
+        ]
+      : [`    fillAndBlurField(form, ${q(path)}, ${bad});`]),
+    `    expect(form.getState().errors[${q(path)}]).toBeDefined();`,
+    ...(asyncSchema
+      ? [
+          `    fillField(form, ${q(path)}, ${good});`,
+          `    await form.validateFieldsAsync([${q(path)}]);`,
+        ]
+      : [`    fillAndBlurField(form, ${q(path)}, ${good});`]),
+    `    expect(form.getState().errors[${q(path)}]).toBeUndefined();`,
+    "  });",
+  ];
 
   const storeCases: readonly string[] = [
     ...(hasBlankInvalid
@@ -96,7 +126,7 @@ export const emitComponentSpec = (
           "    const result = await submitForm(form);",
           `    expect(result.kind).toBe("invalid");`,
           `    if (result.kind === "invalid") {`,
-          ...plan.requiredPaths.map(
+          ...blankInvalidPaths.map(
             (entry) =>
               `      expect(result.errors[${q(entry.path)}]).toBeDefined();`,
           ),
@@ -123,30 +153,22 @@ export const emitComponentSpec = (
         ]),
     "    }",
     "  });",
-    ...plan.formatChecks.flatMap((check) => [
-      "",
-      `  ${itLine(false)}(${q(`${check.label} rejects a value that is not a valid ${check.format}`)}, async () => {`,
-      "    const form = makeForm();",
-      ...(asyncSchema
-        ? [
-            `    fillField(form, ${q(check.path)}, ${q(check.bad)});`,
-            `    await form.validateFieldsAsync([${q(check.path)}]);`,
-          ]
-        : [
-            `    fillAndBlurField(form, ${q(check.path)}, ${q(check.bad)});`,
-          ]),
-      `    expect(form.getState().errors[${q(check.path)}]).toBeDefined();`,
-      ...(asyncSchema
-        ? [
-            `    fillField(form, ${q(check.path)}, ${q(check.good)});`,
-            `    await form.validateFieldsAsync([${q(check.path)}]);`,
-          ]
-        : [
-            `    fillAndBlurField(form, ${q(check.path)}, ${q(check.good)});`,
-          ]),
-      `    expect(form.getState().errors[${q(check.path)}]).toBeUndefined();`,
-      "  });",
-    ]),
+    ...plan.formatChecks.flatMap((check) =>
+      probeCase(
+        `${check.label} rejects a value that is not a valid ${check.format}`,
+        check.path,
+        q(check.bad),
+        q(check.good),
+      ),
+    ),
+    ...plan.boundChecks.flatMap((check) =>
+      probeCase(
+        `${check.label} rejects a value ${check.reason}`,
+        check.path,
+        check.bad,
+        check.good,
+      ),
+    ),
   ];
 
   const renderNeeded =
@@ -192,8 +214,10 @@ export const emitComponentSpec = (
         "});",
       ];
 
-  const needsFillField = asyncSchema && plan.formatChecks.length > 0;
-  const needsFillAndBlur = !asyncSchema && plan.formatChecks.length > 0;
+  const hasProbes =
+    plan.formatChecks.length > 0 || plan.boundChecks.length > 0;
+  const needsFillField = asyncSchema && hasProbes;
+  const needsFillAndBlur = !asyncSchema && hasProbes;
   const testingImports = [
     ...(needsFillAndBlur ? ["fillAndBlurField"] : []),
     ...(needsFillField ? ["fillField"] : []),

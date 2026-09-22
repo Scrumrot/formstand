@@ -3,13 +3,17 @@
 Status: **implemented (v1) 2026-09-18** — `--tests vitest|jest|playwright`,
 the config `tests` block, the plan collector (`testCases.ts`), and both
 emitters (`testsEmit.ts`) shipped, with the emitted spec EXECUTED against
-the library source in the root suite (tests/generatedSpec.test.tsx). One
-v1 scope note against the sketch below: the IR carries no zod check
-metadata (min/max/length) and no authored messages, so the `bound` and
-`arrayMin` case kinds are NOT emitted yet and every assertion is
-presence-shaped — those cases arrive with IR enrichment, honestly,
-rather than guessed. `unionSwitch` is also deferred. The decisions
-section at the end records the five resolved questions.
+the library source in the root suite (tests/generatedSpec.test.tsx).
+**Check-metadata enrichment 2026-09-22**: the IR now carries string/array
+length bounds and number bounds (`checks` on the string, number, and
+array arms, captured by fromZod and fromJsonSchema), so the `bound`
+(one probe per bounded string/number: minimum, else maximum, else
+integrality) and `arrayMin` (asserted inside the blank-submit case at
+the array path) kinds are emitted, and the valid literal honors every
+bound. Two scope notes remain against the sketch below: the IR carries
+no authored messages, so every assertion stays presence-shaped; and
+`unionSwitch` is still deferred. The decisions section at the end
+records the five resolved questions.
 
 ## The one-line pitch
 

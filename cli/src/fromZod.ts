@@ -75,6 +75,144 @@ const descriptionOf = (schema: unknown): string | undefined => {
   }
 };
 
+// Duck-typed read of zod v4's checks array: each check's plain payload
+// lives at entry._zod.def ({ check: "min_length", minimum: 3 },
+// { check: "greater_than", value: 18, inclusive: true }, ...). Unknown
+// check kinds are ignored on purpose — bounds are an enrichment the
+// emitters and generated tests consume, never a gate on walking.
+const checkDefs = (
+  def: Readonly<Record<string, unknown>>,
+): readonly Readonly<Record<string, unknown>>[] => {
+  const raw = def["checks"];
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((entry): readonly Readonly<Record<string, unknown>>[] => {
+    const inner =
+      (entry as Readonly<{ _zod?: Readonly<{ def?: unknown }> }>)._zod?.def ??
+      entry;
+    return typeof inner === "object" && inner !== null
+      ? [inner as Readonly<Record<string, unknown>>]
+      : [];
+  });
+};
+
+const finiteOf = (value: unknown): number | undefined =>
+  typeof value === "number" && Number.isFinite(value) ? value : undefined;
+
+// min_length / max_length / length_equals — shared by strings and arrays.
+// Repeated checks keep the TIGHTEST bound (zod applies all of them).
+const lengthChecksOf = (
+  def: Readonly<Record<string, unknown>>,
+): Readonly<{ minLength?: number; maxLength?: number }> | undefined => {
+  const collected = checkDefs(def).reduce<{
+    minLength?: number;
+    maxLength?: number;
+  }>((acc, check) => {
+    switch (check["check"]) {
+      case "min_length": {
+        const minimum = finiteOf(check["minimum"]);
+        return minimum === undefined
+          ? acc
+          : { ...acc, minLength: Math.max(acc.minLength ?? minimum, minimum) };
+      }
+      case "max_length": {
+        const maximum = finiteOf(check["maximum"]);
+        return maximum === undefined
+          ? acc
+          : { ...acc, maxLength: Math.min(acc.maxLength ?? maximum, maximum) };
+      }
+      case "length_equals": {
+        const length = finiteOf(check["length"]);
+        return length === undefined
+          ? acc
+          : { ...acc, minLength: length, maxLength: length };
+      }
+      default:
+        return acc;
+    }
+  }, {});
+  return collected.minLength === undefined && collected.maxLength === undefined
+    ? undefined
+    : collected;
+};
+
+// The number formats zod treats as integers: a bare z.int() is a
+// ZodNumberFormat whose def.format is "safeint" and whose checks array is
+// EMPTY (the format itself is the check), while .int() on a plain number
+// appends a number_format check carrying the same format string. Both
+// spellings must land as int: true, so the format is read in both places.
+const INT_FORMATS: ReadonlySet<unknown> = new Set(["safeint", "int32", "uint32"]);
+
+// A tighter bound replaces the previous edge AND its exclusivity flag; a
+// rest-destructure would do it, but the lint forbids the unused binding.
+const withoutKey = <T extends object, K extends keyof T>(
+  obj: T,
+  key: K,
+): Omit<T, K> =>
+  Object.fromEntries(
+    Object.entries(obj).filter(([name]) => name !== key),
+  ) as Omit<T, K>;
+
+// greater_than / less_than (value + inclusive) and the integer formats
+// (see INT_FORMATS). A tie between an inclusive and an exclusive bound at
+// the same value keeps the exclusive one, the stricter of the two.
+const numberChecksOf = (
+  def: Readonly<Record<string, unknown>>,
+):
+  | Readonly<{
+      min?: number;
+      max?: number;
+      minExclusive?: true;
+      maxExclusive?: true;
+      int?: true;
+    }>
+  | undefined => {
+  const collected = checkDefs(def).reduce<{
+    min?: number;
+    max?: number;
+    minExclusive?: true;
+    maxExclusive?: true;
+    int?: true;
+  }>((acc, check) => {
+    switch (check["check"]) {
+      case "greater_than": {
+        const value = finiteOf(check["value"]);
+        const exclusive = check["inclusive"] !== true;
+        const looser =
+          acc.min !== undefined &&
+          (value === undefined ||
+            value < acc.min ||
+            (value === acc.min && (acc.minExclusive === true || !exclusive)));
+        if (value === undefined || looser) return acc;
+        return {
+          ...withoutKey(acc, "minExclusive"),
+          min: value,
+          ...(exclusive ? { minExclusive: true as const } : {}),
+        };
+      }
+      case "less_than": {
+        const value = finiteOf(check["value"]);
+        const exclusive = check["inclusive"] !== true;
+        const looser =
+          acc.max !== undefined &&
+          (value === undefined ||
+            value > acc.max ||
+            (value === acc.max && (acc.maxExclusive === true || !exclusive)));
+        if (value === undefined || looser) return acc;
+        return {
+          ...withoutKey(acc, "maxExclusive"),
+          max: value,
+          ...(exclusive ? { maxExclusive: true as const } : {}),
+        };
+      }
+      case "number_format":
+        return INT_FORMATS.has(check["format"]) ? { ...acc, int: true } : acc;
+      default:
+        return acc;
+    }
+  }, INT_FORMATS.has(def["format"]) ? { int: true } : {});
+  return Object.keys(collected).length === 0 ? undefined : collected;
+};
+
 const stringValues = (values: unknown): readonly string[] | null => {
   if (!Array.isArray(values)) return null;
   return values.every((v): v is string => typeof v === "string")
@@ -233,13 +371,25 @@ const walkNode = (
       // (emitZodSchema round-trips them as z.email()/z.url()/z.uuid());
       // other formats (ipv4, emoji, ...) stay plain strings.
       const format = def.format;
-      return format === "email" || format === "url" || format === "uuid"
-        ? { kind: "string", format, ...flags }
-        : { kind: "string", ...flags };
+      const checks = lengthChecksOf(def);
+      return {
+        kind: "string",
+        ...(format === "email" || format === "url" || format === "uuid"
+          ? { format }
+          : {}),
+        ...(checks === undefined ? {} : { checks }),
+        ...flags,
+      };
     }
     case "number":
-    case "int":
-      return { kind: "number", ...flags };
+    case "int": {
+      const checks = numberChecksOf(def);
+      return {
+        kind: "number",
+        ...(checks === undefined ? {} : { checks }),
+        ...flags,
+      };
+    }
     case "boolean":
       return { kind: "boolean", ...flags };
     case "date":
@@ -266,7 +416,8 @@ const walkNode = (
         fields: fieldsFromShape(def.shape, depth - 1, nextSeen),
         ...flags,
       };
-    case "array":
+    case "array": {
+      const checks = lengthChecksOf(def);
       return {
         kind: "array",
         item: walk(
@@ -275,8 +426,10 @@ const walkNode = (
           depth - 1,
           nextSeen,
         ),
+        ...(checks === undefined ? {} : { checks }),
         ...flags,
       };
+    }
     case "tuple": {
       if (!Array.isArray(def.items)) {
         return fallback(flags, `unsupported zod type "tuple"; defaulted to string`);

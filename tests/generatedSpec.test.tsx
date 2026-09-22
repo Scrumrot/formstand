@@ -15,9 +15,12 @@ import { emitComponentSpec } from "../cli/src/testsEmit";
 // project so vitest's transform pipeline picks the .tsx up), then the spec
 // module is imported — its describe/it blocks register in THIS suite, so a
 // generated assertion that stops holding fails CI like any hand-written
-// test. The fixture deliberately covers every v1 case shape: a formatted
+// test. The fixture deliberately covers every case shape: a formatted
 // string (required + format + render cases), a required number and enum
-// (blank-invalid), an optional string, and a nested object.
+// (blank-invalid), an optional string, a nested object, and (since the
+// check-metadata enrichment) a length-bounded string, an integer with an
+// exclusive lower bound, a maximum-only number, and an array with a row
+// minimum (blank-invalid at the array path, valid values carry a row).
 
 const schema = z.object({
   email: z.email(),
@@ -25,6 +28,10 @@ const schema = z.object({
   tier: z.enum(["basic", "pro"]),
   notes: z.string().optional(),
   shipping: z.object({ city: z.string() }),
+  name: z.string().min(3).max(12),
+  score: z.int().gt(0),
+  discount: z.number().max(50),
+  tags: z.array(z.string()).min(1),
 });
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -43,6 +50,10 @@ fs.writeFileSync(
     `  tier: z.enum(["basic", "pro"]),`,
     "  notes: z.string().optional(),",
     "  shipping: z.object({ city: z.string() }),",
+    "  name: z.string().min(3).max(12),",
+    "  score: z.int().gt(0),",
+    "  discount: z.number().max(50),",
+    "  tags: z.array(z.string()).min(1),",
     "});",
     "",
   ].join("\n"),

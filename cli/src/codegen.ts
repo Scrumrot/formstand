@@ -553,6 +553,45 @@ export const blankNeedsCast = (spec: FieldSpec): boolean => {
 // Zod schema source (for type-mode users, and round-trippable from the IR)
 // ---------------------------------------------------------------------------
 
+// Captured check metadata re-emitted as zod method chains so a generated
+// validator round-trips the source's bounds (a zod-mode `.min(3)` or a JSON
+// Schema `minLength: 3` would otherwise vanish from the emitted schema).
+// Lengths use .min/.max on strings AND arrays (zod spells both the same);
+// numbers use .gt/.lt for exclusive bounds and .gte/.lte for inclusive ones
+// (zod's .min/.max aliases exist, but the explicit pair reads the same as
+// the captured flag). `.int()` goes first so `z.number().int().gte(0)`
+// matches how people write it by hand.
+const lengthChain = (
+  checks: Readonly<{ minLength?: number; maxLength?: number }> | undefined,
+): string =>
+  checks === undefined
+    ? ""
+    : [
+        ...(checks.minLength === undefined ? [] : [`.min(${checks.minLength})`]),
+        ...(checks.maxLength === undefined ? [] : [`.max(${checks.maxLength})`]),
+      ].join("");
+
+const numberChain = (
+  checks: Readonly<{
+    min?: number;
+    max?: number;
+    minExclusive?: true;
+    maxExclusive?: true;
+    int?: true;
+  }> | undefined,
+): string =>
+  checks === undefined
+    ? ""
+    : [
+        ...(checks.int === true ? [".int()"] : []),
+        ...(checks.min === undefined
+          ? []
+          : [`.${checks.minExclusive === true ? "gt" : "gte"}(${checks.min})`]),
+        ...(checks.max === undefined
+          ? []
+          : [`.${checks.maxExclusive === true ? "lt" : "lte"}(${checks.max})`]),
+      ].join("");
+
 const zodExpr = (spec: FieldSpec, level: number): string => {
   const base = ((): string => {
     switch (spec.kind) {
@@ -560,9 +599,12 @@ const zodExpr = (spec: FieldSpec, level: number): string => {
         // A carried format emits zod's top-level validator (z.email(), not
         // the deprecated z.string().email() spelling); the bound control
         // stays a plain text input — the constraint belongs to validation.
-        return spec.format === undefined ? "z.string()" : `z.${spec.format}()`;
+        return (
+          (spec.format === undefined ? "z.string()" : `z.${spec.format}()`) +
+          lengthChain(spec.checks)
+        );
       case "number":
-        return "z.number()";
+        return `z.number()${numberChain(spec.checks)}`;
       case "boolean":
         return "z.boolean()";
       case "date":
@@ -570,7 +612,7 @@ const zodExpr = (spec: FieldSpec, level: number): string => {
       case "enum":
         return `z.enum([${spec.options.map(q).join(", ")}])`;
       case "array":
-        return `z.array(${zodExpr(spec.item, level)})`;
+        return `z.array(${zodExpr(spec.item, level)})${lengthChain(spec.checks)}`;
       case "tuple":
         return `z.tuple([${spec.elements.map((el) => zodExpr(el, level)).join(", ")}])`;
       case "object": {

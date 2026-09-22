@@ -117,10 +117,11 @@ the CLI from two UI targets to six, and make the docs match.
   schema walk, with store-level cases on `formstand/testing`, label-driven
   render cases through the config's `renderWrapper`, and a Playwright spec
   gated on a configured base URL (design + decisions:
-  cli/design/generated-tests.md). Still open there, waiting on IR
-  enrichment: min/max/length ("bound") and array-minimum cases — the IR
-  does not carry zod check metadata yet, so v1 asserts presence, never
-  guessed constraints.
+  cli/design/generated-tests.md). The check-metadata enrichment landed
+  2026-09-22: the IR carries string/array length bounds and number bounds
+  from both the zod and JSON Schema front-ends, the emitted schema
+  round-trips them, and the spec gains bound and array-minimum cases.
+  Assertions stay presence-shaped (the IR carries no authored messages).
 
 - **A browser-extension devtools.** The in-page panel proves the display; an
   extension would add store discovery, a page bridge, and cross-context

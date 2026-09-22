@@ -51,6 +51,8 @@ Three properties worth relying on. It is strictly opt-in: nothing prompts from a
 
 `string`, `number` and `int`, `boolean`, `date`, `enum`, unions of string literals, `object`, `array`, and `tuple`, with `.optional()`, `.nullable()`, `.default()`, and `.pipe()` unwrapped.
 
+Bounds ride along too: `.min()` / `.max()` / `.length()` on strings and arrays, `.min()` / `.max()` / `.gt()` / `.lt()` and `.int()` (or `z.int()`) on numbers. They change no control, but the zod schema emitted for type and JSON Schema inputs carries them (`z.string().min(3).max(9)`, `z.number().int().gt(0)`, `z.array(...).min(1)`), and the generated tests derive bound cases from them. When a bound repeats, the tightest wins. TypeScript types carry no bounds, so type mode never captures any.
+
 Tuples (`z.tuple([...])`, or `[A, B]` in type mode) render fixed positional controls at static numeric-index paths such as `coord.0` and `coord.1`, in both layouts.
 
 Arrays nested inside array rows extract a `useFieldArray`-owning row component at **every** level, recursively, in both layouts, bounded by `--max-depth`. Each enclosing row's index threads down as a `p0`, `p1`, and so on prop, so `teams[] › members[] › phones[]` all generate. Single-file emits a child `{Stem}Rows` component with a typed `form` prop above the main component; module layout emits a `Row` and `Rows` pair per level in the section file.
@@ -69,7 +71,8 @@ A `.json` input file switches the front-end: the document is read as a bare JSON
 | --- | --- |
 | `type: "string"` | text field; `format: date` or `date-time` becomes a date field; `format: email`, `uri`, or `uuid` stays a text field but emits `z.email()` / `z.url()` / `z.uuid()` in the generated schema |
 | `enum` of strings, `const`, `oneOf` of string consts | select carrying the options |
-| `type: "number"` or `"integer"` | number field |
+| `type: "number"` or `"integer"` | number field; `integer` emits `.int()` in the generated schema |
+| `minLength` / `maxLength`, `minimum` / `maximum` / `exclusiveMinimum` / `exclusiveMaximum` (2020-12 numeric form), `minItems` / `maxItems` | no control change; the generated schema carries the bound (`.min()` / `.max()`, `.gte()` / `.lte()` / `.gt()` / `.lt()`) and the generated tests derive cases from it. A non-numeric bound is ignored; when both the inclusive and exclusive spellings exist, the tighter wins |
 | `type: "object"` with `properties` | a section; `required` sets which fields are optional |
 | `type: "array"` with `items` | a `useFieldArray` row section |
 | `prefixItems` | a tuple with fixed positional controls |
@@ -85,7 +88,7 @@ A `.json` input file switches the front-end: the document is read as a bare JSON
 
 ## Generated tests: `--tests`
 
-`--tests vitest` (or `jest` — the same component spec with different globals; or `playwright`, combinable as a comma list) emits a spec **beside the component**, derived from the same schema walk, so the spec and the form cannot drift. The component spec proves the validation and submit paths in two layers: store-level cases ride [`formstand/testing`](../testing) (a blank submit reports every field a blank form cannot satisfy; a valid fill round-trips `schema.parse`; each string format rejects and accepts its samples), and a couple of render cases prove the DOM wiring by **label** through the `aria-invalid` contract. The Playwright spec drives the same flows by role and label, and is emitted only when the config supplies a base URL.
+`--tests vitest` (or `jest`, the same component spec with different globals; or `playwright`; combinable as a comma list) emits a spec **beside the component**, derived from the same schema walk, so the spec and the form cannot drift. The component spec proves the validation and submit paths in two layers: store-level cases ride [`formstand/testing`](../testing) (a blank submit reports every field a blank form cannot satisfy, including an array whose row minimum `[]` cannot meet; a valid fill round-trips `schema.parse`; each string format rejects and accepts its samples; each bounded string or number rejects a value just past its tightest edge and accepts one inside it), and a couple of render cases prove the DOM wiring by **label** through the `aria-invalid` contract. The Playwright spec drives the same flows by role and label, and is emitted only when the config supplies a base URL.
 
 ```ts
 // formstand.config.ts
@@ -98,7 +101,7 @@ export default defineConfig({
 });
 ```
 
-The honest edges, by design (see `cli/design/generated-tests.md`): assertions are presence-shaped, never zod's default prose; kit output without a configured `renderWrapper` emits its render cases as `it.skip` with a stderr warning (the generator never emits providers); `--live` and `--form-prop` output skips the render/browser layers with the reason in a comment; an async schema (a zod-mode async refine) emits its submit cases fully written but `it.skip`, naming the IO to stub; and v1 emits no min/max/length cases, because the IR does not carry zod check metadata yet. The spec regenerates **with** the component — the two are one unit — and fills go by label, so a hand-renamed label fails the spec on purpose. Specs need `--out`, and their store-level cases import `formstand/testing` (formstand 0.20+).
+The honest edges, by design (see `cli/design/generated-tests.md`): assertions are presence-shaped, never zod's default prose; kit output without a configured `renderWrapper` emits its render cases as `it.skip` with a stderr warning (the generator never emits providers); `--live` and `--form-prop` output skips the render/browser layers with the reason in a comment; an async schema (a zod-mode async refine) emits its submit cases fully written but `it.skip`, naming the IO to stub; and bound cases cover one edge per field (the minimum first, then the maximum, then integrality) with samples the generator can construct, so a bounded email gets its format case only. The spec regenerates **with** the component (the two are one unit), and fills go by label, so a hand-renamed label fails the spec on purpose. Specs need `--out`, and their store-level cases import `formstand/testing` (formstand 0.20+).
 
 ## How unsupported shapes degrade
 
