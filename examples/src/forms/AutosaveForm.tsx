@@ -98,14 +98,14 @@ export const AutosaveForm = () => {
       </p>
 
       <div className="field">
-        <label>Title</label>
-        <input {...textInputProps(title)} />
+        <label htmlFor="title">Title</label>
+        <input id="title" {...textInputProps(title)} />
         <span className="error">{title.error?.[0] ?? " "}</span>
       </div>
 
       <div className="field">
-        <label>Body</label>
-        <textarea
+        <label htmlFor="body">Body</label>
+        <textarea id="body"
           rows={5}
           {...textInputProps(body)}
           style={{

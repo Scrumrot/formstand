@@ -55,20 +55,20 @@ export const DerivedFieldForm = () => {
       </p>
 
       <div className="field">
-        <label>First name</label>
-        <input {...textInputProps(firstName)} />
+        <label htmlFor="first-name">First name</label>
+        <input id="first-name" {...textInputProps(firstName)} />
         <span className="error">{firstName.error?.[0] ?? " "}</span>
       </div>
 
       <div className="field">
-        <label>Last name</label>
-        <input {...textInputProps(lastName)} />
+        <label htmlFor="last-name">Last name</label>
+        <input id="last-name" {...textInputProps(lastName)} />
         <span className="error">{lastName.error?.[0] ?? " "}</span>
       </div>
 
       <div className="field">
-        <label>Display name (derived)</label>
-        <input value={displayName} readOnly disabled />
+        <label htmlFor="display-name-derived">Display name (derived)</label>
+        <input id="display-name-derived" value={displayName} readOnly disabled />
       </div>
 
       <button className="primary" type="submit">

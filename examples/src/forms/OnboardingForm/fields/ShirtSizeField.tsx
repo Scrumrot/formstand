@@ -10,8 +10,8 @@ export const ShirtSizeField = ({ label = "Shirt size" }: ShirtSizeFieldProps) =>
   const field = useShirtSizeField();
   return (
     <div className="field">
-      <label>{label}</label>
-      <select {...selectProps(field)}>
+      <label htmlFor={field.path}>{label}</label>
+      <select id={field.path} {...selectProps(field)}>
         <option value="">Select…</option>
         {SHIRT_SIZE_OPTIONS.map((option) => (
           <option key={option.value} value={option.value}>

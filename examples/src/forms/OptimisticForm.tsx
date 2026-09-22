@@ -62,14 +62,14 @@ export const OptimisticForm = () => {
       </p>
 
       <div className="field">
-        <label>Display name</label>
-        <input {...textInputProps(displayName)} />
+        <label htmlFor="display-name">Display name</label>
+        <input id="display-name" {...textInputProps(displayName)} />
         <span className="error">{displayName.error?.[0] ?? " "}</span>
       </div>
 
       <div className="field">
-        <label>Bio</label>
-        <textarea
+        <label htmlFor="bio">Bio</label>
+        <textarea id="bio"
           rows={3}
           {...textInputProps(bio)}
           style={{
@@ -86,8 +86,10 @@ export const OptimisticForm = () => {
       </div>
 
       {serverError !== null ? (
-        <div className="error" style={{ marginBottom: 12 }}>
-          Server error: {serverError}
+        // Inside a .field wrapper: the playground scopes .error styling
+        // under .field, so a bare error div renders unstyled.
+        <div className="field" style={{ marginBottom: 12 }}>
+          <span className="error">Server error: {serverError}</span>
         </div>
       ) : null}
 

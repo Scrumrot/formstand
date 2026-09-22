@@ -53,7 +53,7 @@ The playground bundles its own copies of the shadcn components (they're copy-in 
 
 ## Browse the source inline
 
-Every block below embeds the demo's actual source file at build time, so it can never drift from what the playground runs. Two lines in each demo are playground harness, not library API: `import { useDemoForm } from "../demo/DemoShell"` and the `useDemoForm(form)` call register the demo's form with the playground shell, which is what powers the **View state** panel (rendered by `StateDump.tsx` below). Delete those two lines when copying a demo into your own project; everything else is plain formstand.
+Every block below embeds the demo's source file at build time, so it cannot drift from what the playground runs. One transformation applies: the two lines of playground harness (the `useDemoForm` registration that powers the **View state** panel, and its import) are stripped, the same way the playground's own code panel strips them, so a listing copied into your project compiles as-is. Everything shown is plain formstand.
 
 ::: details Basic + modes: BasicForm.tsx
 <StackBlitzLink demo="basic" title="Basic + modes" />

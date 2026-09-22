@@ -51,8 +51,8 @@ const Field = ({
   type?: string;
 }>) => (
   <div className="field">
-    <label>{label}</label>
-    <input type={type ?? "text"} {...textInputProps(field)} />
+    <label htmlFor={field.path}>{label}</label>
+    <input id={field.path} type={type ?? "text"} {...textInputProps(field)} />
     <span className="error">
       {field.touched ? (field.firstError ?? " ") : " "}
     </span>

@@ -59,8 +59,8 @@ export const TagInputForm = () => {
       </p>
 
       <div className="field">
-        <label>Title</label>
-        <input
+        <label htmlFor="title">Title</label>
+        <input id="title"
           value={title.value as string}
           onChange={(e) => title.setValue(e.target.value)}
           onBlur={title.onBlur}
@@ -69,7 +69,7 @@ export const TagInputForm = () => {
       </div>
 
       <div className="field">
-        <label>Tags</label>
+        <label htmlFor="tags">Tags</label>
         <div
           style={{
             display: "flex",
@@ -114,7 +114,7 @@ export const TagInputForm = () => {
               </button>
             </span>
           ))}
-          <input
+          <input id="tags"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onKey}

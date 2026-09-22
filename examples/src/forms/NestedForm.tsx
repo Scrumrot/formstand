@@ -37,8 +37,8 @@ export const NestedForm = () => {
       }}
     >
       <div className="field">
-        <label>Name</label>
-        <input
+        <label htmlFor="name">Name</label>
+        <input id="name"
           value={name.value ?? ""}
           onChange={(e) => name.setValue(e.target.value)}
           onBlur={name.onBlur}
@@ -47,8 +47,8 @@ export const NestedForm = () => {
       </div>
 
       <div className="field">
-        <label>Street</label>
-        <input
+        <label htmlFor="street">Street</label>
+        <input id="street"
           value={street.value ?? ""}
           onChange={(e) => street.setValue(e.target.value)}
           onBlur={street.onBlur}
@@ -57,8 +57,8 @@ export const NestedForm = () => {
       </div>
 
       <div className="field">
-        <label>City</label>
-        <input
+        <label htmlFor="city">City</label>
+        <input id="city"
           value={city.value ?? ""}
           onChange={(e) => city.setValue(e.target.value)}
           onBlur={city.onBlur}
@@ -67,8 +67,8 @@ export const NestedForm = () => {
       </div>
 
       <div className="field">
-        <label>Zip</label>
-        <input
+        <label htmlFor="zip">Zip</label>
+        <input id="zip"
           value={zip.value ?? ""}
           onChange={(e) => zip.setValue(e.target.value)}
           onBlur={zip.onBlur}

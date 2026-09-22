@@ -145,8 +145,8 @@ export const PerfBenchmarkForm = () => {
       </p>
 
       <div className="row" style={{ marginBottom: 16 }}>
-        <label>Form size:</label>
-        <select
+        <label htmlFor="form-size">Form size:</label>
+        <select id="form-size"
           value={size}
           onChange={(e) => {
             setResults([]);

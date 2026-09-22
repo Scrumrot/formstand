@@ -9,8 +9,8 @@ export const NotesField = ({ label = "Anything else? (optional)" }: NotesFieldPr
   const field = useNotesField();
   return (
     <div className="field">
-      <label>{label}</label>
-      <textarea rows={3} {...textInputProps(field)} />
+      <label htmlFor={field.path}>{label}</label>
+      <textarea id={field.path} rows={3} {...textInputProps(field)} />
       <span className="error">{field.error?.[0] ?? " "}</span>
     </div>
   );

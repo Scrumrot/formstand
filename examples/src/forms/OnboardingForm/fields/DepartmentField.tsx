@@ -10,8 +10,8 @@ export const DepartmentField = ({ label = "Department" }: DepartmentFieldProps) 
   const field = useDepartmentField();
   return (
     <div className="field">
-      <label>{label}</label>
-      <select {...selectProps(field)}>
+      <label htmlFor={field.path}>{label}</label>
+      <select id={field.path} {...selectProps(field)}>
         <option value="">Select…</option>
         {DEPARTMENT_OPTIONS.map((option) => (
           <option key={option.value} value={option.value}>

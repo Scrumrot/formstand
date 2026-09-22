@@ -37,8 +37,8 @@ const TaglineField = () => {
   const tagline = useField(form, "tagline");
   return (
     <div className="field">
-      <label>Tagline (custom input via textInputProps)</label>
-      <input {...textInputProps(tagline)} />
+      <label htmlFor="tagline-custom-input-via-textinputprops">Tagline (custom input via textInputProps)</label>
+      <input id="tagline-custom-input-via-textinputprops" {...textInputProps(tagline)} />
       <span className="error">{tagline.error?.[0] ?? " "}</span>
     </div>
   );

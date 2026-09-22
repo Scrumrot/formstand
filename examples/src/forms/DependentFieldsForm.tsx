@@ -55,8 +55,8 @@ export const DependentFieldsForm = () => {
       </p>
 
       <div className="field">
-        <label>Country</label>
-        <select
+        <label htmlFor="country">Country</label>
+        <select id="country"
           value={country.value}
           onChange={(e) => onCountryChange(e.target.value as Country)}
           onBlur={country.onBlur}
@@ -69,8 +69,8 @@ export const DependentFieldsForm = () => {
       </div>
 
       <div className="field">
-        <label>Region</label>
-        <select
+        <label htmlFor="region">Region</label>
+        <select id="region"
           value={region.value}
           onChange={(e) => region.setValue(e.target.value)}
           onBlur={region.onBlur}
@@ -86,8 +86,8 @@ export const DependentFieldsForm = () => {
       </div>
 
       <div className="field">
-        <label>City</label>
-        <input {...textInputProps(city)} />
+        <label htmlFor="city">City</label>
+        <input id="city" {...textInputProps(city)} />
         <span className="error">{city.error?.[0] ?? " "}</span>
       </div>
 

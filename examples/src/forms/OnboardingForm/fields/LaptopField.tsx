@@ -10,8 +10,8 @@ export const LaptopField = ({ label = "Laptop" }: LaptopFieldProps) => {
   const field = useLaptopField();
   return (
     <div className="field">
-      <label>{label}</label>
-      <select {...selectProps(field)}>
+      <label htmlFor={field.path}>{label}</label>
+      <select id={field.path} {...selectProps(field)}>
         <option value="">Select…</option>
         {LAPTOP_OPTIONS.map((option) => (
           <option key={option.value} value={option.value}>

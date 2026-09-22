@@ -42,8 +42,8 @@ export const FileUploadForm = () => {
       </p>
 
       <div className="field">
-        <label>Caption</label>
-        <input
+        <label htmlFor="caption">Caption</label>
+        <input id="caption"
           value={caption.value ?? ""}
           onChange={(e) => caption.setValue(e.target.value)}
           onBlur={caption.onBlur}
@@ -52,8 +52,8 @@ export const FileUploadForm = () => {
       </div>
 
       <div className="field">
-        <label>File</label>
-        <input
+        <label htmlFor="file">File</label>
+        <input id="file"
           type="file"
           onChange={(e) => {
             const next = e.target.files?.[0];

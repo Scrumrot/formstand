@@ -9,8 +9,8 @@ export const LastNameField = ({ label = "Last name" }: LastNameFieldProps) => {
   const field = useLastNameField();
   return (
     <div className="field">
-      <label>{label}</label>
-      <input {...textInputProps(field)} />
+      <label htmlFor={field.path}>{label}</label>
+      <input id={field.path} {...textInputProps(field)} />
       <span className="error">{field.error?.[0] ?? " "}</span>
     </div>
   );

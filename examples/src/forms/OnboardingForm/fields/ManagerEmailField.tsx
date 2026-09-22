@@ -9,8 +9,8 @@ export const ManagerEmailField = ({ label = "Manager's email" }: ManagerEmailFie
   const field = useManagerEmailField();
   return (
     <div className="field">
-      <label>{label}</label>
-      <input type="email" {...textInputProps(field)} />
+      <label htmlFor={field.path}>{label}</label>
+      <input id={field.path} type="email" {...textInputProps(field)} />
       <span className="error">{field.error?.[0] ?? " "}</span>
     </div>
   );

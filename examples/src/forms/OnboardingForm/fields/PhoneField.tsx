@@ -9,8 +9,8 @@ export const PhoneField = ({ label = "Phone" }: PhoneFieldProps) => {
   const field = usePhoneField();
   return (
     <div className="field">
-      <label>{label}</label>
-      <input type="tel" {...textInputProps(field)} />
+      <label htmlFor={field.path}>{label}</label>
+      <input id={field.path} type="tel" {...textInputProps(field)} />
       <span className="error">{field.error?.[0] ?? " "}</span>
     </div>
   );

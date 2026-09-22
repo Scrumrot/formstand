@@ -127,8 +127,8 @@ export const InvoiceForm = () => {
       }}
     >
       <div className="field">
-        <label>Customer</label>
-        <input {...textInputProps(customer)} />
+        <label htmlFor="customer">Customer</label>
+        <input id="customer" {...textInputProps(customer)} />
         <span className="error">{customer.error?.[0] ?? " "}</span>
       </div>
 

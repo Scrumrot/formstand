@@ -47,8 +47,8 @@ export const AsyncForm = () => {
       </p>
 
       <div className="field">
-        <label>Username</label>
-        <input {...textInputProps(username)} autoComplete="off" />
+        <label htmlFor="username">Username</label>
+        <input id="username" {...textInputProps(username)} autoComplete="off" />
         <span className="error">
           {username.isValidating ? (
             <span className="pending">checking...</span>

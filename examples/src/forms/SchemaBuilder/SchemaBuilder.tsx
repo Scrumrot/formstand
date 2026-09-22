@@ -477,14 +477,14 @@ export const SchemaBuilder = () => {
       <div className="row" style={{ alignItems: "flex-start" }}>
         {mode === "build" ? (
           <div className="field" style={{ flex: 2 }}>
-            <label>Component name</label>
-            <input placeholder="ContactForm" {...textInputProps(formName)} />
+            <label htmlFor="component-name">Component name</label>
+            <input id="component-name" placeholder="ContactForm" {...textInputProps(formName)} />
             <span className="error">{formName.error?.[0] ?? " "}</span>
           </div>
         ) : null}
         <div className="field" style={{ flex: 1 }}>
-          <label>UI (--ui)</label>
-          <select {...selectProps(ui)}>
+          <label htmlFor="ui-ui">UI (--ui)</label>
+          <select id="ui-ui" {...selectProps(ui)}>
             <option value="plain">plain</option>
             <option value="mui">mui</option>
             <option value="mui@5">mui@5</option>
@@ -498,23 +498,23 @@ export const SchemaBuilder = () => {
           </select>
         </div>
         <div className="field" style={{ flex: 1 }}>
-          <label>Layout (--layout)</label>
-          <select {...selectProps(layout)}>
+          <label htmlFor="layout-layout">Layout (--layout)</label>
+          <select id="layout-layout" {...selectProps(layout)}>
             <option value="single">single file</option>
             <option value="module">feature module</option>
           </select>
         </div>
         <div className="field" style={{ flex: 1 }}>
-          <label>Sections (--sections)</label>
-          <select {...selectProps(sectionStyle)}>
+          <label htmlFor="sections-sections">Sections (--sections)</label>
+          <select id="sections-sections" {...selectProps(sectionStyle)}>
             <option value="flat">flat</option>
             <option value="panel">panel</option>
             <option value="collapsible">collapsible</option>
           </select>
         </div>
         <div className="field" style={{ flex: 1 }}>
-          <label>Columns (--columns)</label>
-          <select {...selectProps(columns)}>
+          <label htmlFor="columns-columns">Columns (--columns)</label>
+          <select id="columns-columns" {...selectProps(columns)}>
             <option value="1">1</option>
             <option value="2">2</option>
             <option value="3">3</option>

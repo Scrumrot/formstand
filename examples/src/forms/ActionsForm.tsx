@@ -75,14 +75,14 @@ export const ActionsForm = () => {
       </p>
 
       <div className="field">
-        <label>Handle</label>
-        <input {...textInputProps(handle)} />
+        <label htmlFor="handle">Handle</label>
+        <input id="handle" {...textInputProps(handle)} />
         <span className="error">{handle.firstError ?? " "}</span>
       </div>
 
       <div className="field">
-        <label>Email</label>
-        <input {...textInputProps(email)} />
+        <label htmlFor="email">Email</label>
+        <input id="email" {...textInputProps(email)} />
         <span className="error">{email.firstError ?? " "}</span>
       </div>
 

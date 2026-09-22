@@ -156,38 +156,38 @@ export const CliCommandBuilder = () => {
 
       <div className="row" style={{ alignItems: "flex-start" }}>
         <div className="field" style={{ flex: 1 }}>
-          <label>Runner</label>
-          <select {...selectProps(runner)}>
+          <label htmlFor="runner">Runner</label>
+          <select id="runner" {...selectProps(runner)}>
             <option value="npx">npx</option>
             <option value="pnpm dlx">pnpm dlx</option>
             <option value="yarn dlx">yarn dlx</option>
           </select>
         </div>
         <div className="field" style={{ flex: 2 }}>
-          <label>Input file</label>
-          <input placeholder="src/schema.ts" {...textInputProps(input)} />
+          <label htmlFor="input-file">Input file</label>
+          <input id="input-file" placeholder="src/schema.ts" {...textInputProps(input)} />
           <span className="error">{input.error?.[0] ?? " "}</span>
         </div>
       </div>
 
       <div className="row" style={{ alignItems: "flex-start" }}>
         <div className="field" style={{ flex: 1 }}>
-          <label>Mode</label>
-          <select {...selectProps(mode)}>
+          <label htmlFor="mode">Mode</label>
+          <select id="mode" {...selectProps(mode)}>
             <option value="zod">zod schema</option>
             <option value="type">TS type / interface</option>
           </select>
         </div>
         {mode.value === "type" ? (
           <div className="field" style={{ flex: 2 }}>
-            <label>Type name (--type)</label>
-            <input placeholder="Profile" {...textInputProps(typeName)} />
+            <label htmlFor="type-name-type">Type name (--type)</label>
+            <input id="type-name-type" placeholder="Profile" {...textInputProps(typeName)} />
             <span className="error">{typeName.error?.[0] ?? " "}</span>
           </div>
         ) : (
           <div className="field" style={{ flex: 2 }}>
-            <label>Schema export (--export, optional)</label>
-            <input
+            <label htmlFor="schema-export-export-optional">Schema export (--export, optional)</label>
+            <input id="schema-export-export-optional"
               placeholder="default / sole export"
               {...textInputProps(exportName)}
             />
@@ -198,8 +198,8 @@ export const CliCommandBuilder = () => {
 
       <div className="row" style={{ alignItems: "flex-start" }}>
         <div className="field" style={{ flex: 1 }}>
-          <label>UI library (--ui)</label>
-          <select {...selectProps(ui)}>
+          <label htmlFor="ui-library-ui">UI library (--ui)</label>
+          <select id="ui-library-ui" {...selectProps(ui)}>
             <option value="plain">plain (formstand components)</option>
             <option value="mui">mui (Material UI, latest major)</option>
             <option value="mui@5">mui@5</option>
@@ -213,8 +213,8 @@ export const CliCommandBuilder = () => {
           </select>
         </div>
         <div className="field" style={{ flex: 1 }}>
-          <label>Layout (--layout)</label>
-          <select {...selectProps(layout)}>
+          <label htmlFor="layout-layout">Layout (--layout)</label>
+          <select id="layout-layout" {...selectProps(layout)}>
             <option value="single">single file</option>
             <option value="module">feature module</option>
           </select>
@@ -223,16 +223,16 @@ export const CliCommandBuilder = () => {
 
       <div className="row" style={{ alignItems: "flex-start" }}>
         <div className="field" style={{ flex: 1 }}>
-          <label>Sections (--sections)</label>
-          <select {...selectProps(sections)}>
+          <label htmlFor="sections-sections">Sections (--sections)</label>
+          <select id="sections-sections" {...selectProps(sections)}>
             <option value="flat">flat headings</option>
             <option value="panel">bordered panels</option>
             <option value="collapsible">collapsible</option>
           </select>
         </div>
         <div className="field" style={{ flex: 1 }}>
-          <label>Field columns (--columns)</label>
-          <select {...selectProps(columns)}>
+          <label htmlFor="field-columns-columns">Field columns (--columns)</label>
+          <select id="field-columns-columns" {...selectProps(columns)}>
             <option value="1">1</option>
             <option value="2">2</option>
             <option value="3">3</option>
@@ -242,16 +242,17 @@ export const CliCommandBuilder = () => {
 
       <div className="row" style={{ alignItems: "flex-start" }}>
         <div className="field" style={{ flex: 1 }}>
-          <label>Component name (--name, optional)</label>
-          <input placeholder="derived from input" {...textInputProps(name)} />
+          <label htmlFor="component-name-name-optional">Component name (--name, optional)</label>
+          <input id="component-name-name-optional" placeholder="derived from input" {...textInputProps(name)} />
         </div>
         <div className="field" style={{ flex: 1 }}>
-          <label>
+          <label htmlFor="cli-out">
             {layout.value === "module"
               ? "Output folder (--out)"
               : "Output file (--out)"}
           </label>
           <input
+            id="cli-out"
             placeholder={
               layout.value === "module" ? "src/ProfileForm" : "stdout"
             }
@@ -262,8 +263,8 @@ export const CliCommandBuilder = () => {
 
       {mode.value === "type" && layout.value === "single" ? (
         <div className="field">
-          <label>Generated schema file (--schema-out, optional)</label>
-          <input
+          <label htmlFor="generated-schema-file-schema-out-optional">Generated schema file (--schema-out, optional)</label>
+          <input id="generated-schema-file-schema-out-optional"
             placeholder="<schemaName>.ts next to --out"
             {...textInputProps(schemaOut)}
           />
