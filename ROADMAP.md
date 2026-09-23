@@ -153,32 +153,33 @@ the CLI from two UI targets to six, and make the docs match.
 
 Cleanup items verified real but outranked by correctness fixes at the time.
 Fair game for any slow afternoon; none block features. Re-checked against the
-source on 2026-07-31.
+source on 2026-09-23 (sweep in the `chore/internal-debt-sweep` branch).
 
-- `validateFields` / `validateFieldsAsync` / `commitFieldErrors` share one
-  commit helper (the server-error release contract lives in three places).
-- `SectionPlan` carries its leaf `FieldPlan`s so `objectSectionFile` stops
-  re-walking and string-matching what `buildPlan` already computed.
-- `KindUsage`'s booleans become a `ReadonlySet<kind>`.
-- `camelJoin` delegates to `casing.camelCase`; the plain-UI kind-to-builder
-  mapping in `moduleLayout` gets one `plainBuilderName` helper; the Schema
-  builder's name-stem rule reuses `namingFor`.
-- Schema builder polish: `memo` the row components, `useDeferredValue` the
-  emission input so typing never waits on codegen.
-- `useVariantField`'s return type re-derives what `FieldValue` already
-  computes. Reuse `FieldValue<..., \`${P}.${TField}\`>` and keep
-  `UnionValueAt` only for the key constraint.
+- `KindUsage`'s booleans become a `ReadonlySet<kind>`. Still true, and
+  deliberately left: about 230 read sites across the kit adapter sections,
+  all mechanical, where a missed key only shows up as import drift in the
+  generated output. Worth doing the day the adapters change anyway.
 - `persistForm`'s `manual` plus `restore`-semantics combination is unreachable
   (the apply mode collapses two orthogonal axes); a `{ autoApply, baseline }`
-  shape would cover all four without a breaking change.
-- The `parsePath` cache resets wholesale on overflow; an LRU, or a per-form
-  cache at the hook layer, would avoid re-parse storms for apps whose live
-  path set exceeds the cap.
-- `persistForm` and `useField` each hand-roll a trailing-edge debounce. One
-  shared `createDebouncer(fn, ms)` could back both.
+  shape would cover all four without a breaking change. Still true (the
+  0.18 `load()` rename did not touch it); an API-shape call for Tim, so
+  it waits for the 1.0 soak rather than landing in a sweep.
+- The Schema builder's name-stem rule (strip one trailing `Form`) is
+  spelled in `namingFor`, `ownerHookName`, and the demo's `generate.ts`.
+  Sharing it means exporting the stem rule across the cli/examples
+  boundary; small, but not worth a public API surface on its own.
 
-Closed since the last update: `FieldPathArg` was listed as exported but
-unused. It now has six call sites, so the item is gone rather than done.
+Closed on 2026-09-23: `SectionPlan` now carries its leaf `FieldPlan`s
+(`objectSectionFile` reads its own slice instead of string-matching the
+flat plan); `camelJoin` and `casing.camelCase` share one `lowerFirst`; the
+plain kind-to-builder mapping is one exported `plainBuilderName`; the Schema
+builder emits from `useDeferredValue`'d inputs (memo on its rows would not
+help: their callbacks are per-render by design); the `parsePath` cache is a
+real LRU; `persistForm` and `useField` share `createDebouncer`. Already
+closed before the sweep and struck from the list: the three validate paths
+have shared `commitScopedErrors` since 2026-07-16 (090dec0), and
+`useVariantField` derives through `FieldValue` since 774d98c. `FieldPathArg`
+stays: six call sites.
 
 ## How releases happen
 

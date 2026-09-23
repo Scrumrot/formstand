@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import {
   type Form,
   type UseFieldReturn,
@@ -404,7 +404,14 @@ export const SchemaBuilder = () => {
   const [pasteLang, setPasteLang] = useState<ImportLang>("ts");
   const [pasteSource, setPasteSource] = useState(SAMPLE_TS);
   const [importOpen, setImportOpen] = useState(false);
-  const values = useFormValues(form);
+  const liveValues = useFormValues(form);
+  // The emitters run on DEFERRED inputs: a keystroke commits the field
+  // rows (or the pasted source) at input priority and the regenerated
+  // files follow in a lower-priority render React may interrupt, so typing
+  // never waits on codegen. (memo on the row components would not help
+  // here: their callbacks are re-created per render by design.)
+  const values = useDeferredValue(liveValues);
+  const deferredPasteSource = useDeferredValue(pasteSource);
 
   // One emit path, two IR sources. Build mode reads the field rows; paste
   // mode parses the imported source (a TS type or a zod schema) into IR —
@@ -425,7 +432,7 @@ export const SchemaBuilder = () => {
             error: "Fix the highlighted fields above and the files will regenerate.",
           };
     }
-    const parsed = parseFor(pasteLang, pasteSource);
+    const parsed = parseFor(pasteLang, deferredPasteSource);
     if (!parsed.ok) {
       return { files: null, formName: values.formName, error: parsed.error };
     }
@@ -441,7 +448,7 @@ export const SchemaBuilder = () => {
       formName: parsed.formName,
       error: undefined,
     };
-  }, [mode, values, pasteLang, pasteSource]);
+  }, [mode, values, pasteLang, deferredPasteSource]);
 
   return (
     <div>

@@ -4,6 +4,7 @@ import type { StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand/react";
 import { useShallow } from "zustand/react/shallow";
 import type { Form } from "../core/createForm";
+import { type Debouncer, createDebouncer } from "../core/debounce";
 import { isFieldDirty } from "../core/equality";
 import type {
   DefaultPathDepth,
@@ -220,22 +221,22 @@ export function useField<TValue = unknown>(
   }, [formSchema, path, initialValue]);
 
   const debounceMs = options?.debounceMs;
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // One debouncer per (form, path, debounceMs) identity, created lazily on
+  // the first debounced trigger and cancelled by the effect cleanup on
+  // unmount or identity change — the ref keeps it across renders.
+  const debouncerRef = useRef<Debouncer | null>(null);
 
   useEffect(() => {
     return () => {
-      if (debounceTimerRef.current !== null) {
-        clearTimeout(debounceTimerRef.current);
-        debounceTimerRef.current = null;
-      }
+      debouncerRef.current?.cancel();
+      debouncerRef.current = null;
     };
   }, [form, path, debounceMs]);
 
   const triggerValidate = useCallback(() => {
     if (debounceMs !== undefined && debounceMs > 0) {
-      if (debounceTimerRef.current !== null) {
-        clearTimeout(debounceTimerRef.current);
-      }
+      const debouncer = debouncerRef.current ?? createDebouncer(debounceMs);
+      debouncerRef.current = debouncer;
       // The pending timer is invisible to the store, so a reset() /
       // adoptValues() inside the debounce window cannot cancel it the way
       // it invalidates in-flight validation (the ownership tokens) — the
@@ -248,13 +249,12 @@ export function useField<TValue = unknown>(
       // restore/reset to different values). Scheduling runs after
       // setValue, so the captured value is the keystroke being validated.
       const scheduled = getAtPath(form.store.getState().values, path);
-      debounceTimerRef.current = setTimeout(() => {
-        debounceTimerRef.current = null;
+      debouncer.schedule(() => {
         const state = form.store.getState();
         if (state.values === state.initialValues) return;
         if (!Object.is(getAtPath(state.values, path), scheduled)) return;
         void form.validateFieldAsync(path);
-      }, debounceMs);
+      });
       return;
     }
     // The core routes async schemas itself: validateField returns

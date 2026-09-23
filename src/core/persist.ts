@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { Form } from "./createForm";
+import { createDebouncer } from "./debounce";
 import type { DefaultPathDepth, PathDepth } from "./fieldPath";
 
 // Draft persistence for a form: watch the values, debounce-write them as JSON
@@ -230,18 +231,9 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
     }
   };
 
-  // Sanctioned mutable ref for the trailing-edge debounce timer (same shape
-  // as the codebase's other timer/subscription refs).
-  const timerRef: { current: ReturnType<typeof setTimeout> | null } = {
-    current: null,
-  };
-
-  const cancelPending = (): void => {
-    if (timerRef.current !== null) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  };
+  // Trailing-edge debounce of draft writes (0 = write synchronously).
+  const writes = createDebouncer(debounceMs);
+  const cancelPending = (): void => writes.cancel();
 
   // Auto-apply BEFORE subscribing, so applying the draft doesn't immediately
   // schedule a write of the values we just read.
@@ -250,15 +242,7 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
   }
 
   const unsubscribe = form.watchValues((values) => {
-    cancelPending();
-    if (debounceMs === 0) {
-      writeDraft(values);
-    } else {
-      timerRef.current = setTimeout(() => {
-        timerRef.current = null;
-        writeDraft(values);
-      }, debounceMs);
-    }
+    writes.schedule(() => writeDraft(values));
   });
 
   return Object.freeze({

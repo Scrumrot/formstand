@@ -1,4 +1,4 @@
-import { pascalCase, singularize } from "./casing";
+import { lowerFirst, pascalCase, singularize } from "./casing";
 import {
   FORMSTAND_PATH_DEPTH,
   NESTING_LIMIT_TODO,
@@ -201,12 +201,12 @@ export const commentText = (value: string): string => value.replace(/\*\//g, "*\
 export const pascalJoin = (segments: readonly string[]): string =>
   segments.map(pascalCase).join("");
 
-const camelJoin = (segments: readonly string[]): string => {
-  const pascal = pascalJoin(segments);
-  return pascal.length === 0
-    ? pascal
-    : pascal.charAt(0).toLowerCase() + pascal.slice(1);
-};
+// pascalJoin already identSafe's each segment, so the joined name needs
+// only the lower-first rule (casing.camelCase would re-split the joined
+// words and change acronym casing: "APIKey" + lowerFirst is "aPIKey", the
+// spelling every generated binding has carried since 0.1).
+const camelJoin = (segments: readonly string[]): string =>
+  lowerFirst(pascalJoin(segments));
 
 // formstand paths split on "." — a key containing one is not addressable, so
 // the form emitters skip the binding (the zod schema and initialValues still
@@ -2771,7 +2771,9 @@ const plainLeaf = (
   }
 };
 
-// The plain prop-builder name per scalar kind.
+// The plain prop-builder name per scalar kind — THE mapping, shared with
+// the module layout's leaf imports and controls so the two layouts cannot
+// drift on which builder a kind binds with.
 const PLAIN_BUILDER: Readonly<Record<string, string>> = {
   string: "textInputProps",
   number: "numberInputProps",
@@ -2779,6 +2781,11 @@ const PLAIN_BUILDER: Readonly<Record<string, string>> = {
   boolean: "checkboxProps",
   enum: "selectProps",
 };
+
+// Anything without its own builder (a degraded/todo leaf still renders a
+// text input) binds as text.
+export const plainBuilderName = (kind: string): string =>
+  PLAIN_BUILDER[kind] ?? "textInputProps";
 
 // A control rendered from a bound field variable, using the raw prop
 // builders — the discriminant select and every variant field of a union.

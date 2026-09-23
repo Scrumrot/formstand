@@ -14,6 +14,16 @@
   cleared first; `updateState` now runs its updater against the current
   state, decides, and clears before `setState`. Same semantics otherwise.
 
+### Changed
+
+- **`parsePath`'s cache is an LRU.** It used to clear wholesale at 4096
+  entries, so an app whose live path set exceeded the cap re-parsed every
+  path after each reset; now a hit refreshes recency and an overflow
+  evicts the oldest entry. Same correctness, no re-parse storms.
+- `persistForm` and `useField`'s validation debounce share one internal
+  `createDebouncer` (trailing-edge, cancel-then-reschedule). No behavior
+  change; the fire-time guards in `useField` are unchanged.
+
 ### Docs
 
 - The state page spells out the `diff()` / `dirtyFields()` key-set rule:

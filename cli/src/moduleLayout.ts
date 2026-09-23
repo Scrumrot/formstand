@@ -43,6 +43,7 @@ import {
   muiAdapterSection,
   overDepthBudget,
   pathSegmentCount,
+  plainBuilderName,
   variantLeavesOf,
   propKey,
   q,
@@ -153,6 +154,11 @@ type SectionPlan = Readonly<{
     | Extract<FieldSpec, Readonly<{ kind: "array" }>>
     | Extract<FieldSpec, Readonly<{ kind: "tuple" }>>
     | Extract<FieldSpec, Readonly<{ kind: "union" }>>;
+  // The scalar leaves under an object section that get field files, in
+  // walk order — planned once here so the section file neither re-walks
+  // the spec nor string-matches paths against the flat plan. Empty for
+  // array/tuple/union sections (their leaves bind inline).
+  fields: readonly FieldPlan[];
 }>;
 
 type Plan = Readonly<{
@@ -250,22 +256,31 @@ const buildPlan = (root: ObjectSpec, naming: Naming, budget: number): Plan => {
           field.spec.kind === "tuple" ||
           field.spec.kind === "union"),
     )
-    .map(
-      (field): SectionPlan => ({
+    .map((field): SectionPlan => {
+      const componentName = claim(`${pascalCase(field.name)}Section`);
+      return {
         key: field.name,
-        componentName: claim(`${pascalCase(field.name)}Section`),
+        componentName,
         label: field.label,
         spec: field.spec as SectionPlan["spec"],
-      }),
-    );
+        fields: [],
+      };
+    })
+    // Leaves are claimed in a second pass, AFTER every section name, so
+    // the dedupe suffixes come out exactly as the flat plan always did
+    // (a later section named like an earlier section's leaf component
+    // keeps its bare name; the leaf takes the suffix).
+    .map((section): SectionPlan => ({
+      ...section,
+      fields:
+        section.spec.kind === "object"
+          ? collectLeaves(section.spec.fields, [section.key], budget).map(
+              ({ segments, field }) => planField(segments, field),
+            )
+          : [],
+    }));
 
-  const sectionLeafFields = sections.flatMap((section) =>
-    section.spec.kind === "object"
-      ? collectLeaves(section.spec.fields, [section.key], budget).map(
-          ({ segments, field }) => planField(segments, field),
-        )
-      : [],
-  );
+  const sectionLeafFields = sections.flatMap((section) => section.fields);
 
   const rootTodos = root.fields
     .filter((field) => isUnaddressable(field.name))
@@ -507,19 +522,8 @@ const baseLeafImports = (
     }
   }
   switch (ui) {
-    case "plain": {
-      const builder =
-        spec.kind === "number"
-          ? "numberInputProps"
-          : spec.kind === "boolean"
-            ? "checkboxProps"
-            : spec.kind === "enum"
-              ? "selectProps"
-              : spec.kind === "date"
-                ? "dateInputProps"
-                : "textInputProps";
-      return [{ from: "formstand", names: [builder] }];
-    }
+    case "plain":
+      return [{ from: "formstand", names: [plainBuilderName(spec.kind)] }];
     case "mui":
       switch (spec.kind) {
         case "boolean":
@@ -934,15 +938,7 @@ const leafJsx = (
           : isTextareaLeaf(spec)
             ? [`${indent}    <textarea rows={3} {...textInputProps(${varName})} />`]
             : [
-                `${indent}    <input {...${
-                  spec.kind === "number"
-                    ? "numberInputProps"
-                    : spec.kind === "boolean"
-                      ? "checkboxProps"
-                      : spec.kind === "date"
-                        ? "dateInputProps"
-                        : "textInputProps"
-                }(${varName})} />`,
+                `${indent}    <input {...${plainBuilderName(spec.kind)}(${varName})} />`,
               ];
       // The always-visible muted helper line — plain keeps the description
       // in its own slot next to the error line (mirrors the single-file
@@ -3285,8 +3281,13 @@ const objectSectionFile = (
   const spec = section.spec as ObjectSpec;
   const propsType = `${section.componentName}Props`;
   const hookName = `use${section.componentName}`;
+  // The section's planned leaves by path — its own slice of the plan, so a
+  // body lookup is a map hit rather than a scan of every field file.
+  const ownByPath: ReadonlyMap<string, FieldPlan> = new Map(
+    section.fields.map((field) => [field.segments.join("."), field]),
+  );
   const own = (segments: readonly string[]): FieldPlan | undefined =>
-    plan.fields.find((f) => f.segments.join(".") === segments.join("."));
+    ownByPath.get(segments.join("."));
 
   // Arrays anywhere under this section each get a Row/Rows pair in this
   // file; the body renders <XRows /> at the array's site.
@@ -3525,13 +3526,10 @@ const objectSectionFile = (
       }
     });
 
-  const fieldImports = collectLeaves(spec.fields, [section.key], budget)
-    .map(({ segments }) => own(segments))
-    .flatMap((planned) => (planned === undefined ? [] : [planned]))
-    .map(
-      (planned) =>
-        `import { ${planned.componentName} } from "../fields/${planned.componentName}";`,
-    );
+  const fieldImports = section.fields.map(
+    (planned) =>
+      `import { ${planned.componentName} } from "../fields/${planned.componentName}";`,
+  );
 
   // Nested rows bind template paths and push typed empty items, so the file
   // gains the bound Field/FieldArray hooks and the draft values type; a

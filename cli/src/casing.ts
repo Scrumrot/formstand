@@ -24,14 +24,14 @@ const identSafe = (name: string): string =>
 export const pascalCase = (name: string): string =>
   identSafe(splitWords(name).map(capitalize).join(""));
 
-export const camelCase = (name: string): string => {
-  const pascal = splitWords(name).map(capitalize).join("");
-  return identSafe(
-    pascal.length === 0
-      ? pascal
-      : pascal.charAt(0).toLowerCase() + pascal.slice(1),
-  );
-};
+// PascalCase → camelCase of an already-joined identifier: the one place
+// the lower-first rule lives (camelCase here, codegen's camelJoin over
+// path segments). No identSafe: the input is already an identifier.
+export const lowerFirst = (pascal: string): string =>
+  pascal.length === 0 ? pascal : pascal.charAt(0).toLowerCase() + pascal.slice(1);
+
+export const camelCase = (name: string): string =>
+  identSafe(lowerFirst(splitWords(name).map(capitalize).join("")));
 
 // Reserved words a bare camelCase(fieldName) could collide with when used
 // as a const binding (row variables in the module layout). PascalCase

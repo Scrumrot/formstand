@@ -16,15 +16,23 @@ const isIndexSegment = (s: string): boolean => {
 
 // Hot path: every field subscription re-resolves its path on every store
 // notification (getAtPath in selectors), so parsing is memoized — a form's
-// paths are a small fixed set. Bounded like equality's dirtyCache: a
-// pathological unbounded key set resets the cache instead of growing it
-// forever (the reset only costs re-parsing, never correctness).
+// paths are a small fixed set. Bounded as an LRU over Map insertion order:
+// a hit re-inserts its key (moving it to the back) and an overflow evicts
+// the front, so an app whose LIVE path set exceeds the cap keeps its hot
+// paths cached instead of re-parsing every one of them after each reset
+// (the old wholesale clear). Eviction only costs re-parsing, never
+// correctness. Same delete-then-set recency idiom as useFieldArray's
+// per-path id cache.
 const PARSE_CACHE_MAX = 4096;
 const parseCache = new Map<string, readonly PathSegment[]>();
 
 export const parsePath = (path: string): readonly PathSegment[] => {
   const cached = parseCache.get(path);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) {
+    parseCache.delete(path);
+    parseCache.set(path, cached);
+    return cached;
+  }
   // Frozen because the array is now SHARED across every caller (and cached):
   // parsePath is a public export, and pre-cache each call returned a private
   // array that was safe to mutate. Freezing enforces the `readonly` type at
@@ -35,7 +43,10 @@ export const parsePath = (path: string): readonly PathSegment[] => {
       ? []
       : path.split(".").map((s) => (isIndexSegment(s) ? Number(s) : s)),
   );
-  if (parseCache.size >= PARSE_CACHE_MAX) parseCache.clear();
+  if (parseCache.size >= PARSE_CACHE_MAX) {
+    const oldest = parseCache.keys().next().value;
+    if (oldest !== undefined) parseCache.delete(oldest);
+  }
   parseCache.set(path, segments);
   return segments;
 };
