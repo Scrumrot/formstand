@@ -20,6 +20,18 @@
   through every emitter (`EmitFormOptions.pathDepth`,
   `applyFieldOverrides`'s fifth argument, `collectOptionsProps`'s second),
   and `overDepthBudget` / `overBudgetFieldPaths` take it explicitly.
+- **Module layout: unions and tuples nested inside object sections
+  generate.** They used to degrade to an "only top-level unions are
+  generated" TODO while the single-file layout bound the same shape.
+  Now a union or tuple at a static path inside an object section binds
+  inside that section's component, exactly as a row's union or tuple
+  binds inside its Row: the discriminant and common keys on the bound
+  field hook, variant-only keys on the bound variant hook (dotted
+  sub-paths for variant containers), tuple positions at their static
+  indices, hooks hoisted into the section component, and an optional
+  or nullable union clearable from its select. Var names dedupe across
+  every container in the section (`kind`, `kind2`). Sections without a
+  nested container emit byte-identical output.
 
 ## formstand-cli 0.21.0 — 2026-09-23
 

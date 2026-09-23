@@ -3347,6 +3347,91 @@ const objectSectionFile = (
       `${indent}${close}`,
     ];
   };
+  // Options props consumed anywhere under this section (field files and
+  // nested rows): declared here, passed in by the form file.
+  const sectionProps = sectionOptionsProps(spec);
+
+  // Unions and tuples nested inside this section at STATIC paths (not
+  // inside array rows, whose Row components own their containers) bind
+  // right in the section component, exactly as a union/tuple field of a
+  // row binds in its Row: the section is a component, so the hooks hoist
+  // into it. One walk over the same addressable, in-budget object tree the
+  // body renders, keyed by path so the body places each block at its site;
+  // the var scope is shared so two nested unions with the same discriminant
+  // name dedupe (`kind`, `kind2`) against each other and the component's
+  // own params.
+  const sectionVarUsed = new Set<string>([
+    "heading",
+    "dirty",
+    "valid",
+    ...sectionProps,
+  ]);
+  const staticContainers: ReadonlyMap<string, RowContainerPieces> = ((): ReadonlyMap<
+    string,
+    RowContainerPieces
+  > => {
+    const walk = (
+      fields: readonly NamedField[],
+      segments: readonly string[],
+    ): readonly (readonly [string, RowContainerPieces])[] =>
+      fields.flatMap((field): readonly (readonly [string, RowContainerPieces])[] => {
+        if (isUnaddressable(field.name)) return [];
+        const at = [...segments, field.name];
+        if (overDepthBudget(field.spec, at.length, budget)) return [];
+        const key = at.join(".");
+        switch (field.spec.kind) {
+          case "object":
+            return walk(field.spec.fields, at);
+          case "union":
+            return [
+              [
+                key,
+                rowUnionPieces(
+                  ui,
+                  naming,
+                  field.spec,
+                  templateEscape(key),
+                  key,
+                  field.label,
+                  sectionVarUsed,
+                  budget,
+                ),
+              ],
+            ];
+          case "tuple":
+            return [
+              [
+                key,
+                rowTuplePieces(
+                  ui,
+                  naming,
+                  field.spec,
+                  templateEscape(key),
+                  key,
+                  field.label,
+                  sectionVarUsed,
+                ),
+              ],
+            ];
+          default:
+            return [];
+        }
+      });
+    return new Map(walk(spec.fields, [section.key]));
+  })();
+  const containerBindings = [...staticContainers.values()].flatMap(
+    (pieces) => pieces.bindings,
+  );
+  // The pieces render at a Row component's fixed body indent; the section
+  // body places them at whatever depth the enclosing fieldsets reach.
+  const ROW_BODY_INDENT = "      ";
+  const reindent = (lines: readonly string[], indent: string): readonly string[] =>
+    lines.map((line) =>
+      line.startsWith(ROW_BODY_INDENT)
+        ? `${indent}${line.slice(ROW_BODY_INDENT.length)}`
+        : line,
+    );
+
   const body = (
     fields: readonly NamedField[],
     segments: readonly string[],
@@ -3406,17 +3491,22 @@ const objectSectionFile = (
                 ];
         }
         case "union":
-          // A union nested inside an object section: only top-level unions
-          // get a generated section; deeper ones are left to extract by hand.
-          return [
-            `${indent}{/* TODO: discriminated union ${commentText(q(at.join(".")))} — only top-level unions are generated; bind the discriminant with ${naming.hook("Field")} and its variant fields with ${naming.hook("VariantField")} (row-indexed union paths need formstand 0.16+) */}`,
-          ];
-        case "tuple":
-          // Only a top-level tuple gets a generated section; a nested one is
-          // left to bind by hand at its positional paths.
-          return [
-            `${indent}{/* TODO: tuple ${commentText(q(at.join(".")))} — only a top-level tuple is generated; bind its elements by hand with ${naming.hook("Field")} at .0, .1, ... */}`,
-          ];
+        case "tuple": {
+          // Bound in this component (see staticContainers): the block
+          // renders at the field's site, spanning the full row like a
+          // nested fieldset. The lookup cannot miss — both walks apply the
+          // same guards in the same order — but a total emitter beats a
+          // throw on a hand-built IR, so a miss degrades to the TODO.
+          const pieces = staticContainers.get(at.join("."));
+          if (pieces === undefined) {
+            return [
+              `${indent}{/* TODO: ${spec.kind === "union" ? "discriminated union" : "tuple"} ${commentText(q(at.join(".")))} — bind it by hand */}`,
+            ];
+          }
+          const block = (inner: string): readonly string[] =>
+            reindent(pieces.body, inner);
+          return inRow ? antdCell("fullRow", indent, block) : block(indent);
+        }
         default: {
           // Over-budget scalars were never planned (collectLeaves skips
           // them) — the guard above already emitted their TODO. Overridden
@@ -3444,25 +3534,30 @@ const objectSectionFile = (
     );
 
   // Nested rows bind template paths and push typed empty items, so the file
-  // gains the bound Field/FieldArray hooks and the draft values type.
-  const hooksImports =
-    nested.length === 0
-      ? [
-          `import { ${naming.hook("IsDirty")}, ${naming.hook("IsValid")} } from "../hooks";`,
-        ]
-      : [
-          "import {",
-          `  ${naming.hook("Field")},`,
-          `  ${naming.hook("FieldArray")},`,
-          `  ${naming.hook("IsDirty")},`,
-          `  ${naming.hook("IsValid")},`,
-          `} from "../hooks";`,
-          `import type { ${naming.valuesType} } from "../types";`,
-        ];
+  // gains the bound Field/FieldArray hooks and the draft values type; a
+  // nested union/tuple binds with the field hook (and the variant hook
+  // when a variant-only field exists) but pushes nothing.
+  const usesVariantHook = containerBindings.some((line) =>
+    line.includes(`${naming.hook("VariantField")}(`),
+  );
+  const hookNames = [
+    ...(nested.length > 0 || staticContainers.size > 0
+      ? [naming.hook("Field")]
+      : []),
+    ...(nested.length > 0 ? [naming.hook("FieldArray")] : []),
+    naming.hook("IsDirty"),
+    naming.hook("IsValid"),
+    ...(usesVariantHook ? [naming.hook("VariantField")] : []),
+  ];
+  const hooksImports = [
+    ...(hookNames.length === 2
+      ? [`import { ${hookNames.join(", ")} } from "../hooks";`]
+      : ["import {", ...hookNames.map((name) => `  ${name},`), `} from "../hooks";`]),
+    ...(nested.length > 0
+      ? [`import type { ${naming.valuesType} } from "../types";`]
+      : []),
+  ];
 
-  // Options props consumed anywhere under this section (field files and
-  // nested rows): declared here, passed in by the form file.
-  const sectionProps = sectionOptionsProps(spec);
   const sectionPropsTypeFields = [
     "heading?: string",
     ...optionsPropsTypeFields(sectionProps),
@@ -3488,6 +3583,9 @@ const objectSectionFile = (
           ? [{ from: "@chakra-ui/react", names: ["Box"] } as const]
           : []),
         ...nestedParts.flatMap((part) => part.imports),
+        ...[...staticContainers.values()].flatMap((pieces) =>
+          pieces.specs.flatMap((leaf) => leafImports(ui, leaf)),
+        ),
       ]),
       ...hooksImports,
       ...fieldImports,
@@ -3507,6 +3605,7 @@ const objectSectionFile = (
       ...sectionProps.map((name) => `  ${name},`),
       `}: ${propsType}) => {`,
       `  const { dirty, valid } = ${hookName}();`,
+      ...containerBindings,
       "  return (",
       ...objectShell(
         ui,
