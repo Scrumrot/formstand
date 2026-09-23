@@ -36,7 +36,7 @@ form.dirtyFields(); // minimal divergent paths, e.g. ["profile.name", "tags"]
 form.diff();        // { "profile.name": "Ada", tags: ["a", "b"] }
 ```
 
-Both compare `values` against `initialValues` and report **minimal divergent paths**: objects recurse to the changed leaves, arrays report their base path, and a divergent non-record root reports `""`. Reverting a field to its initial value drops it from both.
+Both compare `values` against `initialValues` and report **minimal divergent paths**: objects recurse to the changed leaves, arrays report their base path, and a divergent non-record root reports `""`. An object whose leaves all compare equal but whose key set differs (`{}` against `{ nickname: undefined }`) reports the object itself, so the list always agrees with that path's dirty flag; at the root that is `""` again, with `diff()` carrying the whole values object under it. Reverting a field to its initial value drops it from both.
 
 ## Touched
 

@@ -1378,34 +1378,41 @@ export const createForm = <
         };
       }),
     updateState: (updater) => {
-      const valuesBefore = store.getState().values;
-      store.setState((state) => {
-        const patch: Partial<FormState<Values>> = updater(state);
-        if (Object.keys(patch).length === 0) return state;
-        // Spread-style updaters carry `errors` with its current reference —
-        // only a genuinely foreign map (a plain-JS write; TS forbids it via
-        // the patch type) earns the warning.
-        if (patch.errors !== undefined && patch.errors !== state.errors) {
-          console.warn(
-            "[formstand] `errors` is derived from schemaErrors/serverErrors — patch those channels instead; the direct `errors` patch is ignored.",
-          );
-        }
-        // Re-derive against the CURRENT merged map (not the patched one), so
-        // an ignored `errors` patch can't leak even its object identity into
-        // state and re-fire identity-based subscribers.
-        const next = { ...state, ...patch };
-        return {
-          ...next,
-          ...errorChannels(state, {
-            schemaErrors: next.schemaErrors,
-            serverErrors: next.serverErrors,
-          }),
-        };
-      });
+      // The updater runs against the current state OUTSIDE setState so the
+      // op-log decision below can precede the notification: subscribers
+      // derive array row ids synchronously inside setState, and a values
+      // patch that reintroduces an earlier array reference (a snapshot of
+      // values taken before an op) would otherwise chain the op's stale
+      // record against it during that notification, then have the log
+      // cleared too late to matter. Same ordering setValues/adoptValues
+      // keep. Semantically identical to setState(updater): both read the
+      // same synchronous state.
+      const state = store.getState();
+      const patch: Partial<FormState<Values>> = updater(state);
+      if (Object.keys(patch).length === 0) return;
+      // Spread-style updaters carry `errors` with its current reference —
+      // only a genuinely foreign map (a plain-JS write; TS forbids it via
+      // the patch type) earns the warning.
+      if (patch.errors !== undefined && patch.errors !== state.errors) {
+        console.warn(
+          "[formstand] `errors` is derived from schemaErrors/serverErrors — patch those channels instead; the direct `errors` patch is ignored.",
+        );
+      }
+      // Re-derive against the CURRENT merged map (not the patched one), so
+      // an ignored `errors` patch can't leak even its object identity into
+      // state and re-fire identity-based subscribers.
+      const next = { ...state, ...patch };
       // A values patch is a chain-breaking write like setValues.
-      if (store.getState().values !== valuesBefore) {
+      if (next.values !== state.values) {
         clearArrayOpsUnder(store, "");
       }
+      store.setState(() => ({
+        ...next,
+        ...errorChannels(state, {
+          schemaErrors: next.schemaErrors,
+          serverErrors: next.serverErrors,
+        }),
+      }));
     },
     adoptValues: (values) => {
       // Rebasing values invalidates any in-flight async validation (the

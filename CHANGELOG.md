@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **`updateState` clears the array op log before notifying subscribers,
+  not after.** Row-id derivation runs synchronously inside the store
+  notification, so a values patch that wrote back an array reference an
+  earlier `arrayRemove`/`arrayMove` had consumed (a snapshot of values
+  taken before the op) could chain that op's stale record against it
+  during the notification and remint or misassign row ids; the log was
+  then cleared too late to matter. `setValues` and `adoptValues` already
+  cleared first; `updateState` now runs its updater against the current
+  state, decides, and clears before `setState`. Same semantics otherwise.
+
+### Docs
+
+- The state page spells out the `diff()` / `dirtyFields()` key-set rule:
+  an object whose leaves compare equal but whose key set differs reports
+  the object itself (the root reports `""`), so the list always agrees
+  with that path's dirty flag.
+
 ## formstand-cli 0.22.0 — 2026-09-23
 
 ### Added
