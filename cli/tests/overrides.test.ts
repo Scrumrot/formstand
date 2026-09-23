@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { FORMSTAND_PATH_DEPTH } from "../src/depth";
 import { main, moduleSpecifier } from "../src/cli";
 import {
   type EmitFormOptions,
@@ -119,8 +120,8 @@ describe("applyFieldOverrides", () => {
       }),
     ).toThrow(/fields\["icaso"\].*does not match any field.*did you mean "icao"/s);
     // The candidate list itself spells rows with "*".
-    expect(overridablePaths(baseIr)).toContain("crew.*.role");
-    expect(overridablePaths(baseIr)).toContain("tags.*");
+    expect(overridablePaths(baseIr, FORMSTAND_PATH_DEPTH)).toContain("crew.*.role");
+    expect(overridablePaths(baseIr, FORMSTAND_PATH_DEPTH)).toContain("tags.*");
   });
 
   it("suggestions never offer paths the validator itself would reject", () => {
@@ -156,7 +157,7 @@ describe("applyFieldOverrides", () => {
         { name: "deep", label: "Deep", spec: deep },
       ],
     };
-    const candidates = overridablePaths(messyIr);
+    const candidates = overridablePaths(messyIr, FORMSTAND_PATH_DEPTH);
     expect(candidates).toContain("icao");
     // Unaddressable name: applyFieldOverrides could never bind it.
     expect(candidates).not.toContain("ica.o");

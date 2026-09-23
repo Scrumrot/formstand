@@ -31,6 +31,8 @@ import {
   describedLeafKinds,
   emitInitialValues,
   gridChakraProps,
+  FORMSTAND_PATH_DEPTH,
+  formType,
   hasVariantFieldUsage,
   identifierSuffix,
   isScalarSpec,
@@ -187,15 +189,16 @@ const specHasArray = (spec: FieldSpec): boolean =>
 const collectLeaves = (
   fields: readonly NamedField[],
   segments: readonly string[],
+  budget: number,
 ): readonly Readonly<{ segments: readonly string[]; field: NamedField }>[] =>
   fields.flatMap((field) => {
     if (isUnaddressable(field.name)) return [];
     const at = [...segments, field.name];
     switch (field.spec.kind) {
       case "object":
-        return overDepthBudget(field.spec, at.length)
+        return overDepthBudget(field.spec, at.length, budget)
           ? []
-          : collectLeaves(field.spec.fields, at);
+          : collectLeaves(field.spec.fields, at, budget);
       case "array":
       // A union renders inline in its section file, not as a leaf field.
       case "union":
@@ -204,13 +207,13 @@ const collectLeaves = (
       case "tuple":
         return [];
       default:
-        return overDepthBudget(field.spec, at.length)
+        return overDepthBudget(field.spec, at.length, budget)
           ? []
           : [{ segments: at, field }];
     }
   });
 
-const buildPlan = (root: ObjectSpec, naming: Naming): Plan => {
+const buildPlan = (root: ObjectSpec, naming: Naming, budget: number): Plan => {
   // Pre-claim the bound hook's name shape: a field named after the module
   // prefix (field "contact" in ContactForm) would otherwise get
   // componentName ContactField, whose exported hook useContactField
@@ -258,7 +261,7 @@ const buildPlan = (root: ObjectSpec, naming: Naming): Plan => {
 
   const sectionLeafFields = sections.flatMap((section) =>
     section.spec.kind === "object"
-      ? collectLeaves(section.spec.fields, [section.key]).map(
+      ? collectLeaves(section.spec.fields, [section.key], budget).map(
           ({ segments, field }) => planField(segments, field),
         )
       : [],
@@ -2147,6 +2150,7 @@ const hooksFile = (
   root: ObjectSpec,
   plan: Plan,
   scaffold: ScaffoldOptions,
+  budget: number,
 ): ModuleFile => {
   // Nested arrays (under object sections, or inside array rows) bind the
   // same bound hooks as top-level array sections, so look past the roots.
@@ -2161,7 +2165,8 @@ const hooksFile = (
     (field) => !isUnaddressable(field.name) && specHasUnion(field.spec),
   );
   const hasVariantFields = root.fields.some(
-    (field) => !isUnaddressable(field.name) && hasVariantFieldUsage(field.spec),
+    (field) =>
+      !isUnaddressable(field.name) && hasVariantFieldUsage(field.spec, budget),
   );
   // A tuple section binds each scalar element with the plain field hook at
   // its positional path (coord.0) and imports it whenever at least one
@@ -2221,6 +2226,10 @@ const hooksFile = (
       `export const ${naming.formConst} = createForm(${schemaImport.name}, {`,
       "  initialValues,",
       `  mode: ${q(emittedMode(scaffold))},`,
+      // The widened (or narrowed) typed-path budget, when --path-depth set
+      // one: createFormHooks infers its depth from this form, so every
+      // pre-wired hook sees the same FieldPath union the emitters drew.
+      ...(budget === FORMSTAND_PATH_DEPTH ? [] : [`  pathDepth: ${budget},`]),
       "});",
       "",
       "export const {",
@@ -2414,17 +2423,18 @@ type RawNestedArray = Readonly<{
 const collectNestedArrays = (
   fields: readonly NamedField[],
   segments: readonly string[],
+  budget: number,
 ): readonly RawNestedArray[] =>
   fields.flatMap((field): readonly RawNestedArray[] => {
     if (isUnaddressable(field.name)) return [];
     const at = [...segments, field.name];
     switch (field.spec.kind) {
       case "object":
-        return overDepthBudget(field.spec, at.length)
+        return overDepthBudget(field.spec, at.length, budget)
           ? []
-          : collectNestedArrays(field.spec.fields, at);
+          : collectNestedArrays(field.spec.fields, at, budget);
       case "array":
-        return overDepthBudget(field.spec, at.length)
+        return overDepthBudget(field.spec, at.length, budget)
           ? []
           : [{ segments: at, label: field.label, item: field.spec.item }];
       default:
@@ -2615,6 +2625,7 @@ const rowUnionPieces = (
   label: string,
   // The row component's var scope; reserved names are added to it.
   usedVars: Set<string>,
+  budget: number,
 ): RowContainerPieces => {
   const reserve = (
     base: string,
@@ -2654,7 +2665,7 @@ const rowUnionPieces = (
         ? !isUnaddressable(field.name) && isScalarSpec(field.spec)
           ? [{ name: field.name, label: field.label, spec: field.spec }]
           : []
-        : variantLeavesOf(field, baseSegments).flatMap((leaf) =>
+        : variantLeavesOf(field, baseSegments, budget).flatMap((leaf) =>
             leaf.kind === "leaf"
               ? [{ name: leaf.name, label: leaf.label, spec: leaf.spec }]
               : [],
@@ -2758,7 +2769,7 @@ const rowUnionPieces = (
       // as the binding collection flattened them.
       const flattened = variant.fields
         .filter((field) => !commonBindingNames.has(field.name))
-        .flatMap((field) => variantLeavesOf(field, baseSegments));
+        .flatMap((field) => variantLeavesOf(field, baseSegments, budget));
       const inner = (indent: string): readonly string[] =>
         flattened.flatMap((leaf): readonly string[] => {
           switch (leaf.kind) {
@@ -2776,7 +2787,9 @@ const rowUnionPieces = (
                   );
             }
             case "depth":
-              return [depthTodoLine(`${commentBase}.${leaf.name}`, indent)];
+              return [
+                depthTodoLine(`${commentBase}.${leaf.name}`, indent, budget),
+              ];
             case "unsupported":
               return [
                 `${indent}{/* TODO: nested ${leaf.specKind} ${commentText(q(`${commentBase}.${leaf.name}`))} inside a union variant — extract it by hand */}`,
@@ -2893,6 +2906,7 @@ const nestedArrayComponents = (
   naming: Naming,
   entry: NestedArrayEntry,
   used: Set<string>,
+  budget: number,
 ): NestedParts => {
   const rowName = `${entry.stem}Row`;
   const rowsName = `${entry.stem}Rows`;
@@ -2918,10 +2932,14 @@ const nestedArrayComponents = (
   // item-field kind — scalar bindings, child lists, and nested containers
   // degrade identically).
   const overBudgetFieldBody = (fieldName: string): readonly string[] => [
-    depthTodoLine(`${entry.commentBase}.$\{index}.${fieldName}`, "      "),
+    depthTodoLine(
+      `${entry.commentBase}.$\{index}.${fieldName}`,
+      "      ",
+      budget,
+    ),
   ];
   const overBudgetRowBody = (): readonly string[] => [
-    depthTodoLine(`${entry.commentBase}.$\{index}`, "      "),
+    depthTodoLine(`${entry.commentBase}.$\{index}`, "      ", budget),
   ];
 
   // The entry for an array extracted from this row (one deeper hole), claiming
@@ -3013,7 +3031,7 @@ const nestedArrayComponents = (
           // the budget nothing binds (a scalar's useField, a child list's
           // useFieldArray, a container's hand-extraction), so all kinds
           // degrade to the same depth TODO.
-          if (overDepthBudget(field.spec, rowSegments + 1)) {
+          if (overDepthBudget(field.spec, rowSegments + 1, budget)) {
             return { body: overBudgetFieldBody(field.name) };
           }
           if (isScalarSpec(field.spec)) {
@@ -3043,7 +3061,7 @@ const nestedArrayComponents = (
             );
             return {
               body: [childRef(child)],
-              part: nestedArrayComponents(ui, naming, child, used),
+              part: nestedArrayComponents(ui, naming, child, used, budget),
             };
           }
           // A union or tuple FIELD of the row binds right in the Row
@@ -3061,6 +3079,7 @@ const nestedArrayComponents = (
                     commentBase,
                     field.label,
                     rowVarUsed,
+                    budget,
                   )
                 : rowTuplePieces(
                     ui,
@@ -3104,7 +3123,7 @@ const nestedArrayComponents = (
           ]),
           children: objectPieces.flatMap((p) => (p.part ? [p.part] : [])),
         }
-      : overDepthBudget(entry.item, rowSegments)
+      : overDepthBudget(entry.item, rowSegments, budget)
         ? {
             // The row path itself is past the budget (for an array item the
             // inner list IS the row path; a tuple/union needs headroom for
@@ -3147,7 +3166,7 @@ const nestedArrayComponents = (
                   bindings: [],
                   body: [childRef(child)],
                   specs: [],
-                  children: [nestedArrayComponents(ui, naming, child, used)],
+                  children: [nestedArrayComponents(ui, naming, child, used, budget)],
                 };
               })()
             : ((): typeof parts => {
@@ -3165,6 +3184,7 @@ const nestedArrayComponents = (
                         commentBase,
                         entry.label,
                         rowVarUsed,
+                        budget,
                       )
                     : rowTuplePieces(
                         ui,
@@ -3259,6 +3279,7 @@ const objectSectionFile = (
   naming: Naming,
   section: SectionPlan,
   plan: Plan,
+  budget: number,
   muiVersion: MuiVersion = DEFAULT_MUI_VERSION,
 ): ModuleFile => {
   const spec = section.spec as ObjectSpec;
@@ -3271,14 +3292,14 @@ const objectSectionFile = (
   // file; the body renders <XRows /> at the array's site.
   const nested = objectNestedEntries(
     naming,
-    collectNestedArrays(spec.fields, [section.key]),
+    collectNestedArrays(spec.fields, [section.key], budget),
   );
   const nestedByKey = new Map(nested.map((entry) => [entry.key, entry]));
   // One shared stem registry so recursively-extracted child components never
   // collide with each other or with the top-level entries.
   const nestedUsed = new Set<string>(nested.map((entry) => entry.stem));
   const nestedParts = nested.map((entry) =>
-    nestedArrayComponents(ui, naming, entry, nestedUsed),
+    nestedArrayComponents(ui, naming, entry, nestedUsed, budget),
   );
 
   // Container uis lay the shell out with a real layout component (antd
@@ -3345,8 +3366,8 @@ const objectSectionFile = (
       // single-file walker, so an over-budget union/tuple degrades to the
       // depth TODO (its hand-binding advice would be unachievable) and the
       // CLI warning list mirrors the emitted TODOs exactly.
-      if (overDepthBudget(spec, at.length)) {
-        return [depthTodoLine(at.join("."), indent)];
+      if (overDepthBudget(spec, at.length, budget)) {
+        return [depthTodoLine(at.join("."), indent, budget)];
       }
       switch (spec.kind) {
         case "object": {
@@ -3414,7 +3435,7 @@ const objectSectionFile = (
       }
     });
 
-  const fieldImports = collectLeaves(spec.fields, [section.key])
+  const fieldImports = collectLeaves(spec.fields, [section.key], budget)
     .map(({ segments }) => own(segments))
     .flatMap((planned) => (planned === undefined ? [] : [planned]))
     .map(
@@ -3610,6 +3631,7 @@ const arraySectionFile = (
   visual: VisualOptions,
   naming: Naming,
   section: SectionPlan,
+  budget: number,
   muiVersion: MuiVersion = DEFAULT_MUI_VERSION,
 ): ModuleFile => {
   const spec = section.spec as Extract<FieldSpec, Readonly<{ kind: "array" }>>;
@@ -3638,7 +3660,7 @@ const arraySectionFile = (
   const nestedByKey = new Map(nested.map((entry) => [entry.key, entry]));
   const nestedUsed = new Set<string>(nested.map((entry) => entry.stem));
   const nestedParts = nested.map((entry) =>
-    nestedArrayComponents(ui, naming, entry, nestedUsed),
+    nestedArrayComponents(ui, naming, entry, nestedUsed, budget),
   );
 
   // An array whose row item is ITSELF an array (an array-of-arrays section):
@@ -3668,7 +3690,7 @@ const arraySectionFile = (
     ...nestedParts,
     ...(arrayItemEntry === undefined
       ? []
-      : [nestedArrayComponents(ui, naming, arrayItemEntry, nestedUsed)]),
+      : [nestedArrayComponents(ui, naming, arrayItemEntry, nestedUsed, budget)]),
   ];
 
   const used = new Set<string>(["index", "onRemove", "field", "rows"]);
@@ -3728,6 +3750,7 @@ const arraySectionFile = (
                   commentBase,
                   field.label,
                   used,
+                  budget,
                 )
               : rowTuplePieces(
                   ui,
@@ -3773,6 +3796,7 @@ const arraySectionFile = (
           `${section.key}.$\{index}`,
           section.label,
           used,
+          budget,
         )
       : spec.item.kind === "tuple"
         ? rowTuplePieces(
@@ -4010,6 +4034,7 @@ const formFile = (
   root: ObjectSpec,
   plan: Plan,
   scaffold: ScaffoldOptions,
+  budget: number,
 ): ModuleFile => {
   const shell = formShell(ui);
   const formExpr = scaffold.formProp ? "form" : naming.formConst;
@@ -4020,7 +4045,7 @@ const formFile = (
   // Options props (config-fields autocomplete overrides with optionsProp):
   // the page supplies each suggestion list here, and the form body threads
   // it down to the section/field that consumes it.
-  const optionsProps = collectOptionsProps(root);
+  const optionsProps = collectOptionsProps(root, budget);
   const params = [
     ...(scaffold.formProp ? ["form"] : []),
     ...(scaffold.live ? ["onValuesChange"] : []),
@@ -4033,7 +4058,7 @@ const formFile = (
           '  // (exported from "./hooks"): pass that instance. A different form',
           "  // of the same schema would compile, but the fields would keep",
           "  // reading the module's own form.",
-          `  form: Form<${naming.schemaType}>;`,
+          `  form: ${formType(naming.schemaType, budget)};`,
         ]
       : []),
     ...(scaffold.live
@@ -4197,6 +4222,7 @@ const unionSectionFile = (
   visual: VisualOptions,
   naming: Naming,
   section: SectionPlan,
+  budget: number,
 ): ModuleFile => {
   const spec = section.spec as Extract<FieldSpec, Readonly<{ kind: "union" }>>;
   const propsType = `${section.componentName}Props`;
@@ -4248,7 +4274,7 @@ const unionSectionFile = (
         ? !isUnaddressable(field.name) && isScalarSpec(field.spec)
           ? [{ name: field.name, label: field.label, spec: field.spec }]
           : []
-        : variantLeavesOf(field, unionBaseSegments).flatMap((leaf) =>
+        : variantLeavesOf(field, unionBaseSegments, budget).flatMap((leaf) =>
             leaf.kind === "leaf"
               ? [{ name: leaf.name, label: leaf.label, spec: leaf.spec }]
               : [],
@@ -4333,7 +4359,7 @@ const unionSectionFile = (
       // binding collection flattened them.
       const flattened = variant.fields
         .filter((field) => !commonBindingNames.has(field.name))
-        .flatMap((field) => variantLeavesOf(field, unionBaseSegments));
+        .flatMap((field) => variantLeavesOf(field, unionBaseSegments, budget));
       const inner = (indent: string): readonly string[] =>
         flattened.flatMap((leaf): readonly string[] => {
           switch (leaf.kind) {
@@ -4351,7 +4377,7 @@ const unionSectionFile = (
                   );
             }
             case "depth":
-              return [depthTodoLine(`${path}.${leaf.name}`, indent)];
+              return [depthTodoLine(`${path}.${leaf.name}`, indent, budget)];
             case "unsupported":
               return [
                 `${indent}{/* TODO: nested ${leaf.specKind} ${commentText(q(`${path}.${leaf.name}`))} inside a union variant — extract it by hand */}`,
@@ -4496,25 +4522,34 @@ export const emitModuleForm = (
   const scaffold = scaffoldOf(options);
   const root = assertObjectRoot(options.ir);
   const naming = namingFor(options.formName, options.schemaImport.name);
-  const plan = buildPlan(root, naming);
-  const adapter = adapterFile(ui, collectUsage(root), options.muiVersion);
+  const budget = options.pathDepth ?? FORMSTAND_PATH_DEPTH;
+  const plan = buildPlan(root, naming, budget);
+  const adapter = adapterFile(ui, collectUsage(root, budget), options.muiVersion);
 
   return [
     schemaFile(options.schemaImport, options.schemaSource),
     typesFile(naming, options.schemaImport),
-    hooksFile(naming, options.schemaImport, root, plan, scaffold),
+    hooksFile(naming, options.schemaImport, root, plan, scaffold, budget),
     ...(adapter === undefined ? [] : [adapter]),
     ...plan.fields.map((field) => fieldFile(ui, naming, field)),
     ...plan.sections.map((section) =>
       section.spec.kind === "object"
-        ? objectSectionFile(ui, visual, naming, section, plan, options.muiVersion)
+        ? objectSectionFile(
+            ui,
+            visual,
+            naming,
+            section,
+            plan,
+            budget,
+            options.muiVersion,
+          )
         : section.spec.kind === "array"
-          ? arraySectionFile(ui, visual, naming, section, options.muiVersion)
+          ? arraySectionFile(ui, visual, naming, section, budget, options.muiVersion)
           : section.spec.kind === "tuple"
             ? tupleSectionFile(ui, visual, naming, section, options.muiVersion)
-            : unionSectionFile(ui, visual, naming, section),
+            : unionSectionFile(ui, visual, naming, section, budget),
     ),
-    formFile(ui, naming, root, plan, scaffold),
+    formFile(ui, naming, root, plan, scaffold, budget),
     indexFile(naming),
   ];
 };

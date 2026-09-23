@@ -132,9 +132,10 @@ the CLI from two UI targets to six, and make the docs match.
   the CLI carries two dependencies on purpose. Deliberately out for now;
   the error message names the one-line conversion. Revisit if the mode
   gets real use.
-- **`--path-depth` flag.** `createForm` can widen its typed-path budget, but
-  the CLI has no matching flag, so generated bindings past nine segments
-  degrade to a TODO even when the form could type them.
+- **`--path-depth` flag — shipped 2026-09-23.** The typed-path budget as a
+  per-run value threaded through both layouts, the warnings, the override
+  validator, and the generated tests; the emitted form sets `createForm`'s
+  `pathDepth` to the same number so the library's union matches.
 - **Visual regression snapshots** for the playground, on top of the Playwright
   e2e job (baseline images plus pixel diff, vs today's render-integrity
   assertions and three screenshots).

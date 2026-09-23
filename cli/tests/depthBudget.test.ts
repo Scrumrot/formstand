@@ -120,7 +120,11 @@ describe("overBudgetFieldPaths", () => {
     // child can only exceed it); the at-limit branch and shallow fields are
     // clean.
     expect(
-      overBudgetFieldPaths(fromZod(deepPathsSchema, FIXTURE_MAX_DEPTH)),
+      overBudgetFieldPaths(
+        fromZod(deepPathsSchema, FIXTURE_MAX_DEPTH),
+        depthWarningFrontier("single"),
+        FORMSTAND_PATH_DEPTH,
+      ),
     ).toEqual(["l1.l2.l3.l4.l5.l6.l7.l8.l9"]);
   });
 
@@ -129,7 +133,11 @@ describe("overBudgetFieldPaths", () => {
     // path, while `e`'s OBJECT rows degrade per field (`f`, `g`) — exactly
     // the TODO lines the emission tests below pin.
     expect(
-      overBudgetFieldPaths(fromZod(deepRowsSchema, FIXTURE_MAX_DEPTH)),
+      overBudgetFieldPaths(
+        fromZod(deepRowsSchema, FIXTURE_MAX_DEPTH),
+        depthWarningFrontier("single"),
+        FORMSTAND_PATH_DEPTH,
+      ),
     ).toEqual([
       "a.*.b.*.c.*.h.*.d.*",
       "a.*.b.*.c.*.h.*.e.*.f",
@@ -141,6 +149,8 @@ describe("overBudgetFieldPaths", () => {
     expect(
       overBudgetFieldPaths(
         fromZod(z.object({ a: z.array(z.object({ b: z.string() })) })),
+        depthWarningFrontier("single"),
+        FORMSTAND_PATH_DEPTH,
       ),
     ).toEqual([]);
   });
@@ -317,7 +327,11 @@ describe("at-budget arrays with non-scalar items", () => {
       `{/* TODO: path "${LIST}.\${index}" ${DEPTH_TODO} */}`,
     );
     expect(code).not.toContain("extract a row component");
-    const warnings = overBudgetFieldPaths(ir);
+    const warnings = overBudgetFieldPaths(
+      ir,
+      depthWarningFrontier("single"),
+      FORMSTAND_PATH_DEPTH,
+    );
     expect(warnings).toEqual([`${LIST}.*`]);
     expect(warnings).toHaveLength(depthTodoCount(code));
   });
@@ -335,7 +349,11 @@ describe("at-budget arrays with non-scalar items", () => {
     expect(code).toContain(
       `{/* TODO: path "${LIST}.\${index}.y" ${DEPTH_TODO} */}`,
     );
-    const warnings = overBudgetFieldPaths(ir);
+    const warnings = overBudgetFieldPaths(
+      ir,
+      depthWarningFrontier("single"),
+      FORMSTAND_PATH_DEPTH,
+    );
     expect(warnings).toEqual([`${LIST}.*.x`, `${LIST}.*.y`]);
     expect(warnings).toHaveLength(depthTodoCount(code));
   });
@@ -429,10 +447,18 @@ describe("warnings stop at each layout's degradation frontier", () => {
     const moduleJoined = emitModule(ir);
     // Both layouts now extract the inner Rows component and emit exactly
     // one depth TODO (the inner rows' field), mirrored one for one.
-    const singleWarnings = overBudgetFieldPaths(ir, depthWarningFrontier("single"));
+    const singleWarnings = overBudgetFieldPaths(
+      ir,
+      depthWarningFrontier("single"),
+      FORMSTAND_PATH_DEPTH,
+    );
     expect(singleWarnings).toEqual(["o1.o2.o3.o4.o5.o6.list.*.*.x"]);
     expect(depthTodoCount(single)).toBe(singleWarnings.length);
-    const moduleWarnings = overBudgetFieldPaths(ir, depthWarningFrontier("module"));
+    const moduleWarnings = overBudgetFieldPaths(
+      ir,
+      depthWarningFrontier("module"),
+      FORMSTAND_PATH_DEPTH,
+    );
     expect(moduleWarnings).toEqual(["o1.o2.o3.o4.o5.o6.list.*.*.x"]);
     expect(depthTodoCount(moduleJoined)).toBe(moduleWarnings.length);
   });
@@ -443,20 +469,34 @@ describe("warnings stop at each layout's degradation frontier", () => {
     const moduleJoined = emitModule(ir);
     // Single-file recurses into the row object and emits exactly one depth
     // TODO (at `nest.deeper`), mirrored one for one.
-    const singleWarnings = overBudgetFieldPaths(ir, depthWarningFrontier("single"));
+    const singleWarnings = overBudgetFieldPaths(
+      ir,
+      depthWarningFrontier("single"),
+      FORMSTAND_PATH_DEPTH,
+    );
     expect(singleWarnings).toEqual(["o1.o2.o3.o4.o5.list.*.nest.deeper"]);
     expect(depthTodoCount(single)).toBe(singleWarnings.length);
     // The module layout degrades the row's object field to the generic TODO
     // — no depth TODO, so no depth warning either.
     expect(moduleJoined).toContain("bind it by hand");
     expect(depthTodoCount(moduleJoined)).toBe(0);
-    expect(overBudgetFieldPaths(ir, depthWarningFrontier("module"))).toEqual([]);
+    expect(overBudgetFieldPaths(
+      ir,
+      depthWarningFrontier("module"),
+      FORMSTAND_PATH_DEPTH,
+    )).toEqual([]);
   });
 
   it("the default frontier is the single-file layout's", () => {
     const ir = fromZod(objectInRows);
-    expect(overBudgetFieldPaths(ir)).toEqual(
-      overBudgetFieldPaths(ir, depthWarningFrontier("single")),
+    expect(
+      overBudgetFieldPaths(ir, depthWarningFrontier("single"), FORMSTAND_PATH_DEPTH),
+    ).toEqual(
+      overBudgetFieldPaths(
+      ir,
+      depthWarningFrontier("single"),
+      FORMSTAND_PATH_DEPTH,
+    ),
     );
   });
 });
@@ -623,7 +663,7 @@ describe("CLI warnings for over-budget paths", () => {
       spy.mockRestore();
     }
     expect(chunks.join("")).toContain(
-      `warning: path "l1.l2.l3.l4.l5.l6.l7.l8.l9" exceeds formstand's typed FieldPath depth (${FORMSTAND_PATH_DEPTH}); emitted a TODO — bind it by hand`,
+      `warning: path "l1.l2.l3.l4.l5.l6.l7.l8.l9" exceeds formstand's typed FieldPath depth (${FORMSTAND_PATH_DEPTH}); emitted a TODO — raise --path-depth or bind it by hand`,
     );
   });
 });

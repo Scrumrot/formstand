@@ -60,6 +60,12 @@ export type EmitFormOptions = Readonly<{
   // `form` prop instead of calling useForm itself; the useForm scaffold is
   // still emitted, as an exported use{Name}Form hook the page calls.
   formProp?: boolean;
+  // --path-depth: the typed-path budget in SEGMENTS (default 9, the
+  // library's). Every depth boundary the emitters draw uses it, and the
+  // emitted useForm/createForm call sets `pathDepth` to the same number so
+  // the library's FieldPath union matches the generator's decisions. Must
+  // be 0-25 (createForm's PathDepth constraint) — the CLI validates.
+  pathDepth?: number;
 }>;
 
 // The scaffold modes with their defaults applied — the shape the emitters
@@ -112,6 +118,23 @@ const ownerHookName = (formName: string): string => {
   const stripped = formName.replace(/Form$/, "");
   return `use${stripped.length === 0 ? formName : stripped}Form`;
 };
+
+// The `pathDepth` option the emitted useForm/createForm call carries when
+// the run's budget differs from the library default: the library's
+// FieldPath union must widen (or narrow) to exactly the boundary the
+// emitters drew, or a binding the generator judged in-budget would fail
+// TS2820 in the consumer. At the default the option is omitted so
+// default-flag output stays byte-identical.
+export const pathDepthOption = (budget: number): string =>
+  budget === FORMSTAND_PATH_DEPTH ? "" : `, pathDepth: ${budget}`;
+
+// `Form<S>` or `Form<S, N>`: the typed form reference in emitted props
+// (child Rows components, --form-prop), carrying the depth argument on
+// the same rule as pathDepthOption.
+export const formType = (schemaTypeExpr: string, budget: number): string =>
+  budget === FORMSTAND_PATH_DEPTH
+    ? `Form<${schemaTypeExpr}>`
+    : `Form<${schemaTypeExpr}, ${budget}>`;
 
 export type ObjectSpec = Extract<FieldSpec, Readonly<{ kind: "object" }>>;
 
@@ -195,6 +218,7 @@ export const isUnaddressable = (name: string): boolean => name.includes(".");
 // programmatic consumers.
 export {
   FORMSTAND_PATH_DEPTH,
+  FORMSTAND_PATH_DEPTH_MAX,
   NESTING_LIMIT_TODO,
   isScalarSpec,
   overDepthBudget,
@@ -218,13 +242,16 @@ export const pathSegmentCount = (path: string): number =>
 
 // The shared TODO text for an over-budget binding — the emitters put it in a
 // comment, the CLI mirrors it as a stderr warning (overBudgetFieldPaths).
-export const depthTodoText = (path: string): string =>
-  `path ${commentText(q(path))} exceeds formstand's typed FieldPath depth (${FORMSTAND_PATH_DEPTH}); bind by hand`;
+export const depthTodoText = (path: string, budget: number): string =>
+  `path ${commentText(q(path))} exceeds formstand's typed FieldPath depth (${budget}); bind by hand`;
 
 // The one production of an over-budget TODO comment line, shared with the
 // module layout so the two emitters can't drift on the wording.
-export const depthTodoLine = (path: string, indent: string): string =>
-  `${indent}{/* TODO: ${depthTodoText(path)} */}`;
+export const depthTodoLine = (
+  path: string,
+  indent: string,
+  budget: number,
+): string => `${indent}{/* TODO: ${depthTodoText(path, budget)} */}`;
 
 // Where a LAYOUT's emitter stops descending — the degradation frontier. The
 // two layouts genuinely diverge past it (each degrades the shape to a
@@ -264,7 +291,8 @@ export const depthWarningFrontier = (
 // alongside the in-file TODO comments.
 export const overBudgetFieldPaths = (
   ir: FieldSpec,
-  frontier: DepthWarningFrontier = depthWarningFrontier("single"),
+  frontier: DepthWarningFrontier,
+  budget: number,
 ): readonly string[] => {
   const walkFields = (
     fields: readonly NamedField[],
@@ -281,7 +309,9 @@ export const overBudgetFieldPaths = (
     segments: readonly string[],
     rowField: boolean,
   ): readonly string[] => {
-    if (overDepthBudget(spec, segments.length)) return [segments.join(".")];
+    if (overDepthBudget(spec, segments.length, budget)) {
+      return [segments.join(".")];
+    }
     switch (spec.kind) {
       case "object":
         // An in-budget object field of an array row: only recurse when the
@@ -295,7 +325,9 @@ export const overBudgetFieldPaths = (
           return walkFields(spec.item.fields, row, true);
         }
         // Both layouts check the row path itself for every non-object item…
-        if (overDepthBudget(spec.item, row.length)) return [row.join(".")];
+        if (overDepthBudget(spec.item, row.length, budget)) {
+          return [row.join(".")];
+        }
         // …but only the module layout descends into a container item.
         return frontier.descendsArrayItemContainers
           ? walk(spec.item, row, false)
@@ -754,11 +786,12 @@ export const autocompleteOptionsExpr = (spec: FieldSpec): string =>
 // in the right leaf builders/components even with no sibling of that kind.
 const unionKindUsage = (
   spec: Extract<FieldSpec, Readonly<{ kind: "union" }>>,
+  budget: number,
 ): KindUsage =>
   spec.variants.reduce<KindUsage>(
     (acc, variant) =>
       variant.fields.reduce<KindUsage>(
-        (inner, field) => mergeUsage(inner, collectUsage(field.spec)),
+        (inner, field) => mergeUsage(inner, collectUsage(field.spec, budget)),
         acc,
       ),
     { ...NO_USAGE, union: true, enum: true },
@@ -769,27 +802,32 @@ const unionKindUsage = (
 // control, so they must contribute no usage — an over-budget-only kind would
 // otherwise emit an unused import. overDepthBudget mirrors fieldLines'
 // boundary per kind.
-export const collectUsage = (spec: FieldSpec, count = 0): KindUsage => {
-  if (overDepthBudget(spec, count)) return NO_USAGE;
+export const collectUsage = (
+  spec: FieldSpec,
+  budget: number,
+  count = 0,
+): KindUsage => {
+  if (overDepthBudget(spec, count, budget)) return NO_USAGE;
   switch (spec.kind) {
     case "object":
       return spec.fields.reduce(
-        (acc, field) => mergeUsage(acc, collectUsage(field.spec, count + 1)),
+        (acc, field) =>
+          mergeUsage(acc, collectUsage(field.spec, budget, count + 1)),
         NO_USAGE,
       );
     case "array":
-      return collectUsage(spec.item, count + 1);
+      return collectUsage(spec.item, budget, count + 1);
     // Non-scalar elements render as TODOs, not controls, so they pull in no
     // builders — only scalar elements count toward usage.
     case "tuple":
       return spec.elements
         .filter(isScalarSpec)
         .reduce(
-          (acc, el) => mergeUsage(acc, collectUsage(el, count + 1)),
+          (acc, el) => mergeUsage(acc, collectUsage(el, budget, count + 1)),
           NO_USAGE,
         );
     case "union":
-      return unionKindUsage(spec);
+      return unionKindUsage(spec, budget);
     default:
       // An overridden leaf renders the override control, not its kind's
       // default — count it as autocomplete only.
@@ -823,6 +861,7 @@ const collectRawArrays = (
   spec: FieldSpec,
   segments: readonly string[],
   label: string,
+  budget: number,
 ): readonly RawArrayEntry[] => {
   switch (spec.kind) {
     case "object":
@@ -830,7 +869,7 @@ const collectRawArrays = (
       // emitted as a TODO (children can only exceed), and an array whose own
       // list path exceeds it can't bind its useFieldArray hook — neither may
       // claim a hook that the body never references.
-      return overDepthBudget(spec, segments.length)
+      return overDepthBudget(spec, segments.length, budget)
         ? []
         : spec.fields
             .filter((field) => !isUnaddressable(field.name))
@@ -839,12 +878,13 @@ const collectRawArrays = (
                 field.spec,
                 [...segments, field.name],
                 field.label,
+                budget,
               ),
             );
     case "array":
       // Arrays nested inside this array's items have dynamic paths; they are
       // emitted as TODO comments instead of hooks.
-      return overDepthBudget(spec, segments.length)
+      return overDepthBudget(spec, segments.length, budget)
         ? []
         : [{ segments, label, item: spec.item }];
     default:
@@ -902,8 +942,11 @@ const arrayEntry = (raw: RawArrayEntry, suffix: string): ArrayEntry => {
   };
 };
 
-const collectArrays = (root: ObjectSpec): readonly ArrayEntry[] =>
-  collectRawArrays(root, [], "").reduce<
+const collectArrays = (
+  root: ObjectSpec,
+  budget: number,
+): readonly ArrayEntry[] =>
+  collectRawArrays(root, [], "", budget).reduce<
     Readonly<{ used: ReadonlySet<string>; entries: readonly ArrayEntry[] }>
   >(
     (acc, raw) => {
@@ -1010,6 +1053,7 @@ export type VariantLeaf =
 export const variantLeavesOf = (
   field: NamedField,
   baseSegments: number,
+  budget: number,
 ): readonly VariantLeaf[] => {
   const walk = (
     spec: FieldSpec,
@@ -1022,7 +1066,7 @@ export const variantLeavesOf = (
         // An object binds one segment past its own path, so it needs
         // headroom BELOW the budget — the same boundary overDepthBudget
         // draws; one depth marker at the container, not one per leaf.
-        return segments >= FORMSTAND_PATH_DEPTH
+        return segments >= budget
           ? [{ kind: "depth", name }]
           : spec.fields.flatMap((child) =>
               isUnaddressable(child.name)
@@ -1041,7 +1085,7 @@ export const variantLeavesOf = (
                   ),
             );
       case "tuple":
-        return segments >= FORMSTAND_PATH_DEPTH
+        return segments >= budget
           ? [{ kind: "depth", name }]
           : spec.elements.flatMap((element, i) =>
               isScalarSpec(element)
@@ -1060,7 +1104,7 @@ export const variantLeavesOf = (
       // Every remaining kind is a scalar (isScalarSpec's complement): a
       // deliberate-subset default — the container kinds are the cases.
       default:
-        return segments > FORMSTAND_PATH_DEPTH
+        return segments > budget
           ? [{ kind: "depth", name }]
           : [{ kind: "leaf", name, label, spec }];
     }
@@ -1078,22 +1122,25 @@ type RawUnionEntry = Readonly<{ segments: readonly string[]; spec: UnionSpec }>;
 const collectRawUnions = (
   spec: FieldSpec,
   segments: readonly string[],
+  budget: number,
 ): readonly RawUnionEntry[] => {
   switch (spec.kind) {
     case "object":
       // Same FieldPath boundary as collectRawArrays: no hooks under a
       // depth-TODO'd object.
-      return overDepthBudget(spec, segments.length)
+      return overDepthBudget(spec, segments.length, budget)
         ? []
         : spec.fields
             .filter((field) => !isUnaddressable(field.name))
             .flatMap((field) =>
-              collectRawUnions(field.spec, [...segments, field.name]),
+              collectRawUnions(field.spec, [...segments, field.name], budget),
             );
     case "union":
       // The discriminant and every field binding sit one segment past the
       // union's path, so the union needs headroom below the budget.
-      return overDepthBudget(spec, segments.length) ? [] : [{ segments, spec }];
+      return overDepthBudget(spec, segments.length, budget)
+        ? []
+        : [{ segments, spec }];
     default:
       return [];
   }
@@ -1102,6 +1149,7 @@ const collectRawUnions = (
 const unionEntry = (
   raw: RawUnionEntry,
   seed: ReadonlySet<string>,
+  budget: number,
   // The union path's own segment count — raw.segments.length for static
   // paths; holed templates (row unions) pass pathSegmentCount(template),
   // since their stripped naming segments undercount the row indices.
@@ -1166,7 +1214,7 @@ const unionEntry = (
           isScalarSpec(field.spec)
           ? [field]
           : []
-        : variantLeavesOf(field, baseSegments).flatMap((leaf) =>
+        : variantLeavesOf(field, baseSegments, budget).flatMap((leaf) =>
             leaf.kind === "leaf"
               ? [{ name: leaf.name, label: leaf.label, spec: leaf.spec }]
               : [],
@@ -1222,12 +1270,13 @@ const unionEntry = (
 const collectUnions = (
   root: ObjectSpec,
   seed: ReadonlySet<string>,
+  budget: number,
 ): readonly UnionEntry[] =>
-  collectRawUnions(root, []).reduce<
+  collectRawUnions(root, [], budget).reduce<
     Readonly<{ used: ReadonlySet<string>; entries: readonly UnionEntry[] }>
   >(
     (acc, raw) => {
-      const { entry, used } = unionEntry(raw, acc.used);
+      const { entry, used } = unionEntry(raw, acc.used, budget);
       return { used, entries: [...acc.entries, entry] };
     },
     { used: new Set(seed), entries: [] },
@@ -1291,19 +1340,23 @@ const unionHooks = (
 // The KindUsage of union CONTROLS only (discriminant select + variant field
 // kinds), ignoring non-union siblings — so the plain backend imports exactly
 // the prop builders its union rendering calls.
-export const collectUnionUsage = (spec: FieldSpec, count = 0): KindUsage => {
-  if (overDepthBudget(spec, count)) return NO_USAGE;
+export const collectUnionUsage = (
+  spec: FieldSpec,
+  budget: number,
+  count = 0,
+): KindUsage => {
+  if (overDepthBudget(spec, count, budget)) return NO_USAGE;
   switch (spec.kind) {
     case "object":
       return spec.fields.reduce(
         (acc, field) =>
-          mergeUsage(acc, collectUnionUsage(field.spec, count + 1)),
+          mergeUsage(acc, collectUnionUsage(field.spec, budget, count + 1)),
         NO_USAGE,
       );
     case "array":
       return collectUnionUsage(spec.item, count + 1);
     case "union":
-      return unionKindUsage(spec);
+      return unionKindUsage(spec, budget);
     default:
       return NO_USAGE;
   }
@@ -1316,13 +1369,17 @@ export const collectUnionUsage = (spec: FieldSpec, count = 0): KindUsage => {
 // kit Bound* components); the prop-builder and useField/useVariantField
 // imports stay on total usage / collectUnionUsage, since union rendering does
 // call them. Fixes leaf components imported-but-unused for a union-only kind.
-export const collectStaticUsage = (spec: FieldSpec, count = 0): KindUsage => {
-  if (overDepthBudget(spec, count)) return NO_USAGE;
+export const collectStaticUsage = (
+  spec: FieldSpec,
+  budget: number,
+  count = 0,
+): KindUsage => {
+  if (overDepthBudget(spec, count, budget)) return NO_USAGE;
   switch (spec.kind) {
     case "object":
       return spec.fields.reduce(
         (acc, field) =>
-          mergeUsage(acc, collectStaticUsage(field.spec, count + 1)),
+          mergeUsage(acc, collectStaticUsage(field.spec, budget, count + 1)),
         NO_USAGE,
       );
     case "array":
@@ -1355,12 +1412,16 @@ export const collectStaticUsage = (spec: FieldSpec, count = 0): KindUsage => {
 // BoundFieldProps and the Bound components' helper-text wiring, so
 // description-free schemas keep byte-identical output. Mirrors
 // collectStaticUsage's walk (same depth boundary, unions excluded).
-const hasStaticDescriptions = (spec: FieldSpec, count = 0): boolean => {
-  if (overDepthBudget(spec, count)) return false;
+const hasStaticDescriptions = (
+  spec: FieldSpec,
+  budget: number,
+  count = 0,
+): boolean => {
+  if (overDepthBudget(spec, count, budget)) return false;
   switch (spec.kind) {
     case "object":
       return spec.fields.some((field) =>
-        hasStaticDescriptions(field.spec, count + 1),
+        hasStaticDescriptions(field.spec, budget, count + 1),
       );
     case "array":
       return hasStaticDescriptions(spec.item, count + 1);
@@ -1389,22 +1450,28 @@ export type OptionsPropEntry = Readonly<{ name: string; path: string }>;
 // control.
 export const collectOptionsProps = (
   spec: FieldSpec,
+  // Defaulted (unlike the internal walkers) because this is a documented
+  // codegen-api entry point; the CLI and the emitters always pass theirs.
+  budget: number = FORMSTAND_PATH_DEPTH,
   count = 0,
   segments: readonly string[] = [],
 ): readonly OptionsPropEntry[] => {
-  if (overDepthBudget(spec, count)) return [];
+  if (overDepthBudget(spec, count, budget)) return [];
   switch (spec.kind) {
     case "object":
       return spec.fields
         .filter((field) => !isUnaddressable(field.name))
         .flatMap((field) =>
-          collectOptionsProps(field.spec, count + 1, [
+          collectOptionsProps(field.spec, budget, count + 1, [
             ...segments,
             field.name,
           ]),
         );
     case "array":
-      return collectOptionsProps(spec.item, count + 1, [...segments, "*"]);
+      return collectOptionsProps(spec.item, budget, count + 1, [
+        ...segments,
+        "*",
+      ]);
     case "tuple":
     case "union":
       return [];
@@ -1419,15 +1486,19 @@ export const collectOptionsProps = (
 // source of a useVariantField call. Common fields (present in every variant,
 // including every field of a single-variant union) bind with useField, so a
 // union without variant-only fields needs no useVariantField import.
-export const hasVariantFieldUsage = (spec: FieldSpec, count = 0): boolean => {
-  if (overDepthBudget(spec, count)) return false;
+export const hasVariantFieldUsage = (
+  spec: FieldSpec,
+  budget: number,
+  count = 0,
+): boolean => {
+  if (overDepthBudget(spec, count, budget)) return false;
   switch (spec.kind) {
     case "object":
       return spec.fields.some((field) =>
-        hasVariantFieldUsage(field.spec, count + 1),
+        hasVariantFieldUsage(field.spec, budget, count + 1),
       );
     case "array":
-      return hasVariantFieldUsage(spec.item, count + 1);
+      return hasVariantFieldUsage(spec.item, budget, count + 1);
     case "union": {
       const common = unionCommonFieldNames(spec);
       return spec.variants.some((variant) =>
@@ -1553,6 +1624,7 @@ type Backend = Readonly<{
     usage: KindUsage,
     arrays: readonly ArrayEntry[],
     root: ObjectSpec,
+    budget: number,
   ) => readonly string[];
   // Module-level sections between the array decls and the component. Gets
   // total usage (adapters/builders), static-leaf usage (Bound* components),
@@ -1561,6 +1633,7 @@ type Backend = Readonly<{
     usage: KindUsage,
     staticUsage: KindUsage,
     root: ObjectSpec,
+    budget: number,
   ) => readonly string[];
   // One bound control (or a todo fallback) for a scalar field.
   leaf: (
@@ -1661,6 +1734,7 @@ const unionLines = (
   entry: UnionEntry,
   label: string,
   level: number,
+  budget: number,
 ): readonly string[] => {
   const discriminantSpec: FieldSpec = {
     kind: "enum",
@@ -1689,7 +1763,7 @@ const unionLines = (
       // binding collection flattened them.
       const flattened = variant.fields
         .filter((field) => !entry.commonBindingNames.has(field.name))
-        .flatMap((field) => variantLeavesOf(field, entry.baseSegments));
+        .flatMap((field) => variantLeavesOf(field, entry.baseSegments, budget));
       const inner = (lvl: number): readonly string[] =>
         flattened.flatMap((leaf): readonly string[] => {
           switch (leaf.kind) {
@@ -1707,7 +1781,9 @@ const unionLines = (
                   );
             }
             case "depth":
-              return [depthTodoLine(`${entry.path}.${leaf.name}`, ind(lvl))];
+              return [
+                depthTodoLine(`${entry.path}.${leaf.name}`, ind(lvl), budget),
+              ];
             case "unsupported":
               return [
                 `${ind(lvl)}{/* TODO: nested ${leaf.specKind} ${commentText(q(`${entry.path}.${leaf.name}`))} inside a union variant — extract it by hand */}`,
@@ -1749,6 +1825,8 @@ type NestedCtx = Readonly<{
   components: string[][];
   used: Set<string>;
   schemaName: string;
+  // The run's typed-path budget (see EmitFormOptions.pathDepth).
+  budget: number;
 }>;
 
 const fieldLines = (
@@ -1797,8 +1875,8 @@ const fieldLines = (
     const fullPath =
       prefix.text +
       (prefix.dynamic ? templateEscape(field.name) : field.name);
-    if (overDepthBudget(spec, pathSegmentCount(fullPath))) {
-      return [depthTodoLine(fullPath, ind(level))];
+    if (overDepthBudget(spec, pathSegmentCount(fullPath), ctx.budget)) {
+      return [depthTodoLine(fullPath, ind(level), ctx.budget)];
     }
     switch (spec.kind) {
       case "object":
@@ -1882,7 +1960,7 @@ const fieldLines = (
               const shell = inSection ? backend.unionCellShell : undefined;
               const body = (inner: number): readonly string[] => [
                 ...todoComment(spec, inner),
-                ...unionLines(backend, entry, field.label, inner),
+                ...unionLines(backend, entry, field.label, inner, ctx.budget),
               ];
               return shell === undefined
                 ? body(lvl)
@@ -2012,8 +2090,8 @@ const arraySectionLines = (
   const rowBody: readonly string[] =
     entry.item.kind === "object"
       ? fieldLines(backend, entry.item.fields, rowPrefix, level + 3, arrays, unions, ctx)
-      : overDepthBudget(entry.item, pathSegmentCount(rowPath))
-        ? [depthTodoLine(rowPath, ind(level + 3))]
+      : overDepthBudget(entry.item, pathSegmentCount(rowPath), ctx.budget)
+        ? [depthTodoLine(rowPath, ind(level + 3), ctx.budget)]
         : isScalarSpec(entry.item)
           ? backend.leaf(entry.item, pathAttr(rowPrefix, ""), entry.label, level + 3)
           : entry.item.kind === "union"
@@ -2043,9 +2121,10 @@ const arraySectionLines = (
                   // component, exactly like a nested array under an object
                   // row — the outer row's index is its p0.
                   const item = entry.item as Extract<FieldSpec, { kind: "array" }>;
-                  const itemOptionsProps = collectOptionsProps(item.item).map(
-                    (option) => option.name,
-                  );
+                  const itemOptionsProps = collectOptionsProps(
+                    item.item,
+                    ctx.budget,
+                  ).map((option) => option.name);
                   const compName = emitRowsComponent(
                     backend,
                     {
@@ -2111,6 +2190,7 @@ const emitUnionComponent = (
   const { entry: u } = unionEntry(
     { segments, spec: args.spec },
     new Set(["form", ...args.holes]),
+    ctx.budget,
     // Holes count as path segments the stripped naming segments miss.
     pathSegmentCount(args.unionTemplate),
   );
@@ -2126,7 +2206,7 @@ const emitUnionComponent = (
     "  form,",
     ...args.holes.map((hole) => `  ${hole},`),
     `}: Readonly<{ ${[
-      `form: Form<typeof ${ctx.schemaName}>`,
+      `form: ${formType(`typeof ${ctx.schemaName}`, ctx.budget)}`,
       ...args.holes.map((hole) => `${hole}: number`),
     ].join("; ")} }>) => {`,
     `  const ${u.discriminantVar} = useField(form, \`${t}.${templateEscape(args.spec.discriminant)}\`);`,
@@ -2168,7 +2248,7 @@ const emitUnionComponent = (
     ),
     "  return (",
     `${ind(2)}<>`,
-    ...unionLines(backend, u, args.label, 3),
+    ...unionLines(backend, u, args.label, 3, ctx.budget),
     `${ind(2)}</>`,
     "  );",
     "};",
@@ -2197,7 +2277,9 @@ const emitNestedRows = (
   // child component declares them and the reference passes them through from
   // the enclosing scope (the main component's props, or an outer child's own
   // threaded props), so the chain composes to any depth.
-  const itemOptionsProps = collectOptionsProps(item).map((entry) => entry.name);
+  const itemOptionsProps = collectOptionsProps(item, ctx.budget).map(
+    (entry) => entry.name,
+  );
   // The enclosing row's own `index` becomes the next hole (pN) for this child.
   const nextHole = `p${prefix.holes.length}`;
   const listTemplate =
@@ -2295,8 +2377,8 @@ const emitRowsComponent = (
   const rowBody =
     item.kind === "object"
       ? fieldLines(backend, item.fields, childPrefix, 5, arrays, unions, ctx)
-      : overDepthBudget(item, pathSegmentCount(rowPath))
-        ? [depthTodoLine(rowPath, ind(5))]
+      : overDepthBudget(item, pathSegmentCount(rowPath), ctx.budget)
+        ? [depthTodoLine(rowPath, ind(5), ctx.budget)]
         : isScalarSpec(item)
           ? backend.leaf(item, pathAttr(childPrefix, ""), args.label, 5)
           : item.kind === "union"
@@ -2372,7 +2454,7 @@ const emitRowsComponent = (
     ...args.holes.map((hole) => `  ${hole},`),
     ...itemOptionsProps.map((name) => `  ${name},`),
     `}: Readonly<{ ${[
-      "form: Form<typeof " + ctx.schemaName + ">",
+      `form: ${formType(`typeof ${ctx.schemaName}`, ctx.budget)}`,
       ...args.holes.map((hole) => `${hole}: number`),
       ...itemOptionsProps.map((name) => `${name}: readonly string[]`),
     ].join("; ")} }>) => {`,
@@ -2402,6 +2484,7 @@ const scaffoldBlocks = (
   formName: string,
   schemaName: string,
   optionsProps: readonly OptionsPropEntry[],
+  budget: number,
 ): Readonly<{
   beforeComponent: readonly string[];
   componentParams: string;
@@ -2418,7 +2501,7 @@ const scaffoldBlocks = (
         "// blur behind.",
       ]
     : [];
-  const useFormCall = `useForm(${schemaName}, { initialValues, mode: ${q(mode)} })`;
+  const useFormCall = `useForm(${schemaName}, { initialValues, mode: ${q(mode)}${pathDepthOption(budget)} })`;
   const ownerHook = scaffold.formProp
     ? [
         "// The page owns the form: create it with this hook (or an",
@@ -2431,7 +2514,9 @@ const scaffoldBlocks = (
       ]
     : [];
   const propsFields = [
-    ...(scaffold.formProp ? [`  form: Form<typeof ${schemaName}>;`] : []),
+    ...(scaffold.formProp
+      ? [`  form: ${formType(`typeof ${schemaName}`, budget)};`]
+      : []),
     ...(scaffold.live
       ? [
           "  // Fires on every value change (values are replaced immutably,",
@@ -2494,17 +2579,18 @@ const emitForm = (
   { ir, formName, schemaImport, ...rest }: EmitFormOptions,
 ): string => {
   const scaffold = scaffoldOf(rest);
+  const budget = rest.pathDepth ?? FORMSTAND_PATH_DEPTH;
   const root = assertObjectRoot(ir);
-  const usage = collectUsage(root);
-  const staticUsage = collectStaticUsage(root);
-  const arrays = collectArrays(root);
+  const usage = collectUsage(root, budget);
+  const staticUsage = collectStaticUsage(root, budget);
+  const arrays = collectArrays(root, budget);
   const arrayMap: ReadonlyMap<string, ArrayEntry> = new Map(
     arrays.map((entry) => [entry.path, entry]),
   );
   // Options props (config-fields autocomplete overrides) are component
   // parameters: every other derived identifier — union binding vars, nested
   // Rows stems — must steer clear of them, so they seed both used-sets.
-  const optionsProps = collectOptionsProps(root);
+  const optionsProps = collectOptionsProps(root, budget);
   const optionsPropNames = optionsProps.map((entry) => entry.name);
   // Union hook variables must not collide with array hook/type identifiers.
   const arrayIdents = new Set(
@@ -2517,6 +2603,7 @@ const emitForm = (
   const unions = collectUnions(
     root,
     new Set([...arrayIdents, ...optionsPropNames]),
+    budget,
   );
   const unionMap: ReadonlyMap<string, UnionEntry> = new Map(
     unions.map((entry) => [entry.path, entry]),
@@ -2528,6 +2615,7 @@ const emitForm = (
     components: [],
     used: new Set([...arrayIdents, formName, ...optionsPropNames]),
     schemaName: schemaImport.name,
+    budget,
   };
   const bodyLines = fieldLines(
     backend,
@@ -2547,10 +2635,11 @@ const emitForm = (
     formName,
     schemaImport.name,
     optionsProps,
+    budget,
   );
   return [
     "// Generated by formstand-cli — edit freely, this file is yours.",
-    ...backend.header(usage, arrays, root),
+    ...backend.header(usage, arrays, root, budget),
     // Child Rows components take a typed `form` prop (the main component passes
     // its own down); the top-level component gets `form` from useForm — or,
     // under --form-prop, from its own typed prop.
@@ -2562,7 +2651,7 @@ const emitForm = (
     valuesTypeAndInitials(root, schemaImport.name),
     arrayItemDecls(arrays),
     "",
-    ...backend.preamble(usage, staticUsage, root),
+    ...backend.preamble(usage, staticUsage, root, budget),
     ...nestedComponentLines,
     ...blocks.beforeComponent,
     `export const ${formName} = (${blocks.componentParams}) => {`,
@@ -2848,12 +2937,12 @@ const plainBackend = (
       : "";
 
   return {
-  header: (usage, arrays, root) => {
-    const unionUsage = collectUnionUsage(root);
+  header: (usage, arrays, root, budget) => {
+    const unionUsage = collectUnionUsage(root, budget);
     // Leaf COMPONENTS are gated on static-leaf usage only: a union renders its
     // controls from hoisted hooks via the raw prop builders, never via these
     // components, so a union-only kind must not pull the component in.
-    const staticUsage = collectStaticUsage(root);
+    const staticUsage = collectStaticUsage(root, budget);
     // The prop builders the union controls call (discriminant select +
     // common/variant field kinds), imported only when a union renders.
     const builderImports = usage.union
@@ -2882,7 +2971,7 @@ const plainBackend = (
       ...(usage.union || staticUsage.autocomplete || staticUsage.textarea
         ? ["useField"]
         : []),
-      ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
+      ...(hasVariantFieldUsage(root, budget) ? ["useVariantField"] : []),
       "useForm",
       ...(scaffold.live ? [] : ["useIsSubmitting"]),
     ];
@@ -3405,17 +3494,18 @@ const kitFormstandImportLines = (
   arrays: readonly ArrayEntry[],
   root: ObjectSpec,
   scaffold: ScaffoldOptions,
+  budget: number,
 ): readonly string[] => {
   const hasLeaf = hasLeafUsage(usage);
   // FieldFormApi is referenced only by the Bound* components' props type:
   // union controls render raw kit elements from hoisted hooks, so static-leaf
   // usage gates it.
-  const hasStaticLeaf = hasLeafUsage(collectStaticUsage(root));
+  const hasStaticLeaf = hasLeafUsage(collectStaticUsage(root, budget));
   const values = [
     ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
     ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
     ...(hasLeaf ? ["useField"] : []),
-    ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
+    ...(hasVariantFieldUsage(root, budget) ? ["useVariantField"] : []),
     ...(arrays.length > 0 ? ["useFieldArray"] : []),
     "useForm",
     ...(scaffold.live ? [] : ["useIsSubmitting"]),
@@ -4048,7 +4138,7 @@ const muiBackend = (
   const bodyDelta = visual.sections === "flat" ? 0 : cols === 1 ? 1 : 2;
 
   return {
-  header: (usage, arrays, root) => {
+  header: (usage, arrays, root, budget) => {
     const hasSection = arrays.length > 0 || anyAddressableSectionField(root);
     const muiImports = [
       ...(hasSection && visual.sections === "collapsible"
@@ -4084,13 +4174,13 @@ const muiBackend = (
       "import {",
       ...muiImports.map((name) => `  ${name},`),
       `} from "@mui/material";`,
-      ...kitFormstandImportLines(usage, arrays, root, scaffold),
+      ...kitFormstandImportLines(usage, arrays, root, scaffold, budget),
       `import { z } from "zod";`,
     ];
   },
-  preamble: (usage, staticUsage, root) => [
+  preamble: (usage, staticUsage, root, budget) => [
     muiAdapterSection(usage, "", version),
-    muiBoundComponents(staticUsage, hasStaticDescriptions(root)),
+    muiBoundComponents(staticUsage, hasStaticDescriptions(root, budget)),
     "",
   ],
   leaf: muiLeaf,
@@ -4509,7 +4599,7 @@ const shadcnBackend = (
   const bodyDelta = visual.sections === "collapsible" ? 1 : 0;
 
   return {
-  header: (usage, arrays, root) => {
+  header: (usage, arrays, root, budget) => {
     const hasLeaf = hasLeafUsage(usage);
     return [
       // shadcn's number binding stays the stateless type="number" input, so
@@ -4549,13 +4639,13 @@ const shadcnBackend = (
       ...(usage.textarea
         ? [`import { Textarea } from "@/components/ui/textarea";`]
         : []),
-      ...kitFormstandImportLines(usage, arrays, root, scaffold),
+      ...kitFormstandImportLines(usage, arrays, root, scaffold, budget),
       `import { z } from "zod";`,
     ];
   },
-  preamble: (usage, staticUsage, root) => [
+  preamble: (usage, staticUsage, root, budget) => [
     shadcnAdapterSection(usage),
-    shadcnBoundComponents(staticUsage, hasStaticDescriptions(root)),
+    shadcnBoundComponents(staticUsage, hasStaticDescriptions(root, budget)),
     "",
   ],
   leaf: shadcnLeaf,
@@ -5071,7 +5161,7 @@ const chakraBackend = (
     visual.sections === "flat" ? 0 : visual.sections === "panel" ? 1 : 3;
 
   return {
-  header: (usage, arrays, root) => {
+  header: (usage, arrays, root, budget) => {
     const hasSection = arrays.length > 0 || anyAddressableSectionField(root);
     const chakraImports = [
       ...(hasSection && visual.sections === "collapsible" ? ["Accordion"] : []),
@@ -5117,13 +5207,13 @@ const chakraBackend = (
       "import {",
       ...chakraImports.map((name) => `  ${name},`),
       `} from "@chakra-ui/react";`,
-      ...kitFormstandImportLines(usage, arrays, root, scaffold),
+      ...kitFormstandImportLines(usage, arrays, root, scaffold, budget),
       `import { z } from "zod";`,
     ];
   },
-  preamble: (usage, staticUsage, root) => [
+  preamble: (usage, staticUsage, root, budget) => [
     chakraAdapterSection(usage),
-    chakraBoundComponents(staticUsage, hasStaticDescriptions(root)),
+    chakraBoundComponents(staticUsage, hasStaticDescriptions(root, budget)),
     "",
   ],
   leaf: chakraLeaf,
@@ -5569,7 +5659,7 @@ const mantineBackend = (
     visual.sections === "flat" ? 0 : visual.sections === "panel" ? 1 : 3;
 
   return {
-  header: (usage, arrays, root) => {
+  header: (usage, arrays, root, budget) => {
     const hasSection = arrays.length > 0 || anyAddressableSectionField(root);
     const mantineImports = [
       ...(hasSection && visual.sections === "collapsible" ? ["Accordion"] : []),
@@ -5607,13 +5697,13 @@ const mantineBackend = (
       "import {",
       ...mantineImports.map((name) => `  ${name},`),
       `} from "@mantine/core";`,
-      ...kitFormstandImportLines(usage, arrays, root, scaffold),
+      ...kitFormstandImportLines(usage, arrays, root, scaffold, budget),
       `import { z } from "zod";`,
     ];
   },
-  preamble: (usage, staticUsage, root) => [
+  preamble: (usage, staticUsage, root, budget) => [
     mantineAdapterSection(usage),
-    mantineBoundComponents(staticUsage, hasStaticDescriptions(root)),
+    mantineBoundComponents(staticUsage, hasStaticDescriptions(root, budget)),
     "",
   ],
   leaf: mantineLeaf,
@@ -6208,7 +6298,7 @@ const antdBackend = (
     visual.sections === "flat" ? 0 : visual.sections === "panel" ? 1 : 4;
 
   return {
-  header: (usage, arrays, root) => {
+  header: (usage, arrays, root, budget) => {
     const hasSection = arrays.length > 0 || anyAddressableSectionField(root);
     const needsError =
       usage.string ||
@@ -6251,13 +6341,13 @@ const antdBackend = (
       ...antdImports.map((name) => `  ${name},`),
       ...(usage.boolean ? ["  type CheckboxChangeEvent,"] : []),
       `} from "antd";`,
-      ...kitFormstandImportLines(usage, arrays, root, scaffold),
+      ...kitFormstandImportLines(usage, arrays, root, scaffold, budget),
       `import { z } from "zod";`,
     ];
   },
-  preamble: (usage, staticUsage, root) => [
+  preamble: (usage, staticUsage, root, budget) => [
     antdAdapterSection(usage),
-    antdBoundComponents(staticUsage, hasStaticDescriptions(root)),
+    antdBoundComponents(staticUsage, hasStaticDescriptions(root, budget)),
     "",
   ],
   leaf: antdLeaf,
@@ -6684,8 +6774,8 @@ const templateBackend = (
   const plain = plainBackend(visual, scaffold);
   return {
     ...plain,
-    header: (usage, arrays, root) => {
-      const staticUsage = collectStaticUsage(root);
+    header: (usage, arrays, root, budget) => {
+      const staticUsage = collectStaticUsage(root, budget);
       const hasStaticLeaf = hasLeafUsage(staticUsage);
       // Every rendered kind — a static wrapper OR a union control — binds
       // through the plain prop builder, so the builder imports track TOTAL
@@ -6707,7 +6797,7 @@ const templateBackend = (
         // useField backs both the Bound wrappers and the union discriminant/
         // common-field hooks.
         ...(hasStaticLeaf || usage.union ? ["useField"] : []),
-        ...(hasVariantFieldUsage(root) ? ["useVariantField"] : []),
+        ...(hasVariantFieldUsage(root, budget) ? ["useVariantField"] : []),
         "useForm",
         ...(scaffold.live ? [] : ["useIsSubmitting"]),
       ];
@@ -6723,8 +6813,12 @@ const templateBackend = (
         `} from "formstand";`,
       ];
     },
-    preamble: (_usage, staticUsage, root) => [
-      templateBoundComponents(template, staticUsage, hasStaticDescriptions(root)),
+    preamble: (_usage, staticUsage, root, budget) => [
+      templateBoundComponents(
+        template,
+        staticUsage,
+        hasStaticDescriptions(root, budget),
+      ),
       "",
     ],
     leaf: boundLeaf("BoundBooleanField", describedLeafKinds("plain")),

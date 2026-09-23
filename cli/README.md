@@ -66,6 +66,7 @@ exists and `--force` isn't set, nothing is written.
 | `--out <file>` | write here instead of stdout; names the folder under `--layout module` |
 | `--schema-out <file>` | type and `.json` modes: where the generated schema goes |
 | `--max-depth <n>` | nesting budget before a level degrades to a string plus a TODO |
+| `--path-depth <n>` | typed-path budget in segments (default `9`); emitted as the form's `pathDepth` so the library matches |
 | `--config <file>` | config file, default `formstand.config.{ts,mts,js,mjs}` |
 | `--template <file>` | a custom template for a kit formstand doesn't ship; `--layout single` only |
 | `--watch` | regenerate whenever the input changes; requires `--out` |

@@ -1,6 +1,6 @@
 import { pascalCase } from "./casing";
 import { isUnaddressable } from "./codegen";
-import { isScalarSpec, overDepthBudget } from "./depth";
+import { FORMSTAND_PATH_DEPTH, isScalarSpec, overDepthBudget } from "./depth";
 import type { FieldSpec, NamedField } from "./ir";
 
 // Per-field overrides — the formstand.config.ts `fields` block:
@@ -221,7 +221,10 @@ const matchPath = (
 // names (not addressable — the emitters skip the binding), walker-degraded
 // leaves, and paths past the FieldPath depth budget. A suggestion the
 // validator then errors on would be worse than no suggestion.
-export const overridablePaths = (root: FieldSpec): readonly string[] => {
+export const overridablePaths = (
+  root: FieldSpec,
+  budget: number,
+): readonly string[] => {
   const walk = (
     spec: FieldSpec,
     segments: readonly string[],
@@ -239,7 +242,7 @@ export const overridablePaths = (root: FieldSpec): readonly string[] => {
       default:
         return segments.length === 0 ||
           spec.todo !== undefined ||
-          overDepthBudget(spec, segments.length)
+          overDepthBudget(spec, segments.length, budget)
           ? []
           : [segments.join(".")];
     }
@@ -334,11 +337,14 @@ export const applyFieldOverrides = (
   overrides: FieldOverrides | undefined,
   layout: "single" | "module" = "single",
   columns = 1,
+  // The run's typed-path budget (--path-depth); a documented codegen-api
+  // entry point, so it defaults like the layout and columns do.
+  budget: number = FORMSTAND_PATH_DEPTH,
 ): FieldSpec => {
   if (overrides === undefined || Object.keys(overrides).length === 0) {
     return ir;
   }
-  const candidates = overridablePaths(ir);
+  const candidates = overridablePaths(ir, budget);
   const validated = Object.entries(overrides).map(
     ([path, config]): Readonly<{
       path: string;
@@ -403,11 +409,11 @@ export const applyFieldOverrides = (
               ),
             ]
           : []),
-        ...(overDepthBudget(spec, match.segments.length)
+        ...(overDepthBudget(spec, match.segments.length, budget)
           ? [
               overrideError(
                 path,
-                `this path exceeds formstand's typed FieldPath depth — the emitters degrade it to a TODO, so an override cannot apply`,
+                `this path exceeds formstand's typed FieldPath depth (${budget}) — the emitters degrade it to a TODO, so an override cannot apply (raise --path-depth or bind it by hand)`,
               ),
             ]
           : []),

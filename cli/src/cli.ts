@@ -27,6 +27,7 @@ import {
   type VisualOptions,
   type SchemaImport,
   FORMSTAND_PATH_DEPTH,
+  FORMSTAND_PATH_DEPTH_MAX,
   depthWarningFrontier,
   droppedDefaultFieldPaths,
   emitChakraForm,
@@ -46,7 +47,7 @@ import { collectTestPlan } from "./testCases";
 import { emitComponentSpec, emitPlaywrightSpec } from "./testsEmit";
 import { fromJsonSchema } from "./fromJsonSchema";
 import { fromType } from "./fromType";
-import { DEFAULT_MAX_DEPTH, fromZod, isZodSchema } from "./fromZod";
+import { fromZod, isZodSchema } from "./fromZod";
 import type { FieldSpec } from "./ir";
 import {
   type EmitModuleOptions,
@@ -115,9 +116,12 @@ Options:
   --columns <1|2|3>   evenly spaced field columns inside each section
                       (default: 1); multi-row content spans the full row
   --max-depth <n>     schema/type nesting budget before a level degrades to a
-                      string + TODO (default: derived from the FieldPath
-                      budget, currently 11; also bounds nested-array row
-                      extraction)
+                      string + TODO (default: the path budget + 2, so 11 at
+                      default flags; also bounds nested-array row extraction)
+  --path-depth <n>    typed-path budget in segments (default 9, formstand's
+                      own): bindings past it degrade to a TODO. Raising it
+                      emits pathDepth: n into the form's options so the
+                      library's FieldPath union widens to match (1-25)
   --name <MyForm>     component name (default: derived from the schema/type)
   --out <file>        write the component here instead of stdout
   --schema-out <file> (--type / .json input) where to write the generated zod
@@ -217,6 +221,10 @@ type CliOptions = Readonly<{
   // structured per-path data belongs in formstand.config.ts).
   fields?: FieldOverrides;
   maxDepth?: number;
+  // --path-depth: the typed-path budget in segments (default 9, the
+  // library's). Emitted into the form's `pathDepth` option; also the base
+  // the walker budget derives from when --max-depth is absent.
+  pathDepth?: number;
   watch: boolean;
   force: boolean;
   // --tests: which spec files to emit beside the component (vitest OR
@@ -249,6 +257,10 @@ export type ParsedCliOptions = Readonly<{
   config?: string;
   template?: string;
   maxDepth?: number;
+  // --path-depth: the typed-path budget in segments (default 9, the
+  // library's). Emitted into the form's `pathDepth` option; also the base
+  // the walker budget derives from when --max-depth is absent.
+  pathDepth?: number;
   watch: boolean;
   force: boolean;
   tests?: readonly ("vitest" | "jest" | "playwright")[];
@@ -277,6 +289,10 @@ type PartialOptions = Readonly<{
   config?: string;
   template?: string;
   maxDepth?: number;
+  // --path-depth: the typed-path budget in segments (default 9, the
+  // library's). Emitted into the form's `pathDepth` option; also the base
+  // the walker budget derives from when --max-depth is absent.
+  pathDepth?: number;
   watch: boolean;
   force: boolean;
 }>;
@@ -399,6 +415,23 @@ const parseRest = (
       };
     }
     return parseRest(after, { ...acc, maxDepth });
+  }
+  if (head === "--path-depth") {
+    const [value, ...after] = rest;
+    if (value === undefined) {
+      return { kind: "error", message: `missing value for ${head}` };
+    }
+    // 1..25: createForm's `pathDepth` option is constrained to the
+    // library's PathDepth union (0-25); 0 would bind nothing, so it is
+    // refused here rather than emitting a form with no addressable field.
+    const pathDepth = /^[1-9][0-9]*$/.test(value) ? Number(value) : undefined;
+    if (pathDepth === undefined || pathDepth > FORMSTAND_PATH_DEPTH_MAX) {
+      return {
+        kind: "error",
+        message: `--path-depth must be an integer from 1 to ${FORMSTAND_PATH_DEPTH_MAX}, got "${value}"`,
+      };
+    }
+    return parseRest(after, { ...acc, pathDepth });
   }
   const key = VALUE_FLAGS[head];
   if (key !== undefined) {
@@ -607,6 +640,26 @@ const scaffoldFlagsOf = (
   formProp: options.formProp,
 });
 
+// The run's typed-path budget: --path-depth, else the library default.
+const pathDepthOf = (options: CliOptions): number =>
+  options.pathDepth ?? FORMSTAND_PATH_DEPTH;
+
+// The same axis in EmitFormOptions shape — spread into every emit call so
+// a run without the flag leaves the option absent (exactOptionalPropertyTypes
+// forbids an explicit undefined) and default-flag output stays identical.
+const pathDepthFlagOf = (
+  options: CliOptions,
+): Readonly<Pick<EmitFormOptions, "pathDepth">> =>
+  options.pathDepth === undefined ? {} : { pathDepth: options.pathDepth };
+
+// The walker's nesting budget: --max-depth, else derived from the PATH
+// budget (+2, so a leaf one past the path budget is still walked
+// truthfully and degrades through the path budget, not by truncation).
+// Derived from the run's path budget, not the library constant, so
+// --path-depth 12 alone walks deep enough to bind 12-segment paths.
+const walkerBudgetOf = (options: CliOptions): number =>
+  options.maxDepth ?? pathDepthOf(options) + 2;
+
 // The generated-tests emission for one run (design:
 // cli/design/generated-tests.md): the component spec (vitest or jest),
 // the browser spec when the config carries a baseURL, and the honest
@@ -686,9 +739,10 @@ const buildTests = (
           skipRender: skipRenderReason !== undefined,
           ...(skipRenderReason !== undefined ? { skipRenderReason } : {}),
           asyncSchema: args.asyncSchema,
-          optionsProps: collectOptionsProps(args.ir).map(
+          optionsProps: collectOptionsProps(args.ir, pathDepthOf(options)).map(
             (entry) => entry.name,
           ),
+          ...pathDepthFlagOf(options),
         });
   const baseURL = options.testsConfig?.playwright?.baseURL;
   const e2e = ((): string | undefined => {
@@ -942,6 +996,7 @@ const warnDegradedBindings = (
   ir: FieldSpec,
   layout: Layout,
   walkerBudget: number,
+  pathBudget: number,
 ): void => {
   unaddressableFieldPaths(ir).forEach((fieldPath) => {
     stderr(
@@ -952,11 +1007,13 @@ const warnDegradedBindings = (
   // mirror each one on stderr so the degradation is visible at generation
   // time ("*" marks an array row index). The two layouts stop descending at
   // different frontiers, so the walk is told which one is emitting.
-  overBudgetFieldPaths(ir, depthWarningFrontier(layout)).forEach((fieldPath) => {
-    stderr(
-      `warning: path "${fieldPath}" exceeds formstand's typed FieldPath depth (${FORMSTAND_PATH_DEPTH}); emitted a TODO — bind it by hand`,
-    );
-  });
+  overBudgetFieldPaths(ir, depthWarningFrontier(layout), pathBudget).forEach(
+    (fieldPath) => {
+      stderr(
+        `warning: path "${fieldPath}" exceeds formstand's typed FieldPath depth (${pathBudget}); emitted a TODO — raise --path-depth or bind it by hand`,
+      );
+    },
+  );
   // Leaves the WALKER truncated (past the nesting budget) degrade to
   // string-kind placeholders whose kind may be wrong — the initialValues
   // cast keeps the file compiling, but the field needs hand attention.
@@ -996,12 +1053,18 @@ const runZodMode = async (
   // a span with no grid to act on) throws here — main() reports it and
   // exits 1 with nothing written.
   const ir: FieldSpec = applyFieldOverrides(
-    fromZod(pick.schema, options.maxDepth),
+    fromZod(pick.schema, walkerBudgetOf(options)),
     options.fields,
     options.layout,
     options.columns,
+    pathDepthOf(options),
   );
-  warnDegradedBindings(ir, options.layout, options.maxDepth ?? DEFAULT_MAX_DEPTH);
+  warnDegradedBindings(
+    ir,
+    options.layout,
+    walkerBudgetOf(options),
+    pathDepthOf(options),
+  );
   const formName = options.name ?? deriveFormName(pick.exportName);
   const fromDir =
     options.out !== undefined
@@ -1036,6 +1099,7 @@ const runZodMode = async (
           ...moduleUiOf(options.ui),
           visual: visualOf(options),
           ...scaffoldFlagsOf(options),
+          ...pathDepthFlagOf(options),
         }),
         ...tests.files.map((file) => ({
           path: file.name,
@@ -1049,7 +1113,14 @@ const runZodMode = async (
   }
   const code = emitComponent(
     options.ui,
-    { ir, formName, schemaImport, visual: visualOf(options), ...scaffoldFlagsOf(options) },
+    {
+      ir,
+      formName,
+      schemaImport,
+      visual: visualOf(options),
+      ...scaffoldFlagsOf(options),
+      ...pathDepthFlagOf(options),
+    },
     template,
   );
   if (options.out !== undefined) {
@@ -1095,8 +1166,14 @@ const runGeneratedSchemaMode = (
     options.fields,
     options.layout,
     options.columns,
+    pathDepthOf(options),
   );
-  warnDegradedBindings(ir, options.layout, options.maxDepth ?? DEFAULT_MAX_DEPTH);
+  warnDegradedBindings(
+    ir,
+    options.layout,
+    walkerBudgetOf(options),
+    pathDepthOf(options),
+  );
   const schemaName = `${camelCase(baseName)}Schema`;
   const formName = options.name ?? deriveFormName(baseName);
   const schemaSource = emitZodSchema(ir, schemaName);
@@ -1126,6 +1203,7 @@ const runGeneratedSchemaMode = (
           ...moduleUiOf(options.ui),
           visual: visualOf(options),
           ...scaffoldFlagsOf(options),
+          ...pathDepthFlagOf(options),
         }),
         ...tests.files.map((file) => ({
           path: file.name,
@@ -1150,7 +1228,14 @@ const runGeneratedSchemaMode = (
     };
     const code = emitComponent(
       options.ui,
-      { ir, formName, schemaImport, visual: visualOf(options), ...scaffoldFlagsOf(options) },
+      {
+        ir,
+        formName,
+        schemaImport,
+        visual: visualOf(options),
+        ...scaffoldFlagsOf(options),
+        ...pathDepthFlagOf(options),
+      },
       template,
     );
     const tests = buildTests(options, {
@@ -1189,7 +1274,14 @@ const runGeneratedSchemaMode = (
     };
     const code = emitComponent(
       options.ui,
-      { ir, formName, schemaImport, visual: visualOf(options), ...scaffoldFlagsOf(options) },
+      {
+        ir,
+        formName,
+        schemaImport,
+        visual: visualOf(options),
+        ...scaffoldFlagsOf(options),
+        ...pathDepthFlagOf(options),
+      },
       template,
     );
     assertWritable([schemaOutAbs], options.force);
@@ -1205,7 +1297,14 @@ const runGeneratedSchemaMode = (
   };
   const code = emitComponent(
     options.ui,
-    { ir, formName, schemaImport, visual: visualOf(options), ...scaffoldFlagsOf(options) },
+    {
+      ir,
+      formName,
+      schemaImport,
+      visual: visualOf(options),
+      ...scaffoldFlagsOf(options),
+      ...pathDepthFlagOf(options),
+    },
     template,
   );
   stdout(
@@ -1225,7 +1324,7 @@ const runTypeMode = (options: CliOptions, template?: Template): number => {
   const { ir, typeName } = fromType(
     options.input,
     options.typeName,
-    options.maxDepth,
+    walkerBudgetOf(options),
   );
   return runGeneratedSchemaMode(options, ir, typeName, template);
 };
@@ -1250,7 +1349,7 @@ const runJsonSchemaMode = (
   );
   const { ir, schemaName } = fromJsonSchema(document, {
     select: options.schema,
-    maxDepth: options.maxDepth,
+    maxDepth: walkerBudgetOf(options),
     source: options.input,
     fallbackName: fallbackName.length === 0 ? "Generated" : fallbackName,
   });

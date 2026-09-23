@@ -1,5 +1,26 @@
 # Changelog
 
+## formstand-cli Unreleased
+
+### Added
+
+- **`--path-depth N`.** The typed-path budget as a per-run value (1 to
+  25, default 9, formstand's own). Every boundary the generator draws
+  moves with it, in both layouts: which leaves bind and which degrade
+  to a TODO, the stderr warnings, the config override validator, and
+  the generated tests. The emitted form carries the same number as
+  `createForm`'s `pathDepth` option (`useForm(schema, { ..., pathDepth:
+  12 })`, or in the module layout's `hooks.ts`), every typed `form` prop
+  reads `Form<typeof schema, 12>`, and the generated spec's own
+  `createForm` says it too, so the library's `FieldPath` union and the
+  generator agree. Without `--max-depth` the walker budget derives from
+  the new value (`N + 2`), so the flag alone walks deep enough. At 9 the
+  flag is a no-op and the output is byte-identical. The depth-warning
+  text now names the flag. Internally the budget is threaded as a value
+  through every emitter (`EmitFormOptions.pathDepth`,
+  `applyFieldOverrides`'s fifth argument, `collectOptionsProps`'s second),
+  and `overDepthBudget` / `overBudgetFieldPaths` take it explicitly.
+
 ## formstand-cli 0.21.0 — 2026-09-23
 
 ### Added

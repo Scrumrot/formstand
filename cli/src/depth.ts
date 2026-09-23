@@ -10,10 +10,18 @@ import type { FieldSpec } from "./ir";
 // spending one D per dot-separated segment. A binding whose full path has
 // more segments falls outside the union and fails typecheck (TS2820), so
 // the emitters degrade it to a TODO comment instead — exactly like other
-// unsupported shapes. Generated forms don't set createForm's `pathDepth`
-// option, so the library default is the budget here; a future --path-depth
-// flag would pair with it.
+// unsupported shapes. This is the DEFAULT budget: --path-depth widens (or
+// narrows) it per run, and the emitted form then sets createForm's
+// `pathDepth` option to the same number so the library's union and the
+// generator's boundary agree. Every emitter takes the budget as a value
+// rather than reading this constant, so one run can't mix the two.
 export const FORMSTAND_PATH_DEPTH = 9;
+
+// The widest budget the library accepts: createForm's `pathDepth` is
+// constrained to the `PathDepth` union (0-25, src/core/fieldPath.ts's Prev
+// table). The CLI refuses anything past it up front rather than emitting a
+// form that fails typecheck on its own options object.
+export const FORMSTAND_PATH_DEPTH_MAX = 25;
 
 // The scalar (leaf-control) kinds — everything that binds one control at its
 // own path, as opposed to the containers (object/array/union/tuple) that
@@ -31,10 +39,14 @@ export const isScalarSpec = (spec: FieldSpec): boolean =>
 // discriminant / positional indices), so it needs headroom BELOW the budget.
 // Every depth comparison in the emitters routes through here, so the two
 // layouts and the CLI warnings cannot drift on the boundary.
-export const overDepthBudget = (spec: FieldSpec, segments: number): boolean =>
+export const overDepthBudget = (
+  spec: FieldSpec,
+  segments: number,
+  budget: number,
+): boolean =>
   isScalarSpec(spec) || spec.kind === "array"
-    ? segments > FORMSTAND_PATH_DEPTH
-    : segments >= FORMSTAND_PATH_DEPTH;
+    ? segments > budget
+    : segments >= budget;
 
 // The EXACT todo text both walkers (fromZod/fromType) stamp on a node the
 // nesting budget truncated — a recognizable marker, not just prose, so the

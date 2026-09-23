@@ -1,5 +1,10 @@
 import type { SchemaImport } from "./codegen";
-import { emitInitialValues, blankNeedsCast } from "./codegen";
+import {
+  FORMSTAND_PATH_DEPTH,
+  blankNeedsCast,
+  emitInitialValues,
+  pathDepthOption,
+} from "./codegen";
 import type { FieldSpec } from "./ir";
 import type { GeneratedTestPlan } from "./testCases";
 
@@ -37,6 +42,10 @@ export type ComponentSpecOptions = Readonly<{
   // Options-prop overrides the component requires (each becomes an empty
   // readonly list in the render).
   optionsProps: readonly string[];
+  // --path-depth: the spec's own createForm must widen its typed paths the
+  // same way the component's form does, or a fill at a deep path fails
+  // typecheck in the spec alone. Absent = the library default.
+  pathDepth?: number;
 }>;
 
 const HEADER =
@@ -247,7 +256,7 @@ export const emitComponentSpec = (
     "",
     `const validValues = ${plan.validValues} as unknown as FormValues;`,
     "",
-    `const makeForm = () => createForm(${schemaName}, { initialValues: blankValues });`,
+    `const makeForm = () => createForm(${schemaName}, { initialValues: blankValues${pathDepthOption(options.pathDepth ?? FORMSTAND_PATH_DEPTH)} });`,
     "",
     `describe(${q(`${formName} — validation (store-level)`)}, () => {`,
     ...storeCases,
