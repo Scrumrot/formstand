@@ -77,3 +77,63 @@ describe("config file", () => {
     expect(await main([zodFixture, "--watch"])).toBe(1);
   });
 });
+
+// The tests block (TestsConfig): runners is the --tests default, and the
+// render wrapper and browser base URL have no flag spelling at all, so a
+// config that is read but not forwarded silently loses all three. This
+// run passes no --tests flag and expects every block member to land.
+describe("config tests block", () => {
+  const writeSchema = (dir: string): string => {
+    const file = path.join(dir, "orderSchema.ts");
+    fs.writeFileSync(
+      file,
+      `import { z } from "zod";\nexport const orderSchema = z.object({ email: z.email(), quantity: z.number() });\n`,
+      "utf8",
+    );
+    return file;
+  };
+
+  it("runners, renderWrapper, and playwright.baseURL all reach the emitted specs", async () => {
+    const dir = freshTmpDir("config-tests-block");
+    const input = writeSchema(dir);
+    const cfg = writeConfig(
+      dir,
+      [
+        "export default {",
+        '  ui: "mui",',
+        "  tests: {",
+        '    runners: ["vitest", "playwright"],',
+        '    renderWrapper: "./testWrapper",',
+        '    playwright: { baseURL: "http://localhost:5173", route: "/orders/new" },',
+        "  },",
+        "};",
+        "",
+      ].join("\n"),
+    );
+    const out = path.join(dir, "OrderForm.tsx");
+    expect(await main([input, "--config", cfg, "--out", out])).toBe(0);
+    // runners stood in for the absent --tests flag.
+    const spec = fs.readFileSync(path.join(dir, "OrderForm.test.tsx"), "utf8");
+    // Kit output with a configured wrapper renders through it instead of
+    // degrading its render cases to it.skip.
+    expect(spec).toContain('import { RenderWrapper } from "./testWrapper";');
+    expect(spec).toContain("{ wrapper: RenderWrapper }");
+    expect(spec).not.toContain("it.skip(");
+    // The browser spec exists only because the config carried a baseURL.
+    const e2e = fs.readFileSync(path.join(dir, "OrderForm.e2e.ts"), "utf8");
+    expect(e2e).toContain('test.use({ baseURL: "http://localhost:5173" });');
+    expect(e2e).toContain('await page.goto("/orders/new");');
+  });
+
+  it("an unknown runner in the config fails as loudly as on the flag", async () => {
+    const dir = freshTmpDir("config-tests-bad-runner");
+    const input = writeSchema(dir);
+    const cfg = writeConfig(
+      dir,
+      `export default { tests: { runners: ["mocha"] } };\n`,
+    );
+    expect(
+      await main([input, "--config", cfg, "--out", path.join(dir, "F.tsx")]),
+    ).toBe(1);
+  });
+});

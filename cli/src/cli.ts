@@ -504,14 +504,24 @@ const parseConfig = (raw: unknown, from: string): LoadedConfig => {
     "formProp",
     "template",
     "fields",
+    "tests",
   ]);
   Object.keys(record)
     .filter((key) => !known.has(key))
     .forEach((key) => {
       stderr(`note: ${from}: ignoring unknown config key "${key}"`);
     });
-  const { ui, layout, sections, columns, live, formProp, template, fields } =
-    record;
+  const {
+    ui,
+    layout,
+    sections,
+    columns,
+    live,
+    formProp,
+    template,
+    fields,
+    tests,
+  } = record;
   const uiTarget =
     ui === undefined
       ? undefined
@@ -555,6 +565,12 @@ const parseConfig = (raw: unknown, from: string): LoadedConfig => {
   // validated against the walked schema later, in applyFieldOverrides.
   const fieldOverrides =
     fields === undefined ? undefined : parseFieldOverrides(fields, from);
+  // The tests block used to be dropped here (not in the known set, not
+  // destructured), so a configured renderWrapper or baseURL never reached
+  // buildTests and --tests had no config default. Same loud shape checks as
+  // the other keys: a typo'd runner fails like a typo'd --tests value.
+  const testsConfig =
+    tests === undefined ? undefined : parseTestsConfig(tests, from);
   return {
     ...(uiTarget !== undefined ? { ui: uiTarget.target } : {}),
     ...(layout !== undefined ? { layout: layout as Layout } : {}),
@@ -569,6 +585,74 @@ const parseConfig = (raw: unknown, from: string): LoadedConfig => {
       ? { template: path.resolve(path.dirname(from), template) }
       : {}),
     ...(fieldOverrides !== undefined ? { fields: fieldOverrides } : {}),
+    ...(testsConfig !== undefined ? { tests: testsConfig } : {}),
+  };
+};
+
+const TEST_RUNNERS = ["vitest", "jest", "playwright"] as const;
+
+type TestRunnerName = (typeof TEST_RUNNERS)[number];
+
+const isTestRunner = (value: unknown): value is TestRunnerName =>
+  typeof value === "string" &&
+  (TEST_RUNNERS as readonly string[]).includes(value);
+
+// The config's tests block, shape-checked against TestsConfig (config.ts):
+// runners is a subset of the --tests spellings, renderWrapper an import
+// specifier, playwright a { baseURL, route? } record. Loud on every miss,
+// because a silently ignored baseURL is exactly the bug this replaces.
+const parseTestsConfig = (raw: unknown, from: string): TestsConfig => {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new Error(`${from}: tests must be an object`);
+  }
+  const record = raw as Readonly<Record<string, unknown>>;
+  const { runners, renderWrapper, playwright } = record;
+  if (
+    runners !== undefined &&
+    (!Array.isArray(runners) || !runners.every(isTestRunner))
+  ) {
+    throw new Error(
+      `${from}: tests.runners must be an array of ${TEST_RUNNERS.join(", ")}`,
+    );
+  }
+  if (renderWrapper !== undefined && typeof renderWrapper !== "string") {
+    throw new Error(
+      `${from}: tests.renderWrapper must be an import specifier string`,
+    );
+  }
+  if (
+    playwright !== undefined &&
+    (typeof playwright !== "object" ||
+      playwright === null ||
+      Array.isArray(playwright))
+  ) {
+    throw new Error(`${from}: tests.playwright must be an object`);
+  }
+  const pw =
+    playwright === undefined
+      ? undefined
+      : (playwright as Readonly<Record<string, unknown>>);
+  if (pw !== undefined && pw["baseURL"] !== undefined && typeof pw["baseURL"] !== "string") {
+    throw new Error(`${from}: tests.playwright.baseURL must be a string`);
+  }
+  if (pw !== undefined && pw["route"] !== undefined && typeof pw["route"] !== "string") {
+    throw new Error(`${from}: tests.playwright.route must be a string`);
+  }
+  const baseURL = pw?.["baseURL"];
+  const route = pw?.["route"];
+  return {
+    ...(Array.isArray(runners)
+      ? { runners: [...new Set(runners.filter(isTestRunner))] }
+      : {}),
+    ...(typeof renderWrapper === "string" ? { renderWrapper } : {}),
+    ...(pw !== undefined
+      ? {
+          playwright: {
+            ...(typeof baseURL === "string" ? { baseURL } : {}),
+            ...(typeof route === "string" ? { route } : {}),
+          },
+        }
+      : {}),
   };
 };
 
