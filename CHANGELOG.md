@@ -60,6 +60,32 @@
   working as an alias; it collided with `form.restore(snapshot)` and with
   the former `restore()` method.
 
+### Docs
+
+- Every em dash is gone from the documentation pages and the playground
+  sources (comments included, since they show in the View code panel).
+- API pages match the shipped surface: `useFields`, `useIsValidating`,
+  and `usePersistForm` rows; `firstError` on `UseFieldReturn`; `path`,
+  `firstError`, `setError`, `clearError` on `UseFieldArrayReturn`;
+  `addErrors`, `SubmitOptions`, and the `devtools` option on the API
+  index; the missing exported types and the `formstand/testing` subpath
+  on the utilities page.
+- The ssr.md provider snippet destructures `Provider` (there is no
+  `FormProvider`); components.md documents why a reusable field component
+  must be generic over its value type; multi-step.md notes that
+  `useFormSteps` memoizes on the steps array's identity.
+- CLI pages: a `--tests` flag row, the current version floors in the CLI
+  README, three input modes everywhere, and a working link for the UI-kit
+  matrix.
+- Playground: "Open in StackBlitz" seeds a project that installs and boots
+  (vite and plugin-react agree, react-dom is always a dependency), with a
+  test pinning the seed to examples/package.json. Array-row errors are
+  styled, textareas follow the theme, buttons show a keyboard focus ring,
+  row inputs carry aria-labels, and the nested-arrays tab says how to
+  start.
+- Docs site: reference tables stop stacking at phone width, and the
+  dark-mode "Get started" button meets AA contrast.
+
 ## 0.21.0 — 2026-09-23
 
 ### Fixed
