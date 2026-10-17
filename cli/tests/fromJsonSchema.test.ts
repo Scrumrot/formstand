@@ -15,6 +15,9 @@ const loadFixture = (name: string): unknown =>
   JSON.parse(fs.readFileSync(path.join(fixturesDir, name), "utf8"));
 
 const OPTS = { source: "fixture.json", fallbackName: "Fixture" } as const;
+// The payment documents below declare several component schemas, so the
+// walk needs the --schema pick a real run would pass.
+const CHECKOUT = { ...OPTS, select: "Checkout" } as const;
 
 const fieldOf = (ir: FieldSpec, name: string): NamedField => {
   if (ir.kind !== "object") throw new Error("expected object root");
@@ -98,6 +101,95 @@ describe("fromJsonSchema — OpenAPI documents", () => {
     expect(payment.variants[0]?.fields.map((field) => field.name)).toEqual([
       "cardNumber",
     ]);
+  });
+
+  // The same two-branch payment union, with its tags spelled the three
+  // ways real documents spell them. 3.1 writes `const`; 3.0 has no
+  // `const` and writes a single-value `enum`; and a document may name the
+  // tags only in discriminator.mapping, leaving the branch property bare.
+  // All three must walk to one IR, or 3.0 documents (the majority in the
+  // wild) degrade a union the generator handles fine when spelled in 3.1.
+  const paymentDocument = (
+    tagOf: (tag: string) => Readonly<Record<string, unknown>>,
+    mapping?: Readonly<Record<string, string>>,
+  ): unknown => ({
+    openapi: "3.0.3",
+    info: { title: "Payments", version: "1" },
+    paths: {},
+    components: {
+      schemas: {
+        Checkout: {
+          type: "object",
+          required: ["payment"],
+          properties: {
+            payment: {
+              oneOf: [
+                { $ref: "#/components/schemas/CardPayment" },
+                { $ref: "#/components/schemas/InvoicePayment" },
+              ],
+              discriminator: {
+                propertyName: "method",
+                ...(mapping === undefined ? {} : { mapping }),
+              },
+            },
+          },
+        },
+        CardPayment: {
+          type: "object",
+          required: ["method", "cardNumber"],
+          properties: {
+            ...(Object.keys(tagOf("card")).length === 0
+              ? {}
+              : { method: tagOf("card") }),
+            cardNumber: { type: "string" },
+          },
+        },
+        InvoicePayment: {
+          type: "object",
+          required: ["method"],
+          properties: {
+            ...(Object.keys(tagOf("invoice")).length === 0
+              ? {}
+              : { method: tagOf("invoice") }),
+            dueDays: { type: "integer" },
+          },
+        },
+      },
+    },
+  });
+
+  it("reads OpenAPI 3.0 single-value enum tags exactly like 3.1 consts", () => {
+    const viaConst = fromJsonSchema(paymentDocument((tag) => ({ const: tag })), CHECKOUT);
+    const viaEnum = fromJsonSchema(paymentDocument((tag) => ({ enum: [tag] })), CHECKOUT);
+    const payment = fieldOf(viaConst.ir, "payment").spec;
+    expect(payment.kind).toBe("union");
+    expect(viaEnum.ir).toEqual(viaConst.ir);
+  });
+
+  it("takes the tags from discriminator.mapping when the branch property is bare", () => {
+    const viaConst = fromJsonSchema(paymentDocument((tag) => ({ const: tag })), CHECKOUT);
+    // The branch declares `method` as a plain string (no const, no enum);
+    // the mapping keys supply "card" and "invoice" by $ref.
+    const viaMapping = fromJsonSchema(
+      paymentDocument(() => ({ type: "string" }), {
+        card: "#/components/schemas/CardPayment",
+        invoice: "#/components/schemas/InvoicePayment",
+      }),
+      CHECKOUT,
+    );
+    expect(viaMapping.ir).toEqual(viaConst.ir);
+  });
+
+  it("names the untagged branch when a discriminated oneOf still degrades", () => {
+    const { ir } = fromJsonSchema(
+      paymentDocument((tag) => (tag === "card" ? { const: tag } : { type: "string" })),
+      CHECKOUT,
+    );
+    const payment = fieldOf(ir, "payment").spec;
+    expect(payment.kind).toBe("string");
+    expect(payment.todo).toContain(
+      'oneOf branch #/components/schemas/InvoicePayment has no usable "method" tag',
+    );
   });
 
   it("reads a oneOf of string consts as an enum", () => {

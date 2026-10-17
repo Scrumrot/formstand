@@ -255,31 +255,82 @@ const enumFromBranches = (
     : null;
 };
 
+// The discriminant tag of one oneOf branch, in the three spellings OpenAPI
+// documents actually use. 3.1 (and hand-written 2020-12) write
+// `{ const: "card" }`; 3.0 has no `const`, so the same tag is spelled
+// `{ enum: ["card"] }`, a single-value enum; and a document may name the
+// tags only in `discriminator.mapping` ({ card: "#/components/schemas/
+// CardPayment" }), leaving the branch's own property untyped. The mapping
+// is consulted by the branch's $ref BEFORE resolution, which is why the raw
+// branch travels alongside the resolved one.
+const branchTag = (
+  resolved: JsonRecord,
+  raw: unknown,
+  propertyName: string,
+  mapping: JsonRecord | undefined,
+): string | null => {
+  const properties = resolved["properties"];
+  const tagSchema = isRecord(properties) ? properties[propertyName] : undefined;
+  const constTag =
+    isRecord(tagSchema) && typeof tagSchema["const"] === "string"
+      ? tagSchema["const"]
+      : null;
+  if (constTag !== null) return constTag;
+  const enumValues = isRecord(tagSchema) ? stringArray(tagSchema["enum"]) : null;
+  const soleEnum = enumValues !== null && enumValues.length === 1 ? enumValues[0] : undefined;
+  if (soleEnum !== undefined) return soleEnum;
+  const ref = isRecord(raw) ? raw["$ref"] : undefined;
+  const mapped =
+    mapping !== undefined && typeof ref === "string"
+      ? Object.entries(mapping).find(([, target]) => target === ref)?.[0]
+      : undefined;
+  return mapped ?? null;
+};
+
+// How a oneOf failed to be a union, for the caller's TODO text: no usable
+// discriminator at all, or one branch without a tag (named so the fix is
+// obvious from the comment alone).
+type UnionOutcome =
+  | Readonly<{ kind: "union"; spec: FieldSpec }>
+  | Readonly<{ kind: "no-discriminator" }>
+  | Readonly<{ kind: "untagged-branch"; branch: string; propertyName: string }>;
+
+// The branch's name for a TODO: its $ref target when it has one, else its
+// title, else its position.
+const branchName = (raw: unknown, resolved: unknown, index: number): string => {
+  const ref = isRecord(raw) ? raw["$ref"] : undefined;
+  if (typeof ref === "string") return ref;
+  const title = isRecord(resolved) ? resolved["title"] : undefined;
+  return typeof title === "string" ? `"${title}"` : `#${index}`;
+};
+
 // OpenAPI's discriminator: oneOf object branches, each carrying the
-// discriminant property as a string const, become the IR union — the same
-// shape z.discriminatedUnion walks to. Anything short of that returns null
-// and the caller degrades loudly.
+// discriminant property as a string tag (see branchTag for the accepted
+// spellings), become the IR union — the same shape z.discriminatedUnion
+// walks to. Anything short of that reports why, and the caller degrades
+// loudly with that reason.
 const unionFromBranches = (
   schema: JsonRecord,
+  rawBranches: readonly unknown[],
   branches: readonly unknown[],
   flags: Flags,
   ctx: Context,
   depth: number,
-): FieldSpec | null => {
+): UnionOutcome => {
   const discriminator = schema["discriminator"];
-  if (!isRecord(discriminator)) return null;
+  if (!isRecord(discriminator)) return { kind: "no-discriminator" };
   const propertyName = discriminator["propertyName"];
-  if (typeof propertyName !== "string") return null;
-  const variants = branches.map((branch): UnionVariant | null => {
-    if (!isRecord(branch)) return null;
+  if (typeof propertyName !== "string") return { kind: "no-discriminator" };
+  const mapping = isRecord(discriminator["mapping"])
+    ? discriminator["mapping"]
+    : undefined;
+  const variants = branches.map((branch, i): UnionVariant | string => {
+    const raw = rawBranches[i];
+    if (!isRecord(branch)) return branchName(raw, branch, i);
     const properties = branch["properties"];
-    if (!isRecord(properties)) return null;
-    const tagSchema = properties[propertyName];
-    const tag =
-      isRecord(tagSchema) && typeof tagSchema["const"] === "string"
-        ? tagSchema["const"]
-        : null;
-    if (tag === null) return null;
+    if (!isRecord(properties)) return branchName(raw, branch, i);
+    const tag = branchTag(branch, raw, propertyName, mapping);
+    if (tag === null) return branchName(raw, branch, i);
     const required = stringArray(branch["required"]) ?? [];
     // The discriminant binds as a plain (common) field; the branch's OTHER
     // properties are the variant fields useVariantField reaches.
@@ -288,9 +339,22 @@ const unionFromBranches = (
       .map(([name, sub]) => namedField(name, sub, required, ctx, depth));
     return { tag, label: labelFromName(tag), fields };
   });
-  return variants.every((variant): variant is UnionVariant => variant !== null)
-    ? { kind: "union", discriminant: propertyName, variants, ...flags }
-    : null;
+  const untagged = variants.find(
+    (variant): variant is string => typeof variant === "string",
+  );
+  return untagged !== undefined
+    ? { kind: "untagged-branch", branch: untagged, propertyName }
+    : {
+        kind: "union",
+        spec: {
+          kind: "union",
+          discriminant: propertyName,
+          variants: variants.filter(
+            (variant): variant is UnionVariant => typeof variant !== "string",
+          ),
+          ...flags,
+        },
+      };
 };
 
 // A property's label: its `title` when the author wrote one (JSON Schema
@@ -484,12 +548,31 @@ const walkNode = (
     }
     const options = enumFromBranches(resolved);
     if (options !== null) return { kind: "enum", options, ...flags };
-    const union = unionFromBranches(schema, resolved, flags, ctx, depth);
-    if (union !== null) return union;
-    return fallback(
+    const union = unionFromBranches(
+      schema,
+      branches,
+      resolved,
       flags,
-      "oneOf/anyOf without a discriminator or string consts is not supported; defaulted to string",
+      ctx,
+      depth,
     );
+    switch (union.kind) {
+      case "union":
+        return union.spec;
+      // The one TODO that names its branch: a discriminator exists, so the
+      // author meant a union, and the fix is a tag on that branch (const, a
+      // single-value enum, or a discriminator.mapping entry).
+      case "untagged-branch":
+        return fallback(
+          flags,
+          `oneOf branch ${union.branch} has no usable "${union.propertyName}" tag (expected a const, a single-value enum, or a discriminator.mapping entry); defaulted to string`,
+        );
+      case "no-discriminator":
+        return fallback(
+          flags,
+          "oneOf/anyOf without a discriminator or string consts is not supported; defaulted to string",
+        );
+    }
   }
   const typed = typeOf(schema);
   if (typed === null) {
