@@ -69,6 +69,7 @@ exists and `--force` isn't set, nothing is written.
 | `--path-depth <n>` | typed-path budget in segments (default `9`); emitted as the form's `pathDepth` so the library matches |
 | `--config <file>` | config file, default `formstand.config.{ts,mts,js,mjs}` |
 | `--template <file>` | a custom template for a kit formstand doesn't ship; `--layout single` only |
+| `--tests <list>` | emit generated specs beside the component: a comma list of `vitest`, `jest`, `playwright` (vitest and jest are the same component spec with different globals; pick one). Requires `--out` |
 | `--watch` | regenerate whenever the input changes; requires `--out` |
 | `--force` | overwrite existing output files |
 | `--wizard` | ask the flag questions interactively, one at a time; runs alone |
@@ -117,8 +118,14 @@ notes are on the
 
 ## Requirements
 
-- **formstand >= 0.3.0** for the kit backends, **>= 0.7** for `--layout module`, and
-  **>= 0.9** for `date` fields. Plain single-file output works on 0.2.0.
+- **formstand**, with the floor set by what you generate: plain single-file output works
+  on 0.2.0; kit output (`--ui`) needs **>= 0.3**; `--layout module` needs **>= 0.7**;
+  `z.date()` fields need **>= 0.9**; a discriminated union as an array's row item needs
+  **>= 0.16**, and unions or tuples nested deeper inside rows need **>= 0.17**; kit output
+  from formstand-cli 0.18 reads `field.clearable`, so it needs **>= 0.18**; containers
+  inside union variants and `--tests` specs need **>= 0.20**. The
+  [quick start](https://scrumrot.github.io/formstand/documentation/cli/quick-start#iterating-on-a-schema)
+  keeps the authoritative list.
 - **zod v4** in your project. The CLI walks your schema structurally and does not ship
   zod itself, so the schema module and the generated code both use your copy.
 

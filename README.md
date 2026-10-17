@@ -83,7 +83,8 @@ npx formstand-gen src/profileSchema.ts --ui mui --sections panel --columns 2 --o
 
 You get typed `initialValues`, a bound control per field, sections for nested objects,
 `useFieldArray` blocks with add and remove buttons, and a wired submit. Point it at a
-TypeScript type instead (`--type Profile`) and it generates the zod schema too. `--ui`
+TypeScript type instead (`--type Profile`), or at a JSON Schema or OpenAPI document
+(`api.json --schema Profile`), and it generates the zod schema too. `--ui`
 targets plain formstand components, Material UI 5 through 9, shadcn/ui, Chakra 3,
 Mantine 9, or Ant Design 6.
 

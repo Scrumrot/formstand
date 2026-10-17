@@ -1,6 +1,6 @@
 # formstand-cli
 
-`formstand-cli` writes the form for you. Point it at a zod schema or a TypeScript type and it prints a complete, compiling React component: typed `initialValues`, one bound control per field, sections for nested objects, `useFieldArray` blocks with add and remove buttons for lists, and a wired submit.
+`formstand-cli` writes the form for you. Point it at a zod schema, a TypeScript type, or a JSON Schema / OpenAPI document and it prints a complete, compiling React component: typed `initialValues`, one bound control per field, sections for nested objects, `useFieldArray` blocks with add and remove buttons for lists, and a wired submit.
 
 ```bash
 npm install -D formstand-cli          # the binary is named formstand-gen
@@ -46,7 +46,7 @@ You get a `ContactForm` with a MUI `TextField` per string, a number binding for 
 
 | Page | What's on it |
 | --- | --- |
-| [Quick start](./quick-start) | both input modes, output destinations, watch mode |
+| [Quick start](./quick-start) | the three input modes (zod schema, TypeScript type, JSON Schema or OpenAPI document), output destinations, watch mode |
 | [UI kits](./ui-kits) | the six backends, supported majors, what each one needs from your app |
 | [Layouts and modes](./layouts) | single file vs feature module, section chrome, `--live`, `--form-prop` |
 | [Config and overrides](./config) | project defaults, and swapping a field's control by path |

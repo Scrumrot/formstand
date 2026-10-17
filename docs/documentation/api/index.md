@@ -19,6 +19,7 @@ const form = createForm(schema, {
   mode: "onBlur",             // ValidationMode, default "onBlur"
   reValidateMode: "onChange", // ValidationMode used once submitCount > 0
   validateOnMount: false,     // run a validation pass at creation
+  devtools: "checkout",       // optional: name this store in the Redux DevTools extension
 });
 ```
 
@@ -30,6 +31,7 @@ const form = createForm(schema, {
 | `mode` | `ValidationMode` | `"onChange" \| "onBlur" \| "onSubmit" \| "onTouched" \| "all"`, default `"onBlur"` |
 | `reValidateMode` | `ValidationMode` | mode used after the first submit attempt, default `"onChange"` |
 | `validateOnMount` | `boolean` | validate at creation so `useIsValid` reflects the initial values (async schemas validate in the background) |
+| `devtools` | `boolean \| string` | connect the store to the Redux DevTools extension through zustand's devtools middleware, so every state write is inspectable and time-travelable. A string names the instance (`"checkout"`), which keeps several forms distinguishable; `true` uses `"formstand"`. Off by default, non-production only, and inert when the extension is not installed. See [Devtools](../devtools#compared-with-the-redux-devtools-option) |
 | `pathDepth` | `PathDepth` literal (`0`–`25`) | **type-level only**: the typed-path depth budget in segments, default `9`. Widens or narrows the `FieldPath` union for this form (`Form<TSchema, D>`); the runtime ignores it. Constrained to the `PathDepth` union (0–25), so an out-of-range literal or a `number`-typed variable fails to compile. Raising it costs compile time. See [Typed paths](../typed-paths#how-path-segments-are-interpreted) |
 
 ## `Form<TSchema>` methods
@@ -43,6 +45,7 @@ const form = createForm(schema, {
 | `setTouched(path, touched?)` | marks a path touched (default `true`) |
 | `setSubmitting(value)` | manually set the `isSubmitting` flag |
 | `setError(path, errors)` / `setErrors(map)` / `clearErrors(path?)` | the app-owned **server error channel** (`state.serverErrors`), which validation never touches. `setError` accepts a single string or an array; `clearErrors(path)` clears both channels at the path and its descendants (`clearErrors("")` clears just the root entry; `clearErrors()` clears everything); `setErrors` replaces the whole server channel |
+| `addErrors(map)` | the merge-many sibling of `setError`: merges a runtime-keyed `ErrorMap` into the server channel, the shape a server response already has, so no typed-path cast per entry. Keys already present are overwritten, other keys are kept, and an empty array removes its key, like `setError`. See [Writing the server channel](../errors#writing-the-server-channel) |
 | `setMode(mode)` / `setReValidateMode(mode)` | switch validation modes at runtime |
 | `reset(nextInitial?, options?)` | reset to initial; takes optional partial overrides (shallow-merged for record roots, replaced wholesale otherwise) and [`ResetOptions`](#resetoptions). There is no `keepDirty`: dirtiness derives from values vs initial, and reset makes them equal |
 | `resetField(path)` | reset one field to its initial value, clearing its (and its descendants') error and touched state. A path with no initial counterpart, such as an appended array row, keeps its value and only clears field state |
@@ -50,7 +53,7 @@ const form = createForm(schema, {
 | `updateState(updater)` | atomic multi-field patch. `errors` is derived from `schemaErrors`/`serverErrors`, so patch the channels instead: the patch type omits `errors` entirely, and a plain-JS `errors` patch is warned about and ignored |
 | `validate()` / `validateField(path)` / `validateFields(paths)` | sync validation. On an async schema all three transparently start the async pass instead and return `{ kind: "pending", promise }` |
 | `validateAsync()` / `validateFieldAsync(path)` / `validateFieldsAsync(paths)` | async; supports `async .refine` |
-| `submit(onValid, onInvalid?, { force? })` | full submit flow, returns `Promise<SubmitResult>`. Resolves `{ kind: "valid", data }`, `{ kind: "invalid", errors }` (errored fields are also marked touched), `{ kind: "skipped" }` when another submit is in flight and `force` isn't set, or `{ kind: "error", error }` when `onValid` throws or rejects. Submit resolves instead of rejecting, so `handleSubmit` never leaves an unhandled rejection |
+| `submit(onValid, onInvalid?, options?)` | full submit flow with [`SubmitOptions`](#submitoptions), returns `Promise<SubmitResult>`. Resolves `{ kind: "valid", data }`, `{ kind: "invalid", errors }` (errored fields are also marked touched), `{ kind: "skipped" }` when another submit is in flight and `force` isn't set, or `{ kind: "error", error }` when `onValid` throws or rejects. Submit resolves instead of rejecting, so `handleSubmit` never leaves an unhandled rejection |
 | `handleSubmit(onValid, onInvalid?, options?)` | returns an event handler that calls `preventDefault()` and runs `submit` |
 | `getField(path)` | typed one-shot value read |
 | `getFieldState(path)` | typed one-shot read of a field's full slice, a [`FieldSnapshot`](#fieldsnapshot-tvalue) |
@@ -81,6 +84,20 @@ type SubmitResult<TOutput> =
   | { kind: "error"; error: unknown };    // onValid threw or rejected. Submit resolves with the
                                           // thrown value instead of rejecting; no error state is
                                           // written, so surface it yourself (e.g. via setError)
+```
+
+### `SubmitOptions`
+
+The third argument of `submit` and `handleSubmit`:
+
+```ts
+type SubmitOptions = {
+  force?: boolean;                    // run even while another submit is in flight
+                                      // (otherwise the call resolves { kind: "skipped" })
+  onError?: (error: unknown) => void; // called when onValid throws or rejects, the save-failure
+                                      // hook mirroring onInvalid; the result still resolves
+                                      // { kind: "error" } so imperative callers can switch on it
+};
 ```
 
 ### `ResetOptions`

@@ -21,10 +21,10 @@ shouldValidateOn(trigger, mode, reValidateMode, submitAttempted, touched?): bool
 
 ```ts
 persistForm(form, options): PersistHandle   // debounced draft save + load
-// options: { key, storage?, debounceMs?, apply? }
+// options: { key, storage?, debounceMs?, apply?, version? }
 ```
 
-`persistForm` is the autosave recipe as a helper: it saves a debounced draft under `options.key` and restores it on the next load. Storage defaults to `localStorage` and is structural, so `sessionStorage` or any `{ getItem, setItem, removeItem }` works. See [Persistence](../state#persistence) for the `apply` modes and the SSR caveat.
+`persistForm` is the autosave recipe as a helper: it saves a debounced draft under `options.key` and restores it on the next load. Storage defaults to `localStorage` and is structural, so `sessionStorage` or any `{ getItem, setItem, removeItem }` works. See [Persistence](../state#persistence) for the `apply` modes and the SSR caveat, and [Drafts that outlive the schema](../state#drafts-that-outlive-the-schema) for `version`, which stamps each draft so one written under an older schema is discarded instead of applied.
 
 ## Exported types
 
@@ -34,11 +34,19 @@ Everything importable via `import type { ... } from "formstand"`:
 - **State:** `FormState`, `ErrorMap`, `BoolMap`
 - **Paths:** `PathSegment`, `FieldPath`, `FieldValue`, `PathDepth` (the legal `pathDepth` budgets, the literals 0–25), `DefaultPathDepth` (the default budget, 9)
 - **Validation:** `ValidationResult`, `SettledValidationResult`, `FieldValidationResult`, `SettledFieldValidationResult`, `FieldsValidationResult`, `SettledFieldsValidationResult`, `ValidationMode`, `ValidationTrigger`
-- **Hooks:** `FormStateApi`, `UseFieldReturn`, `FieldFormApi`, `FieldPathArg`, `UseFieldOptions`, `UseFieldArrayReturn`, `FieldArrayFormApi`, `FieldArrayEntry`, `FormProviderProps`, `FormContextApi`
+- **Hooks:** `FormStateApi`, `UseFieldReturn`, `FieldFormApi`, `FieldPathArg`, `UseFieldOptions`, `UseFieldArrayReturn`, `FieldArrayFormApi`, `FieldArrayEntry`, `UseFieldsReturn` (what [`useFields`](../components#composite-fields-usefields) returns), `FormProviderProps`, `FormContextApi`
+- **Discriminated unions:** `VariantKeys`, `VariantFieldPath`, `VariantFieldValue`, `UnionValueAt`, the path and value types behind [`useVariantField`](../components#discriminated-unions)
+- **Masked inputs:** `MaskedInputBinding`, `MaskedInputOptions`, `MaskedParse` (what [`useMaskedInput`](../recipes#masked-and-formatted-inputs) takes and returns)
+- **Multi-step:** `FormStep`, `StepStatus`, `UseFormStepsReturn` (the [`useFormSteps`](../multi-step) contract)
+- **Form actions:** `FormActionHandler`, `FormActionStateHandler`, `FormActionOptions` (the [React 19 bridge](../ssr#react-19-form-actions))
 - **Components:** `TextFieldProps`, `NumberFieldProps`, `DateFieldProps`, `CheckboxFieldProps`, `SelectFieldProps`, `SelectFieldOption`, `FieldRef`, `PathsOf`, `NumberInputBinding` (what [`useNumberInput`](./components#usenumberinput-field) returns)
 - **Prop builders:** `TextInputProps`, `NumberInputProps`, `DateInputProps`, `CheckboxProps`, `SelectProps`, `ParsedNumberText`, `ParsedDateText`
 - **Persistence:** `PersistOptions`, `PersistStorage`, `PersistHandle` (see [`persistForm`](../state#persistence))
-- **Pre-wired hooks:** `BoundUseField`, `BoundUseFieldArray`, `BoundUseSelector`, `BoundUseFlag`, the hook shapes [`createFormHooks`](../state#pre-wired-hooks-createformhooks) returns
+- **Pre-wired hooks:** `FormHooks` (the whole object [`createFormHooks`](../state#pre-wired-hooks-createformhooks) returns) and its member shapes `BoundUseField`, `BoundUseFieldArray`, `BoundUseSelector`, `BoundUseFlag`
+
+From the `formstand/testing` subpath (see [Testing](../testing)):
+
+- `fillField(form, path, value)`, `blurField(form, path)`, `fillAndBlurField(form, path, value)`, `fillFields(form, values)`, and `submitForm(form)`: store-level drivers that write through the same mode gates the hooks use, so a test never has to re-derive `mode`/`reValidateMode` semantics by hand.
 
 From the `formstand/devtools` subpath (see [Devtools](../devtools)):
 

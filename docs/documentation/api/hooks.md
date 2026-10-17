@@ -10,18 +10,21 @@ Every React hook formstand exports. For the imperative surface these wrap, see [
 | `useField` | `useField(form, path, options?): UseFieldReturn<V>` | one field's slice plus helpers. `path` may be a selector `(state) => string`, which returns `UseFieldReturn<unknown>`; `options: { debounceMs?: number }` debounces triggered validation. An explicit type argument on a schema-typed form is a readable compile error, because the value type infers from the path (see [Typed paths](../typed-paths#paths-are-inferred-from-the-schema)) |
 | `useFieldArray` | `useFieldArray(form, path): UseFieldArrayReturn<TItem>`, with `TItem` inferred from the schema through the path (explicit `<TItem>` only for schema-less `FieldFormApi` forms) | array ops plus stable ids; see [Field arrays](../field-arrays). An explicit `<TItem>` on a schema-typed form is a readable compile error (see [Typed paths](../typed-paths#paths-are-inferred-from-the-schema)) |
 | `useVariantField` | `useVariantField(form, unionPath, field): UseFieldReturn<V \| undefined>` | binds a variant-only field of a discriminated union, since `FieldPath` exposes only common keys; `field` may be a dotted sub-path into a variant-only container (`"billing.zip"`, `"span.0"`). See [Discriminated unions](../components#discriminated-unions). An explicit type argument on a schema-typed form is a readable compile error, because the variant value infers from the union path and field (see [Typed paths](../typed-paths#paths-are-inferred-from-the-schema)) |
+| `useFields` | `useFields(form, paths): UseFieldsReturn<[...]>` | one control over several schema paths: `fields` is a tuple of `UseFieldReturn`s in `paths` order (each typed from its path), `error`/`firstError` merge every bound path's messages, `touched`/`dirty`/`isValidating` are "any of them", and `onBlur()` blurs every path under the mode gate. `paths` expands to that many `useField` calls, so its length and order must be stable across renders. See [Composite fields](../components#composite-fields-usefields) |
 | `useFormSelector` | `useFormSelector(form, selector): U` | selector-style subscription over `FormState` |
 | `useFormSelectorShallow` | `useFormSelectorShallow(form, selector): U` | shallow-compared variant, required for object or array returning selectors |
 | `useFormValues` | `useFormValues(form): z.input<TSchema>` | the whole values object, reactively. Sugar for `useFormSelector(form, (s) => s.values)`. Reference-compared (values are replaced immutably), so it re-renders exactly when some value changes and never on touched or error churn. Reach for it when rendering is driven by values, such as a live map or preview. Structural `FormStateApi` forms read `unknown` |
 | `useFormError` | `useFormError(form): readonly string[] \| undefined` | shortcut for the root `""` error |
 | `useIsDirty` | `useIsDirty(form, path?): boolean` | any field dirty (derived); a typed path scopes it to that subtree, so `"shipping"` covers `shipping.city` |
 | `useIsValid` | `useIsValid(form, path?): boolean` | no errors currently in the merged map, which is not the same as a fresh validation; a typed path scopes it to errors at or under that path |
+| `useIsValidating` | `useIsValidating(form, path?): boolean` | any field-level pass in flight **or** a whole-form async pass running, as one boolean-only subscription; a typed path scopes it to the field passes at or under that subtree. See [Async validation](../validation#async-validation) |
 | `useIsSubmitting` | `useIsSubmitting(form): boolean` | `state.isSubmitting` |
 | `useMaskedInput` | `useMaskedInput(field, { parse, format }): MaskedInputBinding` | the raw-text editing pattern behind `useNumberInput`, generalized: partial entries stay visible without touching the form, parses push immediately, blur snaps to `format(value)`. See [Masked and formatted inputs](../recipes#masked-and-formatted-inputs) |
 | `useFormSteps` | `useFormSteps(form, steps): UseFormStepsReturn` | the wizard hook: per-step validation scopes over one form. `next()` gates on the current step's fields validating clean (errored fields marked touched like a failed submit), `back()` never validates, forward `goTo()` lands on the first failing step, `steps` is live per-step status. See [Multi-step forms](../multi-step) |
 | `useFormAction` | `useFormAction(form, onValid, options?): (formData: FormData) => Promise<void>` | the React 19 `<form action={...}>` bridge: validates first, then calls `onValid(data, formData)` with parsed `z.output` data under the full submit lifecycle; `options: { onInvalid?, onError? }` mirror `handleSubmit`. Reference-stable across renders. See [SSR & Next.js](../ssr#react-19-form-actions) |
 | `useFormActionState` | `useFormActionState(form, action, initialState, options?): [state, formAction, isPending]` | `useActionState` with schema-validated data: `action(prevState, data, formData)` runs only when validation passes; invalid, skipped, and throwing submissions keep the previous state (field errors live in the form store). A `"use server"` function slots in as `action` |
 | `useSubmitCount` | `useSubmitCount(form): number` | `state.submitCount` |
+| `usePersistForm` | `usePersistForm(form, options): PersistHandle` | [`persistForm`](./utilities#core-utilities) with the mount/dispose effect owned for you (StrictMode safe). Returns a reference-stable handle whose `load()`/`clear()`/`dispose()` delegate to the live subscription, so it is safe to close over in a submit handler. Options are read when the subscription starts, on mount and again only if `form` or `options.key` changes, so pass a stable options object or accept that later edits to it are ignored until then. See [Persistence](../state#persistence) |
 | `createFormContext` | `createFormContext<TSchema>(): { Provider, useFormContext }` | typed context factory for prop-drilling-free forms |
 | `createFormHooks` | `createFormHooks(form, name?): FormHooks` | every hook pre-wired to one form, with the name baked into the hook names (`"invoice"` gives you `useInvoiceField` and friends). This is the provider-free way to share a module-singleton form; see [State](../state#pre-wired-hooks-createformhooks) |
 
@@ -37,6 +40,7 @@ The pre-0.2 names `useFormState` and `useFormStateShallow` were renamed to `useF
 | `emptyValue` | `null \| undefined` | what a cleared input writes back, introspected from the zod schema (`.nullable()` gives `null`, `.optional()` gives `undefined`), with an initial-value fallback for schema-less forms |
 | `clearable` | `boolean` | whether the schema accepts that `emptyValue` (optional, nullable, or defaulted); the text and select bindings write `emptyValue` on clear only when true, so a required string cleared to `""` stays `""` |
 | `error` | `readonly string[] \| undefined` | from the merged error map |
+| `firstError` | `string \| undefined` | `error[0]`, or `undefined` when the channel is empty; the display shorthand every adapter otherwise re-derives by hand |
 | `touched` / `dirty` / `isValidating` | `boolean` | |
 | `setValue(v)` | | writes the value and triggers mode-appropriate validation |
 | `setTouched(touched?)` | | |
@@ -49,8 +53,11 @@ The pre-0.2 names `useFormState` and `useFormStateShallow` were renamed to `useF
 
 | Field | Type |
 | --- | --- |
+| `path` | `string`, the resolved array path (the same convenience `useField` exposes) |
 | `fields` | `readonly { id: string; value: TItem }[]`, where `id` is your React key |
 | `items` | `readonly TItem[]` |
 | `length` | `number` |
 | `error` | `readonly string[] \| undefined`, the array-level error |
+| `firstError` | `string \| undefined`, the first array-level message; same shorthand as `useField` |
+| `setError(errors)` / `clearError()` | the array-level **server channel** at this path: `setError` takes a `string` or `readonly string[]` like `form.setError`; `clearError()` is `clearErrors(path)`. Both no-op on a hand-rolled `FieldArrayFormApi` that omits the optional members |
 | `push(item)` / `remove(index)` / `insert(index, item)` / `move(from, to)` / `swap(a, b)` | wrappers over the form's array ops |

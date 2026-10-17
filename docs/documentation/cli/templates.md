@@ -39,7 +39,7 @@ Unlisted kinds fall back to the plain output, so a template can override only th
 ## Rules and limits
 
 - `--template` overrides `--ui`.
-- It currently supports `--layout single` only. Module support is planned.
+- It is single-file only: `--template` with `--layout module` is rejected.
 - A [per-field override](./config#per-field-component-overrides) wins over the template for that one field, since the field has opted out of its kind. Every other field still routes through the template.
 - Set a project default with `template: "./acme.template.ts"` in `formstand.config.ts`.
 

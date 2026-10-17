@@ -58,6 +58,6 @@ cd cli/matrix && npm install   # once, and it is a chunky install
 cd .. && npm run matrix
 ```
 
-It is deliberately not part of `npm test`, since it needs its own `node_modules`. See the [CLI README](https://github.com/Scrumrot/formstand/tree/main/cli#the-ui-kit-version-matrix-pre-release-check) for the full job list.
+It is deliberately not part of `npm test`, since it needs its own `node_modules`. The job list lives in the [`cli/matrix`](https://github.com/Scrumrot/formstand/tree/main/cli/matrix) folder (`run.mjs` drives it; `package.json` pins the kit majors it installs).
 
 Need a kit that isn't on this list? Write a [custom template](./templates).

@@ -55,6 +55,8 @@ const Wizard = () => {
 
 Each step declares the paths it owns; a container path covers its whole subtree, so `fields: ["shipping"]` owns `shipping.city` and everything beside it.
 
+`STEPS` is hoisted to module level on purpose. `useFormSteps` memoizes its returned object (and the live `steps` statuses) on the **identity** of the array you pass, so an array literal written inline in the component body is a fresh reference every render and recomputes the whole result each time, which defeats the memo and churns any `useEffect` keyed on `wizard`. Define the steps once at module level, or wrap them in `useMemo` when they genuinely depend on props.
+
 ## What the navigation promises
 
 - **`next()`** validates the current step's fields (through `validateFieldsAsync`, so async refines are covered) and advances only when they come back clean. A failed advance writes the step's errors and **marks the errored fields touched**, exactly like a failed submit, so touched-gated error UIs show why the wizard refused. On the last step it validates without advancing (submit is the last step's "next") and still resolves whether the step was clean, so `if (await wizard.next())` reads the same everywhere.

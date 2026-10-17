@@ -44,11 +44,21 @@ The provider pattern gives you the module's ergonomics with per-mount lifetime:
 ```tsx
 "use client";
 
-const { FormProvider, useFormContext } = createFormContext<typeof profileSchema>();
+const { Provider: ProfileFormProvider, useFormContext } =
+  createFormContext<typeof profileSchema>();
+
+// Fields anywhere in the subtree reach the form through useFormContext().
+const NameField = () => (
+  <TextField form={useFormContext()} path="name" label="Name" />
+);
 
 export function ProfileFormRoot({ initial }: { initial: ProfileValues }) {
   const form = useForm(profileSchema, { initialValues: initial });
-  return <FormProvider form={form}>{/* fields use useFormContext() */}</FormProvider>;
+  return (
+    <ProfileFormProvider form={form}>
+      <NameField />
+    </ProfileFormProvider>
+  );
 }
 ```
 

@@ -74,6 +74,34 @@ Each builder spreads `name`, the controlled `value`/`checked`, `aria-invalid`, `
 
 `numberInputProps` is a *stateless* `<input type="number">` binding, so you get the native stepper and the `step` attribute, at the cost of the intermediate-entry behavior described next.
 
+## Reusable field components
+
+A component that takes a `useField` result as a prop (the "bound field" shape kit adapters and app-level `<Field>` wrappers end up with) must be **generic over the value type**, not typed as `UseFieldReturn<string>`:
+
+```tsx
+import { useField, textInputProps, type UseFieldReturn } from "formstand";
+
+type FieldProps<T extends string | null | undefined> = Readonly<{
+  field: UseFieldReturn<T>;
+  label: string;
+}>;
+
+export const Field = <T extends string | null | undefined>({ field, label }: FieldProps<T>) => (
+  <label>
+    {label}
+    <input {...textInputProps(field)} />
+    {field.touched && field.firstError && <span role="alert">{field.firstError}</span>}
+  </label>
+);
+
+// Accepts a plain string, a nullable string, and a literal union alike:
+<Field field={useField(form, "name")} label="Name" />      // z.string()
+<Field field={useField(form, "nickname")} label="Nick" />  // z.string().nullable()
+<Field field={useField(form, "theme")} label="Theme" />    // z.enum(["light", "dark"])
+```
+
+The reason is `setValue`. `UseFieldReturn<T>` carries `setValue: (value: T) => void`, and a function parameter is checked contravariantly, so `UseFieldReturn<"light" | "dark">` is **not** assignable to `UseFieldReturn<string>`: the wider component could call `setValue("neon")` on a field whose schema only knows two themes. A `Field` typed on `UseFieldReturn<string>` therefore rejects every `z.enum` and `z.literal` field with a long assignability error, while the generic version infers `T` from whatever `useField` returned and keeps the narrow type all the way down. The same constraint (`T extends string | null | undefined`) is what `textInputProps` and `selectProps` declare, so the generic wrapper spreads into them without a cast; a number-shaped wrapper uses `T extends number | null | undefined` with `numberInputProps` in the same way.
+
 ## `DateField` and calendar-date semantics
 
 `DateField` renders `<input type="date">` bound to a `Date`-typed field. Display and parsing go through the exported `dateToInputText` and `parseDateText` rules, which treat the value as a **local calendar date**: the input's `"yyyy-MM-dd"` maps to local midnight, never through `toISOString()`, because a date picked as June 1 must not render as May 31 for users west of UTC. Clearing writes the field's `emptyValue` (`null` for `z.date().nullable()`), rollover text like `2026-02-31` is rejected rather than silently becoming March 3, and `dateInputProps` is exported for custom markup and UI-kit adapters. For picker widgets, bind MUI X's `DatePicker` or shadcn's `Calendar` with a small adapter that reuses these same two functions.

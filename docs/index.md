@@ -25,7 +25,7 @@ features:
       width: 28
       height: 28
     title: The form writes itself
-    details: "formstand-gen turns a zod schema or a TypeScript type into a working component: typed initial values, a bound control per field, array sections, accessible markup. One command, no runtime dependency."
+    details: "formstand-gen turns a zod schema, a TypeScript type, or a JSON Schema / OpenAPI document into a working component: typed initial values, a bound control per field, array sections, accessible markup. One command, no runtime dependency."
     link: /documentation/cli/
     linkText: See what it generates
   - icon:

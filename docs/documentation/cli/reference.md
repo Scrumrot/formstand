@@ -24,6 +24,7 @@ formstand-gen <input file> [flags]
 | `--path-depth N` | the typed-path budget in segments, `1` to `25` (default `9`, formstand's own). Bindings past it degrade to a TODO. Any other value is emitted as `pathDepth: N` into the form's options, so the library's `FieldPath` union widens or narrows to exactly the boundary the generator drew. See [The two depth budgets](#the-two-depth-budgets) |
 | `--config FILE` | config file, default `formstand.config.{ts,mts,js,mjs}` in the working directory. See [Config](./config) |
 | `--template FILE` | a custom template module for a kit formstand doesn't ship. `--layout single` only, and it overrides `--ui`. See [Templates](./templates) |
+| `--tests vitest\|jest\|playwright` | emit generated specs beside the component, as a comma list. `vitest` and `jest` are the same component spec with different globals, so pick one; `playwright` adds a browser spec and needs `tests.playwright.baseURL` in the [config](./config). Store-level cases import `formstand/testing` (formstand 0.20 or newer); render cases use the config's `tests.renderWrapper`. Requires `--out` |
 | `--watch` | regenerate whenever the input changes; requires `--out` |
 | `--force` | allow overwriting existing files |
 | `--wizard` | ask the flag questions interactively, one at a time. Runs alone; see below |
