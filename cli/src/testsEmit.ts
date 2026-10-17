@@ -88,6 +88,24 @@ export const emitComponentSpec = (
     .map((name) => ` ${name}={[]}`)
     .join("");
   const submitSkip = asyncSchema;
+  // Probe titles are built from labels, and two sections can share one
+  // ("Email" under shipping and billing): vitest/jest then report two
+  // cases with the same title, and a failure cannot be told apart. A label
+  // that appears more than once across the probe set gets its path
+  // appended, the way labelFills already resolve a repeated label.
+  const probeLabelCounts = [...plan.formatChecks, ...plan.boundChecks].reduce<
+    ReadonlyMap<string, number>
+  >(
+    (map, check) =>
+      new Map([...map, [check.label, (map.get(check.label) ?? 0) + 1]]),
+    new Map(),
+  );
+  const probeTitleLabel = (
+    check: Readonly<{ label: string; path: string }>,
+  ): string =>
+    (probeLabelCounts.get(check.label) ?? 0) > 1
+      ? `${check.label} (${check.path})`
+      : check.label;
   // A walker-degraded leaf (a record, a callable, an unsupported kind) is a
   // string stand-in, so its "valid" sample is a string the real schema
   // rejects: the round trip cannot pass as emitted. The literal stays (it
@@ -182,7 +200,7 @@ export const emitComponentSpec = (
     "  });",
     ...plan.formatChecks.flatMap((check) =>
       probeCase(
-        `${check.label} rejects a value that is not a valid ${check.format}`,
+        `${probeTitleLabel(check)} rejects a value that is not a valid ${check.format}`,
         check.path,
         q(check.bad),
         q(check.good),
@@ -190,7 +208,7 @@ export const emitComponentSpec = (
     ),
     ...plan.boundChecks.flatMap((check) =>
       probeCase(
-        `${check.label} rejects a value ${check.reason}`,
+        `${probeTitleLabel(check)} rejects a value ${check.reason}`,
         check.path,
         check.bad,
         check.good,

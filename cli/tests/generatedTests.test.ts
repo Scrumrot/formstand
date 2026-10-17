@@ -135,6 +135,39 @@ describe("samples the spec can actually pass", () => {
   });
 });
 
+describe("probe titles stay unique", () => {
+  it("a label shared by two sections carries its path in the title", () => {
+    // Two "Email" fields: identical titles would make two cases
+    // indistinguishable in the runner's report.
+    const dupIr = fromZod(
+      z.object({
+        shipping: z.object({ email: z.email() }),
+        billing: z.object({ email: z.email(), zip: z.string().min(3) }),
+      }),
+    );
+    const out = emitComponentSpec({
+      runner: "vitest",
+      formName: "DupForm",
+      schemaImport: { name: "dupSchema", from: "./dupSchema", kind: "named" },
+      ir: dupIr,
+      plan: collectTestPlan(dupIr),
+      componentImport: "./DupForm",
+      skipRender: false,
+      asyncSchema: false,
+      optionsProps: [],
+    });
+    expect(out).toContain(
+      'it("Email (shipping.email) rejects a value that is not a valid email"',
+    );
+    expect(out).toContain(
+      'it("Email (billing.email) rejects a value that is not a valid email"',
+    );
+    // A unique label keeps the plain title.
+    expect(out).toContain('it("Zip rejects a value shorter than 3 characters"');
+    expect(out).not.toContain('it("Email rejects');
+  });
+});
+
 describe("the component spec", () => {
   it("asserts presence at every blank-invalid path and round-trips schema.parse", () => {
     const code = spec();
