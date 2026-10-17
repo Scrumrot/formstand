@@ -198,6 +198,13 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
       // whole values object.
       if (versioned && wrapper.values === undefined) return false;
       const values = (versioned ? wrapper.values : parsed) as z.input<TSchema>;
+      // A null or missing TOP-LEVEL payload is not a draft either (an
+      // unversioned "null" in storage, or a versioned wrapper holding
+      // values: null). conflictsWith deliberately treats null as shapeless
+      // because nested nullable fields legally hold it, so the top level is
+      // the one place to refuse it: adoptValues(null) would make every path
+      // read on the form crash and then re-persist the same null.
+      if (values === null || values === undefined) return false;
       // A draft whose shape conflicts with the form's is from another schema.
       // Applying it would rebase the form onto values it cannot validate, and
       // because "adopt" clears errors, the form would read CLEAN while holding

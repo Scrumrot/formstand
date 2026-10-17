@@ -136,8 +136,22 @@ const reconcileIds = (prev: IdState, nextItems: readonly unknown[]): IdState => 
     return { ...prev, items: nextItems };
   }
 
-  // Bucket prev positions by item so duplicate primitives match in order.
+  // Zeroth pass: a row that is Object.is-equal AT ITS OWN INDEX keeps its
+  // own id before any value matching runs. Without this, duplicate
+  // primitives steal each other's ids on an edit: with ["", ""] and a
+  // keystroke into row 0 (["x", ""]), the value pass below would hand row
+  // 0's id to row 1 (the first "" bucket slot), row 0 would then mint, and
+  // React would remount the input the user is typing in. Reserving
+  // same-index identity first keeps row 1 on its own id and leaves row 0's
+  // slot for the same-index leftover pass, which is what an edit needs.
+  const keptAtIndex: readonly boolean[] = nextItems.map(
+    (item, i) => i < prev.items.length && Object.is(item, prev.items[i]),
+  );
+
+  // Bucket the REMAINING prev positions by item so duplicate primitives
+  // match in order.
   const buckets = prev.items.reduce<Map<unknown, number[]>>((acc, item, i) => {
+    if (keptAtIndex[i] === true) return acc;
     const bucket = acc.get(item);
     if (bucket === undefined) {
       acc.set(item, [i]);
@@ -149,7 +163,8 @@ const reconcileIds = (prev: IdState, nextItems: readonly unknown[]): IdState => 
 
   // First pass: reuse the id of the matching prev item, consuming that slot so
   // each id is reused at most once (`shift` empties the bucket as we go).
-  const matchedIds: readonly (string | null)[] = nextItems.map((item) => {
+  const matchedIds: readonly (string | null)[] = nextItems.map((item, i) => {
+    if (keptAtIndex[i] === true) return prev.ids[i] ?? null;
     const prevIndex = buckets.get(item)?.shift();
     return prevIndex === undefined ? null : (prev.ids[prevIndex] ?? null);
   });

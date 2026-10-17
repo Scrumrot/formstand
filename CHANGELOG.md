@@ -1,5 +1,43 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **`useFieldArray` no longer remounts the row you are typing in when rows
+  are identical primitives.** With `["", ""]`, a keystroke into row 0 made
+  the value-matching pass hand row 0's id to row 1 and mint a new id for
+  row 0, so React remounted the focused input. A same-index identity pass
+  now runs first, so an edited row keeps its id and duplicates keep theirs.
+- **`debounceMs` no longer suppresses blur validation on an untouched
+  form.** The reset-protection guard read "values is initialValues" as
+  pristine, which is also every form nobody has typed in yet, so a
+  required field tabbed through showed nothing. A rebase is now detected
+  as the values reference moving onto initialValues since scheduling,
+  which only reset and adoptValues produce.
+- **`useFormSteps.next()` and `goTo()` no longer apply a stale step** when
+  the user presses `back()` while the async step gate is in flight; the
+  user's newer position wins and `goTo` returns it.
+- **`useMaskedInput` follows the text binding's clearing rule.** Clearing a
+  required string writes `""` (clean against a `""` initial, the author's
+  message) instead of `undefined`; optional, nullable, and non-string
+  fields still clear to `emptyValue`.
+- **`clearable` and `emptyValue` read the schema through wrappers and
+  unions.** A leaf under an optional object and a field inside a
+  discriminated-union variant (`useVariantField`) now report their own
+  schema's blank instead of the runtime heuristic.
+- **`persistForm` refuses a `null` top-level draft** (an unversioned
+  `"null"` or a versioned wrapper holding `values: null`) instead of
+  adopting it as the whole values object. Nested nulls stay legal.
+- **`handleSubmit` and the action bridge never reject when `process` is
+  undefined.** The dev-only "nothing observed the error" warning read
+  `process.env.NODE_ENV` unguarded, so in a runtime without a `process`
+  global the never-rejects contract broke exactly on the failure path. One
+  shared `isDevBuild()` now guards all three sites.
+- **Array ops reject tuple paths at the type level.** `arrayPush("pair", x)`
+  on a `z.tuple` no longer compiles; it could only ever grow a fixed-arity
+  value the schema rejects.
+
 ## 0.21.0 — 2026-09-23
 
 ### Fixed

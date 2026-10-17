@@ -267,6 +267,48 @@ const hasChecks = (s: z.ZodType): boolean => {
 // Wrappers (optional/nullable/default/pipe/union/record/...) also bail: their
 // error keying differs from a direct parse of the inner value. The leaf itself
 // may carry any checks — they belong to the field.
+// The subschema at `path` for INTROSPECTION (useField's emptyValue and
+// clearable): what blank does the schema accept here, and may a cleared
+// control write it. Unlike fieldSchemaAtPath (validateField's fast path,
+// which must refuse anything a scoped parse could get wrong), this walk
+// looks THROUGH wrappers at container levels (an optional profile object
+// still has a profile.name) and INTO discriminated unions and unions (a
+// variant's field is read from the first member that declares the key;
+// members rarely disagree on a shared key's wrapper, and the heuristic
+// fallback is what a miss costs). The last segment's own wrapper is kept:
+// it is exactly what the two introspection helpers read.
+export const fieldSchemaForIntrospection = (
+  schema: z.ZodType,
+  path: string,
+): z.ZodType | null => {
+  const childOf = (s: z.ZodType, segment: PathSegment): z.ZodType | null => {
+    const inner = unwrapForWalk(s);
+    if (inner !== null) return childOf(inner, segment);
+    if (s instanceof z.ZodObject && typeof segment === "string") {
+      const shape: Readonly<Record<string, z.ZodType | undefined>> = s.shape;
+      return Object.hasOwn(shape, segment) ? (shape[segment] ?? null) : null;
+    }
+    if (s instanceof z.ZodArray && typeof segment === "number") {
+      return s.element as z.ZodType;
+    }
+    if (s instanceof z.ZodTuple && typeof segment === "number") {
+      return (s.def.items[segment] as z.ZodType | undefined) ?? null;
+    }
+    if (s instanceof z.ZodDiscriminatedUnion || s instanceof z.ZodUnion) {
+      const options = s.def.options as readonly z.ZodType[];
+      return options.reduce<z.ZodType | null>(
+        (found, option) => found ?? childOf(option, segment),
+        null,
+      );
+    }
+    return null;
+  };
+  return parsePath(path).reduce<z.ZodType | null>(
+    (current, segment) => (current === null ? null : childOf(current, segment)),
+    schema,
+  );
+};
+
 export const fieldSchemaAtPath = (
   schema: z.ZodType,
   path: string,

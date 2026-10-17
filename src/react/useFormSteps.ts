@@ -108,11 +108,24 @@ export const useFormSteps = <
     [form],
   );
 
+  // The step the user is on RIGHT NOW, readable after an await. next() and
+  // goTo() validate asynchronously from the render-time `step` (the one the
+  // user acted on), but the user may press back() while that validation is
+  // in flight; applying the advance then would land two steps past where
+  // they now are. Each transition re-checks that the step is still the one
+  // it validated before writing, and otherwise leaves the user's newer
+  // navigation alone.
+  const currentStep = useRef(step);
+  useEffect(() => {
+    currentStep.current = step;
+  });
+
   const next = useCallback(async (): Promise<boolean> => {
     // Functional reads through state setters would race the async
     // validation; the render-time `step` is the one the user acted on.
     const ok = await validateStep(step);
     if (!ok) return false;
+    if (currentStep.current !== step) return false;
     const target = Math.min(step + 1, latest.current.length - 1);
     setStep(target);
     setVisited((prev) => new Set([...prev, target]));
@@ -138,6 +151,10 @@ export const useFormSteps = <
         return (await validateStep(from)) ? walk(from + 1) : from;
       };
       const landed = await walk(step);
+      // The user navigated during the walk (back(), or another goTo that
+      // resolved first): their newer position wins, and the caller learns
+      // where the form actually is.
+      if (currentStep.current !== step) return currentStep.current;
       setStep(landed);
       setVisited(
         (prev) =>

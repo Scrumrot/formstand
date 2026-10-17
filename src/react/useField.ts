@@ -20,7 +20,7 @@ import {
   type SettledFieldValidationResult,
   emptyValueForSchema,
   isClearableSchema,
-  fieldSchemaAtPath,
+  fieldSchemaForIntrospection,
 } from "../core/validation";
 
 type ReadonlyStore<T> = Pick<
@@ -205,7 +205,7 @@ export function useField<TValue = unknown>(
   const initialValue = slice.initialValue;
   const { emptyValue, clearable } = useMemo(() => {
     if (formSchema !== undefined) {
-      const sub = fieldSchemaAtPath(formSchema, path);
+      const sub = fieldSchemaForIntrospection(formSchema, path);
       if (sub !== null) {
         return {
           emptyValue: emptyValueForSchema(sub),
@@ -239,19 +239,28 @@ export function useField<TValue = unknown>(
       debouncerRef.current = debouncer;
       // The pending timer is invisible to the store, so a reset() /
       // adoptValues() inside the debounce window cannot cancel it the way
-      // it invalidates in-flight validation (the ownership tokens) — the
+      // it invalidates in-flight validation (the ownership tokens): the
       // fire would claim a FRESH token and re-commit errors onto the
-      // pristine form. Two fire-time guards close it: a pristine form
-      // (values IS initialValues by reference — exactly what reset and
-      // adoptValues leave behind) never receives a debounced commit, and
-      // a path whose value changed since scheduling is stale (the write
-      // that changed it scheduled its own validation, or was a
-      // restore/reset to different values). Scheduling runs after
-      // setValue, so the captured value is the keystroke being validated.
-      const scheduled = getAtPath(form.store.getState().values, path);
+      // rebased form. Two fire-time guards close it. A REBASE is detected
+      // as "the values reference moved since scheduling AND now IS
+      // initialValues", which is exactly what reset and adoptValues leave
+      // behind and nothing else produces (a keystroke moves the reference
+      // away from initialValues, not onto it). The bare "values is
+      // initialValues" test used before also matched a form nobody has
+      // typed in yet, so a blur with debounceMs on an untouched required
+      // field never validated. The second guard drops a stale fire: a path
+      // whose value changed since scheduling (the write that changed it
+      // scheduled its own validation, or was a restore to other values).
+      // Scheduling runs after setValue, so the captured value is the
+      // keystroke being validated.
+      const scheduledValues = form.store.getState().values;
+      const scheduled = getAtPath(scheduledValues, path);
       debouncer.schedule(() => {
         const state = form.store.getState();
-        if (state.values === state.initialValues) return;
+        const rebased =
+          state.values !== scheduledValues &&
+          state.values === state.initialValues;
+        if (rebased) return;
         if (!Object.is(getAtPath(state.values, path), scheduled)) return;
         void form.validateFieldAsync(path);
       });

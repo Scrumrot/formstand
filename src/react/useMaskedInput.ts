@@ -83,10 +83,21 @@ export const useMaskedInput = <TValue>(
           field.setValue(parsed.value);
           return;
         case "empty": {
-          // The schema-legal blank (null/nullable, undefined/optional) —
-          // the same write every other clearing binding performs; the
-          // cast is the emptyValue contract, not a guess.
-          const empty = field.emptyValue as TValue;
+          // The same clearing rule as textInputProps: emptyValue only when
+          // the schema ACCEPTS it (field.clearable: optional, nullable,
+          // defaulted). A REQUIRED string field clears back to "", so it
+          // reads clean against a "" initial and reports the author's
+          // message (z.string().min(1, "required")) instead of zod's
+          // "expected string, received undefined". Non-string fields
+          // (a masked number or date) have no honest blank besides
+          // emptyValue, exactly like numberInputProps, so they keep it;
+          // the initial value's runtime type is the signal, since TValue
+          // is erased. The cast is the emptyValue contract, not a guess.
+          const empty = (
+            field.clearable || typeof field.initialValue !== "string"
+              ? field.emptyValue
+              : ""
+          ) as TValue;
           setEdit({ raw: text, pushed: empty });
           field.setValue(empty);
           return;

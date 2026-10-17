@@ -1,4 +1,5 @@
 import { useActionState, useCallback, useEffect, useRef } from "react";
+import { isDevBuild } from "../core/env";
 import type { z } from "zod";
 import type {
   Form,
@@ -66,7 +67,7 @@ const warnUnobserved = (
   if (
     result.kind === "error" &&
     options?.onError === undefined &&
-    process.env.NODE_ENV !== "production"
+    isDevBuild()
   ) {
     console.warn(
       `[formstand] action handler threw and nothing observed it — the form shows no feedback. Pass { onError } to ${site} (or setError inside your handler):`,

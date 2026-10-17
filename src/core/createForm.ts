@@ -13,6 +13,7 @@ import {
 } from "./array";
 import { clearArrayOpsUnder, recordArrayOp } from "./arrayOpLog";
 import { isFieldDirty, isPlainObject, valuesEqual } from "./equality";
+import { isDevBuild } from "./env";
 import type {
   DefaultPathDepth,
   FieldPath,
@@ -112,7 +113,16 @@ export type SubmitResult<TOutput> =
   | Readonly<{ kind: "skipped" }>
   | Readonly<{ kind: "error"; error: unknown }>;
 
-type ArrayItemOf<T> = T extends readonly (infer U)[] ? U : never;
+// The item type the array ops accept at a path. A TUPLE resolves to never:
+// its length is a literal, so `number extends T["length"]` fails, and a
+// push/insert/remove that the types blessed could only ever grow or shrink
+// a fixed-arity value the schema rejects. Variable-length arrays (length is
+// `number`) resolve to their element type as before.
+type ArrayItemOf<T> = T extends readonly (infer U)[]
+  ? number extends T["length"]
+    ? U
+    : never
+  : never;
 
 // Root-level errors (schema-wide .refine) live at the "" key.
 type ErrorPath<TValues, D extends PathDepth = DefaultPathDepth> =
@@ -556,9 +566,7 @@ export const createForm = <
             // a module-singleton form's unbounded time-travel history is a
             // real memory + serialization cost. Guarded for environments
             // without process (a bundler defines NODE_ENV in real dev).
-            enabled:
-              typeof process !== "undefined" &&
-              process.env?.["NODE_ENV"] !== "production",
+            enabled: isDevBuild(),
           }),
         );
 
@@ -1583,7 +1591,7 @@ export const createForm = <
         if (
           result.kind === "error" &&
           opts?.onError === undefined &&
-          process.env.NODE_ENV !== "production"
+          isDevBuild()
         ) {
           console.warn(
             "[formstand] submit handler threw and nothing observed it — the form shows no feedback. Pass { onError } to handleSubmit (or setError inside your handler):",

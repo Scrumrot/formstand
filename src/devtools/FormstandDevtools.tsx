@@ -1,4 +1,5 @@
 import { type ReactNode, useState } from "react";
+import { isDevBuild } from "../core/env";
 import type { z } from "zod";
 import type { Form } from "../core/createForm";
 import type { FieldPath } from "../core/fieldPath";
@@ -30,9 +31,6 @@ type FieldRow = Readonly<{
 // form state into the page. Bundlers that define NODE_ENV drop the panel
 // entirely; the `typeof process` guard keeps it from throwing in runtimes
 // that define no process at all.
-const isDevBuild = (): boolean =>
-  typeof process === "undefined" ||
-  process.env?.["NODE_ENV"] !== "production";
 
 const preview = (value: unknown): string => {
   if (value === undefined) return "undefined";
