@@ -4,7 +4,7 @@ The shipped components, the prop builders behind them, and the focus helpers. Th
 
 ## Components
 
-All bound components render `name={path}`, `aria-invalid`, `aria-describedby`, and the error with `role="alert"`, and accept a `ref` to the underlying element. Their `path` prop is typed against the form: passing a real `Form<TSchema>` narrows it to the schema's `FieldPath` union, so typos are compile errors while template-literal array paths still typecheck. A structural `FieldFormApi` keeps plain `string`. The `PathsOf<F>` type captures this rule.
+All bound components render `name={path}`, `aria-invalid`, `aria-describedby`, and the error with `role="alert"`, and accept a `ref` to the underlying element. Their `path` prop is typed against the form, by value: passing a real `Form<TSchema>` narrows it to the schema paths whose value the control can hold (`TextField` takes string-valued paths, `NumberField` number-valued, `DateField` Date-valued, `CheckboxField` boolean-valued, `SelectField` string-valued; optional and nullable fields qualify), so a typo or a `TextField` on a `z.number()` is a compile error while template-literal array paths still typecheck. A structural `FieldFormApi` keeps plain `string`. `PathsAccepting<F, V>` captures the rule (`PathsOf<F>` is the unfiltered union).
 
 | Component | Props type | Element |
 | --- | --- | --- |
@@ -12,7 +12,7 @@ All bound components render `name={path}`, `aria-invalid`, `aria-describedby`, a
 | `NumberField` | `NumberFieldProps` | `input type="text" inputMode="decimal"` with partial-entry handling |
 | `DateField` | `DateFieldProps` (adds `min?`, `max?`) | `input type="date"` bound to a `Date`-typed field |
 | `CheckboxField` | `CheckboxFieldProps` | `input type="checkbox"` |
-| `SelectField` | `SelectFieldProps<T>` (`options: SelectFieldOption<T>[]`, `placeholder?`) | `select`, stays controlled while empty |
+| `SelectField` | `SelectFieldProps<F, P>` (`options: SelectFieldOption<SelectValueAt<F, P>>[]`, checked against the field's `z.enum` values; `placeholder?`) | `select`, stays controlled while empty |
 
 ## Prop builders
 

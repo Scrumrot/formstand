@@ -39,7 +39,7 @@ Everything importable via `import type { ... } from "formstand"`:
 - **Masked inputs:** `MaskedInputBinding`, `MaskedInputOptions`, `MaskedParse` (what [`useMaskedInput`](../recipes#masked-and-formatted-inputs) takes and returns)
 - **Multi-step:** `FormStep`, `StepStatus`, `UseFormStepsReturn` (the [`useFormSteps`](../multi-step) contract)
 - **Form actions:** `FormActionHandler`, `FormActionStateHandler`, `FormActionOptions` (the [React 19 bridge](../ssr#react-19-form-actions))
-- **Components:** `TextFieldProps`, `NumberFieldProps`, `DateFieldProps`, `CheckboxFieldProps`, `SelectFieldProps`, `SelectFieldOption`, `FieldRef`, `PathsOf`, `NumberInputBinding` (what [`useNumberInput`](./components#usenumberinput-field) returns)
+- **Components:** `TextFieldProps`, `NumberFieldProps`, `DateFieldProps`, `CheckboxFieldProps`, `SelectFieldProps`, `SelectFieldOption`, `SelectValueAt`, `FieldRef`, `PathsOf`, `PathsAccepting`, `NumberInputBinding` (what [`useNumberInput`](./components#usenumberinput-field) returns)
 - **Prop builders:** `TextInputProps`, `NumberInputProps`, `DateInputProps`, `CheckboxProps`, `SelectProps`, `ParsedNumberText`, `ParsedDateText`
 - **Persistence:** `PersistOptions`, `PersistStorage`, `PersistHandle` (see [`persistForm`](../state#persistence))
 - **Pre-wired hooks:** `FormHooks` (the whole object [`createFormHooks`](../state#pre-wired-hooks-createformhooks) returns) and its member shapes `BoundUseField`, `BoundUseFieldArray`, `BoundUseSelector`, `BoundUseFlag`
