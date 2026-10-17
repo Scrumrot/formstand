@@ -55,6 +55,7 @@ const LineItemRow = ({
       <div>
         <input
           placeholder="description"
+          aria-label="description"
           {...textInputProps(description)}
           style={{ width: "100%" }}
         />
@@ -63,7 +64,12 @@ const LineItemRow = ({
         </div>
       </div>
       <div>
-        <input placeholder="qty" {...numberInputProps(quantity)} style={{ width: "100%" }} />
+        <input
+          placeholder="qty"
+          aria-label="quantity"
+          {...numberInputProps(quantity)}
+          style={{ width: "100%" }}
+        />
         <div className="error" style={{ marginTop: 4 }}>
           {quantity.error?.[0] ?? " "}
         </div>
@@ -71,6 +77,7 @@ const LineItemRow = ({
       <div>
         <input
           placeholder="price"
+          aria-label="unit price"
           {...numberInputProps(unitPrice)}
           step="0.01"
           style={{ width: "100%" }}

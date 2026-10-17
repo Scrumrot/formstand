@@ -23,15 +23,22 @@ const fakeServer = async (next: Profile): Promise<Profile> => {
   return next;
 };
 
+// The profile the fake server starts with. A constant, not the
+// serverProfile state: useForm locks its options at mount, so feeding it
+// state that later changes only trips the dev warning about ignored
+// option changes after a save. The rebase after a save is adoptValues'
+// job below.
+const INITIAL_PROFILE: Profile = {
+  displayName: "Tim",
+  bio: "Original bio.",
+};
+
 export const OptimisticForm = () => {
-  const [serverProfile, setServerProfile] = useState<Profile>({
-    displayName: "Tim",
-    bio: "Original bio.",
-  });
+  const [serverProfile, setServerProfile] = useState<Profile>(INITIAL_PROFILE);
   const [serverError, setServerError] = useState<string | null>(null);
 
   const form = useForm(schema, {
-    initialValues: serverProfile,
+    initialValues: INITIAL_PROFILE,
     mode: "onBlur",
   });
   useDemoForm(form);
@@ -69,19 +76,7 @@ export const OptimisticForm = () => {
 
       <div className="field">
         <label htmlFor="bio">Bio</label>
-        <textarea id="bio"
-          rows={3}
-          {...textInputProps(bio)}
-          style={{
-            background: "#0b0d12",
-            border: "1px solid #2a3140",
-            color: "#e6ebf5",
-            padding: "10px 12px",
-            borderRadius: 6,
-            fontSize: 14,
-            fontFamily: "inherit",
-          }}
-        />
+        <textarea id="bio" rows={3} {...textInputProps(bio)} />
         <span className="error">{bio.error?.[0] ?? " "}</span>
       </div>
 

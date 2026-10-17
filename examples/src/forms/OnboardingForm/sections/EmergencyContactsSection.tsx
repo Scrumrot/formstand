@@ -31,19 +31,28 @@ const ContactRow = ({
   return (
     <div className="array-item" style={{ gridTemplateColumns: "1fr 1fr 1fr auto" }}>
       <div>
-        <input placeholder="Name" {...textInputProps(name)} />
+        <input placeholder="Name" aria-label="Contact name" {...textInputProps(name)} />
         <div className="error" style={{ marginTop: 4 }}>
           {name.error?.[0] ?? " "}
         </div>
       </div>
       <div>
-        <input placeholder="Relationship" {...textInputProps(relationship)} />
+        <input
+          placeholder="Relationship"
+          aria-label="Relationship"
+          {...textInputProps(relationship)}
+        />
         <div className="error" style={{ marginTop: 4 }}>
           {relationship.error?.[0] ?? " "}
         </div>
       </div>
       <div>
-        <input placeholder="Phone" type="tel" {...textInputProps(phone)} />
+        <input
+          placeholder="Phone"
+          aria-label="Contact phone"
+          type="tel"
+          {...textInputProps(phone)}
+        />
         <div className="error" style={{ marginTop: 4 }}>
           {phone.error?.[0] ?? " "}
         </div>

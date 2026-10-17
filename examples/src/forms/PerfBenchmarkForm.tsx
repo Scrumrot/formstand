@@ -33,6 +33,7 @@ const Row = ({ form, path, onRender }: RowProps) => {
       value={(field.value as string) ?? ""}
       onChange={(e) => field.setValue(e.target.value)}
       placeholder={path}
+      aria-label={path}
       style={{
         background: "#0b0d12",
         border: "1px solid #2a3140",

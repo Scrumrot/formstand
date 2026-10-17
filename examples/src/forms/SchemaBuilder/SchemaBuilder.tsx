@@ -96,11 +96,11 @@ const FieldRowInputs = ({
 }: FieldRowInputsProps) => (
   <div className="row builder-field-row" style={{ alignItems: "flex-start" }}>
     <div className="field" style={{ flex: 2 }}>
-      <input placeholder="fieldName" {...textInputProps(name)} />
+      <input placeholder="fieldName" aria-label="field name" {...textInputProps(name)} />
       <span className="error">{name.error?.[0] ?? " "}</span>
     </div>
     <div className="field" style={{ flex: 2 }}>
-      <select {...selectProps(kind)}>
+      <select aria-label="field kind" {...selectProps(kind)}>
         {FIELD_KINDS.map((value) => (
           <option key={value} value={value}>
             {KIND_LABELS[value]}
@@ -111,7 +111,11 @@ const FieldRowInputs = ({
     </div>
     {kind.value === "enum" ? (
       <div className="field" style={{ flex: 3 }}>
-        <input placeholder="red, green, blue" {...textInputProps(options)} />
+        <input
+          placeholder="red, green, blue"
+          aria-label="enum options, comma separated"
+          {...textInputProps(options)}
+        />
         <span className="error">{options.error?.[0] ?? " "}</span>
       </div>
     ) : null}
@@ -202,11 +206,11 @@ const SectionEditor = ({ form, index, onRemove, ...move }: SectionEditorProps) =
     <div className="builder-section">
       <div className="row" style={{ alignItems: "flex-start" }}>
         <div className="field" style={{ flex: 2 }}>
-          <input placeholder="sectionName" {...textInputProps(name)} />
+          <input placeholder="sectionName" aria-label="section name" {...textInputProps(name)} />
           <span className="error">{name.error?.[0] ?? " "}</span>
         </div>
         <div className="field" style={{ flex: 2 }}>
-          <select {...selectProps(kind)}>
+          <select aria-label="section kind" {...selectProps(kind)}>
             <option value="object">object: one group of fields</option>
             <option value="array">array: repeating rows</option>
           </select>

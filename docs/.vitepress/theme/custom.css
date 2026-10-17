@@ -24,6 +24,17 @@
   --vp-c-brand-3: #c0842c;
   --vp-c-brand-soft: rgba(226, 169, 78, 0.16);
   --fs-check: #86c166;
+  /* The brand button is white text on brand-3, and the dark brass above is
+   * tuned for text on dark backgrounds: white on #c0842c measures 3.19:1,
+   * under the 4.5:1 AA floor, and the hover shade (#d99a3d) drops to 2.4:1.
+   * Only the button surfaces get the deeper brass (#996818 is 4.8:1,
+   * #8f5f18 5.5:1, #7c5213 6.6:1); links and accents keep the lighter tone. */
+  --vp-button-brand-bg: #996818;
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-hover-bg: #8f5f18;
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-active-bg: #7c5213;
+  --vp-button-brand-active-border: transparent;
 }
 
 /* ---- home hero ------------------------------------------------------ */
@@ -127,6 +138,24 @@
 
 .VPButton:active {
   transform: translateY(0);
+}
+
+/* Narrow viewports: the reference tables end in a prose Notes column, and
+ * at phone width the auto layout squeezes it to a few words per line, so
+ * one row runs to 400px tall (measured on api/hooks at 390px: max row
+ * 429px, average 206px). VitePress already scrolls tables horizontally, so
+ * give that last column a real floor (max row 239px, average 135px at
+ * 24rem, for ~140px more horizontal scroll) and keep the first column (the
+ * hook or method name) on one line: the table scrolls sideways instead of
+ * stacking. A uniform per-cell floor was tried first and changed nothing
+ * here, since every column already exceeded it. */
+@media (max-width: 640px) {
+  .vp-doc td:first-child {
+    white-space: nowrap;
+  }
+  .vp-doc td:last-child {
+    min-width: 24rem;
+  }
 }
 
 /* "Tip" custom blocks read as validation passing. */

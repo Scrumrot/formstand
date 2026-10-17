@@ -606,6 +606,7 @@ button.secondary.active {
  * track instead, and allow shrinking below the intrinsic size. */
 .field input:not([type="checkbox"]),
 .field select,
+.field textarea,
 .zf-field input:not([type="checkbox"]),
 .zf-field select {
   width: 100%;
@@ -613,6 +614,7 @@ button.secondary.active {
 }
 .field input:not([type="checkbox"]),
 .field select,
+.field textarea,
 .zf-field input:not([type="checkbox"]),
 .zf-field select,
 .array-item input:not([type="checkbox"]),
@@ -628,14 +630,29 @@ button.secondary.active {
     border-color 0.18s ease,
     box-shadow 0.18s ease;
 }
+/* Textareas share the input chrome (the Autosave and Optimistic demos used
+ * to hard-code dark colors inline, which broke the light theme) and keep
+ * the page font, since browsers default textareas to monospace. */
+.field textarea {
+  font-family: inherit;
+  resize: vertical;
+}
 .field input:not([type="checkbox"]):focus,
 .field select:focus,
+.field textarea:focus,
 .zf-field input:not([type="checkbox"]):focus,
 .zf-field select:focus,
 .array-item input:not([type="checkbox"]):focus,
 .array-item select:focus {
   border-color: var(--fs-accent);
   box-shadow: 0 0 0 3px var(--fs-accent-soft);
+}
+/* Keyboard focus on buttons: the default UA ring is nearly invisible on the
+ * dark theme, so a brass ring matches the checkbox treatment below. Only
+ * :focus-visible, so a mouse click leaves the button ringless. */
+button:focus-visible {
+  outline: 2px solid var(--fs-accent);
+  outline-offset: 2px;
 }
 .field input[type="checkbox"],
 .zf-field input[type="checkbox"] {
@@ -646,7 +663,10 @@ button.secondary.active {
   outline: 2px solid var(--fs-accent);
   outline-offset: 2px;
 }
+/* .array-item too: the invoice, hooks-factory, and nested-arrays rows put
+ * their per-cell errors inside the grid row rather than a .field wrapper. */
 .field .error,
+.array-item .error,
 .zf-field .zf-error {
   color: var(--error);
   font-size: 12px;

@@ -488,7 +488,7 @@ const BLURBS: Readonly<Record<TabKey, string>> = {
   genDeepNest:
     "Nine levels of nesting, untouched single-file output: leaves exactly AT formstand's 9-segment FieldPath budget bind real controls, while the level past it degrades to a // TODO.",
   genArrayStress:
-    "Three-level nested arrays (teams → members → phones) from the CLI's recursive row extraction, untouched module output.",
+    "Three-level nested arrays (teams → members → phones) from the CLI's recursive row extraction, untouched module output. The form opens empty: add a team, then members and phones appear inside it.",
   genChakra:
     "The same Onboarding schema as the mui tab through --ui chakra: Chakra UI v3's compound Field/NativeSelect/Switch components, untouched single-file output.",
   genMantine:

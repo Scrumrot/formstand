@@ -67,6 +67,7 @@ const TrackRow = ({
       <div>
         <input
           placeholder="track title"
+          aria-label="track title"
           {...textInputProps(title)}
           style={{ width: "100%" }}
         />
@@ -77,6 +78,7 @@ const TrackRow = ({
       <div>
         <input
           placeholder="min"
+          aria-label="duration in minutes"
           {...numberInputProps(durationMin)}
           style={{ width: "100%" }}
         />
@@ -136,6 +138,7 @@ const AlbumRow = ({
       <div className="row" style={{ marginBottom: 12 }}>
         <input
           placeholder="album title"
+          aria-label="album title"
           {...textInputProps(albumTitle)}
           style={{ flex: 1 }}
         />

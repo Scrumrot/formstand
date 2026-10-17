@@ -105,19 +105,7 @@ export const AutosaveForm = () => {
 
       <div className="field">
         <label htmlFor="body">Body</label>
-        <textarea id="body"
-          rows={5}
-          {...textInputProps(body)}
-          style={{
-            background: "#0b0d12",
-            border: "1px solid #2a3140",
-            color: "#e6ebf5",
-            padding: "10px 12px",
-            borderRadius: 6,
-            fontSize: 14,
-            fontFamily: "inherit",
-          }}
-        />
+        <textarea id="body" rows={5} {...textInputProps(body)} />
         <span className="error">{body.error?.[0] ?? " "}</span>
       </div>
 

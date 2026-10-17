@@ -45,6 +45,7 @@ const UserRow = ({
           onChange={(e) => email.setValue(e.target.value)}
           onBlur={email.onBlur}
           placeholder="email"
+          aria-label="email"
         />
         <div className="error" style={{ marginTop: 4 }}>
           {email.error?.[0] ?? " "}

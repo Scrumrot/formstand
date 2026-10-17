@@ -12,8 +12,15 @@ import { z } from "zod";
 
 const lineItemSchema = z.object({
   description: z.string().min(1, "required"),
-  quantity: z.int().positive("must be > 0"),
-  unitPrice: z.number().nonnegative("must be >= 0"),
+  // The type-level messages cover the blank and the non-integer cases,
+  // which zod would otherwise report as "Invalid input: expected int,
+  // received undefined", not something a visitor should read in a demo.
+  quantity: z
+    .int({ error: "enter a whole number" })
+    .positive("must be > 0"),
+  unitPrice: z
+    .number({ error: "enter a price" })
+    .nonnegative("must be >= 0"),
 });
 
 const schema = z.object({
@@ -54,6 +61,7 @@ const LineItemRow = ({ form, index, onRemove }: LineItemRowProps) => {
       <div>
         <input
           placeholder="description"
+          aria-label="description"
           {...textInputProps(description)}
           style={{ width: "100%" }}
         />
@@ -64,6 +72,7 @@ const LineItemRow = ({ form, index, onRemove }: LineItemRowProps) => {
       <div>
         <input
           placeholder="qty"
+          aria-label="quantity"
           {...numberInputProps(quantity)}
           style={{ width: "100%" }}
         />
@@ -74,6 +83,7 @@ const LineItemRow = ({ form, index, onRemove }: LineItemRowProps) => {
       <div>
         <input
           placeholder="price"
+          aria-label="unit price"
           {...numberInputProps(unitPrice)}
           step="0.01"
           style={{ width: "100%" }}
