@@ -105,8 +105,12 @@ const objectFields = (
 ): readonly NamedField[] =>
   checker.getPropertiesOfType(type).flatMap((prop): readonly NamedField[] => {
     const propType = checker.getTypeOfSymbol(prop);
-    // Methods are not form fields — skip them entirely.
-    if (propType.getCallSignatures().length > 0) return [];
+    // A method or function-typed member is not a form field, but it used to
+    // be dropped here without a trace, so the generated schema silently lost
+    // a key of the type it claims to mirror. walkType's callable branch
+    // turns it into the string-plus-TODO placeholder every other
+    // unsupported shape gets (what the README and reference promise), so
+    // the reader sees the member and decides what to do with it.
     const spec = walkType(checker, propType, NO_FLAGS, depth - 1);
     const optional =
       spec.optional || (prop.flags & ts.SymbolFlags.Optional) !== 0;
@@ -174,7 +178,20 @@ const walkType = (
     if (isCallable(type)) {
       return fallback(
         flags,
-        `callable type "${checker.typeToString(type)}" — not supported; defaulted to string`,
+        `callable type "${checker.typeToString(type)}" is not supported; defaulted to string`,
+      );
+    }
+    // Record<string, number> and friends have an index signature and no
+    // named properties: there is no fixed key to bind a control to, so an
+    // empty section (what z.object({}) would become) is a lie about the
+    // type. Same TODO the zod walker gives z.record.
+    if (
+      checker.getPropertiesOfType(type).length === 0 &&
+      checker.getIndexInfosOfType(type).length > 0
+    ) {
+      return fallback(
+        flags,
+        `record type "${checker.typeToString(type)}" has no fixed keys to bind; defaulted to string`,
       );
     }
     return { kind: "object", fields: objectFields(checker, type, depth), ...flags };
