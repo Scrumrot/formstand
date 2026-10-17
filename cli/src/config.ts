@@ -3,7 +3,7 @@ import type { FieldOverrides } from "./overrides";
 import type { Ui } from "./uiTarget";
 
 // The project-level defaults formstand-gen reads from formstand.config.ts
-// (or .mts/.js/.mjs) in the working directory — everything here is a
+// (or .mts/.js/.mjs) in the working directory, everything here is a
 // DEFAULT: explicit flags always win. Per-invocation things (input, --out,
 // --name) stay flags on purpose; the config holds the choices that are
 // stable per project.
@@ -11,7 +11,7 @@ export type { Ui } from "./uiTarget";
 export type Layout = "single" | "module";
 
 // The generated-tests block (design: cli/design/generated-tests.md).
-// `runners` is the --tests default; the rest has no flag spelling — a
+// `runners` is the --tests default; the rest has no flag spelling, a
 // render wrapper and a browser base URL are project facts, not
 // per-invocation choices.
 export type TestsConfig = Readonly<{
@@ -20,16 +20,16 @@ export type TestsConfig = Readonly<{
   // `RenderWrapper`), as resolvable FROM THE GENERATED SPEC's location.
   // Kit output without one emits its render cases as it.skip, loudly.
   renderWrapper?: string;
-  // Playwright specs are emitted only when a baseURL exists — a browser
+  // Playwright specs are emitted only when a baseURL exists, a browser
   // spec that guesses its URL is a broken spec with extra steps.
   playwright?: Readonly<{ baseURL?: string; route?: string }>;
 }>;
 
 export type FormstandConfig = Readonly<{
   // Same spellings as --ui: "plain", "shadcn", "mui" (current major), a
-  // pinned "mui@5" | "mui@6" | "mui@7" | "mui@9", "chakra" (v3 — the only
-  // supported major, also spelled "chakra@3"), "mantine" (v9 — the current
-  // major, also spelled "mantine@9"), or "antd" (v6 — the current major,
+  // pinned "mui@5" | "mui@6" | "mui@7" | "mui@9", "chakra" (v3, the only
+  // supported major, also spelled "chakra@3"), "mantine" (v9, the current
+  // major, also spelled "mantine@9"), or "antd" (v6, the current major,
   // also spelled "antd@6").
   ui?: Ui;
   layout?: Layout;
@@ -61,7 +61,7 @@ export type FormstandConfig = Readonly<{
   tests?: TestsConfig;
 }>;
 
-// Identity with types — `export default defineConfig({ ui: "mui" })` gets
+// Identity with types, `export default defineConfig({ ui: "mui" })` gets
 // completion and typo-checking in the config file.
 export const defineConfig = (config: FormstandConfig): FormstandConfig =>
   config;

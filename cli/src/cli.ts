@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
-// Core module; importing it never touches stdin — the interface only opens
+// Core module; importing it never touches stdin, the interface only opens
 // inside the --wizard branch.
 import { createInterface } from "node:readline/promises";
 import { pathToFileURL } from "node:url";
@@ -61,7 +61,7 @@ import { type WizardIo, runWizard } from "./wizard";
 
 // The --ui flag spelling and mui enumeration, built from UI_KITS /
 // MUI_VERSIONS directly (uiTarget.ts is the single source of truth) so HELP
-// can't drift from what the parser accepts — no regex surgery on the prose
+// can't drift from what the parser accepts, no regex surgery on the prose
 // UI_CHOICES string: "plain|mui[@5|6|7|9]|shadcn|...".
 const UI_FLAG_CHOICES = UI_KITS.map((kit) =>
   kit === "mui" ? `mui[@${MUI_VERSIONS.join("|")}]` : kit,
@@ -70,7 +70,7 @@ const MUI_CHOICE_LIST = MUI_VERSIONS.map((version) => `mui@${version}`).join(
   ", ",
 );
 
-const HELP = `formstand-gen — generate formstand form components
+const HELP = `formstand-gen: generate formstand form components
 
 Usage:
   formstand-gen <input.ts> [options]
@@ -105,7 +105,7 @@ Options:
                       MantineProvider. antd targets antd 6, the current
                       major ("antd@6" spells the same thing); no provider is
                       required, and antd's own Form/Form.Item is never
-                      emitted — formstand owns the form state.
+                      emitted, formstand owns the form state.
   --layout <single|module>
                       single: one component file (default). module: a
                       feature-module folder (schema.ts/types.ts/hooks.ts via
@@ -146,7 +146,7 @@ Options:
                       tests.renderWrapper; playwright needs
                       tests.playwright.baseURL in the config. Requires --out.
   --template <file>   custom template module (default-export defineTemplate)
-                      for a UI kit formstand doesn't ship — overrides the
+                      for a UI kit formstand doesn't ship, overrides the
                       per-kind field rendering, inheriting the plain form
                       scaffold. --layout single only. Overrides --ui.
   --config <file>     config file (default: formstand.config.{ts,mts,js,mjs}
@@ -155,7 +155,7 @@ Options:
                       per-field component overrides: fields maps exact dot
                       paths ("*" = one array-index segment) to overrides,
                       e.g. { "icao": { component: "autocomplete",
-                      optionsProp: true } } — see the README's config
+                      optionsProp: true } }, see the README's config
                       section for the options rules per field kind.
   --watch             regenerate whenever the input file changes (requires
                       --out)
@@ -163,7 +163,7 @@ Options:
   --wizard            ask the questions the flags answer, one at a time, and
                       end by printing the composed command so the run is
                       reproducible without the wizard. Runs ALONE (no other
-                      flags) and only when asked — never from a TTY check.
+                      flags) and only when asked, never from a TTY check.
                       Prompts write to stderr, so stdout output stays pipeable.
   -h, --help          show this help
 
@@ -219,7 +219,7 @@ type CliOptions = Readonly<{
   schemaOut?: string;
   config?: string;
   template?: string;
-  // Per-field component overrides from the config file (no flag spelling —
+  // Per-field component overrides from the config file (no flag spelling,
   // structured per-path data belongs in formstand.config.ts).
   fields?: FieldOverrides;
   maxDepth?: number;
@@ -232,7 +232,7 @@ type CliOptions = Readonly<{
   // --tests: which spec files to emit beside the component (vitest OR
   // jest for the component spec, plus playwright). Empty = none.
   tests: readonly ("vitest" | "jest" | "playwright")[];
-  // The config's tests block (renderWrapper / playwright) — config-only,
+  // The config's tests block (renderWrapper / playwright), config-only,
   // like `fields`: project facts, not per-invocation choices.
   testsConfig?: TestsConfig;
 }>;
@@ -448,7 +448,7 @@ const parseRest = (
       };
     }
     // The name is interpolated verbatim as a declared identifier (and, for
-    // --layout module, as file names and the index.ts export) — reject
+    // --layout module, as file names and the index.ts export), reject
     // anything that would emit unparseable code.
     if (
       head === "--name" &&
@@ -686,7 +686,7 @@ const loadTemplate = async (file: string): Promise<Template> => {
   const candidate = mod["default"] ?? mod;
   if (!isTemplate(candidate)) {
     throw new Error(
-      `${relToCwd(abs)}: not a valid template — default-export defineTemplate({ name, leaf })`,
+      `${relToCwd(abs)}: not a valid template, default-export defineTemplate({ name, leaf })`,
     );
   }
   return candidate;
@@ -717,7 +717,7 @@ const visualOf = (options: CliOptions): VisualOptions => ({
   columns: options.columns,
 });
 
-// The scaffold-mode axes (--live / --form-prop), in EmitFormOptions shape —
+// The scaffold-mode axes (--live / --form-prop), in EmitFormOptions shape,
 // spread into every emit call of both layouts.
 const scaffoldFlagsOf = (
   options: CliOptions,
@@ -730,7 +730,7 @@ const scaffoldFlagsOf = (
 const pathDepthOf = (options: CliOptions): number =>
   options.pathDepth ?? FORMSTAND_PATH_DEPTH;
 
-// The same axis in EmitFormOptions shape — spread into every emit call so
+// The same axis in EmitFormOptions shape, spread into every emit call so
 // a run without the flag leaves the option absent (exactOptionalPropertyTypes
 // forbids an explicit undefined) and default-flag output stays identical.
 const pathDepthFlagOf = (
@@ -749,7 +749,7 @@ const walkerBudgetOf = (options: CliOptions): number =>
 // The generated-tests emission for one run (design:
 // cli/design/generated-tests.md): the component spec (vitest or jest),
 // the browser spec when the config carries a baseURL, and the honest
-// degradations — render cases it.skip with the reason when the spec
+// degradations, render cases it.skip with the reason when the spec
 // cannot construct the render itself (kit output without a wrapper,
 // --live's missing submit button, --form-prop's page-owned form).
 type TestsEmission = Readonly<{
@@ -808,7 +808,7 @@ const buildTests = (
     !options.formProp
   ) {
     stderr(
-      "warning: --tests on kit output with no tests.renderWrapper configured — render-layer cases emitted as it.skip",
+      "warning: --tests on kit output with no tests.renderWrapper configured, render-layer cases emitted as it.skip",
     );
   }
   const spec =
@@ -841,7 +841,7 @@ const buildTests = (
     }
     if (baseURL === undefined) {
       stderr(
-        "note: --tests playwright skipped — set tests.playwright.baseURL in formstand.config.ts (a browser spec that guesses its URL is a broken spec with extra steps)",
+        "note: --tests playwright skipped, set tests.playwright.baseURL in formstand.config.ts (a browser spec that guesses its URL is a broken spec with extra steps)",
       );
       return undefined;
     }
@@ -873,7 +873,7 @@ const deriveFormName = (base: string): string => {
 // Relative import specifier from one directory to a target module file.
 export const moduleSpecifier = (fromDir: string, targetAbs: string): string => {
   const relative = path.relative(fromDir, targetAbs);
-  // On Windows, path.relative across drives returns the target ABSOLUTE —
+  // On Windows, path.relative across drives returns the target ABSOLUTE,
   // "./D:/schemas/x" would be an unresolvable specifier, so fail loudly at
   // generation time instead (main() reports thrown errors and exits 1).
   if (path.isAbsolute(relative)) {
@@ -946,7 +946,7 @@ const availableExports = (mod: Readonly<Record<string, unknown>>): string => {
 };
 
 // jiti's ESM interop can flatten a default export onto the namespace object
-// itself (mod.safeParse works, while mod["default"] is an exotic binding) —
+// itself (mod.safeParse works, while mod["default"] is an exotic binding),
 // accept either shape.
 const defaultExport = (
   mod: Readonly<Record<string, unknown>>,
@@ -1091,7 +1091,7 @@ const warnDegradedBindings = (
 ): void => {
   unaddressableFieldPaths(ir).forEach((fieldPath) => {
     stderr(
-      `warning: field "${fieldPath}" skipped — "." in a key is not path-addressable (see formstand docs)`,
+      `warning: field "${fieldPath}" skipped, "." in a key is not path-addressable (see formstand docs)`,
     );
   });
   // Bindings past the library's typed-path budget degrade to in-file TODOs;
@@ -1101,23 +1101,23 @@ const warnDegradedBindings = (
   overBudgetFieldPaths(ir, depthWarningFrontier(layout), pathBudget).forEach(
     (fieldPath) => {
       stderr(
-        `warning: path "${fieldPath}" exceeds formstand's typed FieldPath depth (${pathBudget}); emitted a TODO — raise --path-depth or bind it by hand`,
+        `warning: path "${fieldPath}" exceeds formstand's typed FieldPath depth (${pathBudget}); emitted a TODO, raise --path-depth or bind it by hand`,
       );
     },
   );
   // Leaves the WALKER truncated (past the nesting budget) degrade to
-  // string-kind placeholders whose kind may be wrong — the initialValues
+  // string-kind placeholders whose kind may be wrong, the initialValues
   // cast keeps the file compiling, but the field needs hand attention.
   truncatedFieldPaths(ir).forEach((fieldPath) => {
     stderr(
-      `warning: path "${fieldPath}" exceeds the walker nesting budget (${walkerBudget}); field degraded to a placeholder — raise --max-depth or bind by hand`,
+      `warning: path "${fieldPath}" exceeds the walker nesting budget (${walkerBudget}); field degraded to a placeholder, raise --max-depth or bind by hand`,
     );
   });
   // Defaults the capture guard or the emitter refused start blank despite
-  // the schema's .default() — never silently.
+  // the schema's .default(), never silently.
   droppedDefaultFieldPaths(ir).forEach((fieldPath) => {
     stderr(
-      `warning: field "${fieldPath}" has a .default() the CLI could not capture (non-primitive, non-deterministic, or degraded field); it starts blank — seed it by hand`,
+      `warning: field "${fieldPath}" has a .default() the CLI could not capture (non-primitive, non-deterministic, or degraded field); it starts blank, seed it by hand`,
     );
   });
   // Every other walker TODO (an unsupported zod kind such as z.record, a
@@ -1151,7 +1151,7 @@ const runZodMode = async (
   }
   // Config `fields` overrides stamp the IR before any emitter runs; a bad
   // override (unknown path, non-string/enum target, missing optionsProp,
-  // a span with no grid to act on) throws here — main() reports it and
+  // a span with no grid to act on) throws here, main() reports it and
   // exits 1 with nothing written.
   const ir: FieldSpec = applyFieldOverrides(
     fromZod(pick.schema, walkerBudgetOf(options)),
@@ -1259,7 +1259,7 @@ const runGeneratedSchemaMode = (
   baseName: string,
   template?: Template,
 ): number => {
-  // Same override stamping as zod mode — the config speaks IR paths, so it
+  // Same override stamping as zod mode, the config speaks IR paths, so it
   // is frontend-agnostic (the emitted zod schema source stays override-free;
   // overrides shape COMPONENTS, not validation).
   const ir = applyFieldOverrides(
@@ -1443,7 +1443,7 @@ const runJsonSchemaMode = (
     }
   })();
   // Naming falls back to the filename when the document offers no name of
-  // its own (no selected component, no title) — same base the zod mode's
+  // its own (no selected component, no title), same base the zod mode's
   // default-export path derives.
   const fallbackName = pascalCase(
     path.basename(inputAbs).replace(/\..*$/, ""),
@@ -1502,11 +1502,11 @@ const run = async (
     return 1;
   }
   // OpenAPI documents travel as YAML at least as often as JSON, but reading
-  // them would mean a YAML dependency — named as unsupported rather than
+  // them would mean a YAML dependency, named as unsupported rather than
   // silently misparsed as a TS module.
   if (/\.ya?ml$/i.test(options.input)) {
     stderr(
-      "error: YAML input is not supported yet — convert it to JSON first (e.g. npx js-yaml api.yaml > api.json)",
+      "error: YAML input is not supported yet, convert it to JSON first (e.g. npx js-yaml api.yaml > api.json)",
     );
     return 1;
   }
@@ -1519,7 +1519,7 @@ const run = async (
   }
   if (jsonInput && (options.typeName ?? options.exportName) !== undefined) {
     stderr(
-      "error: --type/--export do not apply to a .json input — pick a schema in the document with --schema",
+      "error: --type/--export do not apply to a .json input, pick a schema in the document with --schema",
     );
     return 1;
   }
@@ -1531,7 +1531,7 @@ const run = async (
 };
 
 // The wizard's readline seam: process.stdin for answers, STDERR for
-// prompts — a run that streams its component to stdout keeps that stream
+// prompts, a run that streams its component to stdout keeps that stream
 // clean. The pending question races the interface's close event so a pipe
 // that ends mid-interview fails loudly instead of hanging.
 const readlineWizardIo = (): Readonly<{ io: WizardIo; close: () => void }> => {
@@ -1541,7 +1541,7 @@ const readlineWizardIo = (): Readonly<{ io: WizardIo; close: () => void }> => {
   });
   // NOT rl.question: it only captures lines that arrive while a question
   // is pending, and a piped `printf 'a\nb\n' | formstand-gen --wizard`
-  // delivers every answer before the interview asks for it — question()
+  // delivers every answer before the interview asks for it, question()
   // would drop them all and the wizard would die on "input ended". Buffer
   // every line at the edge instead; a terminal is just the slow case where
   // the queue is always empty. This mutable queue is the IO boundary the
@@ -1606,7 +1606,7 @@ export const main = async (
     // The wizard runs ALONE: it asks everything the other flags say, and a
     // half-flags half-questions run would have two sources of truth.
     if (argv.length !== 1) {
-      stderr("error: --wizard runs alone — it asks everything the other flags cover");
+      stderr("error: --wizard runs alone, it asks everything the other flags cover");
       return 1;
     }
     const wired =
@@ -1650,7 +1650,7 @@ export const main = async (
         // already owns that form by importing it.
         if (options.formProp && options.layout === "module") {
           stderr(
-            "error: --form-prop does not combine with --layout module — the module's form is a singleton the page already owns: import the exported instance (e.g. profileForm) and drive it directly (reset, adoptValues, handleSubmit)",
+            "error: --form-prop does not combine with --layout module, the module's form is a singleton the page already owns: import the exported instance (e.g. profileForm) and drive it directly (reset, adoptValues, handleSubmit)",
           );
           return 1;
         }
@@ -1685,7 +1685,7 @@ export const main = async (
 
 // npm installs bin entries as symlinks in node_modules/.bin. When Node loads
 // an ESM entry through such a symlink, import.meta.url is derived from the
-// *resolved* (real) file path, while process.argv[1] keeps the symlink path —
+// *resolved* (real) file path, while process.argv[1] keeps the symlink path,
 // so a raw comparison never matches and the CLI silently does nothing.
 // Realpath argv[1] before comparing; if realpath fails (the path vanished, or
 // permissions), fall back to the raw resolved path.

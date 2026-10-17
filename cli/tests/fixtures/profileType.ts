@@ -1,4 +1,4 @@
-// Mirrors ./profileSchema.ts — keep the two in sync, the fromType test
+// Mirrors ./profileSchema.ts, keep the two in sync, the fromType test
 // asserts their IRs match.
 export type Profile = {
   firstName: string;

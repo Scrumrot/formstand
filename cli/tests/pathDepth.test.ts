@@ -299,7 +299,7 @@ describe("the CLI threads --path-depth everywhere", () => {
     expect(result).toBe(0);
     for (const todoPath of ["l1.l2.l3.l4.l5", "a.b.c.d.e"]) {
       expect(stderr).toContain(
-        `warning: path "${todoPath}" exceeds formstand's typed FieldPath depth (5); emitted a TODO — raise --path-depth or bind it by hand`,
+        `warning: path "${todoPath}" exceeds formstand's typed FieldPath depth (5); emitted a TODO, raise --path-depth or bind it by hand`,
       );
     }
   });

@@ -50,7 +50,7 @@ const spectAt = (ir: FieldSpec, segments: readonly string[]): FieldSpec =>
   }, ir);
 
 // Every override the single-file layout supports (crew.*.home.base sits in
-// an object nested inside array rows — reachable single-file, module errors).
+// an object nested inside array rows, reachable single-file, module errors).
 const SINGLE_OVERRIDES = {
   icao: { component: "autocomplete", optionsProp: true },
   aircraft: { component: "autocomplete" },
@@ -165,7 +165,7 @@ describe("applyFieldOverrides", () => {
     expect(candidates).not.toContain("icaq");
     // The 10-segment leaf is past the FieldPath budget.
     expect(candidates.some((p) => p.startsWith("deep."))).toBe(false);
-    // End to end: the near-miss list in the error offers only "icao" —
+    // End to end: the near-miss list in the error offers only "icao",
     // never the dotted or degraded neighbors that would themselves error.
     const message = (() => {
       try {
@@ -284,7 +284,7 @@ const generateSingle = (
 };
 
 // A consumer page proving the options props are REQUIRED and typed
-// readonly string[] — the twin's page shape (data-driven airport list).
+// readonly string[], the twin's page shape (data-driven airport list).
 const writeConsumer = (dir: string): string => {
   const file = path.join(dir, "OverridesPage.tsx");
   fs.writeFileSync(
@@ -661,7 +661,7 @@ describe("module-layout overrides emission", () => {
 // ---------------------------------------------------------------------------
 
 // Every string field overridden, so usage.string is FALSE while
-// usage.autocomplete is true — the exact gap the module adapter's import
+// usage.autocomplete is true, the exact gap the module adapter's import
 // gates missed: chakra/shadcn ride the ChangeEvent-typed text adapter and
 // antd's FieldError renders Typography, but a non-overridden string in the
 // other fixtures kept those imports alive and hid the miss.

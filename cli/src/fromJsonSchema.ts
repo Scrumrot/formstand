@@ -10,7 +10,7 @@ import {
 } from "./ir";
 
 // JSON Schema frontend: the third door into the IR, beside the zod runtime
-// walk and the TS checker walk. The input is a parsed JSON document — either
+// walk and the TS checker walk. The input is a parsed JSON document, either
 // a bare JSON Schema (the document IS the schema) or an OpenAPI 3.x document
 // (schemas live under #/components/schemas and one is selected by name or
 // pointer). Like type mode, the input carries no runtime validator, so the
@@ -38,7 +38,7 @@ export type FromJsonSchemaOptions = Readonly<{
   // document declares more than one component schema.
   select?: string | undefined;
   maxDepth?: number | undefined;
-  // The input path as the user typed it — error messages echo it verbatim.
+  // The input path as the user typed it, error messages echo it verbatim.
   source: string;
   // Naming base when neither a component name nor a `title` exists
   // (derived from the input filename by the caller).
@@ -129,7 +129,7 @@ const unescapePointerSegment = (segment: string): string =>
   segment.replace(/~1/g, "/").replace(/~0/g, "~");
 
 // Resolve a "#/a/b" pointer against the document root. Returns undefined for
-// a dangling pointer — the two callers disagree on how loud that is (a
+// a dangling pointer, the two callers disagree on how loud that is (a
 // user-typed --schema throws; a $ref inside the document degrades to a TODO).
 const resolvePointer = (root: unknown, pointer: string): unknown => {
   if (pointer === "#") return root;
@@ -152,7 +152,7 @@ const resolvePointer = (root: unknown, pointer: string): unknown => {
 // The walk context: the document root ($ref targets resolve against it) and
 // the ref-cycle guard. JSON has no object cycles, but $ref chains can loop
 // (a schema referencing itself is the JSON Schema recursion idiom), so the
-// seen-set tracks resolved NODES by identity — the same degrade-to-TODO
+// seen-set tracks resolved NODES by identity, the same degrade-to-TODO
 // treatment fromZod gives its getter idiom.
 type Context = Readonly<{
   root: unknown;
@@ -183,7 +183,7 @@ const typeOf = (
 };
 
 // A JSON-primitive `default` seeds initialValues exactly like a captured zod
-// .default() — and JSON literals are deterministic by construction, so the
+// .default(), and JSON literals are deterministic by construction, so the
 // double-read guard fromZod needs has nothing to guard against here. A
 // non-primitive default (object/array/null) has no safe source literal:
 // droppedDefault marks it so the CLI mirrors the degradation on stderr.
@@ -226,7 +226,7 @@ const enumSpec = (schema: JsonRecord, flags: Flags): FieldSpec | null => {
 };
 
 // Each branch resolved one $ref level (discriminated-union branches are
-// almost always written as refs into components/schemas), NOT walked — the
+// almost always written as refs into components/schemas), NOT walked, the
 // caller decides what the branch set means before spending depth on it.
 const resolvedBranches = (
   branches: readonly unknown[],
@@ -306,7 +306,7 @@ const branchName = (raw: unknown, resolved: unknown, index: number): string => {
 
 // OpenAPI's discriminator: oneOf object branches, each carrying the
 // discriminant property as a string tag (see branchTag for the accepted
-// spellings), become the IR union — the same shape z.discriminatedUnion
+// spellings), become the IR union, the same shape z.discriminatedUnion
 // walks to. Anything short of that reports why, and the caller degrades
 // loudly with that reason.
 const unionFromBranches = (
@@ -375,7 +375,7 @@ const namedField = (
       typeof title === "string" && title.trim() !== ""
         ? title
         : labelFromName(name),
-    // JSON Schema properties are optional unless `required` lists them —
+    // JSON Schema properties are optional unless `required` lists them,
     // the opposite default from zod/TS, resolved here so the IR reads the
     // same either way.
     spec: { ...spec, optional: spec.optional || !required.includes(name) },
@@ -390,7 +390,7 @@ const objectSpec = (
 ): FieldSpec => {
   const properties = schema["properties"];
   if (!isRecord(properties)) {
-    // additionalProperties/patternProperties describe open key sets — a
+    // additionalProperties/patternProperties describe open key sets, a
     // record, not a fixed field list; there is nothing to bind controls to.
     return fallback(
       flags,
@@ -410,7 +410,7 @@ const objectSpec = (
 // allOf merging: every branch (after one $ref resolution) must be an object
 // schema; their properties merge (later branches win a name collision, the
 // composition-order rule) and their required lists union. Deeper allOf
-// algebra (branch-level constraints on the same property) is out of scope —
+// algebra (branch-level constraints on the same property) is out of scope,
 // the merged properties walk as written.
 const mergedAllOf = (
   branches: readonly unknown[],
@@ -442,7 +442,7 @@ const arraySpec = (
   const prefixItems = schema["prefixItems"];
   const items = schema["items"];
   // 2020-12 tuples: prefixItems holds the fixed positions; a sibling `items`
-  // schema is the variadic rest, which isn't a fixed shape — keep the head
+  // schema is the variadic rest, which isn't a fixed shape, keep the head
   // and flag the dropped rest, mirroring the zod walk's tuple rest rule.
   if (Array.isArray(prefixItems)) {
     const elements = prefixItems.map((element) =>
@@ -454,7 +454,7 @@ const arraySpec = (
         : {};
     return { kind: "tuple", elements, ...flags, ...restTodo };
   }
-  // Draft-07 spelled tuples as `items: [...]` — the one spot the dialects
+  // Draft-07 spelled tuples as `items: [...]`, the one spot the dialects
   // collide, so name the fix instead of guessing.
   if (Array.isArray(items)) {
     return fallback(
@@ -482,7 +482,7 @@ const walk = (
   ctx: Context,
   depth: number,
 ): FieldSpec => {
-  // Bare `true`/`false` are legal schemas ("anything"/"nothing") — neither
+  // Bare `true`/`false` are legal schemas ("anything"/"nothing"), neither
   // names a control.
   if (!isRecord(schema)) {
     return fallback(flags, "schema is not an object; defaulted to string");
@@ -582,7 +582,7 @@ const walkNode = (
     );
   }
   // Two nullable dialects meet here: the 3.1 type-array spelling (typed)
-  // and 3.0's `nullable: true` keyword — both mark the same IR flag.
+  // and 3.0's `nullable: true` keyword, both mark the same IR flag.
   const withNull: Flags = {
     ...flags,
     nullable: flags.nullable || typed.nullable || schema["nullable"] === true,
@@ -594,7 +594,7 @@ const walkNode = (
       const format = schema["format"];
       // date/date-time carry calendar semantics a date control serves
       // better than free text. email/uri/uuid stay TEXT CONTROLS but ride
-      // into the generated validator (z.email()/z.url()/z.uuid()) — the
+      // into the generated validator (z.email()/z.url()/z.uuid()), the
       // constraint belongs to validation, and the emitted schema is the
       // runtime source of truth, so dropping it would silently weaken the
       // document's contract. Every other format stays a plain string.
@@ -704,7 +704,7 @@ const selectSchema = (
   }
   const openapi = isRecord(root) ? root["openapi"] : undefined;
   if (typeof openapi === "string") {
-    // An OpenAPI document is not itself a schema — one must be selected.
+    // An OpenAPI document is not itself a schema, one must be selected.
     const store = storeAt(root, ["components", "schemas"]);
     const names = store === null ? [] : Object.keys(store);
     const sole = names[0];

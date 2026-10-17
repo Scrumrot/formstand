@@ -3,7 +3,7 @@ import { isUnaddressable } from "./codegen";
 import { FORMSTAND_PATH_DEPTH, isScalarSpec, overDepthBudget } from "./depth";
 import type { FieldSpec, NamedField } from "./ir";
 
-// Per-field overrides — the formstand.config.ts `fields` block:
+// Per-field overrides, the formstand.config.ts `fields` block:
 //
 //   export default defineConfig({
 //     fields: {
@@ -17,22 +17,22 @@ import type { FieldSpec, NamedField } from "./ir";
 // Paths are exact dot paths against the walked schema, with `*` matching one
 // array-index segment (an array's rows). Config problems are ERRORS (exit 1),
 // never warnings: a typo'd path, an override on a non-string/enum field, a
-// plain string without an options source, a degraded/over-budget target —
+// plain string without an options source, a degraded/over-budget target,
 // each fails loudly, naming the path and why (with near-miss suggestions for
 // unknown paths). applyFieldOverrides validates the whole block, then stamps
 // the matched leaves' specs (see FieldOverrideSpec in ./ir); everything
 // downstream is the ordinary pure-string-builder pipeline.
 
 // The config-file shape of one override (before resolution). `component` is
-// a union of one on purpose — future flavors (textarea, slider, ...) slot in
+// a union of one on purpose, future flavors (textarea, slider, ...) slot in
 // as new members without reshaping the config. `span` is the second,
 // independent axis: layout placement in the section's multi-column grid.
 // An entry must carry at least one of the two.
 export type FieldOverrideConfig = Readonly<{
-  // "autocomplete" (string/enum) or "textarea" (string only — the binding
+  // "autocomplete" (string/enum) or "textarea" (string only, the binding
   // is unchanged, the control just grows lines; options make no sense).
   component?: "autocomplete" | "textarea";
-  // string fields: REQUIRED (the options are data — an airport list — so
+  // string fields: REQUIRED (the options are data, an airport list, so
   // the generated component must accept them as a prop). enum fields:
   // optional; when true the prop REPLACES the baked-in enum values.
   optionsProp?: boolean;
@@ -102,7 +102,7 @@ export const parseFieldOverrides = (
         );
       }
       const span = override["span"];
-      // span: 1 is the default item width — accepting it would bless a
+      // span: 1 is the default item width, accepting it would bless a
       // silent no-op, the exact failure mode this config errors against.
       if (
         span !== undefined &&
@@ -140,7 +140,7 @@ export const parseFieldOverrides = (
 // Path matching against the walked IR
 // ---------------------------------------------------------------------------
 
-// Where a matched leaf sits relative to array rows — the module layout
+// Where a matched leaf sits relative to array rows, the module layout
 // degrades OBJECTS nested inside array rows to a TODO (its extraction stops
 // at one object level per row), so an override buried there is unreachable
 // under --layout module and must error rather than vanish.
@@ -149,7 +149,7 @@ type MatchResult =
       kind: "found";
       spec: FieldSpec;
       segments: readonly string[];
-      // Anywhere under an array's "*" — rows are per-row stacks in every
+      // Anywhere under an array's "*", rows are per-row stacks in every
       // backend, so a span there has no grid to act on.
       insideRow: boolean;
       insideRowObject: boolean;
@@ -192,7 +192,7 @@ const matchPath = (
         if (head !== "*") {
           return {
             kind: "miss",
-            reason: `"${head}" names an array row — use "*" for the row index`,
+            reason: `"${head}" names an array row, use "*" for the row index`,
           };
         }
         return walk(spec.item, tail, true, inRowObject);
@@ -215,10 +215,10 @@ const matchPath = (
 };
 
 // Every path an override COULD name: scalar leaves reachable through objects
-// and arrays ("*" marking rows) — the near-miss candidate list for unknown
+// and arrays ("*" marking rows), the near-miss candidate list for unknown
 // paths, in IR order. Unions/tuples are excluded (not overridable), and so
 // is every leaf applyFieldOverrides itself would reject: dot-containing
-// names (not addressable — the emitters skip the binding), walker-degraded
+// names (not addressable, the emitters skip the binding), walker-degraded
 // leaves, and paths past the FieldPath depth budget. A suggestion the
 // validator then errors on would be worse than no suggestion.
 export const overridablePaths = (
@@ -250,7 +250,7 @@ export const overridablePaths = (
   return walk(root, []);
 };
 
-// Plain Levenshtein over whole path strings — cheap at config scale (a
+// Plain Levenshtein over whole path strings, cheap at config scale (a
 // handful of overrides × a few dozen candidate paths).
 const editDistance = (a: string, b: string): number => {
   const row0 = Array.from({ length: b.length + 1 }, (_, i) => i);
@@ -326,7 +326,7 @@ const overrideError = (path: string, why: string): string =>
 
 // Validate every override against the walked IR and return a new IR with the
 // matched leaves stamped. Throws ONE error aggregating every problem (the
-// CLI's loud-failure style — exit 1, nothing emitted). `layout` matters for
+// CLI's loud-failure style, exit 1, nothing emitted). `layout` matters for
 // two reachability rules: the module layout degrades objects nested inside
 // array rows to a TODO (an autocomplete buried there is unreachable), and
 // it stacks deeper-than-section objects as plain fieldsets (a span buried
@@ -413,7 +413,7 @@ export const applyFieldOverrides = (
           ? [
               overrideError(
                 path,
-                `this path exceeds formstand's typed FieldPath depth (${budget}) — the emitters degrade it to a TODO, so an override cannot apply (raise --path-depth or bind it by hand)`,
+                `this path exceeds formstand's typed FieldPath depth (${budget}), the emitters degrade it to a TODO, so an override cannot apply (raise --path-depth or bind it by hand)`,
               ),
             ]
           : []),
@@ -423,7 +423,7 @@ export const applyFieldOverrides = (
           ? [
               overrideError(
                 path,
-                `a plain string field has no options source — set optionsProp: true so the generated component accepts "${optionsPropBaseName(
+                `a plain string field has no options source, set optionsProp: true so the generated component accepts "${optionsPropBaseName(
                   match.segments,
                 )}: readonly string[]"`,
               ),
@@ -456,7 +456,7 @@ export const applyFieldOverrides = (
                 ? [
                     overrideError(
                       path,
-                      `span needs a multi-column form — pass --columns 2 or 3`,
+                      `span needs a multi-column form, pass --columns 2 or 3`,
                     ),
                   ]
                 : []),

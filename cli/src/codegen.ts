@@ -64,11 +64,11 @@ export type EmitFormOptions = Readonly<{
   // library's). Every depth boundary the emitters draw uses it, and the
   // emitted useForm/createForm call sets `pathDepth` to the same number so
   // the library's FieldPath union matches the generator's decisions. Must
-  // be 0-25 (createForm's PathDepth constraint) — the CLI validates.
+  // be 0-25 (createForm's PathDepth constraint), the CLI validates.
   pathDepth?: number;
 }>;
 
-// The scaffold modes with their defaults applied — the shape the emitters
+// The scaffold modes with their defaults applied, the shape the emitters
 // and both layouts consume.
 export type ScaffoldOptions = Readonly<{ live: boolean; formProp: boolean }>;
 
@@ -81,7 +81,7 @@ export const scaffoldOf = (
 
 // The emitted useForm/createForm mode. --live defaults it to "onChange":
 // with the library-default "onBlur" a live consumer would read values whose
-// errors lag a blur behind — a footgun for exactly the use case --live
+// errors lag a blur behind, a footgun for exactly the use case --live
 // exists for (live coordinates driving a map want live validity too).
 export const emittedMode = (scaffold: ScaffoldOptions): string =>
   scaffold.live ? "onChange" : "onBlur";
@@ -90,7 +90,7 @@ export const emittedMode = (scaffold: ScaffoldOptions): string =>
 // indent (6 spaces in every backend). Submit scaffolds run the typed
 // handleSubmit; --live keeps the <form> element for its semantics (label
 // association, the form landmark, kit styling props unchanged) but must
-// still swallow the browser's implicit Enter-key submission — with no
+// still swallow the browser's implicit Enter-key submission, with no
 // submit button a lone text input would otherwise navigate the page.
 export const onSubmitAttrLines = (
   formExpr: string,
@@ -143,7 +143,7 @@ export const ind = (level: number): string => "  ".repeat(level);
 // Re-indent an already-built JSX block by whole levels. Section bodies are
 // generated one level below their section tag (fieldLines' contract, which
 // cannot know the kit's chrome), but panel/collapsible chrome nests the
-// body's real container deeper — the shift is what parks cells under their
+// body's real container deeper, the shift is what parks cells under their
 // container instead of under the Card. Safe on generated lines only: every
 // line is space-prefixed code, so prefixing more spaces never changes
 // meaning (multi-line string literals would break, and no emitter produces
@@ -157,11 +157,11 @@ export const shiftLines = (
     : lines.map((line) => (line.length === 0 ? line : ind(delta) + line));
 
 // ---------------------------------------------------------------------------
-// Escaping — one helper per emission context, so ANY field name is safe
+// Escaping, one helper per emission context, so ANY field name is safe
 // ---------------------------------------------------------------------------
 
 // JS string literal (also the payload of JSX expression containers).
-// JSON.stringify leaves U+2028/U+2029 raw — legal JSON, but a syntax error
+// JSON.stringify leaves U+2028/U+2029 raw, legal JSON, but a syntax error
 // inside string literals for pre-ES2019 parsers of the GENERATED file (and
 // CodeQL's js/bad-code-sanitization); escape them so emitted source is
 // plain ASCII-safe line-wise.
@@ -191,7 +191,7 @@ export const jsxAttr = (name: string, value: string): string => `${name}={${q(va
 export const jsxText = (value: string): string => `{${q(value)}}`;
 
 // Static segment of a template literal: escape what is active inside
-// backticks — backslashes, backticks, and "${" openings.
+// backticks, backslashes, backticks, and "${" openings.
 export const templateEscape = (value: string): string =>
   value.replace(/[\\`]|\$\{/g, (match) => `\\${match}`);
 
@@ -208,7 +208,7 @@ export const pascalJoin = (segments: readonly string[]): string =>
 const camelJoin = (segments: readonly string[]): string =>
   lowerFirst(pascalJoin(segments));
 
-// formstand paths split on "." — a key containing one is not addressable, so
+// formstand paths split on ".", a key containing one is not addressable, so
 // the form emitters skip the binding (the zod schema and initialValues still
 // carry the key).
 export const isUnaddressable = (name: string): boolean => name.includes(".");
@@ -240,7 +240,7 @@ export const pathSegmentCount = (path: string): number =>
     .split(".")
     .filter((segment) => segment.length > 0).length;
 
-// The shared TODO text for an over-budget binding — the emitters put it in a
+// The shared TODO text for an over-budget binding, the emitters put it in a
 // comment, the CLI mirrors it as a stderr warning (overBudgetFieldPaths).
 export const depthTodoText = (path: string, budget: number): string =>
   `path ${commentText(q(path))} exceeds formstand's typed FieldPath depth (${budget}); bind by hand`;
@@ -253,7 +253,7 @@ export const depthTodoLine = (
   budget: number,
 ): string => `${indent}{/* TODO: ${depthTodoText(path, budget)} */}`;
 
-// Where a LAYOUT's emitter stops descending — the degradation frontier. The
+// Where a LAYOUT's emitter stops descending, the degradation frontier. The
 // two layouts genuinely diverge past it (each degrades the shape to a
 // GENERIC extract/bind-by-hand TODO, not a depth TODO), so the depth-warning
 // walk below must stop exactly where the chosen layout's emitter stops or
@@ -278,12 +278,12 @@ export const depthWarningFrontier = (
     : { descendsArrayItemContainers: true, descendsRowObjects: true };
 
 // The over-budget paths in an IR, mirroring the emitters' boundary decisions
-// through the SAME overDepthBudget predicate the walkers consult — one entry
+// through the SAME overDepthBudget predicate the walkers consult, one entry
 // per depth-TODO site the CHOSEN layout emits (default: the single-file
 // layout), not per buried leaf. An object stops recursion once
 // overDepthBudget says its children can only exceed; an array level spends
 // TWO segments (name + row index, shown as `*`). An array's OBJECT item
-// never checks its own row path — the emitters walk straight into its
+// never checks its own row path, the emitters walk straight into its
 // fields (one TODO per field), so the warnings are per-field too; every
 // other item kind checks the row path itself. Past the frontier the walk
 // stops (the emitter degraded the shape to a generic TODO there, so a depth
@@ -342,7 +342,7 @@ export const overBudgetFieldPaths = (
 
 // Every path in the IR whose spec matches `match`, "*" marking array rows,
 // tuple elements at their numeric index, union variant fields under the
-// union's path. Unlike overBudgetFieldPaths this walk descends EVERYWHERE —
+// union's path. Unlike overBudgetFieldPaths this walk descends EVERYWHERE,
 // it reports facts about the IR itself (truncation, dropped defaults), not
 // emitter decisions, so no frontier applies. The root is skipped (it has no
 // path to name).
@@ -393,13 +393,13 @@ const matchingSpecPaths = (
 // The paths the WALKER truncated (nesting budget exhausted before the leaf
 // was reached): their specs are string-kind stand-ins whose kind and flags
 // may be wrong, so blankNeedsCast forces the initialValues cast and the CLI
-// mirrors each one as its own stderr warning — truncation is never silent.
+// mirrors each one as its own stderr warning, truncation is never silent.
 export const truncatedFieldPaths = (ir: FieldSpec): readonly string[] =>
   matchingSpecPaths(ir, (spec) => spec.todo === NESTING_LIMIT_TODO);
 
 // The paths whose `.default()` / `.prefault()` value will NOT be seeded into
 // the generated initialValues: the capture guard refused it in the walk
-// (droppedDefault — function-valued, non-deterministic, throwing getter), or
+// (droppedDefault, function-valued, non-deterministic, throwing getter), or
 // the emitter refuses the captured value (defaultLiteral: todo fallback,
 // kind mismatch, non-finite number, undeclared enum option, any date). The
 // CLI mirrors each as a stderr warning; fields with no default never appear.
@@ -454,7 +454,7 @@ export const unaddressableFieldPaths = (ir: FieldSpec): readonly string[] => {
 // The ONE table of blank-form defaults: what a blank leaf holds, paired
 // with whether that blank satisfies z.input. emitInitialValues and
 // blankNeedsCast both read it, so the emitted expression and the
-// annotate-vs-cast decision cannot drift apart — a disagreement would ship
+// annotate-vs-cast decision cannot drift apart, a disagreement would ship
 // as a compile error in every user's generated file.
 type BlankLeaf = Readonly<{ expr: string; satisfiesInput: boolean }>;
 
@@ -467,11 +467,11 @@ type ScalarSpec = Extract<
 // is a JSON-serializable primitive MATCHING the field kind (a string, a
 // finite number, a boolean, or a declared enum option). Dates and container
 // defaults have no safe source literal, and a mismatched value would emit a
-// type error — both degrade to the blank behavior below.
+// type error, both degrade to the blank behavior below.
 const defaultLiteral = (spec: ScalarSpec): string | undefined => {
   // A fallback stand-in (todo set) LIES about the kind: z.custom<T>()
   // degrades to a string spec, so a captured `.default("abc")` would seed a
-  // plain string literal into a slot whose real z.input type is T — breaking
+  // plain string literal into a slot whose real z.input type is T, breaking
   // the generated file's checked initialValues annotation (verified with
   // z.custom<Branded>().default(...)). Never seed a default into a fallback;
   // the field keeps its blank/undefined behavior.
@@ -497,7 +497,7 @@ const defaultLiteral = (spec: ScalarSpec): string | undefined => {
 
 const blankLeaf = (spec: ScalarSpec): BlankLeaf => {
   // A captured default is a legal value of the base type, and a defaulted
-  // field's z.input is optional anyway — the literal always satisfies input.
+  // field's z.input is optional anyway, the literal always satisfies input.
   const dflt = defaultLiteral(spec);
   if (dflt !== undefined) return { expr: dflt, satisfiesInput: true };
   switch (spec.kind) {
@@ -509,7 +509,7 @@ const blankLeaf = (spec: ScalarSpec): BlankLeaf => {
           : // A todo-bearing stand-in LIES about the kind (z.custom degrades
             // here; walker truncation fires before .optional()/.nullable()
             // even unwrap), so a required fallback's `""` is a guess at an
-            // unknown input type — it must force the as-unknown-as cast, or
+            // unknown input type, it must force the as-unknown-as cast, or
             // the checked annotation ships a compile error to the consumer.
             // An optional/nullable fallback keeps its honest blank above:
             // those flags only come from wrappers that really unwrapped, so
@@ -524,7 +524,7 @@ const blankLeaf = (spec: ScalarSpec): BlankLeaf => {
     case "number":
     case "date":
     case "enum":
-      // No blank literal exists for a required one — undefined is the only
+      // No blank literal exists for a required one, undefined is the only
       // honest start, and it doesn't satisfy the input type.
       return spec.nullable
         ? { expr: "null", satisfiesInput: true }
@@ -562,7 +562,7 @@ export const emitInitialValues = (spec: FieldSpec, level = 0): string => {
       return `[${spec.elements.map((el) => emitInitialValues(el, level)).join(", ")}]`;
     // A REQUIRED union starts as its first variant, concretely shaped: the
     // discriminant set to that variant's tag, its fields blank. An
-    // optional/nullable union starts empty instead — seeding a variant the
+    // optional/nullable union starts empty instead, seeding a variant the
     // user never chose would SUBMIT that variant (zod strips nothing it
     // can parse), which dogfooding caught as a phantom escalation object.
     case "union": {
@@ -666,7 +666,7 @@ const zodExpr = (spec: FieldSpec, level: number): string => {
       case "string":
         // A carried format emits zod's top-level validator (z.email(), not
         // the deprecated z.string().email() spelling); the bound control
-        // stays a plain text input — the constraint belongs to validation.
+        // stays a plain text input, the constraint belongs to validation.
         return (
           (spec.format === undefined ? "z.string()" : `z.${spec.format}()`) +
           lengthChain(spec.checks)
@@ -722,7 +722,7 @@ const zodExpr = (spec: FieldSpec, level: number): string => {
   // disagree. Only the generated-schema modes reach here with a default
   // (zod mode never re-emits; fromType never captures one). Note zod's
   // .default() makes the INPUT optional, so a required-with-default source
-  // field deliberately re-walks as optional — the default is the truer
+  // field deliberately re-walks as optional, the default is the truer
   // contract for an omitted value than a required-key error.
   // Spelled as kind checks (not isScalarSpec, which returns a plain
   // boolean) so the union narrows to ScalarSpec for defaultLiteral.
@@ -736,7 +736,7 @@ const zodExpr = (spec: FieldSpec, level: number): string => {
       : undefined;
   const withDefault =
     dflt === undefined ? withOptional : `${withOptional}.default(${dflt})`;
-  // Outermost, after the wrappers — where fromZod's outermost-wins capture
+  // Outermost, after the wrappers, where fromZod's outermost-wins capture
   // reads it back, so a type-mode JSDoc description round-trips.
   return spec.description === undefined
     ? withDefault
@@ -766,7 +766,7 @@ export type KindUsage = Readonly<{
   union: boolean;
   // A field carries a config `fields` override with component "autocomplete"
   // (see ./overrides): it renders the autocomplete control INSTEAD of its
-  // kind's default, so it counts here and NOT under string/enum — the
+  // kind's default, so it counts here and NOT under string/enum, the
   // default Bound components and their imports must not be pulled in by an
   // override-only schema.
   autocomplete: boolean;
@@ -799,13 +799,13 @@ const mergeUsage = (a: KindUsage, b: KindUsage): KindUsage => ({
 });
 
 // Whether this leaf renders the autocomplete override control instead of its
-// kind's default (only ever true on string/enum leaves — applyFieldOverrides
+// kind's default (only ever true on string/enum leaves, applyFieldOverrides
 // validates that loudly). Shared with the module layout.
 export const isAutocompleteLeaf = (spec: FieldSpec): boolean =>
   spec.override?.component === "autocomplete";
 
 // Whether this leaf renders the textarea override control (string leaves
-// only — applyFieldOverrides validates that loudly). Same swap rule as the
+// only, applyFieldOverrides validates that loudly). Same swap rule as the
 // autocomplete: the override wins over the kind's default control.
 export const isTextareaLeaf = (spec: FieldSpec): boolean =>
   spec.override?.component === "textarea";
@@ -835,7 +835,7 @@ const unionKindUsage = (
 
 // `count` is the segment count of the path at which `spec` sits (0 for the
 // root object). Subtrees the walkers degrade to a depth TODO render no
-// control, so they must contribute no usage — an over-budget-only kind would
+// control, so they must contribute no usage, an over-budget-only kind would
 // otherwise emit an unused import. overDepthBudget mirrors fieldLines'
 // boundary per kind.
 export const collectUsage = (
@@ -854,7 +854,7 @@ export const collectUsage = (
     case "array":
       return collectUsage(spec.item, budget, count + 1);
     // Non-scalar elements render as TODOs, not controls, so they pull in no
-    // builders — only scalar elements count toward usage.
+    // builders, only scalar elements count toward usage.
     case "tuple":
       return spec.elements
         .filter(isScalarSpec)
@@ -866,7 +866,7 @@ export const collectUsage = (
       return unionKindUsage(spec, budget);
     default:
       // An overridden leaf renders the override control, not its kind's
-      // default — count it as autocomplete only.
+      // default, count it as autocomplete only.
       return isAutocompleteLeaf(spec)
         ? { ...NO_USAGE, autocomplete: true }
         : isTextareaLeaf(spec)
@@ -875,7 +875,7 @@ export const collectUsage = (
   }
 };
 
-// A field array the component can bind with a top-level useFieldArray hook —
+// A field array the component can bind with a top-level useFieldArray hook,
 // i.e. one whose path is static (not inside another array's rows).
 type ArrayEntry = Readonly<{
   path: string;
@@ -903,7 +903,7 @@ const collectRawArrays = (
     case "object":
       // Mirrors fieldLines' FieldPath boundary: an object at the budget is
       // emitted as a TODO (children can only exceed), and an array whose own
-      // list path exceeds it can't bind its useFieldArray hook — neither may
+      // list path exceeds it can't bind its useFieldArray hook, neither may
       // claim a hook that the body never references.
       return overDepthBudget(spec, segments.length, budget)
         ? []
@@ -941,7 +941,7 @@ export const identifierSuffix = (base: string, used: ReadonlySet<string>): strin
 // machinery, reserving the DERIVED `${varName}NumberProps` const alongside a
 // number binding's own name (kit number bindings hoist that const next to
 // the field hook): the chosen suffix must leave BOTH names free, and both
-// are registered — so a schema field literally named "priceNumberProps" can
+// are registered, so a schema field literally named "priceNumberProps" can
 // collide with neither the hoisted const of a "price" number field
 // (whichever allocates first) nor vice versa. Non-number vars reserve just
 // themselves. Callers add every name in `reserved` to their used set.
@@ -1002,7 +1002,7 @@ const collectArrays = (
 
 export type UnionSpec = Extract<FieldSpec, Readonly<{ kind: "union" }>>;
 
-// The variant field names present in EVERY variant — the union's COMMON keys
+// The variant field names present in EVERY variant, the union's COMMON keys
 // (the discriminant is already absent from variant.fields). The library's
 // VariantKeys<V> = Exclude<AllKeys, keyof V> excludes these, so useVariantField
 // REJECTS a common key (it resolves to `never`); a common field must bind with
@@ -1026,7 +1026,7 @@ export const unionCommonFieldNames = (spec: UnionSpec): ReadonlySet<string> => {
 // hoists its bindings to the component body: a plain useField for the
 // discriminant and each COMMON field (common keys, addressable through
 // FieldPath), and one useVariantField per variant-ONLY field (deduped by name
-// — useVariantField keys on the field, unioning the types). The JSX renders
+//, useVariantField keys on the field, unioning the types). The JSX renders
 // the discriminant + common fields once (outside the variant blocks, since
 // they exist in every variant) and the variant-only fields inside the matching
 // block; every control renders from its bound variable via the raw prop
@@ -1058,7 +1058,7 @@ export type UnionEntry = Readonly<{
   baseSegments: number;
   // Present for an optional/nullable union: the discriminant select becomes
   // CLEARABLE. It reads the discriminant but writes the WHOLE union through
-  // a wrapper (selectVar) over the whole-union field hook (unionVar) — the
+  // a wrapper (selectVar) over the whole-union field hook (unionVar), the
   // empty choice clears back to this literal, a tag starts that variant
   // blank. Writing only the discriminant key would leave a half-variant
   // object behind that the user never chose (and could never remove).
@@ -1100,7 +1100,7 @@ export const variantLeavesOf = (
     switch (spec.kind) {
       case "object":
         // An object binds one segment past its own path, so it needs
-        // headroom BELOW the budget — the same boundary overDepthBudget
+        // headroom BELOW the budget, the same boundary overDepthBudget
         // draws; one depth marker at the container, not one per leaf.
         return segments >= budget
           ? [{ kind: "depth", name }]
@@ -1138,7 +1138,7 @@ export const variantLeavesOf = (
       case "union":
         return [{ kind: "unsupported", name, specKind: spec.kind }];
       // Every remaining kind is a scalar (isScalarSpec's complement): a
-      // deliberate-subset default — the container kinds are the cases.
+      // deliberate-subset default, the container kinds are the cases.
       default:
         return segments > budget
           ? [{ kind: "depth", name }]
@@ -1186,7 +1186,7 @@ const unionEntry = (
   raw: RawUnionEntry,
   seed: ReadonlySet<string>,
   budget: number,
-  // The union path's own segment count — raw.segments.length for static
+  // The union path's own segment count, raw.segments.length for static
   // paths; holed templates (row unions) pass pathSegmentCount(template),
   // since their stripped naming segments undercount the row indices.
   baseSegments: number = raw.segments.length,
@@ -1225,7 +1225,7 @@ const unionEntry = (
   // already claimed in this component, then split by whether the name is a
   // common key (useField) or variant-only (useVariantField). Since
   // formstand 0.20 a variant-only name may be a DOTTED sub-path
-  // ("size.w", "span.0") — variantLeavesOf flattens container variant
+  // ("size.w", "span.0"), variantLeavesOf flattens container variant
   // fields into their bindable scalar leaves.
   const initial: Readonly<{
     used: ReadonlySet<string>;
@@ -1320,7 +1320,7 @@ const collectUnions = (
 
 // The discriminant + variant hook declarations for the component body.
 // `numberPropsHook` (kit backends) additionally hoists the number-props
-// hook call for every number binding — common and variant-only alike, and
+// hook call for every number binding, common and variant-only alike, and
 // unconditionally even for fields of a currently-hidden variant, exactly
 // like the useVariantField calls above them (React's rules of hooks).
 const unionHooks = (
@@ -1340,7 +1340,7 @@ const unionHooks = (
       : [
           `${ind(level)}const ${entry.unionVar} = useField(form, ${q(entry.path)});`,
           `${ind(level)}// The union is ${entry.clearable.emptyLiteral === "null" ? "nullable" : "optional"}: the select reads the discriminant but`,
-          `${ind(level)}// writes the WHOLE union — the empty choice clears it, a tag starts`,
+          `${ind(level)}// writes the WHOLE union, the empty choice clears it, a tag starts`,
           `${ind(level)}// that variant blank (validation reports its gaps on submit). Writing`,
           `${ind(level)}// only the discriminant key would leave a half-variant object behind`,
           `${ind(level)}// that was never really chosen.`,
@@ -1374,7 +1374,7 @@ const unionHooks = (
   ]);
 
 // The KindUsage of union CONTROLS only (discriminant select + variant field
-// kinds), ignoring non-union siblings — so the plain backend imports exactly
+// kinds), ignoring non-union siblings, so the plain backend imports exactly
 // the prop builders its union rendering calls.
 export const collectUnionUsage = (
   spec: FieldSpec,
@@ -1442,7 +1442,7 @@ export const collectStaticUsage = (
   }
 };
 
-// Whether any STATIC scalar leaf (one rendered through a Bound* component —
+// Whether any STATIC scalar leaf (one rendered through a Bound* component,
 // union controls render inline from hoisted hooks and carry their literal
 // inline) has a captured description. Gates the `description` prop on
 // BoundFieldProps and the Bound components' helper-text wiring, so
@@ -1478,10 +1478,10 @@ const hasStaticDescriptions = (
 // path ("*" marking array rows) for the emitted comment.
 export type OptionsPropEntry = Readonly<{ name: string; path: string }>;
 
-// The options props a subtree's overridden leaves consume, in IR order —
+// The options props a subtree's overridden leaves consume, in IR order,
 // what the generated component (or an extracted child Rows component) must
 // accept and thread. Mirrors collectStaticUsage's walk: same depth boundary,
-// unions/tuples excluded (overrides can't land there — applyFieldOverrides
+// unions/tuples excluded (overrides can't land there, applyFieldOverrides
 // validates that), so a declared prop is always consumed by a rendered
 // control.
 export const collectOptionsProps = (
@@ -1518,7 +1518,7 @@ export const collectOptionsProps = (
   }
 };
 
-// Whether any union in the tree has a variant-ONLY scalar field — the sole
+// Whether any union in the tree has a variant-ONLY scalar field, the sole
 // source of a useVariantField call. Common fields (present in every variant,
 // including every field of a single-variant union) bind with useField, so a
 // union without variant-only fields needs no useVariantField import.
@@ -1549,14 +1549,14 @@ export const hasVariantFieldUsage = (
 };
 
 // A path prefix under construction. For dynamic prefixes (inside array rows)
-// `text` is already template-escaped — apart from the deliberate ${index}
-// hole for the current row and ${p0}, ${p1}, ... holes for enclosing rows —
+// `text` is already template-escaped, apart from the deliberate ${index}
+// hole for the current row and ${p0}, ${p1}, ... holes for enclosing rows,
 // because it ends up inside a backtick template. Static prefixes stay raw and
 // are JSON-escaped as one piece at the end.
 //
 // `holes` (dynamic only) is the ordered list of ENCLOSING row-index prop names
 // in scope (p0, p1, ...); the current row's own index is the literal `index`.
-// `valueTypeExpr` (dynamic only) is the TS type of the value at this path — a
+// `valueTypeExpr` (dynamic only) is the TS type of the value at this path, a
 // nested array extracted from here types its empty item as
 // `NonNullable<${valueTypeExpr}["field"]>[number]`.
 type PathPrefix = Readonly<{
@@ -1679,7 +1679,7 @@ type Backend = Readonly<{
     level: number,
   ) => readonly string[];
   // One control rendered from an already-bound field VARIABLE (a useField or
-  // useVariantField result hoisted to the component body) — how the
+  // useVariantField result hoisted to the component body), how the
   // discriminant select and each variant field of a union render.
   variantLeaf: (
     spec: FieldSpec,
@@ -1696,14 +1696,14 @@ type Backend = Readonly<{
   // The emitted number-props HOOK name (kit backends only): number controls
   // bind through useState-backed raw-text state, so union NUMBER bindings
   // hoist `const ${var}NumberProps = ${hook}(${var});` next to the field
-  // hooks (unionHooks) and the variant leaf spreads the hoisted const —
+  // hooks (unionHooks) and the variant leaf spreads the hoisted const,
   // hooks can't be called inside the conditional variant blocks. Absent for
   // plain/shadcn/template backends, whose number bindings are stateless
   // builders called inline.
   numberPropsHook?: string;
   // Kit-native grid cells. Defined ONLY when the backend lays section
   // bodies out with a real layout component (MUI <Grid>, antd <Row>/<Col>,
-  // mantine <Grid.Col>) whose children must each be wrapped — and only at
+  // mantine <Grid.Col>) whose children must each be wrapped, and only at
   // columns > 1, so its presence doubles as the "wrap children" signal.
   // CSS-grid backends (plain, chakra, shadcn) leave it undefined: their
   // children are grid items by placement alone. Returns the raw open/close
@@ -1720,14 +1720,14 @@ type Backend = Readonly<{
   // Vertical rhythm for a union riding a grid cell. A union renders bare
   // sibling controls (discriminant select, common fields, variant
   // fragments) with no section chrome, so inside a fullRow cell they lose
-  // the spacing the kit's 1-column Stack chrome otherwise provides — this
+  // the spacing the kit's 1-column Stack chrome otherwise provides, this
   // open/close pair restores it. Only kit-grid backends whose leaves don't
   // carry their own wrapper define it (mui/mantine Stack; antd leaves are
   // each a Flex already), and only at columns > 1, like gridChild.
   unionCellShell?: readonly [string, string] | undefined;
   // The cell for a config `fields` span (see spanCellFor): kit-grid
-  // backends REPLACE the item cell with it, CSS-grid backends — whose
-  // leaves are grid items by placement alone — WRAP the leaf in the
+  // backends REPLACE the item cell with it, CSS-grid backends, whose
+  // leaves are grid items by placement alone, WRAP the leaf in the
   // spanning element. Undefined at columns 1 like gridChild; override
   // validation guarantees a surviving span always has a section grid.
   spanCell?:
@@ -1740,7 +1740,7 @@ type Backend = Readonly<{
     body: readonly string[],
   ) => readonly string[];
   // Wrapper around a field array's mapped rows. rowBody arrives built at
-  // level + 3 (the flat-chrome row depth — arraySectionLines cannot know
+  // level + 3 (the flat-chrome row depth, arraySectionLines cannot know
   // the kit's chrome); a kit whose chrome or row cells nest deeper shifts
   // it with shiftLines, the same way wrapSection shifts section bodies.
   arraySection: (
@@ -1789,7 +1789,7 @@ const unionLines = (
       entry.clearable !== undefined,
     ),
     // Common fields exist in every variant, so they render once, outside the
-    // per-variant blocks — bound with useField (useVariantField rejects them).
+    // per-variant blocks, bound with useField (useVariantField rejects them).
     ...entry.commonBindings.flatMap((binding) =>
       backend.variantLeaf(binding.spec, binding.varName, binding.label, level),
     ),
@@ -1822,7 +1822,7 @@ const unionLines = (
               ];
             case "unsupported":
               return [
-                `${ind(lvl)}{/* TODO: nested ${leaf.specKind} ${commentText(q(`${entry.path}.${leaf.name}`))} inside a union variant — extract it by hand */}`,
+                `${ind(lvl)}{/* TODO: nested ${leaf.specKind} ${commentText(q(`${entry.path}.${leaf.name}`))} inside a union variant, extract it by hand */}`,
               ];
           }
         });
@@ -1837,7 +1837,7 @@ const unionLines = (
       }
       // One real element needs no fragment. A lone TODO comment still does:
       // `cond && ({/* ... */})` is an empty parenthesized expression, which
-      // does not parse — the fragment is what makes the comment legal JSX.
+      // does not parse, the fragment is what makes the comment legal JSX.
       const first = flattened[0];
       const single =
         flattened.length === 1 &&
@@ -1883,7 +1883,7 @@ const fieldLines = (
   unions: ReadonlyMap<string, UnionEntry>,
   ctx: NestedCtx,
   // True when these fields are a SECTION body (nested object/tuple
-  // innards) rather than the root list or an array row — the root list is
+  // innards) rather than the root list or an array row, the root list is
   // a Stack/Flex in every backend and rows live in per-row stacks, so
   // neither ever sets it. Under a gridChild backend a section body is a
   // kit grid whose children wrap in cells; under a CSS-grid backend the
@@ -1897,7 +1897,7 @@ const fieldLines = (
     const spec = field.spec;
     // Each child of a kit grid container becomes one wrapped cell; the
     // payload renders one level deeper to sit inside its wrapper. Bare
-    // comments (TODOs) stay unwrapped — a comment is not an element, so it
+    // comments (TODOs) stay unwrapped, a comment is not an element, so it
     // creates no cell, while an empty wrapper would.
     const cell = (
       kind: "item" | "fullRow",
@@ -1910,11 +1910,11 @@ const fieldLines = (
     };
     if (isUnaddressable(field.name)) {
       return [
-        `${ind(level)}{/* TODO: field ${commentText(q(field.name))} skipped — "." in a key is not path-addressable (see formstand docs) */}`,
+        `${ind(level)}{/* TODO: field ${commentText(q(field.name))} skipped, "." in a key is not path-addressable (see formstand docs) */}`,
       ];
     }
     // The FieldPath budget check on the FULL bound path (template holes count
-    // one segment each) — overDepthBudget picks the boundary per kind.
+    // one segment each), overDepthBudget picks the boundary per kind.
     // Over-budget shapes degrade to a TODO before any hook or map entry is
     // consulted.
     const fullPath =
@@ -1938,7 +1938,7 @@ const fieldLines = (
               arrays,
               unions,
               ctx,
-              // A nested object's fields are a section body — a kit grid
+              // A nested object's fields are a section body, a kit grid
               // under a gridChild backend, a CSS grid otherwise.
               true,
             ),
@@ -1966,7 +1966,7 @@ const fieldLines = (
           // the same reason nested arrays do: its bindings are hooks, and
           // hooks cannot run inside rows.map. The enclosing row's index
           // threads in as the next hole (pN), so the component binds the
-          // holed template (`invoices.${p0}.pay` — typed since formstand
+          // holed template (`invoices.${p0}.pay`, typed since formstand
           // 0.16/0.17). collectUnions still skips dynamic paths; the
           // component allocates its own binding vars.
           const nextHole = `p${prefix.holes.length}`;
@@ -2017,7 +2017,7 @@ const fieldLines = (
             });
       }
       case "tuple": {
-        // Fixed positions bind at static numeric indices (coord.0, coord.1) —
+        // Fixed positions bind at static numeric indices (coord.0, coord.1),
         // no useFieldArray, no add/remove. Scalar elements render a control;
         // a non-scalar element (object/array/union/nested tuple) is a TODO.
         const elemPrefix = extendPrefix(prefix, field.name);
@@ -2049,7 +2049,7 @@ const fieldLines = (
                     ),
                   )
                 : [
-                    `${ind(lvl + 1)}{/* TODO: tuple element ${i} (${element.kind}) at ${commentText(q(elemPrefix.text + i))} isn't scalar — bind it by hand */}`,
+                    `${ind(lvl + 1)}{/* TODO: tuple element ${i} (${element.kind}) at ${commentText(q(elemPrefix.text + i))} isn't scalar, bind it by hand */}`,
                   ],
             ),
           ),
@@ -2057,7 +2057,7 @@ const fieldLines = (
       }
       default: {
         // A config span replaces the leaf's item cell (kit grids) or wraps
-        // the leaf in a spanning element (CSS grids) — one code path,
+        // the leaf in a spanning element (CSS grids), one code path,
         // because spanCell already IS the right wrapper per backend.
         // Validation upstream rejected spans that can't reach a section
         // grid, so inSection is always true when one arrives here.
@@ -2104,7 +2104,7 @@ const tupleRowLines = (
           lvl,
         )
       : [
-          `${ind(lvl)}{/* TODO: tuple element ${i} (${element.kind}) at ${commentText(q(rowPrefix.text + String(i)))} isn't scalar — bind it by hand */}`,
+          `${ind(lvl)}{/* TODO: tuple element ${i} (${element.kind}) at ${commentText(q(rowPrefix.text + String(i)))} isn't scalar, bind it by hand */}`,
         ],
   );
 
@@ -2128,7 +2128,7 @@ const arraySectionLines = (
   // inline, and an array item (array-of-arrays) extracts an inner Rows
   // component threaded this row's index as p0.
   // A row binds one segment past the list path (`list.${index}`), so it can
-  // exceed the FieldPath budget even when the list hook binds — and then the
+  // exceed the FieldPath budget even when the list hook binds, and then the
   // depth TODO must be the advice (extraction is impossible within budget),
   // not extraction. overBudgetFieldPaths mirrors both decisions exactly.
   const rowPath = `${templateEscape(entry.path)}.\${index}`;
@@ -2164,7 +2164,7 @@ const arraySectionLines = (
               : ((): readonly string[] => {
                   // Array-of-arrays: the inner list extracts its own Rows
                   // component, exactly like a nested array under an object
-                  // row — the outer row's index is its p0.
+                  // row, the outer row's index is its p0.
                   const item = entry.item as Extract<FieldSpec, { kind: "array" }>;
                   const itemOptionsProps = collectOptionsProps(
                     item.item,
@@ -2196,7 +2196,7 @@ const arraySectionLines = (
 
 // A union bound INSIDE rows.map compiles to a child component, for the
 // same reason nested arrays extract: the bindings are hooks, and hooks
-// cannot run inside rows.map. One production serves every site — the union
+// cannot run inside rows.map. One production serves every site, the union
 // AS a row item (`shapes.${index}`, top-level or nested) and the union as
 // a FIELD of a row object (`invoices.${p0}.pay`). The component takes
 // `form` plus one number prop per hole in the union's template path, binds
@@ -2222,7 +2222,7 @@ const emitUnionComponent = (
   ctx: NestedCtx,
 ): string => {
   // Field segments (holes stripped) name the component and seed the binding
-  // vars — same hole-body scan rationale as pathSegmentCount.
+  // vars, same hole-body scan rationale as pathSegmentCount.
   const segments = args.unionTemplate
     .replace(/\$\{[^{}]+\}/g, "")
     .split(".")
@@ -2231,7 +2231,7 @@ const emitUnionComponent = (
   const compName = `${base}${identifierSuffix(base, ctx.used)}`;
   ctx.used.add(compName);
   // The union binding vars, allocated with the same partition/dedupe rules
-  // as a static union — the seed is the component's own scope.
+  // as a static union, the seed is the component's own scope.
   const { entry: u } = unionEntry(
     { segments, spec: args.spec },
     new Set(["form", ...args.holes]),
@@ -2264,7 +2264,7 @@ const emitUnionComponent = (
       : [
           `  const ${u.unionVar} = useField(form, \`${t}\`);`,
           `  // The union is ${u.clearable.emptyLiteral === "null" ? "nullable" : "optional"}: the select reads the discriminant but`,
-          "  // writes the WHOLE union — the empty choice clears it, a tag starts",
+          "  // writes the WHOLE union, the empty choice clears it, a tag starts",
           "  // that variant blank (validation reports its gaps on submit). Writing",
           "  // only the discriminant key would leave a half-variant object behind",
           "  // that was never really chosen.",
@@ -2358,7 +2358,7 @@ const emitNestedRows = (
 // (array-of-arrays), at any depth. It takes `form` plus one number prop per
 // enclosing hole (p0..pN), runs its own useFieldArray on the holed list
 // template, and renders rows through the same backend.arraySection + row
-// dispatch a top-level array gets — so every item kind (object fields,
+// dispatch a top-level array gets, so every item kind (object fields,
 // scalars, unions, tuples, deeper arrays) is handled identically wherever
 // the array sits. Returns the component's name; the caller builds the
 // reference, since only it knows which enclosing vars fill the holes.
@@ -2391,7 +2391,7 @@ const emitRowsComponent = (
   // The suffix must leave every derived MODULE-SCOPE name free, not just
   // the stem: an array-of-arrays' inner Rows strips to the same segments
   // as its outer list, whose top-level entry already claimed
-  // `empty{Stem}Item` / `{Stem}Item` / `{stem}Array` via arrayIdents — so
+  // `empty{Stem}Item` / `{Stem}Item` / `{stem}Array` via arrayIdents, so
   // probing only the stem would redeclare the empty-item const.
   const free = (s: string): boolean =>
     !ctx.used.has(`${base}${s}`) &&
@@ -2519,7 +2519,7 @@ const emitRowsComponent = (
 //
 // Subscription-primitive choice (--live): the prop wires through
 // form.watchValues, present since formstand 0.2 and returning its own
-// unsubscribe — the lowest floor of the three candidates. useFormSelector
+// unsubscribe, the lowest floor of the three candidates. useFormSelector
 // (also 0.2+) is a render-side subscription, wrong shape for a callback
 // prop; useFormValues is the nicest spelling but UNRELEASED (> 0.12), and
 // generated output must not require an unpublished library version. The
@@ -2550,7 +2550,7 @@ const scaffoldBlocks = (
   const ownerHook = scaffold.formProp
     ? [
         "// The page owns the form: create it with this hook (or an",
-        "// equivalent useForm call) and pass it down — the same instance can",
+        "// equivalent useForm call) and pass it down, the same instance can",
         "// drive this component and any other consumer of the values.",
         ...modeComment,
         `export const ${hookName} = () =>`,
@@ -2565,13 +2565,13 @@ const scaffoldBlocks = (
     ...(scaffold.live
       ? [
           "  // Fires on every value change (values are replaced immutably,",
-          "  // so reference identity tracks real changes) — drive a map, a",
+          "  // so reference identity tracks real changes), drive a map, a",
           "  // preview, or an autosave from here.",
           "  onValuesChange?: (values: FormValues) => void;",
         ]
       : []),
     // Config-fields autocomplete overrides with optionsProp: the page
-    // supplies the suggestion list — options are DATA (an airport list),
+    // supplies the suggestion list, options are DATA (an airport list),
     // not schema.
     ...optionsProps.flatMap((entry) => [
       `  // Suggestions for the ${q(entry.path)} autocomplete override.`,
@@ -2633,8 +2633,8 @@ const emitForm = (
     arrays.map((entry) => [entry.path, entry]),
   );
   // Options props (config-fields autocomplete overrides) are component
-  // parameters: every other derived identifier — union binding vars, nested
-  // Rows stems — must steer clear of them, so they seed both used-sets.
+  // parameters: every other derived identifier, union binding vars, nested
+  // Rows stems, must steer clear of them, so they seed both used-sets.
   const optionsProps = collectOptionsProps(root, budget);
   const optionsPropNames = optionsProps.map((entry) => entry.name);
   // Union hook variables must not collide with array hook/type identifiers.
@@ -2683,10 +2683,10 @@ const emitForm = (
     budget,
   );
   return [
-    "// Generated by formstand-cli — edit freely, this file is yours.",
+    "// Generated by formstand-cli: edit freely, this file is yours.",
     ...backend.header(usage, arrays, root, budget),
     // Child Rows components take a typed `form` prop (the main component passes
-    // its own down); the top-level component gets `form` from useForm — or,
+    // its own down); the top-level component gets `form` from useForm, or,
     // under --form-prop, from its own typed prop.
     ...(nested.components.length > 0 || scaffold.formProp
       ? [`import type { Form } from "formstand";`]
@@ -2735,14 +2735,14 @@ const plainLeaf = (
   // A described field renders an always-visible muted helper line under the
   // control (className "zf-help" as the styling hook, like "zf-field"):
   // formstand's built-in field components own the error line internally, so
-  // the description keeps its own separate slot — coexisting with the error
-  // like Mantine's native description slot does — rather than swapping.
+  // the description keeps its own separate slot, coexisting with the error
+  // like Mantine's native description slot does, rather than swapping.
   const desc =
     spec.description !== undefined
       ? [`${ind(level)}<p className="zf-help">${jsxText(spec.description)}</p>`]
       : [];
   // The config-fields autocomplete override wins over the kind's default
-  // control: an in-file AutocompleteField (input + native datalist — see
+  // control: an in-file AutocompleteField (input + native datalist, see
   // the preamble) instead of formstand's TextField/SelectField.
   if (isAutocompleteLeaf(spec)) {
     return [
@@ -2816,7 +2816,7 @@ const plainLeaf = (
   }
 };
 
-// The plain prop-builder name per scalar kind — THE mapping, shared with
+// The plain prop-builder name per scalar kind, THE mapping, shared with
 // the module layout's leaf imports and controls so the two layouts cannot
 // drift on which builder a kind binds with.
 const PLAIN_BUILDER: Readonly<Record<string, string>> = {
@@ -2833,7 +2833,7 @@ export const plainBuilderName = (kind: string): string =>
   PLAIN_BUILDER[kind] ?? "textInputProps";
 
 // A control rendered from a bound field variable, using the raw prop
-// builders — the discriminant select and every variant field of a union.
+// builders, the discriminant select and every variant field of a union.
 const plainVariantLeaf = (
   spec: FieldSpec,
   fieldVar: string,
@@ -2845,7 +2845,7 @@ const plainVariantLeaf = (
     `${ind(level + 2)}<p role="alert">{${fieldVar}.error?.[0]}</p>`,
     `${ind(level + 1)}) : null}`,
   ];
-  // The always-visible muted helper line — plain keeps the description in
+  // The always-visible muted helper line, plain keeps the description in
   // its own slot next to the error line (see plainLeaf).
   const desc =
     spec.description !== undefined
@@ -2902,7 +2902,7 @@ const plainVariantLeaf = (
 
 // The plain (and custom-template fallback) autocomplete override control:
 // free text with suggestions as a plain input bound through formstand's
-// textInputProps, the suggestion list a native <datalist> — no new
+// textInputProps, the suggestion list a native <datalist>, no new
 // dependency, and the field stays a string the user can type freely.
 // Emitted once in the preamble when some static leaf carries the override.
 const PLAIN_AUTOCOMPLETE_PROPS_TYPE: readonly string[] = [
@@ -3107,7 +3107,7 @@ const plainBackend = (
     `${ind(level + 3)}</button>`,
     `${ind(level + 2)}</fieldset>`,
     `${ind(level + 1)}))}`,
-    // The array-level error (z.array().min(...) etc.) — the same line the
+    // The array-level error (z.array().min(...) etc.), the same line the
     // module layout's list shell renders.
     `${ind(level + 1)}{${entry.hookName}.error ? <p role="alert">{${entry.hookName}.error[0]}</p> : null}`,
     `${ind(level + 1)}<button type="button" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
@@ -3141,12 +3141,12 @@ export const emitPlainForm = (options: EmitFormOptions): string =>
 // Snippets shared by the component-kit backends (MUI + shadcn)
 // ---------------------------------------------------------------------------
 
-// The grid each section's fields flow into, in each ui's dialect — emitted
+// The grid each section's fields flow into, in each ui's dialect, emitted
 // as PROPERTY/CLASS fragments (not whole objects) so wrappers can merge
 // them with span and chrome styles. One source: the single-file backends
 // and the module layout must emit identical grids for the same --columns.
 // Responsive on purpose: --columns N means "N columns WHEN THERE IS ROOM,
-// stacking as width runs out" — nobody asks for 2 columns wanting 110px
+// stacking as width runs out", nobody asks for 2 columns wanting 110px
 // inputs on a phone. Inline styles cannot carry a media query, so the track
 // is the CSS clamp idiom: the calc caps the count at N (each track must fit
 // its share of the row), the 220px floor collapses columns that would drop
@@ -3164,7 +3164,7 @@ export const responsiveGridTracks = (columns: number): string =>
 // section's columns the field occupies, or the whole row.
 export type FieldSpan = number | "full";
 
-// The spanning cell a config `span` places a field in, per ui dialect —
+// The spanning cell a config `span` places a field in, per ui dialect,
 // ONE source, because the single-file backends and the module layout must
 // emit identical cells for the same span and column count (the same
 // invariant the grids themselves follow). A span at or past the column
@@ -3174,7 +3174,7 @@ export const spanCellFor = (
   span: FieldSpan,
   columns: number,
   // mui only: v7/9's size-prop grid vs the v5/v6 legacy item/xs/sm
-  // spelling — mirrors containerCellTags and the single-file backend.
+  // spelling, mirrors containerCellTags and the single-file backend.
   muiGridSizeProp = true,
 ): Readonly<{ open: string; close: string; note?: string }> => {
   const full = span === "full" || span >= columns;
@@ -3216,7 +3216,7 @@ export const spanCellFor = (
       // The section grid collapses below `md` (gridChakraProps), so a
       // partial span applies from md up and base stays auto for the
       // 1-column phone flow. The full row is "1 / -1", safe at any track
-      // count — same spelling section roots use.
+      // count, same spelling section roots use.
       return {
         open: full
           ? `<Box gridColumn="1 / -1">`
@@ -3225,7 +3225,7 @@ export const spanCellFor = (
       };
     case "plain":
       // Inline styles cannot carry a media query, and the plain grid's
-      // auto-fit tracks collapse by width — a hard `span 2` would force
+      // auto-fit tracks collapse by width, a hard `span 2` would force
       // implicit tracks (overflow) once the tracks collapse on a phone.
       // "1 / -1" is safe at ANY track count, so a partial span degrades
       // to the full row and says so in a comment beside the wrapper.
@@ -3263,10 +3263,10 @@ export const hasLeafUsage = (usage: KindUsage): boolean =>
 // (everything but plain and custom templates).
 export type KitUi = "mui" | "shadcn" | "chakra" | "mantine" | "antd";
 
-// The emitted builder/hook name for a text-shaped scalar binding, per kit —
+// The emitted builder/hook name for a text-shaped scalar binding, per kit,
 // one production for every site that used to restate these as ternaries.
 // Kit NUMBER bindings are use-prefixed HOOKS (they hold raw-text state; see
-// numberTextHook below) — except shadcn's, which stays a stateless
+// numberTextHook below), except shadcn's, which stays a stateless
 // type="number" builder.
 export const kitScalarBinding = (
   ui: KitUi,
@@ -3282,7 +3282,7 @@ export const kitScalarBinding = (
 // The react import for a kit header or module adapter: the number hook holds
 // useState-backed raw-text state, so number usage promotes the type-only
 // ChangeEvent import to a value import carrying useState. shadcn passes
-// needsNumberState: false — its number binding is the stateless
+// needsNumberState: false, its number binding is the stateless
 // type="number" input.
 // `needsEffect` (--live) adds useEffect for the onValuesChange
 // subscription; number usage still promotes the whole import to a value
@@ -3322,7 +3322,7 @@ const withExportPrefix = (
         line.startsWith("const ") ? `${exp}${line}` : line,
       );
 
-// The emitted first-error helper — one definition so the two generators
+// The emitted first-error helper, one definition so the two generators
 // can't drift in error semantics.
 const FIELD_ERROR_HELPER: readonly string[] = [
   "const fieldError = (",
@@ -3336,7 +3336,7 @@ const FIELD_ERROR_HELPER: readonly string[] = [
 // The emitted raw-text number-editing hook, shared verbatim by the four
 // stateful kit adapters (only the ChangeEvent element type differs). It
 // REPLICATES formstand's own useNumberInput (src/react/fields.tsx)
-// semantics exactly — emitted INLINE instead of imported because generated
+// semantics exactly, emitted INLINE instead of imported because generated
 // output keeps its formstand >= 0.3.0 floor (the library only exports
 // useNumberInput from 0.11.0): local raw text while editing, keystrokes that parse (shared
 // parseNumberText rules) pushed to the form, partial entries ("-", "1.",
@@ -3350,7 +3350,7 @@ const numberTextHook = (eventTarget: string): readonly string[] => [
   "  raw: string | null;",
   "  // The form value the hook last wrote (or observed when it kept a",
   "  // partial entry). When field.value diverges, an external writer",
-  "  // (reset/adoptValues/another field) changed it — drop the raw text so",
+  "  // (reset/adoptValues/another field) changed it, drop the raw text so",
   "  // the input shows it.",
   "  pushed: number | null | undefined;",
   "}>;",
@@ -3403,7 +3403,7 @@ const numberTextHook = (eventTarget: string): readonly string[] => [
 ];
 
 // Gated like the components that use it: BoundFieldProps references
-// FieldFormApi, whose import only exists when some leaf renders — an
+// FieldFormApi, whose import only exists when some leaf renders, an
 // unconditional type would emit non-compiling code for leaf-free schemas.
 const boundFieldProps = (
   usage: KindUsage,
@@ -3457,7 +3457,7 @@ export const autocompleteSiteComment = (spec: FieldSpec): string =>
 // Both kit backends emit identical Bound* elements per leaf kind; they
 // differ only in which component binds a boolean (MUI renders a Switch,
 // shadcn a Checkbox) and in which kinds forward a captured description
-// (`describedKinds` — the Bound component owns the kit's helper-text slot,
+// (`describedKinds`, the Bound component owns the kit's helper-text slot,
 // the leaf just passes the literal through).
 const boundLeaf =
   (
@@ -3471,7 +3471,7 @@ const boundLeaf =
         ? ` ${jsxAttr("description", spec.description)}`
         : "";
     // The config-fields autocomplete override wins over the kind's default
-    // control (string OR enum — an overridden enum upgrades its select to
+    // control (string OR enum, an overridden enum upgrades its select to
     // the combobox): one Bound component, the options threaded as a prop or
     // baked from the enum.
     if (isAutocompleteLeaf(spec)) {
@@ -3576,7 +3576,7 @@ const kitFormstandImportLines = (
 
 // The objectSection production every kit backend shares: wrap the body in
 // the kit's sectionOpen/sectionClose pair. bodyDelta is how many levels
-// DEEPER than the historical level+1 the body must sit — the depth of the
+// DEEPER than the historical level+1 the body must sit, the depth of the
 // chrome's innermost container beyond the section tag itself (flat chrome
 // is one element, so 0; a Card+CardContent+Grid stack adds 2). Without the
 // shift, panel/collapsible cells render shallower than the container that
@@ -3594,7 +3594,7 @@ const wrapSection =
   ];
 
 // A control rendered from a bound field variable, using the in-file MUI
-// adapter builders — the discriminant select and each variant field of a
+// adapter builders, the discriminant select and each variant field of a
 // union (the path-typed Bound* components can't reach variant paths).
 const muiVariantLeaf = (
   spec: FieldSpec,
@@ -3604,7 +3604,7 @@ const muiVariantLeaf = (
   noneChoice = false,
 ): readonly string[] => {
   // A described variant field inlines its literal into MUI's one helper-text
-  // slot, after the adapter spread — same swap rule as the Bound components
+  // slot, after the adapter spread, same swap rule as the Bound components
   // (error keeps the slot while present).
   const helper =
     spec.description !== undefined
@@ -3667,7 +3667,7 @@ const shadcnVariantLeaf = (
   level: number,
 ): readonly string[] => {
   const id = `{${fieldVar}.path}`;
-  // The muted description line, rendered only while the error line is not —
+  // The muted description line, rendered only while the error line is not,
   // the two share the one slot under the control.
   const descLines =
     spec.description !== undefined
@@ -3737,7 +3737,7 @@ const shadcnVariantLeaf = (
 
 // Shared rules: sx over system props, MenuItem children inside a select
 // TextField, Stack for layout to stay out of Grid's way entirely. The one
-// prop-surface delta across the supported majors (5, 6, 7, 9 — MUI skipped
+// prop-surface delta across the supported majors (5, 6, 7, 9, MUI skipped
 // 8) is TextField's slot-props API, encoded below; everything else the
 // backend emits typechecks identically against every major (verified
 // empirically by the cli/matrix harness against each major's .d.ts).
@@ -3746,13 +3746,13 @@ const shadcnVariantLeaf = (
 type MuiVersionConfig = Readonly<{
   // v6+ TextField takes slot overrides via `slotProps.{input,inputLabel}`;
   // v5 has only the legacy `InputProps` / `InputLabelProps` component
-  // props (v9 REMOVED those, v6–7 keep them deprecated — so the modern
+  // props (v9 REMOVED those, v6–7 keep them deprecated, so the modern
   // spelling is emitted everywhere it exists).
   textFieldSlotProps: boolean;
   // Grid's size prop only exists from v7 (where Grid2 was renamed Grid);
   // in v5 AND v6 the plain Grid is the legacy item/xs/sm one, so both get
   // the legacy spelling. The matrix against real v6 declarations is what
-  // established this — v6's size-prop grid is the separate Grid2 import.
+  // established this, v6's size-prop grid is the separate Grid2 import.
   gridSizeProp: boolean;
 }>;
 
@@ -3863,10 +3863,10 @@ export const muiAdapterSection = (
     "});",
   ];
   // Free text with suggestions (config-fields autocomplete override): the
-  // field stays a string, so the binding is the INPUT value — controlled
+  // field stays a string, so the binding is the INPUT value, controlled
   // inputValue + onInputChange. Typing fires onInputChange (reason "input")
   // and selecting a suggestion fires it too, so one channel updates the
-  // form either way; `value` stays uncontrolled on purpose (freeSolo — the
+  // form either way; `value` stays uncontrolled on purpose (freeSolo, the
   // selected-option value is not the source of truth, the text is).
   const autocompleteAdapter = [
     "",
@@ -3902,7 +3902,7 @@ const muiBoundComponents = (
   const propsType = boundFieldProps(usage, withDescription);
   // With descriptions in play, the component takes over MUI's ONE helper-text
   // slot: the explicit helperText AFTER the adapter spread widens its
-  // error-only value to `fieldError(field) ?? description` — the error keeps
+  // error-only value to `fieldError(field) ?? description`, the error keeps
   // the slot while present, the description shows otherwise.
   const spreadInput = (
     name: string,
@@ -4105,8 +4105,8 @@ const muiBackend = (
   scaffold: ScaffoldOptions,
 ): Backend => {
   const cols = visual.columns;
-  // Multi-column sections lay out with MUI's own <Grid> — the same
-  // component the hand-written playground demos use — with the per-version
+  // Multi-column sections lay out with MUI's own <Grid>, the same
+  // component the hand-written playground demos use, with the per-version
   // spelling from the config: v5's legacy item/xs/sm, v6+'s size objects.
   // fieldLines wraps each child via gridChild below, so sections no longer
   // self-span. The 1-column chrome keeps the historical Stack/CardContent
@@ -4137,7 +4137,7 @@ const muiBackend = (
       case "panel":
         // Same chrome shape as the module layout's objectShell (which puts
         // the heading INSIDE the grid CardContent so it can carry the
-        // dirty/valid flags) — the two emitters must not drift for the
+        // dirty/valid flags), the two emitters must not drift for the
         // same --sections flag.
         return cols === 1
           ? [
@@ -4209,7 +4209,7 @@ const muiBackend = (
       "Stack",
       ...(usage.boolean ? ["Switch"] : []),
       // The autocomplete's renderInput is a TextField too (and casts its
-      // params through the exported props type — see BoundAutocompleteField).
+      // params through the exported props type, see BoundAutocompleteField).
       ...(usage.string ||
       usage.date ||
       usage.number ||
@@ -4248,7 +4248,7 @@ const muiBackend = (
       ? undefined
       : (fieldSpan) => spanCellFor("mui", fieldSpan, cols, gridSizeProp),
   arraySection: (entry, level, rowBody) => {
-    // Children sit under the chrome's innermost container — same shift as
+    // Children sit under the chrome's innermost container, same shift as
     // objectSection's body. At cols > 1 each row's Stack nests INSIDE its
     // wrapper cell (one deeper again), and the error/add pair sits inside
     // its spanning cell.
@@ -4280,7 +4280,7 @@ const muiBackend = (
       `${ind(rowStack)}</Stack>`,
       ...(cols === 1 ? [] : [`${ind(base + 1)}${fullRowCell[1]}`]),
       `${ind(base)}))}`,
-      // The array-level error (z.array().min(...) etc.) and the add button —
+      // The array-level error (z.array().min(...) etc.) and the add button,
       // one spanning cell at cols > 1.
       ...(cols === 1 ? [] : [`${ind(base)}${fullRowCell[0]}`]),
       `${ind(spanBase)}{${entry.hookName}.error ? (`,
@@ -4361,7 +4361,7 @@ export const shadcnAdapterSection = (usage: KindUsage, exp = ""): string => {
     '  value: field.value ?? "",',
     '  "aria-invalid": ariaInvalid(field),',
     // The textarea override spreads this same builder, so its handler
-    // widens to the textarea element only when that override is in play —
+    // widens to the textarea element only when that override is in play,
     // a handler over the union is assignable to both components.
     `  onChange: (e: ChangeEvent<HTMLInputElement${usage.textarea ? " | HTMLTextAreaElement" : ""}>) => {`,
     "    const text = e.target.value;",
@@ -4386,7 +4386,7 @@ export const shadcnAdapterSection = (usage: KindUsage, exp = ""): string => {
     "  onBlur: field.onBlur,",
     "});",
   ];
-  // No blur event on the Radix Select root — closing the dropdown is the
+  // No blur event on the Radix Select root, closing the dropdown is the
   // "done editing" signal, so it maps to the field's blur trigger.
   const selectAdapter = [
     "",
@@ -4433,8 +4433,8 @@ export const shadcnAdapterSection = (usage: KindUsage, exp = ""): string => {
   return [
     "// ---- formstand → shadcn/ui adapter -----------------------------------------",
     ...(hasLeaf ? withExportPrefix(errorHelper, exp) : []),
-    // The autocomplete override binds the same text adapter — its
-    // suggestions ride a native <datalist> on the Input — and so does the
+    // The autocomplete override binds the same text adapter, its
+    // suggestions ride a native <datalist> on the Input, and so does the
     // textarea override (same binding, wider control).
     ...(usage.string || usage.autocomplete || usage.textarea
       ? textAdapter
@@ -4452,7 +4452,7 @@ const shadcnBoundComponents = (
 ): string => {
   const propsType = boundFieldProps(usage, withDescription);
   // The muted description line shares the under-control slot with the error
-  // line — the error wins it while present (and an undescribed field renders
+  // line, the error wins it while present (and an undescribed field renders
   // neither line, not an empty <p>).
   const params = withDescription
     ? "{ form, path, label, description }"
@@ -4574,7 +4574,7 @@ const shadcnBoundComponents = (
   ];
   // The autocomplete override control: shadcn ships no installable combobox
   // (its combobox is a copy-paste recipe), so suggestions ride a native
-  // <datalist> on the Input — DOM-shaped, zero new API surface, and the
+  // <datalist> on the Input, DOM-shaped, zero new API surface, and the
   // field stays free text.
   const autocomplete = [
     "",
@@ -4705,7 +4705,7 @@ const shadcnBackend = (
   objectSection: wrapSection(sectionOpen, sectionClose, bodyDelta),
   arraySection: (entry, level, rowBody) => {
     // Rows sit under the chrome's innermost container (the collapsible grid
-    // div), not under the section tag — same shift as objectSection's body.
+    // div), not under the section tag, same shift as objectSection's body.
     const base = level + 1 + bodyDelta;
     return [
       ...(visual.sections === "collapsible"
@@ -4732,7 +4732,7 @@ const shadcnBackend = (
       `${ind(base + 2)}</Button>`,
       `${ind(base + 1)}</div>`,
       `${ind(base)}))}`,
-      // The array-level error — the same line the module layout's list shell
+      // The array-level error, the same line the module layout's list shell
       // renders.
       `${ind(base)}{${entry.hookName}.error ? <p role="alert">{${entry.hookName}.error[0]}</p> : null}`,
       `${ind(base)}<Button`,
@@ -4781,7 +4781,7 @@ export const emitShadcnForm = (options: EmitFormOptions): string =>
 // installed 3.36 .d.ts in cli/matrix): Field.Root/Field.Label/Field.ErrorText
 // replace v2's FormControl trio (`invalid` on the root, not `isInvalid`);
 // NativeSelect.Root + NativeSelect.Field bind a plain <select> (preferred
-// over the Ark collection-based Select for generated code — it takes DOM
+// over the Ark collection-based Select for generated code, it takes DOM
 // change events like formstand's selectProps); Switch.Root is a <label>
 // carrying checked/onCheckedChange (details.checked) with Switch.HiddenInput
 // / Switch.Control / Switch.Thumb / Switch.Label inside. The generated file
@@ -4790,7 +4790,7 @@ export const emitShadcnForm = (options: EmitFormOptions): string =>
 // style props (gap/display/gridTemplateColumns), not v2's `spacing`.
 
 // The chakra spelling of the shared section grid, as literal JSX attributes
-// (chakra style props). gap="4" is 1rem — the same 16px the other kits use.
+// (chakra style props). gap="4" is 1rem, the same 16px the other kits use.
 // Style props take responsive objects, so the multi-column grid collapses to
 // one column below md (768px) instead of squeezing inputs on a phone.
 export const gridChakraProps = (columns: number): string =>
@@ -4800,7 +4800,7 @@ export const gridChakraProps = (columns: number): string =>
 
 export const chakraAdapterSection = (usage: KindUsage, exp = ""): string => {
   // Error text renders through Field.ErrorText, gated by `invalid` on
-  // Field.Root — both read fieldError, so every non-boolean leaf needs it
+  // Field.Root, both read fieldError, so every non-boolean leaf needs it
   // (the Switch renders no error line, like the MUI backend's booleans).
   const needsError =
     usage.string ||
@@ -4888,7 +4888,7 @@ export const chakraAdapterSection = (usage: KindUsage, exp = ""): string => {
   return [
     "// ---- formstand → Chakra UI v3 adapter --------------------------------------",
     ...(needsError ? withExportPrefix(FIELD_ERROR_HELPER, exp) : []),
-    // The autocomplete override binds the same text adapter — its
+    // The autocomplete override binds the same text adapter, its
     // suggestions ride a native <datalist> on the Input (chakra's Combobox
     // is Ark's collection-API compound component; see the Bound component's
     // comment for why the DOM-shaped datalist is the generated binding).
@@ -4909,7 +4909,7 @@ const chakraBoundComponents = (
 ): string => {
   const propsType = boundFieldProps(usage, withDescription);
   // Field.HelperText fills the under-control slot only while Field.ErrorText
-  // does not (chakra shows both otherwise — the swap is explicit), and an
+  // does not (chakra shows both otherwise, the swap is explicit), and an
   // undescribed field renders no empty helper element.
   const params = withDescription
     ? "{ form, path, label, description }"
@@ -5001,9 +5001,9 @@ const chakraBoundComponents = (
   ];
   // The autocomplete override control. Chakra 3's own Combobox is Ark's
   // collection-API compound component (createListCollection + Root/Control/
-  // Input/Positioner/Content/Item and allowCustomValue for free text) — a
+  // Input/Positioner/Content/Item and allowCustomValue for free text), a
   // disproportionate surface for a faithful free-text-with-suggestions
-  // binding in generated code — so suggestions ride a native <datalist> on
+  // binding in generated code, so suggestions ride a native <datalist> on
   // the plain Input instead: DOM-shaped, honest, and the field stays a
   // string the user can type freely.
   const autocomplete = [
@@ -5063,7 +5063,7 @@ const chakraBoundComponents = (
 };
 
 // A control rendered from a bound field variable, using the in-file chakra
-// adapter builders — the discriminant select and each variant field of a
+// adapter builders, the discriminant select and each variant field of a
 // union (the path-typed Bound* components can't reach variant paths).
 const chakraVariantLeaf = (
   spec: FieldSpec,
@@ -5071,7 +5071,7 @@ const chakraVariantLeaf = (
   label: string,
   level: number,
 ): readonly string[] => {
-  // The inline Field.HelperText for a described variant field — rendered
+  // The inline Field.HelperText for a described variant field, rendered
   // only while Field.ErrorText is not (chakra shows both otherwise).
   const descLines =
     spec.description !== undefined
@@ -5273,7 +5273,7 @@ const chakraBackend = (
   numberPropsHook: kitScalarBinding("chakra", "number"),
   objectSection: wrapSection(sectionOpen, sectionClose, bodyDelta),
   arraySection: (entry, level, rowBody) => {
-    // Children sit under the chrome's innermost container — same shift as
+    // Children sit under the chrome's innermost container, same shift as
     // objectSection's body.
     const base = level + 1 + bodyDelta;
     return [
@@ -5292,7 +5292,7 @@ const chakraBackend = (
       `${ind(base + 2)}</Button>`,
       `${ind(base + 1)}</Stack>`,
       `${ind(base)}))}`,
-      // The array-level error — the same per-kit line the module layout's
+      // The array-level error, the same per-kit line the module layout's
       // list shell renders.
       `${ind(base)}{${entry.hookName}.error ? (`,
       `${ind(base + 1)}<Text role="alert" color="red.500">{${entry.hookName}.error[0]}</Text>`,
@@ -5334,7 +5334,7 @@ export const emitChakraForm = (options: EmitFormOptions): string =>
 // Emits against the current @mantine/core major (verified against the
 // installed 9.5 .d.ts in cli/matrix). Mantine field components carry their
 // own label + error props, so there is no Field wrapper: TextInput binds
-// text/number/date natively (its onChange is a DOM ChangeEvent — Mantine's
+// text/number/date natively (its onChange is a DOM ChangeEvent, Mantine's
 // NumberInput is deliberately NOT used, its onChange takes
 // `(value: number | string)`, not an event, so it can't share formstand's
 // input-shaped adapters); NativeSelect is a real <select> (DOM change
@@ -5347,7 +5347,7 @@ export const emitChakraForm = (options: EmitFormOptions): string =>
 
 export const mantineAdapterSection = (usage: KindUsage, exp = ""): string => {
   // The error line renders through each control's own `error` prop, so the
-  // builders embed `error: fieldError(field)` — every non-boolean leaf needs
+  // builders embed `error: fieldError(field)`, every non-boolean leaf needs
   // the helper (the Switch renders no error line, like the other backends'
   // booleans).
   const needsError =
@@ -5373,7 +5373,7 @@ export const mantineAdapterSection = (usage: KindUsage, exp = ""): string => {
   ];
   // TextInput with inputMode="decimal": the native binding. Mantine's
   // NumberInput widget is not DOM-shaped (onChange: (value: number | string))
-  // — the plain input keeps the adapter identical in spirit to the other
+  //, the plain input keeps the adapter identical in spirit to the other
   // kits. A HOOK, not a builder: value/onChange/onBlur come from the
   // raw-text editing state (useNumberText), so typing "85000.50" or "-5" is
   // never reparsed into "8500050"/"5" mid-entry.
@@ -5434,7 +5434,7 @@ export const mantineAdapterSection = (usage: KindUsage, exp = ""): string => {
     "});",
   ];
   // Free text with suggestions (config-fields autocomplete override):
-  // Mantine's Autocomplete is exactly that semantic — value: string,
+  // Mantine's Autocomplete is exactly that semantic, value: string,
   // onChange: (value: string) => void, the list only suggests. The data
   // prop stays at the call site (per-field), everything else binds here.
   const autocompleteAdapter = [
@@ -5470,7 +5470,7 @@ const mantineBoundComponents = (
 ): string => {
   const propsType = boundFieldProps(usage, withDescription);
   // Mantine's native `description` slot: its own element, separate from the
-  // `error` slot the adapter builders fill — Mantine renders both when both
+  // `error` slot the adapter builders fill, Mantine renders both when both
   // exist, so no swap is emitted (the kit-idiomatic behavior).
   const params = withDescription
     ? "{ form, path, label, description }"
@@ -5527,7 +5527,7 @@ const mantineBoundComponents = (
     "};",
   ];
   // The autocomplete override control: Mantine's own Autocomplete (free
-  // text with suggestions — its native semantic), the options threaded as
+  // text with suggestions, its native semantic), the options threaded as
   // `data` (Mantine accepts readonly arrays).
   const autocomplete = [
     "",
@@ -5577,7 +5577,7 @@ const mantineBoundComponents = (
 };
 
 // A control rendered from a bound field variable, using the in-file mantine
-// adapter builders — the discriminant select and each variant field of a
+// adapter builders, the discriminant select and each variant field of a
 // union (the path-typed Bound* components can't reach variant paths).
 const mantineVariantLeaf = (
   spec: FieldSpec,
@@ -5585,7 +5585,7 @@ const mantineVariantLeaf = (
   label: string,
   level: number,
 ): readonly string[] => {
-  // Mantine's native description slot, inlined as a literal — separate from
+  // Mantine's native description slot, inlined as a literal, separate from
   // the error slot, so no swap (see mantineBoundComponents).
   const descAttr =
     spec.description !== undefined
@@ -5638,7 +5638,7 @@ const mantineBackend = (
 ): Backend => {
   const cols = visual.columns;
   // Multi-column sections lay out with Mantine's own <Grid>/<Grid.Col>
-  // (12-column spans, responsive span objects) — SimpleGrid was the earlier
+  // (12-column spans, responsive span objects), SimpleGrid was the earlier
   // spelling, but it has no per-child span, and Grid.Col is what makes a
   // future per-field span a one-prop change. fieldLines wraps each child
   // via gridChild below, so sections no longer self-span.
@@ -5776,7 +5776,7 @@ const mantineBackend = (
       : (fieldSpan) => spanCellFor("mantine", fieldSpan, cols),
   objectSection: wrapSection(sectionOpen, sectionClose, bodyDelta),
   arraySection: (entry, level, rowBody) => {
-    // Children sit under the chrome's innermost container — same shift as
+    // Children sit under the chrome's innermost container, same shift as
     // objectSection's body. At cols > 1 each row's Stack nests INSIDE its
     // wrapper Col (one deeper again), and the error/add pair sits inside
     // its spanning Col.
@@ -5806,7 +5806,7 @@ const mantineBackend = (
       `${ind(rowStack)}</Stack>`,
       ...(cols === 1 ? [] : [`${ind(base + 1)}</Grid.Col>`]),
       `${ind(base)}))}`,
-      // The array-level error and add button — one spanning Col at cols > 1.
+      // The array-level error and add button, one spanning Col at cols > 1.
       ...(cols === 1 ? [] : [`${ind(base)}<Grid.Col span={12}>`]),
       `${ind(spanBase)}{${entry.hookName}.error ? (`,
       `${ind(spanBase + 1)}<Text role="alert" c="red">{${entry.hookName}.error[0]}</Text>`,
@@ -5844,11 +5844,11 @@ export const emitMantineForm = (options: EmitFormOptions): string =>
 
 // Emits against antd 6 (verified against the installed 6.5 .d.ts in
 // cli/matrix). The one hard rule: antd's own Form (Form.Item, name-based
-// bindings, its own store) is never emitted — formstand owns state, so the
+// bindings, its own store) is never emitted, formstand owns state, so the
 // generated code binds antd's INPUT components as controlled components:
 //
 // - Input is DOM-shaped (it extends InputHTMLAttributes), so text/number/
-//   date bind natively — number as Input inputMode="decimal" (antd's
+//   date bind natively, number as Input inputMode="decimal" (antd's
 //   InputNumber is rejected on evidence: its onChange is
 //   (value: number | null), not an event) and date as Input type="date"
 //   (antd's DatePicker is dayjs-value-based, and the generated code pulls
@@ -5859,7 +5859,7 @@ export const emitMantineForm = (options: EmitFormOptions): string =>
 //   placeholder, and there is no `name` (antd's Select renders no
 //   form-posting input).
 // - Checkbox binds booleans: its onChange is antd's own DOM-ish
-//   CheckboxChangeEvent (e.target.checked) and it has a real onBlur —
+//   CheckboxChangeEvent (e.target.checked) and it has a real onBlur,
 //   unlike antd's Switch, which has NO onBlur prop at all and a
 //   value-shaped (checked, event) onChange, so Switch is rejected.
 // - Without Form.Item there is no built-in error slot: every non-boolean
@@ -5868,10 +5868,10 @@ export const emitMantineForm = (options: EmitFormOptions): string =>
 //   antd's dialect), with a plain <label htmlFor>/id pair for the label.
 //
 // Sections render Flex/Typography.Title (flat), Card variant="outlined"
-// (panel), or Collapse via the items API (collapsible — children-panels
+// (panel), or Collapse via the items API (collapsible, children-panels
 // are deprecated in 5.x+); grids are style-prop CSS grids (gridStyleProps,
 // like the plain backend). No provider is required (ConfigProvider is
-// optional theming), and antd 6 peers react >=18 — no React-19 patch.
+// optional theming), and antd 6 peers react >=18, no React-19 patch.
 
 export const antdAdapterSection = (usage: KindUsage, exp = ""): string => {
   // Error text renders through the explicit FieldError line and `status`
@@ -5890,7 +5890,7 @@ export const antdAdapterSection = (usage: KindUsage, exp = ""): string => {
     `${exp}const fieldStatus = (`,
     "  field: Readonly<{ error: readonly string[] | undefined }>,",
     // "" (not undefined) is antd's own no-status value in the InputStatus
-    // union — returning undefined would fail host apps compiled with
+    // union, returning undefined would fail host apps compiled with
     // exactOptionalPropertyTypes, where `status?: InputStatus` rejects an
     // explicit undefined.
     '): "error" | "" => (fieldError(field) !== undefined ? "error" : "");',
@@ -5926,7 +5926,7 @@ export const antdAdapterSection = (usage: KindUsage, exp = ""): string => {
     "});",
   ];
   // Input with inputMode="decimal": the native binding. antd's InputNumber
-  // widget is not DOM-shaped (onChange: (value: number | null)) — the plain
+  // widget is not DOM-shaped (onChange: (value: number | null)), the plain
   // input keeps the adapter identical in spirit to the other kits. A HOOK,
   // not a builder: value/onChange/onBlur come from the raw-text editing
   // state (useNumberText), so typing "85000.50" or "-5" is never reparsed
@@ -5962,7 +5962,7 @@ export const antdAdapterSection = (usage: KindUsage, exp = ""): string => {
   // The one value-shaped adapter: antd's Select is a combobox (no native
   // <select> exists in antd), so onChange receives the value directly.
   // value ?? null (not "") keeps the placeholder visible when empty, and
-  // there is no `name` — antd's Select renders no form-posting input.
+  // there is no `name`, antd's Select renders no form-posting input.
   // Because of that, formstand's focus helpers can't reach it through their
   // name walk: on formstand >= 0.11.0, focusField/focusFirstError fall back
   // to the element whose `id` is exactly the path (the generated markup
@@ -5971,7 +5971,7 @@ export const antdAdapterSection = (usage: KindUsage, exp = ""): string => {
   const selectAdapter = [
     "",
     "// No `name`: antd's Select renders no form-posting input. formstand's",
-    "// focus helpers reach it anyway on formstand >= 0.11.0 — their",
+    "// focus helpers reach it anyway on formstand >= 0.11.0, their",
     "// [id=path] fallback finds the combobox through the id={path} the",
     "// markup sets (antd forwards it to the real input); on 0.10.x and",
     "// older, focusField/focusFirstError skip selects.",
@@ -6007,7 +6007,7 @@ export const antdAdapterSection = (usage: KindUsage, exp = ""): string => {
   const autocompleteAdapter = [
     "",
     "// No `name`: antd's AutoComplete renders no form-posting input.",
-    "// formstand's focus helpers reach it anyway on formstand >= 0.11.0 —",
+    "// formstand's focus helpers reach it anyway on formstand >= 0.11.0,",
     "// their [id=path] fallback finds the combobox through the id={path}",
     "// the markup sets (antd forwards it to the real input); on 0.10.x and",
     "// older, focusField/focusFirstError skip it.",
@@ -6041,7 +6041,7 @@ const antdBoundComponents = (
 ): string => {
   const propsType = boundFieldProps(usage, withDescription);
   // The muted Typography.Text description line shares the under-control slot
-  // with the explicit FieldError line — the error wins it while present (and
+  // with the explicit FieldError line, the error wins it while present (and
   // an undescribed field renders neither).
   const params = withDescription
     ? "{ form, path, label, description }"
@@ -6122,7 +6122,7 @@ const antdBoundComponents = (
   ];
   // The autocomplete override control: antd's AutoComplete, options mapped
   // to its { value } shape at the call site, the explicit label/FieldError
-  // lines from the established antd pattern (no Form.Item — formstand owns
+  // lines from the established antd pattern (no Form.Item, formstand owns
   // the state), id={path} for the focus-helper fallback (see the adapter's
   // no-name comment).
   const autocomplete = [
@@ -6189,7 +6189,7 @@ const antdBoundComponents = (
 };
 
 // A control rendered from a bound field variable, using the in-file antd
-// adapter builders — the discriminant select and each variant field of a
+// adapter builders, the discriminant select and each variant field of a
 // union (the path-typed Bound* components can't reach variant paths).
 const antdVariantLeaf = (
   spec: FieldSpec,
@@ -6198,7 +6198,7 @@ const antdVariantLeaf = (
   level: number,
 ): readonly string[] => {
   const id = `{${fieldVar}.path}`;
-  // The muted description line for a described variant field — rendered only
+  // The muted description line for a described variant field, rendered only
   // while the FieldError line is not (the two share the one slot).
   const descLines =
     spec.description !== undefined
@@ -6274,7 +6274,7 @@ const antdBackend = (
 ): Backend => {
   const cols = visual.columns;
   // Multi-column sections lay out with antd's own Row/Col (24-column span
-  // math, responsive props) — the kit's idiom, and what makes per-field
+  // math, responsive props), the kit's idiom, and what makes per-field
   // spans a Col prop later. An earlier revision used the plain backend's
   // CSS grid here; Row/Col replaced it when --columns went responsive.
   // fieldLines wraps each child via gridChild below, so sections no longer
@@ -6311,7 +6311,7 @@ const antdBackend = (
             ];
       case "collapsible":
         // One Collapse per section (mirroring the MUI backend), via the
-        // items API — children-panels are deprecated in antd 5.x+.
+        // items API, children-panels are deprecated in antd 5.x+.
         return [
           `${ind(level)}<Collapse`,
           `${ind(level + 1)}defaultActiveKey={["section"]}`,
@@ -6418,7 +6418,7 @@ const antdBackend = (
       : (fieldSpan) => spanCellFor("antd", fieldSpan, cols),
   objectSection: wrapSection(sectionOpen, sectionClose, bodyDelta),
   arraySection: (entry, level, rowBody) => {
-    // Children sit under the chrome's innermost container — same shift as
+    // Children sit under the chrome's innermost container, same shift as
     // objectSection's body. At cols > 1 each row's Flex nests INSIDE its
     // wrapper Col (one deeper again), and the error/add pair sits inside
     // its spanning Col.
@@ -6447,7 +6447,7 @@ const antdBackend = (
       `${ind(rowStack)}</Flex>`,
       ...(cols === 1 ? [] : [`${ind(base + 1)}</Col>`]),
       `${ind(base)}))}`,
-      // The array-level error and add button — Row children must be Cols, so
+      // The array-level error and add button, Row children must be Cols, so
       // at cols > 1 both ride one spanning Col.
       ...(cols === 1 ? [] : [`${ind(base)}<Col span={24}>`]),
       `${ind(spanBase)}{${entry.hookName}.error ? (`,
@@ -6505,7 +6505,7 @@ const TEMPLATE_FIELD_TYPE: Readonly<Record<TemplateLeafKind, string>> = {
   enum: "string | null | undefined",
 };
 
-// The generated wrapper name per kind — also the element boundLeaf emits, so
+// The generated wrapper name per kind, also the element boundLeaf emits, so
 // the leaf and the preamble agree. boundLeaf's boolean element is parameterized
 // (below), the rest are fixed.
 const TEMPLATE_BOUND_COMPONENT: Readonly<Record<TemplateLeafKind, string>> = {
@@ -6530,7 +6530,7 @@ const templateLeafLines = (
 // off the same pre-formatted LeafContext strings so the one function slots into
 // both the Bound wrapper (label/options are props) and the union variant
 // (label a quoted literal, options an array literal) paths unchanged. Enum
-// renders its options at runtime via `.map` — like the kit Bound selects — so
+// renders its options at runtime via `.map`, like the kit Bound selects, so
 // the `options` expression works whether it's a prop or a literal.
 const plainTemplateLeaf = (ctx: TemplateLeafContext): readonly string[] => {
   const error = [
@@ -6538,7 +6538,7 @@ const plainTemplateLeaf = (ctx: TemplateLeafContext): readonly string[] => {
     `    <p role="alert">{${ctx.field}.error?.[0]}</p>`,
     `  ) : null}`,
   ];
-  // The always-visible muted helper line (plain's separate-slot policy — see
+  // The always-visible muted helper line (plain's separate-slot policy, see
   // plainLeaf). ctx.description may be a per-field-optional prop reference,
   // so the emitted markup guards undefined at runtime.
   const desc =
@@ -6589,7 +6589,7 @@ const plainTemplateLeaf = (ctx: TemplateLeafContext): readonly string[] => {
 };
 
 // The leaf body for a kind: the template's own renderer, or the plain
-// fallback — the ONE place the choice is made, so the wrapper and variant
+// fallback, the ONE place the choice is made, so the wrapper and variant
 // paths render the same kind identically.
 const templateLeafBody = (
   template: Template,
@@ -6615,7 +6615,7 @@ const templateBoundComponent = (
     bind: `${PLAIN_BUILDER[kind]}(field)`,
     label: "label",
     options: kind === "enum" ? "options" : "",
-    // Inside the wrapper the description is the (optional) prop — present on
+    // Inside the wrapper the description is the (optional) prop, present on
     // BoundFieldProps only when the schema carries static descriptions.
     description: withDescription ? "description" : "",
   };
@@ -6649,7 +6649,7 @@ const templateBoundComponent = (
 
 // The autocomplete-override wrapper for the template backend. Overrides WIN
 // over the template: a template owns per-KIND rendering, and an overridden
-// field opted out of its kind's default — so the override emission (plain's
+// field opted out of its kind's default, so the override emission (plain's
 // input + native <datalist>) applies, not template.leaf.string. Unlike
 // plain's own AutocompleteField, the description arrives as a prop (the
 // boundLeaf path passes it), rendered in plain's separate zf-help slot.
@@ -6658,7 +6658,7 @@ const templateAutocompleteComponent = (
 ): readonly string[] => [
   "",
   "// autocomplete override: the config-fields override wins over the",
-  "// template's per-kind renderers — plain input + native <datalist>.",
+  "// template's per-kind renderers, plain input + native <datalist>.",
   "const BoundAutocompleteField = ({",
   "  form,",
   "  path,",
@@ -6694,7 +6694,7 @@ const templateAutocompleteComponent = (
 ];
 
 // The wrapper components, one per kind that renders as a STATIC leaf (gated on
-// static-leaf usage like the kit backends' Bound components — a union-only kind
+// static-leaf usage like the kit backends' Bound components, a union-only kind
 // renders from a hoisted hook and needs no wrapper).
 const templateBoundComponents = (
   template: Template,
@@ -6750,7 +6750,7 @@ const templateBoundComponents = (
 // A variant control (the discriminant select or a union variant field):
 // renders the SAME leaf body as the wrapper, but from the already-hoisted
 // field VARIABLE, with the label as a quoted literal and enum options as an
-// array literal — the pre-formatted strings are what let one leaf function
+// array literal, the pre-formatted strings are what let one leaf function
 // serve both contexts.
 const templateVariantLeaf =
   (template: Template): Backend["variantLeaf"] =>
@@ -6781,7 +6781,7 @@ const templateVariantLeaf =
   };
 
 // Merge the template's import lines by module specifier, deduping names and
-// keeping first-seen order — `type Foo` names pass through verbatim.
+// keeping first-seen order, `type Foo` names pass through verbatim.
 const mergeTemplateImports = (
   imports: readonly TemplateImport[],
 ): readonly TemplateImport[] =>
@@ -6815,8 +6815,8 @@ const templateImportLines = (
   );
 
 // The template backend: plain's scaffold with the leaf rendering replaced by
-// the template's controls — wrapped in Bound* components for static fields,
-// inlined from hoisted hooks for union variants — and unlisted kinds falling
+// the template's controls, wrapped in Bound* components for static fields,
+// inlined from hoisted hooks for union variants, and unlisted kinds falling
 // back to plain's raw controls.
 const templateBackend = (
   template: Template,
@@ -6829,7 +6829,7 @@ const templateBackend = (
     header: (usage, arrays, root, budget) => {
       const staticUsage = collectStaticUsage(root, budget);
       const hasStaticLeaf = hasLeafUsage(staticUsage);
-      // Every rendered kind — a static wrapper OR a union control — binds
+      // Every rendered kind, a static wrapper OR a union control, binds
       // through the plain prop builder, so the builder imports track TOTAL
       // usage (not just the union-control usage the plain backend gates on).
       const builderImports = [

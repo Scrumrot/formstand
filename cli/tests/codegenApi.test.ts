@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 // Import ONLY through the public browser-safe subpath surface (src/codegen-api
 // is what `formstand-cli/codegen` resolves to). This pins that the barrel
 // exports everything a consumer needs to run the generator end to end, and
-// that none of it drags in Node — the module graph is checked for browser
+// that none of it drags in Node, the module graph is checked for browser
 // safety by the esbuild bundle step in CI's build, this asserts the API.
 import {
   DEFAULT_VISUAL,
@@ -103,7 +103,7 @@ describe("codegen-api (the browser-safe formstand-cli/codegen surface)", () => {
       leaf: { string: ({ label, bind }) => `<X label={${label}} {...${bind}} />` },
     });
     expect(template.name).toBe("t");
-    // A hand-built FieldSpec (no fromZod) also emits — the IR is the contract.
+    // A hand-built FieldSpec (no fromZod) also emits, the IR is the contract.
     const ir: FieldSpec = {
       kind: "object",
       optional: false,

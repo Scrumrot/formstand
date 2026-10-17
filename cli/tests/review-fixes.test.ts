@@ -413,7 +413,7 @@ describe("container edge configs", () => {
       }),
     });
     // shadcn/plain have no cell wrapper to carry the span, so it must ride
-    // the fieldset itself even inside the section grid — a bare nested
+    // the fieldset itself even inside the section grid, a bare nested
     // fieldset collapses into a single track.
     const sectionFor = (ui: "shadcn" | "plain") =>
       emitModuleForm({
@@ -434,7 +434,7 @@ describe("container edge configs", () => {
 });
 
 describe("grid-cell cosmetics", () => {
-  // A union INSIDE an object section is what rides a grid cell — a root
+  // A union INSIDE an object section is what rides a grid cell, a root
   // union binds under the root Stack and never gets a cell.
   const nestedUnionSchema = z.object({
     order: z.object({
@@ -460,7 +460,7 @@ describe("grid-cell cosmetics", () => {
       "utf8",
     );
     // Without the shell the discriminant select, common fields, and variant
-    // fragments are bare siblings inside the fullRow cell — visibly tighter
+    // fragments are bare siblings inside the fullRow cell, visibly tighter
     // than the same union at --columns 1. antd needs none (each control is
     // already a Flex column).
     const mui = emitMuiForm({
@@ -497,7 +497,7 @@ describe("grid-cell cosmetics", () => {
       visual: { sections: "panel", columns: 2 },
     });
     // The title cell and the field cells are siblings (same indent), one
-    // level under the Grid container — the drift emitted the container two
+    // level under the Grid container, the drift emitted the container two
     // levels below the cells it wrapped.
     const container = indentOf(panel, /^(\s*)<Grid container spacing=\{2\}>/m);
     const title = indentOf(panel, /^(\s*)<Grid size=\{12\}>/m);

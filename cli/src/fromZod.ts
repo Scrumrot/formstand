@@ -56,13 +56,13 @@ export const isZodSchema = (value: unknown): boolean =>
 
 // The schema's registered description, duck-typed. In zod v4, `.describe(text)`
 // is sugar for `.meta({ description: text })`: both write ONE registry entry
-// (z.globalRegistry, keyed by schema object identity — nothing lands on
+// (z.globalRegistry, keyed by schema object identity, nothing lands on
 // `def`), surfaced by the `description` getter on the schema itself. Reading
 // the getter consults the USER's registry through their own schema object, so
 // the dual-package hazard doesn't apply. Precedence is therefore simply "the
 // last .describe()/.meta() call on that schema object wins"; other .meta()
 // keys (title, examples, ...) are ignored. A wrapper (.optional() etc.) is a
-// NEW schema object with its own (usually absent) entry — walk() prefers the
+// NEW schema object with its own (usually absent) entry, walk() prefers the
 // outermost entry present. The getter can be user code (registries are
 // extensible), so a throwing read means "no description"; an empty or
 // whitespace-only string is treated as absent.
@@ -78,7 +78,7 @@ const descriptionOf = (schema: unknown): string | undefined => {
 // Duck-typed read of zod v4's checks array: each check's plain payload
 // lives at entry._zod.def ({ check: "min_length", minimum: 3 },
 // { check: "greater_than", value: 18, inclusive: true }, ...). Unknown
-// check kinds are ignored on purpose — bounds are an enrichment the
+// check kinds are ignored on purpose, bounds are an enrichment the
 // emitters and generated tests consume, never a gate on walking.
 const checkDefs = (
   def: Readonly<Record<string, unknown>>,
@@ -98,7 +98,7 @@ const checkDefs = (
 const finiteOf = (value: unknown): number | undefined =>
   typeof value === "number" && Number.isFinite(value) ? value : undefined;
 
-// min_length / max_length / length_equals — shared by strings and arrays.
+// min_length / max_length / length_equals, shared by strings and arrays.
 // Repeated checks keep the TIGHTEST bound (zod applies all of them).
 const lengthChecksOf = (
   def: Readonly<Record<string, unknown>>,
@@ -235,7 +235,7 @@ const enumFromUnion = (options: unknown): readonly string[] | null => {
 };
 
 // The single string value of a ZodLiteral, or null (non-literal, non-string,
-// or a multi-value literal — none of which name a discriminant branch).
+// or a multi-value literal, none of which name a discriminant branch).
 const literalTag = (schema: unknown): string | null => {
   const def = defOf(schema);
   if (def === null || def.type !== "literal") return null;
@@ -293,13 +293,13 @@ const discriminatedUnionFrom = (
 // object needs its 10-segment children walked truly, and the root spends
 // one level, hence budget + 2 (= 11 at the default budget of 9). Leaves
 // DEEPER than that (11+ segments at default flags) still truncate to the
-// string-kind stand-in (NESTING_LIMIT_TODO) — possibly with the wrong
-// kind/flags, since the fallback fires before wrappers unwrap — which is
+// string-kind stand-in (NESTING_LIMIT_TODO), possibly with the wrong
+// kind/flags, since the fallback fires before wrappers unwrap, which is
 // why blankNeedsCast forces the initialValues cast for any required
 // todo-bearing leaf and the CLI mirrors every truncated path as a stderr
 // warning.
 // Also the backstop for recursion the seen-set misses (getters that build a
-// fresh schema object on every access) — the walk always terminates even
+// fresh schema object on every access), the walk always terminates even
 // for a truly cyclic schema. Overridable via fromZod's maxDepth argument
 // (the CLI's --max-depth).
 export const DEFAULT_MAX_DEPTH = FORMSTAND_PATH_DEPTH + 2;
@@ -331,7 +331,7 @@ const fallback = (flags: Flags, todo: string): FieldSpec => ({
 //
 // Description capture wraps the node walk: the recursion attaches the inner
 // schema's description first, then each unwinding wrapper level overrides
-// with its own entry when present — so for both
+// with its own entry when present, so for both
 // `z.number().describe("x").optional()` (entry on the inner number) and
 // `z.number().optional().describe("x")` (entry on the outer optional) the
 // OUTERMOST entry present wins.
@@ -450,12 +450,12 @@ const walkNode = (
       return walk(def.innerType, { ...flags, optional: true }, depth, nextSeen);
     case "nullable":
       return walk(def.innerType, { ...flags, nullable: true }, depth, nextSeen);
-    // A .default() means the *input* may omit the value — and the wrapped
+    // A .default() means the *input* may omit the value, and the wrapped
     // value is what the generated initialValues should start from. zod v4's
     // `def.defaultValue` is a GETTER that already resolves the user's
     // factory, so it is read, never invoked: a function-valued result (an
     // older shape storing the factory itself, or a factory returning a
-    // function) means "not capturable" — calling it would execute arbitrary
+    // function) means "not capturable", calling it would execute arbitrary
     // user code at generation time. And a non-deterministic factory
     // (Date.now, randomUUID) must not bake a run-dependent value into
     // byte-deterministic output: the getter is read TWICE, and the value is
@@ -485,7 +485,7 @@ const walkNode = (
       // A refused capture is never silent: the marker lets the CLI mirror
       // the degradation on stderr (the field starts blank despite its
       // .default()). Captured values can still be refused later at emit
-      // time — droppedDefaultFieldPaths covers those off `defaultValue`.
+      // time, droppedDefaultFieldPaths covers those off `defaultValue`.
       return capturable
         ? { ...inner, defaultValue: first }
         : { ...inner, droppedDefault: true };

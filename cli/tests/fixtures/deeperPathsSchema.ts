@@ -3,7 +3,7 @@ import { z } from "zod";
 // WALKER-truncation probe: the leaf sits at ELEVEN segments
 // (m1...m10.count), one past even the derived default nesting budget
 // (FORMSTAND_PATH_DEPTH + 2 = 11), so default-flags generation cannot reach
-// it — the walker truncates it to a string-kind stand-in BEFORE the
+// it, the walker truncates it to a string-kind stand-in BEFORE the
 // .nullable() wrapper unwraps (wrong kind AND wrong flags). The generated
 // file must still compile: blankNeedsCast sees the todo-bearing required
 // fallback and forces the as-unknown-as cast, and the CLI mirrors the

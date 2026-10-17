@@ -23,7 +23,7 @@ import { nonDeterministicDefaultSchema } from "./fixtures/nonDeterministicDefaul
 // captured value is a JSON-serializable primitive matching the field kind
 // (string / finite number / boolean / declared enum option); dates and
 // container defaults keep the blank-form behavior. The value is captured
-// off the zod def (`defaultValue` — a resolved value in zod v4, a factory
+// off the zod def (`defaultValue`, a resolved value in zod v4, a factory
 // in older shapes) into the IR's `defaultValue`.
 
 describe("fromZod default capture", () => {
@@ -66,7 +66,7 @@ describe("defaults in emitInitialValues", () => {
   it("skips a default that does not match the field kind", () => {
     const ir = fromZod(
       z.object({
-        // "gold" is not a declared option — seeding it would emit a type
+        // "gold" is not a declared option, seeding it would emit a type
         // error, so the enum falls back to its blank behavior.
         plan: z.enum(["free", "pro"]).default("gold" as "free"),
       }),
@@ -142,7 +142,7 @@ describe("defaults the capture must refuse", () => {
         },
       });
     const first = emit();
-    // The counter yields a fresh value per read — no literal may land.
+    // The counter yields a fresh value per read, no literal may land.
     expect(first).toContain("seq: undefined,");
     expect(first).not.toMatch(/seq: \d/);
     // Two full generations are byte-identical despite the impure factory.
@@ -151,8 +151,8 @@ describe("defaults the capture must refuse", () => {
 });
 
 describe("refused defaults are mirrored as warnings, never silent", () => {
-  // Every refusal mode — capture-guard (function-valued, non-deterministic)
-  // and emit-time (todo fallback, kind mismatch, dates/containers) — lists
+  // Every refusal mode, capture-guard (function-valued, non-deterministic)
+  // and emit-time (todo fallback, kind mismatch, dates/containers), lists
   // the field exactly once; captured defaults and fields with no default at
   // all never appear.
   it("a function-valued resolved default is listed", () => {
@@ -183,7 +183,7 @@ describe("refused defaults are mirrored as warnings, never silent", () => {
   });
 
   it("captured defaults are not listed; unseedable dates/containers are", () => {
-    // theme/retries/newsletter/plan/factory/quoted all seed literals — no
+    // theme/retries/newsletter/plan/factory/quoted all seed literals, no
     // warning; the date and array defaults keep the blank behavior, so they
     // ARE listed (their .default() never reaches the generated form).
     expect(droppedDefaultFieldPaths(fromZod(defaultsSchema))).toEqual([
@@ -225,9 +225,9 @@ describe("refused defaults are mirrored as warnings, never silent", () => {
     }
     const text = chunks.join("");
     expect(text).toContain(
-      'warning: field "accent" has a .default() the CLI could not capture (non-primitive, non-deterministic, or degraded field); it starts blank — seed it by hand',
+      'warning: field "accent" has a .default() the CLI could not capture (non-primitive, non-deterministic, or degraded field); it starts blank, seed it by hand',
     );
-    // Exactly one refused default in this fixture — one warning.
+    // Exactly one refused default in this fixture, one warning.
     expect(
       text.match(/has a \.default\(\) the CLI could not capture/g),
     ).toHaveLength(1);

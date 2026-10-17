@@ -1,8 +1,8 @@
 // Custom templates: the escape hatch for UI kits formstand-cli doesn't ship
 // built in (Mantine, Chakra, an in-house design system). A template
 // OVERRIDES the per-kind field rendering and declares the imports its
-// controls need; everything else — the form scaffold, sections, arrays,
-// discriminated-union handling, initial values, the schema — is inherited
+// controls need; everything else, the form scaffold, sections, arrays,
+// discriminated-union handling, initial values, the schema, is inherited
 // from the plain backend. This is the leaf-override model: a UI kit differs
 // in its field components, not the form skeleton.
 //
@@ -23,7 +23,7 @@
 export type TemplateLeafKind = "string" | "number" | "boolean" | "date" | "enum";
 
 // The context a leaf renderer receives. Every field is a STRING to splice
-// into JSX — the values are written so the same template works both inside a
+// into JSX, the values are written so the same template works both inside a
 // generated Bound* wrapper component (where `field`/`label` are props) and
 // inside a discriminated-union block (where they are concrete values), so
 // `label={${label}}` / `{...${bind}}` are correct in both.
@@ -34,11 +34,11 @@ export type TemplateLeafContext = Readonly<{
   // etc. off it for custom error/validation display.
   field: string;
   // The formstand prop-builder spread for this kind, already applied to
-  // `field` — `"textInputProps(field)"` etc. Spread it onto your control:
+  // `field`, `"textInputProps(field)"` etc. Spread it onto your control:
   // `{...${bind}}`. Carries name/value/onChange/onBlur/aria-invalid.
   bind: string;
   // The field label, as a JS EXPRESSION (a prop reference or a quoted
-  // string) — write `label={${label}}`, not `label="${label}"`.
+  // string), write `label={${label}}`, not `label="${label}"`.
   label: string;
   // enum only: the options, as a JS expression evaluating to `string[]`
   // (a prop reference or an array literal). `""` for non-enum kinds.
@@ -46,7 +46,7 @@ export type TemplateLeafContext = Readonly<{
   options: string;
   // The field's captured description (zod `.describe()` / `.meta`, or the
   // member's JSDoc in type mode), as a JS EXPRESSION evaluating to
-  // `string | undefined` — a prop reference inside the generated Bound
+  // `string | undefined`, a prop reference inside the generated Bound
   // wrapper, a quoted literal inside a union block. `""` when the schema
   // carries no description for this position: gate your markup on it
   // (`ctx.description === "" ? ... : ...`) so undescribed schemas stay
@@ -76,7 +76,7 @@ export type Template = Readonly<{
   >;
 }>;
 
-// Identity with types — completion and typo-checking in the template file.
+// Identity with types, completion and typo-checking in the template file.
 export const defineTemplate = (template: Template): Template => template;
 
 // Runtime validation for a loaded template module (a plain object from an

@@ -65,7 +65,7 @@ const generate = (
 
 // A typecheck-only consumer for the combined --live --form-prop output: the
 // page creates the form with the exported owner hook, passes it down, and
-// subscribes — exactly the composition the modes exist for (a page feeding
+// subscribes, exactly the composition the modes exist for (a page feeding
 // a map AND the form UI from one instance).
 const writeScaffoldConsumer = (dir: string): string => {
   const file = path.join(dir, "LiveOwnedPage.tsx");
@@ -88,7 +88,7 @@ const writeScaffoldConsumer = (dir: string): string => {
 };
 
 // Every fixture is emitted once per backend, and each backend's outputs are
-// typechecked as ONE program — ts.createProgram re-parses the library
+// typechecked as ONE program, ts.createProgram re-parses the library
 // source, zod's types, and @types/react from scratch every call, so one
 // program per compiler configuration (not per fixture) keeps the suite's
 // cost flat as fixtures accumulate. The fixtures deliberately span the edge
@@ -270,8 +270,8 @@ describe("generated components", () => {
     expect(typecheckDiagnostics(mantine.files, mantineStubPaths)).toEqual([]);
     // The Mantine conventions the emitter promises: field components carry
     // their own label + error props (no Field wrapper), the native-input
-    // bindings (TextInput for numbers — Mantine's NumberInput onChange is
-    // (value: number | string), not a DOM event — and a real <select> via
+    // bindings (TextInput for numbers, Mantine's NumberInput onChange is
+    // (value: number | string), not a DOM event, and a real <select> via
     // NativeSelect), and a DOM-event Switch.
     expect(mantine.profile.code).toContain('} from "@mantine/core";');
     expect(mantine.profile.code).toContain(
@@ -300,7 +300,7 @@ describe("generated components", () => {
     // The antd conventions the emitter promises: formstand owns state, so
     // antd's Form/Form.Item never appears; error display is the explicit
     // status + Typography.Text line; text/number/date bind through the
-    // DOM-shaped Input (InputNumber's onChange is (value: number | null) —
+    // DOM-shaped Input (InputNumber's onChange is (value: number | null),
     // rejected, like Mantine's NumberInput); the enum is antd's Select with
     // the one value-shaped adapter (no native <select> exists in antd); and
     // booleans bind Checkbox, NOT Switch (Switch has no onBlur and a
@@ -345,13 +345,13 @@ describe("generated components", () => {
     // No binding for the dot-in-name field...
     expect(plain.hostile.code).not.toContain('path={"a.b"}');
     expect(plain.hostile.code).toContain(
-      '{/* TODO: field "a.b" skipped — "." in a key is not path-addressable',
+      '{/* TODO: field "a.b" skipped, "." in a key is not path-addressable',
     );
     // ...but initialValues still materializes the key.
     expect(plain.hostile.code).toContain('"a.b": "",');
     // The nested dot field inside array rows is skipped too.
     expect(plain.hostile.code).toContain(
-      '{/* TODO: field "deep.dot" skipped — "." in a key is not path-addressable',
+      '{/* TODO: field "deep.dot" skipped, "." in a key is not path-addressable',
     );
   });
 
@@ -402,7 +402,7 @@ describe("generated components", () => {
     expect(mantine.collapsible.code).toContain(
       "<Grid.Col span={{ base: 12, sm: 4 }}>",
     );
-    // antd's Collapse must use the items API — children-panels are
+    // antd's Collapse must use the items API, children-panels are
     // deprecated in 5.x+.
     expect(antd.collapsible.code).toContain("<Collapse");
     expect(antd.collapsible.code).toContain("items={[");
@@ -429,7 +429,7 @@ describe("generated components", () => {
 
   // The blank-draft cast is emitted only when the draft genuinely can't
   // typecheck (a required number/date/enum starts undefined); otherwise the
-  // initial values get a checked annotation — the typecheck programs above
+  // initial values get a checked annotation, the typecheck programs above
   // prove the annotated form actually compiles.
   it("initialValues are cast only when the blank draft needs it", () => {
     // profileSchema's required `role` enum forces the cast...
@@ -441,7 +441,7 @@ describe("generated components", () => {
 
   // The four stateful kit backends emit the inline useNumberText hook (the
   // raw-text number binding mirroring formstand's useNumberInput) and route
-  // their number adapters through it — a plain reparsing builder would eat
+  // their number adapters through it, a plain reparsing builder would eat
   // the "." of "85000.50" and the "-" of "-5" as they're typed. shadcn's
   // number input stays the stateless type="number" builder.
   it("kit number bindings are raw-text hooks, emitted inline", () => {
@@ -462,7 +462,7 @@ describe("generated components", () => {
   });
 
   // Single-file array sections render the array-level error (rows.error in
-  // the module layout; here the hook const) — a z.array().min(1) message
+  // the module layout; here the hook const), a z.array().min(1) message
   // must not be invisible, and every kit's line carries role="alert" so the
   // message is announced, not just painted.
   it("single-file array sections render the array-level error per kit", () => {
@@ -490,7 +490,7 @@ describe("generated components", () => {
   });
 
   // Leaf-free output must not reference usage-gated helpers/types whose
-  // imports were (correctly) omitted — the typecheck programs above prove it
+  // imports were (correctly) omitted, the typecheck programs above prove it
   // compiles; this pins the mechanism.
   it("leaf-free output omits BoundFieldProps in every backend", () => {
     expect(plain.leafFree.code).not.toContain("BoundFieldProps");

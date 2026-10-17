@@ -55,7 +55,7 @@ describe("the test plan derives only what the IR carries", () => {
       "tier",
     ]);
     // A bare required string accepts the seeded "", a boolean accepts
-    // false, and optionals never gate — none of them is a case.
+    // false, and optionals never gate, none of them is a case.
   });
 
   it("format checks carry rejecting and passing samples", () => {

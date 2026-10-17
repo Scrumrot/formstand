@@ -14,7 +14,7 @@ import {
 } from "./helpers";
 
 // The textarea override (config fields): same string binding, multi-line
-// control — the dogfooding gap was a span: "full" cover letter rendered as
+// control, the dogfooding gap was a span: "full" cover letter rendered as
 // a one-line input.
 
 const schema = z.object({

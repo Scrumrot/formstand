@@ -9,9 +9,9 @@ import { fromType } from "../src/fromType";
 import { freshTmpDir, typecheckDiagnostics } from "./helpers";
 
 // Tuples (z.tuple / [A, B]): fixed-arity positional lists. Each element binds
-// at a STATIC numeric-index path (coord.0, coord.1) — no useFieldArray. This
-// pins the IR both frontends produce, the single-file rendering, and — the
-// real correctness check — that the emitted module typechecks against the
+// at a STATIC numeric-index path (coord.0, coord.1), no useFieldArray. This
+// pins the IR both frontends produce, the single-file rendering, and, the
+// real correctness check, that the emitted module typechecks against the
 // library. (The single-file output is typechecked by typecheck.test.ts via
 // the tupleSchema fixture.)
 
@@ -24,7 +24,7 @@ const emitPlain = (schema: unknown, formName: string): string => {
   });
 };
 
-describe("tuples — frontends produce a tuple IR", () => {
+describe("tuples, frontends produce a tuple IR", () => {
   it("fromZod reads a fixed tuple's elements", () => {
     const ir = fromZod(z.object({ coord: z.tuple([z.number(), z.string()]) }));
     if (ir.kind !== "object") throw new Error("object");
@@ -68,7 +68,7 @@ describe("tuples — frontends produce a tuple IR", () => {
   });
 });
 
-describe("tuples — single-file rendering", () => {
+describe("tuples, single-file rendering", () => {
   const code = emitPlain(
     z.object({ coord: z.tuple([z.number(), z.number()]), label: z.string() }),
     "CoordForm",
@@ -119,7 +119,7 @@ describe("tuples — single-file rendering", () => {
   });
 });
 
-describe("tuples — module layout", () => {
+describe("tuples, module layout", () => {
   const dir = freshTmpDir("tuple-module");
   const ir = fromZod(
     z.object({

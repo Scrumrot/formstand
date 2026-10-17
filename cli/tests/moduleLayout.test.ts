@@ -79,7 +79,7 @@ describe("emitModuleForm", () => {
     // Top-level object and array become sections.
     expect(paths).toContain("sections/AddressSection.tsx");
     expect(paths).toContain("sections/ContactsSection.tsx");
-    // Array-row fields bind template paths inline — no files for them.
+    // Array-row fields bind template paths inline, no files for them.
     expect(paths).not.toContain("fields/EmailField.tsx");
   });
 
@@ -99,7 +99,7 @@ describe("emitModuleForm", () => {
   });
 
   // Consumers type submit handlers and server code off the module's public
-  // API — the schema and draft types must not need deep imports.
+  // API, the schema and draft types must not need deep imports.
   it("index.ts re-exports the hooks, schema, and types", () => {
     const index = files.find((f) => f.path === "index.ts");
     expect(index?.content).toContain('export * from "./hooks";');
@@ -117,7 +117,7 @@ describe("emitModuleForm", () => {
 describe("emitModuleForm pascal-case schema export", () => {
   // "MySchema" derives MyForm, whose schema type alias is... MySchema. The
   // barrel then exported two different MySchemas (the value from ./schema,
-  // the type from ./types) — a TS2308 ambiguity, since export-star cannot
+  // the type from ./types), a TS2308 ambiguity, since export-star cannot
   // merge a value and a type across modules.
   const dir = freshTmpDir("module-pascal-export");
   const { files, written } = generateModule(MySchema, "MySchema", "MyForm", dir);
@@ -187,7 +187,7 @@ describe("emitModuleForm edge inputs", () => {
 
     // Hostile dot-keys surface as TODO comments, not bindings.
     expect(joinModuleFiles(hostile.files)).toContain(
-      'field "a.b" skipped — "." in a key is not path-addressable',
+      'field "a.b" skipped, "." in a key is not path-addressable',
     );
 
     expect(
@@ -250,7 +250,7 @@ describe("emitModuleForm kit uis", () => {
       "chakra",
     );
     const paths = files.map((f) => f.path);
-    // No JSX in the chakra adapter (prop builders only) — adapter.ts.
+    // No JSX in the chakra adapter (prop builders only), adapter.ts.
     expect(paths).toContain("adapter.ts");
     const adapter = files.find((f) => f.path === "adapter.ts");
     expect(adapter?.content).toContain("export const chakraTextInputProps");
@@ -274,13 +274,13 @@ describe("emitModuleForm kit uis", () => {
       "mantine",
     );
     const paths = files.map((f) => f.path);
-    // No JSX in the mantine adapter (prop builders only) — adapter.ts.
+    // No JSX in the mantine adapter (prop builders only), adapter.ts.
     expect(paths).toContain("adapter.ts");
     const adapter = files.find((f) => f.path === "adapter.ts");
     expect(adapter?.content).toContain("export const mantineTextInputProps");
     expect(adapter?.content).toContain("export const mantineSwitchProps");
     // Error text rides inside the builders (Mantine controls carry their
-    // own error prop) — no fieldError import at leaf sites.
+    // own error prop), no fieldError import at leaf sites.
     expect(adapter?.content).toContain("error: fieldError(field),");
     const field = files.find((f) => f.path === "fields/FirstNameField.tsx");
     expect(field?.content).toContain('from "@mantine/core"');
@@ -302,7 +302,7 @@ describe("emitModuleForm kit uis", () => {
       "antd",
     );
     const paths = files.map((f) => f.path);
-    // The antd adapter renders JSX (its FieldError component) — adapter.tsx,
+    // The antd adapter renders JSX (its FieldError component), adapter.tsx,
     // like shadcn's.
     expect(paths).toContain("adapter.tsx");
     const adapter = files.find((f) => f.path === "adapter.tsx");

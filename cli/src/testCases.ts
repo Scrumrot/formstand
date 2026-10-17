@@ -8,9 +8,9 @@ import { propKey } from "./codegen";
 
 // The generated-tests case IR (see cli/design/generated-tests.md): one
 // walk of the FieldSpec IR produces a plan every runner emits from. The
-// plan derives only what the IR actually carries — kinds, optionality,
+// plan derives only what the IR actually carries, kinds, optionality,
 // formats, enum options, defaults, and (since the check-metadata
-// enrichment) string/number/array bounds, but NOT authored messages — so
+// enrichment) string/number/array bounds, but NOT authored messages, so
 // it holds:
 //
 // - requiredPaths: fields a BLANK form fails on. That is narrower than
@@ -29,7 +29,7 @@ import { propKey } from "./codegen";
 //   the literal: strings repeat to the minimum length, numbers sit at the
 //   lower edge, arrays carry the minimum row count.
 // - label plans for the render and browser layers: fills go BY LABEL,
-//   which is what the generated markup associates for a11y — so the spec
+//   which is what the generated markup associates for a11y, so the spec
 //   asserts what users see, and a hand-renamed label breaks it loudly.
 //
 // Walk boundaries: subtrees under arrays, tuples-with-container-elements,
@@ -49,15 +49,15 @@ export type FormatCase = Readonly<{
 
 export type LabelFill = Readonly<{
   label: string;
-  // What to type into the control (always a string — these drive DOM
+  // What to type into the control (always a string, these drive DOM
   // change events).
   text: string;
 }>;
 
 // One bound probe per bounded string/number: `bad` sits just past the
 // tightest edge (the minimum first, then the maximum, then integrality),
-// `good` is the field's valid sample. Both are SOURCE literals — a number
-// case fills the store with a number, a string case with a string — and
+// `good` is the field's valid sample. Both are SOURCE literals, a number
+// case fills the store with a number, a string case with a string, and
 // `reason` names the edge for the case title ("shorter than 3 characters").
 export type BoundCase = Readonly<{
   path: string;
@@ -80,7 +80,7 @@ export type GeneratedTestPlan = Readonly<{
   // Text-shaped, label-reachable fills for the render/browser layers
   // (labels deduped: a repeated label is dropped rather than guessed at).
   labelFills: readonly LabelFill[];
-  // The first blank-invalid control reachable by a unique label — the
+  // The first blank-invalid control reachable by a unique label, the
   // render/browser "blank submit flags it" case; undefined skips it.
   firstInvalidLabel: string | undefined;
 }>;
@@ -101,7 +101,7 @@ type NumberSpec = Extract<FieldSpec, { kind: "number" }>;
 
 // The plain-string sample: "filled" when nothing bounds it, otherwise
 // "filled" stretched or cut to sit inside [minLength, maxLength]. A
-// formatted string keeps its format sample regardless — a bound on an
+// formatted string keeps its format sample regardless, a bound on an
 // email is almost always satisfied by the sample, and no padding rule
 // keeps an address valid.
 const BASE_TEXT = "filled";
@@ -162,7 +162,7 @@ const numberSample = (spec: NumberSpec): number => {
 
 // The rejecting sample for a bounded field, or null when the field carries
 // no bound a sample can cross (a minLength of 0, say). Order: minimum,
-// maximum, integrality — one probe per field keeps the spec readable.
+// maximum, integrality, one probe per field keeps the spec readable.
 const boundProbe = (
   spec: StringSpec | NumberSpec,
 ): Readonly<{ reason: string; bad: string }> | null => {
@@ -223,7 +223,7 @@ const blankInvalid = (spec: FieldSpec): boolean => {
 const blankArrayInvalid = (spec: FieldSpec): boolean =>
   spec.kind === "array" && (spec.checks?.minLength ?? 0) > 0;
 
-// A VALID literal for one spec — the inverse of emitInitialValues' blank.
+// A VALID literal for one spec, the inverse of emitInitialValues' blank.
 const validLiteral = (spec: FieldSpec, level: number): string => {
   const ind = "  ".repeat(level);
   const child = "  ".repeat(level + 1);
@@ -360,7 +360,7 @@ const walkFields = (
         : [];
     // Label fills drive DOM change events, so only text-shaped controls
     // qualify (numbers type as text into the kit-agnostic inputs; enums
-    // render selects and dates render pickers — store-level cases cover
+    // render selects and dates render pickers, store-level cases cover
     // those).
     const fills: readonly LabelFill[] =
       field.spec.kind === "string"

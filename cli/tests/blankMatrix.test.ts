@@ -8,11 +8,11 @@ import { fromZod } from "../src/fromZod";
 import { freshTmpDir, typecheckDiagnostics } from "./helpers";
 
 // The kind × optional × nullable matrix behind emitInitialValues and
-// blankNeedsCast — the one seam that ships as a compile error in USER code
+// blankNeedsCast, the one seam that ships as a compile error in USER code
 // when the two functions drift. Pinned in both directions:
 //   1. every no-cast combo lands in ONE schema whose generated (checked,
 //      not cast) initialValues must typecheck, and
-//   2. every cast combo is proven to genuinely NEED the cast — a checked
+//   2. every cast combo is proven to genuinely NEED the cast, a checked
 //      annotation with the blank value must FAIL to typecheck.
 
 type Wrap = "plain" | "optional" | "nullable" | "optionalNullable";
@@ -104,12 +104,12 @@ describe("blank-value matrix", () => {
     const files = verdicts
       .filter((v) => v.needsCast)
       .map((v) => {
-        // emitZodSchema already imports z, so z.input resolves cleanly —
+        // emitZodSchema already imports z, so z.input resolves cleanly,
         // the only legal diagnostic is the blank value failing the type.
         const source = [
           emitZodSchema(fromZod(z.object({ [v.key]: v.schema })), "s"),
           "",
-          "// The blank draft with a CHECKED annotation must not compile —",
+          "// The blank draft with a CHECKED annotation must not compile,",
           "// this is what forces the as-unknown-as escape hatch.",
           `const blank: z.input<typeof s> = { ${v.key}: undefined };`,
           "void blank;",

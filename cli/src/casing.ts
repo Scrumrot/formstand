@@ -35,7 +35,7 @@ export const camelCase = (name: string): string =>
 
 // Reserved words a bare camelCase(fieldName) could collide with when used
 // as a const binding (row variables in the module layout). PascalCase
-// outputs can't collide — reserved words are lowercase.
+// outputs can't collide, reserved words are lowercase.
 const RESERVED = new Set([
   "await", "break", "case", "catch", "class", "const", "continue",
   "debugger", "default", "delete", "do", "else", "enum", "export",
@@ -59,7 +59,7 @@ export const isReservedWord = (name: string): boolean => RESERVED.has(name);
 // reference" reads as the action it performs; "Add references" reads like
 // a bulk import). A heuristic, deliberately conservative: the common
 // English plural spellings reverse cleanly, irregulars (children, people)
-// and anything it cannot classify pass through unchanged — a plural
+// and anything it cannot classify pass through unchanged, a plural
 // surviving is copy polish lost, a mangled singular would be a bug. Only
 // the LAST word changes ("Job Openings" → "Job Opening").
 export const singularize = (label: string): string => {

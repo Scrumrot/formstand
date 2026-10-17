@@ -8,7 +8,7 @@ import { fixturesDir, normalizeIr } from "./helpers";
 import { profileSchema } from "./fixtures/profileSchema";
 
 // The JSON Schema frontend: the same IR the zod and TS walks produce, from a
-// parsed JSON document — a bare 2020-12 schema or an OpenAPI 3.x document
+// parsed JSON document, a bare 2020-12 schema or an OpenAPI 3.x document
 // with a selected component schema.
 
 const loadFixture = (name: string): unknown =>
@@ -26,7 +26,7 @@ const fieldOf = (ir: FieldSpec, name: string): NamedField => {
   return field;
 };
 
-describe("fromJsonSchema — bare JSON Schema", () => {
+describe("fromJsonSchema, bare JSON Schema", () => {
   it("produces the same IR as the mirrored zod fixture, named by its title", () => {
     const { ir, schemaName } = fromJsonSchema(
       loadFixture("profileSchema.json"),
@@ -45,7 +45,7 @@ describe("fromJsonSchema — bare JSON Schema", () => {
   });
 });
 
-describe("fromJsonSchema — OpenAPI documents", () => {
+describe("fromJsonSchema, OpenAPI documents", () => {
   const document = loadFixture("orderApi.json");
   const order = fromJsonSchema(document, { ...OPTS, select: "Order" });
 
@@ -236,7 +236,7 @@ describe("fromJsonSchema — OpenAPI documents", () => {
     });
     // The pointer lands on a $ref node; the walk resolves it to Order. The
     // last pointer segment ("schema") is a name-shaped word, so it names the
-    // result — callers passing operation pointers should usually add --name.
+    // result, callers passing operation pointers should usually add --name.
     expect(ir.kind).toBe("object");
     expect(fieldOf(ir, "id").spec.kind).toBe("string");
     expect(schemaName).toBe("schema");

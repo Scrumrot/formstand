@@ -149,7 +149,7 @@ describe("--form-prop emission (single file)", () => {
       "export const ProfileForm = ({ form }: ProfileFormProps) => {",
     );
     expect(code).not.toContain("const form = useForm(");
-    // The submit scaffold stays — only ownership moved.
+    // The submit scaffold stays, only ownership moved.
     expect(code).toContain("handleSubmit");
     expect(code).toContain('type="submit"');
     expect(code).toContain("useIsSubmitting");
@@ -215,10 +215,10 @@ describe("module layout scaffold modes", () => {
     );
     expect(form).toContain("  const submitting = useIsSubmitting(form);");
     expect(form).toContain("form.handleSubmit((data) => {");
-    // The only ./hooks import left is the singleton — imported for the
+    // The only ./hooks import left is the singleton, imported for the
     // dev-mode split-brain guard, not for the shell (which runs on the
     // prop). (This pin used to assert NO ./hooks import; the guard changed
-    // that deliberately — see the guard test below.)
+    // that deliberately, see the guard test below.)
     expect(form).toContain('import { profileForm } from "./hooks";');
     expect(form).not.toContain("useProfileIsSubmitting");
   });
@@ -229,7 +229,7 @@ describe("module layout scaffold modes", () => {
     expect(form).toContain('process.env["NODE_ENV"] !== "production" &&');
     expect(form).toContain("form !== profileForm");
     expect(form).toContain(
-      "ProfileForm: the passed form is not this module's own instance from ./hooks — fields are pre-wired to the module form, so state will split. Pass profileForm (see ProfileFormProps docs).",
+      "ProfileForm: the passed form is not this module's own instance from ./hooks, fields are pre-wired to the module form, so state will split. Pass profileForm (see ProfileFormProps docs).",
     );
     // --live --form-prop keeps the guard too (the split is the same).
     const liveForm = fileContent(
@@ -362,7 +362,7 @@ describe("scaffold-mode flags and config", () => {
     const dir = freshTmpDir("scaffold-flags-module");
     const out = path.join(dir, "ProfileForm");
     // The module's fields are pre-wired to its own singleton, so the form
-    // prop was decorative at best — the CLI now refuses the pair (the
+    // prop was decorative at best, the CLI now refuses the pair (the
     // programmatic emitModuleForm surface keeps the option; see the
     // emitter tests above).
     expect(

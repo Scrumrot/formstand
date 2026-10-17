@@ -16,10 +16,10 @@ import { profileSchema } from "./fixtures/profileSchema";
 // The versioned --ui surface: "mui@5".."mui@9" pin an @mui/material major,
 // bare "mui" stays the latest supported major, and the version-free kits
 // reject a version. Only React-19-capable majors qualify (formstand peers
-// react ^19), and MUI skipped major 8 — hence the 5/6/7/9 set.
+// react ^19), and MUI skipped major 8, hence the 5/6/7/9 set.
 
 // Parse a value expected to FAIL, asserting the error arm and returning the
-// message — one helper collapsing the repeated narrow-and-check pairs.
+// message, one helper collapsing the repeated narrow-and-check pairs.
 const parseError = (value: string): string => {
   const result = parseUiTarget(value);
   expect(result.kind).toBe("error");
@@ -122,8 +122,8 @@ describe("parseUiTarget", () => {
 
   // mantine is UNVERSIONED like chakra: v9 (the current major) is the only
   // target; "mantine@9" is accepted as the explicit spelling. Majors 6 and
-  // older error with the React-19 + styling-rewrite rationale; 7 and 8 —
-  // which DO accept React 19 — error with the current-major-only scope
+  // older error with the React-19 + styling-rewrite rationale; 7 and 8,
+  // which DO accept React 19, error with the current-major-only scope
   // (the emitted surface is verified against v9 only).
   it("mantine parses versionless, with mantine@9 as an explicit alias", () => {
     expect(parseUiTarget("mantine")).toEqual({
@@ -170,9 +170,9 @@ describe("parseUiTarget", () => {
   });
 
   // antd is UNVERSIONED like chakra/mantine: v6 (the current major, which
-  // peers react >=18 — React 19 natively in range) is the only target;
-  // "antd@6" is the explicit spelling. antd@5 — which CAN run on React 19
-  // via the @ant-design/v5-patch-for-react-19 host patch — errors with the
+  // peers react >=18, React 19 natively in range) is the only target;
+  // "antd@6" is the explicit spelling. antd@5, which CAN run on React 19
+  // via the @ant-design/v5-patch-for-react-19 host patch, errors with the
   // current-major-only scope (no false incompatibility claim); 4 and older
   // error with the missing-surface rationale.
   it("antd parses versionless, with antd@6 as an explicit alias", () => {
@@ -219,7 +219,7 @@ describe("parseUiTarget", () => {
 // TextField's slot-props API: v5 has only the legacy InputProps /
 // InputLabelProps component props, v6+ take slotProps.{input,inputLabel}
 // (and v9 REMOVED the legacy spelling). Everything else the backend emits
-// typechecks identically against every major — the cli/matrix harness
+// typechecks identically against every major, the cli/matrix harness
 // proves that against each major's real .d.ts; these pin the emission.
 describe("mui version configs", () => {
   const options = {
@@ -247,7 +247,7 @@ describe("mui version configs", () => {
     expect(code).toContain("slotProps: { inputLabel: { shrink: true } },");
     expect(code).not.toContain("InputProps");
     expect(code).not.toContain("InputLabelProps");
-    // Bare mui IS mui@9 — the default path must stay byte-identical.
+    // Bare mui IS mui@9, the default path must stay byte-identical.
     expect(emitMuiForm({ ...options, muiVersion: 9 })).toBe(code);
   });
 
@@ -320,7 +320,7 @@ describe("--ui chakra end to end", () => {
     const code = fs.readFileSync(bare, "utf8");
     expect(code).toContain('} from "@chakra-ui/react";');
     expect(code).toContain("<Field.Root invalid={");
-    // chakra@3 IS chakra — byte-identical output.
+    // chakra@3 IS chakra, byte-identical output.
     expect(fs.readFileSync(pinned, "utf8")).toBe(code);
   });
 
@@ -360,7 +360,7 @@ describe("--ui mantine end to end", () => {
     const code = fs.readFileSync(bare, "utf8");
     expect(code).toContain('} from "@mantine/core";');
     expect(code).toContain("{...mantineTextInputProps(field)}");
-    // mantine@9 IS mantine — byte-identical output.
+    // mantine@9 IS mantine, byte-identical output.
     expect(fs.readFileSync(pinned, "utf8")).toBe(code);
   });
 
@@ -397,7 +397,7 @@ describe("--ui antd end to end", () => {
     expect(code).toContain("{...antdTextInputProps(field)}");
     // formstand owns state: antd's Form/Form.Item never appears.
     expect(code).not.toContain("Form.Item");
-    // antd@6 IS antd — byte-identical output.
+    // antd@6 IS antd, byte-identical output.
     expect(fs.readFileSync(pinned, "utf8")).toBe(code);
   });
 
@@ -420,7 +420,7 @@ describe("--ui antd end to end", () => {
         out,
       ]),
     ).toBe(0);
-    // The antd adapter renders JSX (its FieldError line) — adapter.tsx.
+    // The antd adapter renders JSX (its FieldError line), adapter.tsx.
     const adapter = fs.readFileSync(path.join(out, "adapter.tsx"), "utf8");
     expect(adapter).toContain("export const antdTextInputProps");
   });

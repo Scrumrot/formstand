@@ -29,16 +29,16 @@ import { deeperPathsSchema } from "./fixtures/deeperPathsSchema";
 import { deepRowsSchema } from "./fixtures/deepRowsSchema";
 
 // formstand's FieldPath union stops at 9 segments by default
-// (src/core/fieldPath.ts, D=9 — the CLI follows the library default); a
+// (src/core/fieldPath.ts, D=9, the CLI follows the library default); a
 // binding past that fails typecheck (TS2820). The emitters must degrade
-// such bindings to a TODO — counted on the FULL bound path, where an array
-// level spends TWO segments — while paths exactly AT the limit keep
+// such bindings to a TODO, counted on the FULL bound path, where an array
+// level spends TWO segments, while paths exactly AT the limit keep
 // binding. These suites pin both sides of the boundary and prove every
 // degraded output still typechecks against the real library source.
 
 // deepRowsSchema nests past even the derived default walker budget
 // (FORMSTAND_PATH_DEPTH + 2 = 11), so these suites pass an explicit budget
-// — the PATH budget must be the only thing degrading. The default-flags
+//, the PATH budget must be the only thing degrading. The default-flags
 // behavior (no override at all) gets its own suite below.
 const FIXTURE_MAX_DEPTH = 12;
 
@@ -69,7 +69,7 @@ const generate = (
   return { file, code };
 };
 
-// Emit a module in type mode (generated schema source — no fixture file
+// Emit a module in type mode (generated schema source, no fixture file
 // needed on disk) and write every file (same shape as nestedArrays.test.ts).
 const generateModule = (
   schema: unknown,
@@ -130,7 +130,7 @@ describe("overBudgetFieldPaths", () => {
 
   it("counts array levels as two segments (`*` marks the row index)", () => {
     // One entry PER EMITTED TODO: the scalar rows of `d` degrade at the row
-    // path, while `e`'s OBJECT rows degrade per field (`f`, `g`) — exactly
+    // path, while `e`'s OBJECT rows degrade per field (`f`, `g`), exactly
     // the TODO lines the emission tests below pin.
     expect(
       overBudgetFieldPaths(
@@ -174,8 +174,8 @@ describe("depth budget in the single-file layout", () => {
   );
 
   it("degrades the over-budget subtree to a TODO and keeps binding at the limit", () => {
-    // The TODO lands at l9 — the first node whose children can only exceed
-    // the budget — and no 10+-segment path is ever bound.
+    // The TODO lands at l9, the first node whose children can only exceed
+    // the budget, and no 10+-segment path is ever bound.
     expect(plain.code).toContain(
       `{/* TODO: path "l1.l2.l3.l4.l5.l6.l7.l8.l9" ${DEPTH_TODO} */}`,
     );
@@ -216,7 +216,7 @@ describe("depth budget in the single-file layout", () => {
   });
 
   // THE BIG ONE for this bug: the degraded outputs must typecheck against
-  // the real library source in every backend — the exact failure mode that
+  // the real library source in every backend, the exact failure mode that
   // shipped as examples/src/generated/DeepBoundaryForm.tsx (TS2820).
   it("plain over-budget outputs typecheck", () => {
     expect(typecheckDiagnostics([plain.file, rows.file])).toEqual([]);
@@ -292,7 +292,7 @@ describe("depth budget in the module layout", () => {
 
 describe("at-budget arrays with non-scalar items", () => {
   // Eight object levels put `list` at exactly 9 segments: the list hook
-  // still binds, but every row path sits at 10 — extraction (or any hand
+  // still binds, but every row path sits at 10, extraction (or any hand
   // binding) is impossible within the budget, so the emitters must say so
   // with the DEPTH todo (not the generic extract-a-row advice), and the
   // warning list must match the emitted TODOs one for one.
@@ -400,7 +400,7 @@ describe("warnings stop at each layout's degradation frontier", () => {
     );
 
   // Six object levels put `list` at 7 segments; the inner rows' `x` sits at
-  // 10 (o1...o6.list.*.*.x) — reachable only by the module layout, which
+  // 10 (o1...o6.list.*.*.x), reachable only by the module layout, which
   // extracts the inner Rows component.
   const arrayOfArrays = z.object({
     o1: z.object({
@@ -419,7 +419,7 @@ describe("warnings stop at each layout's degradation frontier", () => {
   });
 
   // Five object levels put `list` at 6 segments; `nest.deeper` sits at 9
-  // (an object needs headroom below the budget) — reachable only by the
+  // (an object needs headroom below the budget), reachable only by the
   // single-file layout, which lays row-object fields out inline.
   const objectInRows = z.object({
     o1: z.object({
@@ -477,7 +477,7 @@ describe("warnings stop at each layout's degradation frontier", () => {
     expect(singleWarnings).toEqual(["o1.o2.o3.o4.o5.list.*.nest.deeper"]);
     expect(depthTodoCount(single)).toBe(singleWarnings.length);
     // The module layout degrades the row's object field to the generic TODO
-    // — no depth TODO, so no depth warning either.
+    //, no depth TODO, so no depth warning either.
     expect(moduleJoined).toContain("bind it by hand");
     expect(depthTodoCount(moduleJoined)).toBe(0);
     expect(overBudgetFieldPaths(
@@ -506,7 +506,7 @@ describe("deep chains at DEFAULT flags", () => {
     // The walker must reach one level PAST the 9-segment path budget so a
     // leaf of up to 10 segments degrades via the PATH budget (real subtree
     // + depth TODO) rather than via walker truncation and its wrong-kind
-    // string fallback. Deeper leaves DO truncate — the suite below pins
+    // string fallback. Deeper leaves DO truncate, the suite below pins
     // that they force the cast and their own stderr warning.
     expect(DEFAULT_MAX_DEPTH).toBe(FORMSTAND_PATH_DEPTH + 2);
     expect(DEFAULT_MAX_DEPTH).toBe(11);
@@ -533,7 +533,7 @@ describe("deep chains at DEFAULT flags", () => {
     expect(code).not.toContain("nesting depth limit reached");
     // ...the PATH budget does the degrading (TODO at l9), and the subtree
     // beneath it is materialized with its REAL kinds (the nullable number
-    // blanks to null — the old string fallback blanked it to "" and failed
+    // blanks to null, the old string fallback blanked it to "" and failed
     // tsc against the imported schema).
     expect(code).toContain(
       `{/* TODO: path "l1.l2.l3.l4.l5.l6.l7.l8.l9" ${DEPTH_TODO} */}`,
@@ -550,7 +550,7 @@ describe("walker truncation past the derived budget (11+ segments)", () => {
     const dir = freshTmpDir("depth-truncation");
     // NO maxDepth override: the leaf sits one past the derived budget, so
     // the walker truncates it to a string-kind stand-in BEFORE .nullable()
-    // unwraps — wrong kind AND wrong flags, collected for the CLI warning.
+    // unwraps, wrong kind AND wrong flags, collected for the CLI warning.
     const ir = fromZod(deeperPathsSchema);
     expect(truncatedFieldPaths(ir)).toEqual([TRUNCATED]);
     const code = emitPlainForm({
@@ -565,7 +565,7 @@ describe("walker truncation past the derived budget (11+ segments)", () => {
         kind: "named",
       },
     });
-    // The stand-in blanks the number|null leaf to "" — a checked annotation
+    // The stand-in blanks the number|null leaf to "", a checked annotation
     // would ship 'string is not assignable to number' to the consumer, so
     // the cast MUST be emitted.
     expect(code).toContain('count: "",');
@@ -598,7 +598,7 @@ describe("walker truncation past the derived budget (11+ segments)", () => {
       spy.mockRestore();
     }
     expect(chunks.join("")).toContain(
-      `warning: path "${TRUNCATED}" exceeds the walker nesting budget (${DEFAULT_MAX_DEPTH}); field degraded to a placeholder — raise --max-depth or bind by hand`,
+      `warning: path "${TRUNCATED}" exceeds the walker nesting budget (${DEFAULT_MAX_DEPTH}); field degraded to a placeholder, raise --max-depth or bind by hand`,
     );
   });
 });
@@ -663,7 +663,7 @@ describe("CLI warnings for over-budget paths", () => {
       spy.mockRestore();
     }
     expect(chunks.join("")).toContain(
-      `warning: path "l1.l2.l3.l4.l5.l6.l7.l8.l9" exceeds formstand's typed FieldPath depth (${FORMSTAND_PATH_DEPTH}); emitted a TODO — raise --path-depth or bind it by hand`,
+      `warning: path "l1.l2.l3.l4.l5.l6.l7.l8.l9" exceeds formstand's typed FieldPath depth (${FORMSTAND_PATH_DEPTH}); emitted a TODO, raise --path-depth or bind it by hand`,
     );
   });
 });

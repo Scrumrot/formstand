@@ -161,7 +161,7 @@ describe("cli main", () => {
     }
     const help = chunks.join("");
 
-    // The flag spelling is built from UI_KITS/MUI_VERSIONS directly — the
+    // The flag spelling is built from UI_KITS/MUI_VERSIONS directly, the
     // kit list is pinned here on purpose (a dropped kit should fail), while
     // the mui enumeration tracks MUI_VERSIONS so a new major can't go stale.
     expect(help).toContain(
@@ -207,7 +207,7 @@ describe("isInvokedAsScript", () => {
         fs.symlinkSync(real, link, "file");
         return true;
       } catch {
-        // Symlink creation needs privileges on Windows — skip gracefully.
+        // Symlink creation needs privileges on Windows, skip gracefully.
         return false;
       }
     })();

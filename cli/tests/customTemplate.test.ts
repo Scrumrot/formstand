@@ -44,7 +44,7 @@ const mantineTemplate: Template = {
 };
 
 // Every scalar kind, an optional field, an enum, a nested object, an array,
-// and a discriminated union — so the wrapper, fallback, and variant paths are
+// and a discriminated union, so the wrapper, fallback, and variant paths are
 // all exercised in one emitted component.
 const kitchenSinkSchema = z.object({
   name: z.string(),

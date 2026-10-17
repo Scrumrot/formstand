@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// Mirrored by the Profile type in ./profileType.ts — keep the two in sync,
+// Mirrored by the Profile type in ./profileType.ts, keep the two in sync,
 // the fromType test asserts their IRs match.
 export const profileSchema = z.object({
   firstName: z.string(),

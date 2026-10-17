@@ -11,10 +11,10 @@ import { freshTmpDir, typecheckDiagnostics } from "./helpers";
 // FIELD, a tuple or array as the row ITEM, and the same shapes under nested
 // arrays all generate now instead of degrading to TODOs. The single-file
 // layout extracts child components where hooks are needed (hooks cannot run
-// inside rows.map — leaves bind through components, unions through an
+// inside rows.map, leaves bind through components, unions through an
 // extracted component per site); the module layout binds in the Row
 // component itself, which is already a component. Containers INSIDE a
-// union variant bind too, as dotted variant sub-paths ("billing.zip" —
+// union variant bind too, as dotted variant sub-paths ("billing.zip",
 // formstand 0.20); only arrays/unions inside a variant still degrade.
 // Typechecking of both layouts' output against the real library is pinned
 // by typecheck.test.ts (rowContainersSchema fixture) and the module
@@ -62,7 +62,7 @@ const emitPlain = (schema: unknown, formName: string): string =>
     schemaImport: { name: "s", from: "./s", kind: "named" },
   });
 
-describe("row containers — single-file layout", () => {
+describe("row containers, single-file layout", () => {
   const code = emitPlain(matrixSchema, "MatrixForm");
 
   it("a tuple row item binds its positions inline at row-indexed paths", () => {
@@ -149,7 +149,7 @@ describe("row containers — single-file layout", () => {
   });
 });
 
-describe("row containers — module layout", () => {
+describe("row containers, module layout", () => {
   const ir = fromZod(matrixSchema);
   const files = emitModuleForm({
     ir,

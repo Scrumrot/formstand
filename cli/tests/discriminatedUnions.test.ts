@@ -210,7 +210,7 @@ describe("discriminated union rendering typechecks", () => {
 // Regression coverage for the three 0.9 union-emitter correctness bugs.
 // Each proves the generated output TYPECHECKS against the real
 // useVariantField/useField helpers (the emitter's own assumptions aren't
-// enough — the existing fixture lacked these shapes, which is how the bugs
+// enough, the existing fixture lacked these shapes, which is how the bugs
 // slipped through).
 // ---------------------------------------------------------------------------
 

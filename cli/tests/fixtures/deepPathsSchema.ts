@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // FieldPath depth-budget probe: ten-segment leaves (l1...l9.leaf, past
 // formstand's 9-segment FieldPath budget) next to an at-the-limit branch
-// (a.b.c.d.e.f.g.h.i — exactly 9 segments) and a shallow control, so one
+// (a.b.c.d.e.f.g.h.i, exactly 9 segments) and a shallow control, so one
 // schema exercises degrade-to-TODO and still-binds side by side.
 //
 // NOTE: the ten-level chain fits the walkers' DERIVED default nesting

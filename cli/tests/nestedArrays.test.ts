@@ -56,7 +56,7 @@ const nestedOnlySchema = z.object({
   }),
 });
 
-// Emit a module in type mode (generated schema source — no fixture file on
+// Emit a module in type mode (generated schema source, no fixture file on
 // disk needed), write every file preserving the folder structure, and
 // return the files + written paths.
 const generateModule = (
@@ -111,10 +111,10 @@ describe("nested arrays in the module layout", () => {
     expect(shipping?.content).toContain(
       "() => rows.push(emptyAddressesItem)",
     );
-    // The body renders the list at the array's site — no TODO left.
+    // The body renders the list at the array's site, no TODO left.
     expect(shipping?.content).toContain("<AddressesRows />");
     expect(shipping?.content).not.toContain(
-      'TODO: nested array "shipping.addresses" —',
+      'TODO: nested array "shipping.addresses",',
     );
   });
 
@@ -156,7 +156,7 @@ describe("nested arrays in the module layout", () => {
 
   it("extracts depth-2 arrays recursively; objects in rows stay TODO", () => {
     // An array two levels down now gets its own Row/Rows pair, threading BOTH
-    // enclosing indices (p0, p1) — under an object section...
+    // enclosing indices (p0, p1), under an object section...
     expect(shipping?.content).toContain("const AddressesTagsRows = ({");
     expect(shipping?.content).toContain(
       "const field = useCustomerField(`shipping.addresses.${p0}.tags.${index}`);",
@@ -172,7 +172,7 @@ describe("nested arrays in the module layout", () => {
     );
     // A non-array shape (an object) inside an array row still stays a TODO.
     expect(contacts?.content).toContain(
-      '{/* TODO: nested object "contacts.${index}.home" — bind it by hand */}',
+      '{/* TODO: nested object "contacts.${index}.home", bind it by hand */}',
     );
   });
 
@@ -219,7 +219,7 @@ describe("nested arrays in the module layout", () => {
 
   // Three levels of nested arrays: the recursion must generate correct
   // p0/p1/p2 threading AND the whole thing must typecheck against the library
-  // — the real guard on the deep template paths and NonNullable item types.
+  //, the real guard on the deep template paths and NonNullable item types.
   it("extracts and typechecks a three-level nesting (array > array > array)", () => {
     const orgSchema = z.object({
       teams: z.array(

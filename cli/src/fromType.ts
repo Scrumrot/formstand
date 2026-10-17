@@ -86,7 +86,7 @@ const isCallable = (type: ts.Type): boolean =>
 
 // The TS analogue of zod's `.describe()`: the member's leading JSDoc
 // description (the free text before any @tags), straight off the property
-// symbol the checker already has — no extra AST walk. Whitespace-only
+// symbol the checker already has, no extra AST walk. Whitespace-only
 // comments read as absent, mirroring fromZod's empty-describe rule.
 const jsdocDescription = (
   checker: ts.TypeChecker,
@@ -173,7 +173,7 @@ const walkType = (
         };
   }
   if (hasFlag(type, ts.TypeFlags.Object)) {
-    // A callable/constructable type is not a data object — surface the whole
+    // A callable/constructable type is not a data object, surface the whole
     // field as a todo instead of walking its properties.
     if (isCallable(type)) {
       return fallback(

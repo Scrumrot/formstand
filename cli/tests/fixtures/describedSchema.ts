@@ -3,7 +3,7 @@ import { z } from "zod";
 // The `.describe()` / `.meta()` capture fixture: helper text on every scalar
 // kind, through wrappers in both orders, from `.meta({ description })`, on a
 // nested-object field, an array-row field, a tuple element, and a union
-// variant field — the positions the emitters route to different slots
+// variant field, the positions the emitters route to different slots
 // (Bound* props, inline variant literals, module field files).
 export const describedSchema = z.object({
   grossWeight: z.number().positive().describe("1,000 lbs"),
@@ -13,7 +13,7 @@ export const describedSchema = z.object({
   // Wrapper orders: description on the inner type vs. on the outer wrapper.
   firstFlight: z.date().describe("maiden flight date").optional(),
   registration: z.string().optional().describe("tail number"),
-  // The registry-based spelling — same store as .describe().
+  // The registry-based spelling, same store as .describe().
   fuelCapacity: z.number().meta({ description: "gallons usable" }),
   limits: z.object({
     ceiling: z.number().describe("feet MSL"),

@@ -1,21 +1,21 @@
-// The parsed `--ui` value: which UI kit to emit for, and — for kits that
-// formstand supports across several majors — which major to target. Pure
+// The parsed `--ui` value: which UI kit to emit for, and, for kits that
+// formstand supports across several majors, which major to target. Pure
 // data + a parser, shared by the flag parser, the config loader, and the
 // emitters (browser-safe: no Node built-ins).
 
 // @mui/material majors formstand-cli can emit for. Only React-19-capable
 // majors qualify (formstand peers react ^19, so MUI 4 and older can never
 // install alongside it), and MUI skipped major 8 entirely (7.x jumps to
-// 9.0.0 on the registry) — hence the gap.
+// 9.0.0 on the registry), hence the gap.
 export type MuiVersion = 5 | 6 | 7 | 9;
 
 export const MUI_VERSIONS: readonly MuiVersion[] = [5, 6, 7, 9];
 
-// Bare `--ui mui` keeps meaning "current MUI" — the latest supported major.
+// Bare `--ui mui` keeps meaning "current MUI", the latest supported major.
 export const DEFAULT_MUI_VERSION: MuiVersion = 9;
 
 // The discriminated target the CLI threads to the emitters. Future phases
-// add more kits here — extend the union, do not widen `kit` to string.
+// add more kits here, extend the union, do not widen `kit` to string.
 //
 // chakra carries no version: @chakra-ui/react 3 is the only major the
 // backend targets (v2 and older predate the compound-component API the
@@ -24,13 +24,13 @@ export const DEFAULT_MUI_VERSION: MuiVersion = 9;
 //
 // mantine carries no version either: the backend targets the current
 // @mantine/core major (9) only. Unlike chakra this is not an API-existence
-// scope — the emitted surface typechecks identically against 7.x-latest and
+// scope, the emitted surface typechecks identically against 7.x-latest and
 // 8.x (verified empirically; the one delta found is the `bdrs` style prop,
-// absent in 7) — but 9 is the only major the matrix verifies, so it is the
+// absent in 7), but 9 is the only major the matrix verifies, so it is the
 // only accepted target. "mantine@9" is the explicit spelling.
 //
 // antd carries no version either: the backend targets antd 6 (the current
-// major, which peers react >=18 — React 19 natively in range). antd 5 also
+// major, which peers react >=18, React 19 natively in range). antd 5 also
 // runs on React 19 but only via the @ant-design/v5-patch-for-react-19 host
 // patch, and the emitted surface is verified against the v6 .d.ts only, so
 // 5 errors honestly rather than claiming support. "antd@6" is the explicit
@@ -43,7 +43,7 @@ export type UiTarget =
   | Readonly<{ kit: "antd" }>
   | Readonly<{ kit: "mui"; version: MuiVersion }>;
 
-// The flag/config spelling of a target — what `--ui` and the config file's
+// The flag/config spelling of a target, what `--ui` and the config file's
 // `ui` key accept. `defineConfig` completion comes from this union.
 export type Ui =
   | "plain"
@@ -57,7 +57,7 @@ export type Ui =
   | "antd"
   | "antd@6";
 
-// The kits in presentation order — the one structured source both choice
+// The kits in presentation order, the one structured source both choice
 // strings below (and HELP's flag spelling in cli.ts) derive from, so adding
 // a kit updates every listing at once.
 export const UI_KITS: readonly UiTarget["kit"][] = [
@@ -69,7 +69,7 @@ export const UI_KITS: readonly UiTarget["kit"][] = [
   "antd",
 ];
 
-// The list HELP and error messages show — the mui enumeration derives from
+// The list HELP and error messages show, the mui enumeration derives from
 // UI_KITS/MUI_VERSIONS so a new kit or major can't leave this stale.
 export const UI_CHOICES = UI_KITS.map((kit) =>
   kit === "mui" ? `mui, mui@<${MUI_VERSIONS.join("|")}>` : kit,
@@ -86,7 +86,7 @@ const muiVersionOf = (text: string): MuiVersion | undefined =>
 
 // A version rule for a single-major kit: `matches` picks the rule, and its
 // message is returned verbatim (tests pin the exact texts, so the
-// kit-specific rationale strings stay data — the helper only owns the
+// kit-specific rationale strings stay data, the helper only owns the
 // shared parse SHAPE).
 type VersionRule = Readonly<{
   matches: (versionText: string) => boolean;
@@ -113,7 +113,7 @@ const singleMajorKit = (
       );
 
 // Parse a `--ui` / config `ui` value. The message comes back without a flag
-// or file prefix — callers prepend their own context ("--ui ...",
+// or file prefix, callers prepend their own context ("--ui ...",
 // "formstand.config.ts: ui ...").
 export const parseUiTarget = (value: string): ParseUiResult => {
   const at = value.indexOf("@");
@@ -131,7 +131,7 @@ export const parseUiTarget = (value: string): ParseUiResult => {
       // Bare "chakra" IS v3; "chakra@3" is the explicit spelling of the same
       // target. Older majors can't be targeted: the backend emits the v3
       // compound-component API (Field.Root/NativeSelect/Switch.Root), which
-      // v2 and older do not have — and formstand peers react ^19, which the
+      // v2 and older do not have, and formstand peers react ^19, which the
       // pre-v3 architecture predates.
       return singleMajorKit(
         { kit: "chakra" },
@@ -145,14 +145,14 @@ export const parseUiTarget = (value: string): ParseUiResult => {
           },
         ],
         (v) =>
-          `unsupported chakra version "${v}"; v3 is the only supported major — use "chakra" or "chakra@3"`,
+          `unsupported chakra version "${v}"; v3 is the only supported major, use "chakra" or "chakra@3"`,
       );
     case "mantine":
       // Bare "mantine" IS v9 (the current major); "mantine@9" is the explicit
       // spelling. Only the current major is a target: majors 6 and older
       // predate both formstand's react ^19 peer and the v7 styling rewrite
-      // (emotion -> CSS modules); majors 7–8 do accept React 19 — and the
-      // emitted surface even compiles there — but the backend is verified
+      // (emotion -> CSS modules); majors 7–8 do accept React 19, and the
+      // emitted surface even compiles there, but the backend is verified
       // against v9 only, so they error rather than silently claim support.
       return singleMajorKit(
         { kit: "mantine" },
@@ -162,24 +162,24 @@ export const parseUiTarget = (value: string): ParseUiResult => {
           {
             matches: (v) => /^[0-6]$/.test(v),
             message: (v) =>
-              `mantine@${v} is not supported: formstand requires React 19, and @mantine/core 7 rewrote styling (emotion → CSS modules) — majors 6 and older predate both; supported: "mantine" (v9, also spelled "mantine@9")`,
+              `mantine@${v} is not supported: formstand requires React 19, and @mantine/core 7 rewrote styling (emotion → CSS modules), majors 6 and older predate both; supported: "mantine" (v9, also spelled "mantine@9")`,
           },
           {
             matches: (v) => v === "7" || v === "8",
             message: (v) =>
-              `mantine@${v} is not supported: the backend targets the current @mantine/core major only — Mantine ${v} does accept React 19, but generated output is verified against v9 only; use "mantine" (or its explicit spelling "mantine@9")`,
+              `mantine@${v} is not supported: the backend targets the current @mantine/core major only, Mantine ${v} does accept React 19, but generated output is verified against v9 only; use "mantine" (or its explicit spelling "mantine@9")`,
           },
         ],
         (v) =>
-          `unsupported mantine version "${v}"; v9 is the only supported major — use "mantine" or "mantine@9"`,
+          `unsupported mantine version "${v}"; v9 is the only supported major, use "mantine" or "mantine@9"`,
       );
     case "antd":
       // Bare "antd" IS v6 (the current major); "antd@6" is the explicit
       // spelling. Only the current major is a target: antd 6 peers
       // react >=18, so React 19 is natively in range; antd 5 nominally
       // peers react >=16.9 but needs the @ant-design/v5-patch-for-react-19
-      // host patch on React 19 — and the emitted surface is verified
-      // against the v6 .d.ts only — so it errors rather than silently
+      // host patch on React 19, and the emitted surface is verified
+      // against the v6 .d.ts only, so it errors rather than silently
       // claim support; 4 and older predate the v5 CSS-in-JS rewrite and
       // parts of the emitted surface (Flex, the Collapse items API, the
       // `status` prop).
@@ -191,16 +191,16 @@ export const parseUiTarget = (value: string): ParseUiResult => {
           {
             matches: (v) => /^[0-4]$/.test(v),
             message: (v) =>
-              `antd@${v} is not supported: the backend emits the antd 5+ surface (Flex, the Collapse items API, status props), which antd ${v} does not have — and antd 4 and older predate the v5 CSS-in-JS rewrite; supported: "antd" (v6, also spelled "antd@6")`,
+              `antd@${v} is not supported: the backend emits the antd 5+ surface (Flex, the Collapse items API, status props), which antd ${v} does not have, and antd 4 and older predate the v5 CSS-in-JS rewrite; supported: "antd" (v6, also spelled "antd@6")`,
           },
           {
             matches: (v) => v === "5",
             message: () =>
-              `antd@5 is not supported: the backend targets the current antd major only — antd 5 can run on React 19 (host apps need the @ant-design/v5-patch-for-react-19 import), but generated output is verified against v6 only; use "antd" (or its explicit spelling "antd@6")`,
+              `antd@5 is not supported: the backend targets the current antd major only, antd 5 can run on React 19 (host apps need the @ant-design/v5-patch-for-react-19 import), but generated output is verified against v6 only; use "antd" (or its explicit spelling "antd@6")`,
           },
         ],
         (v) =>
-          `unsupported antd version "${v}"; v6 is the only supported major — use "antd" or "antd@6"`,
+          `unsupported antd version "${v}"; v6 is the only supported major, use "antd" or "antd@6"`,
       );
     case "mui": {
       if (versionText === undefined) {

@@ -6,37 +6,37 @@ import { capitalize, splitWords } from "./casing";
 // A per-field override, resolved from formstand.config.ts `fields` by
 // applyFieldOverrides (see ./overrides) and stamped onto the matched leaf.
 // Two independent axes share the block: `component` swaps the control
-// ("autocomplete" is the only flavor today — free text with suggestions;
+// ("autocomplete" is the only flavor today, free text with suggestions;
 // strict select-from-list remains the enum/Select path), `span` places the
 // field in its section's multi-column grid. An override may carry either
 // or both.
 export type FieldOverrideSpec = Readonly<{
   // "autocomplete": free text with suggestions (strict select-from-list
-  // remains the enum/Select path). "textarea": multi-line free text — the
+  // remains the enum/Select path). "textarea": multi-line free text, the
   // binding is unchanged, only the control widens (a span: "full" cover
   // letter rendered as a one-line input was the dogfooding gap).
   component?: "autocomplete" | "textarea";
   // Present when the generated component takes a `{name}: readonly string[]`
-  // prop feeding the suggestions (required for plain string fields — no
+  // prop feeding the suggestions (required for plain string fields, no
   // other options source exists; optional for enums, where it REPLACES the
   // baked-in enum values). The name is already collision-resolved.
   optionsPropName?: string;
   // How many of the section's columns the field occupies ("full" = the
   // whole row; a number at or past the column count clamps to full at emit
-  // time). Stamped raw — the emitters know the column count, the config
+  // time). Stamped raw, the emitters know the column count, the config
   // does not. Validated loudly against placements that cannot work (root
-  // fields, array rows, 1-column forms — see applyFieldOverrides).
+  // fields, array rows, 1-column forms, see applyFieldOverrides).
   span?: number | "full";
 }>;
 
 export type SharedSpecProps = Readonly<{
   optional: boolean;
   nullable: boolean;
-  // Set when the source construct wasn't representable — emitters surface it
+  // Set when the source construct wasn't representable, emitters surface it
   // as a `// TODO: ...` comment next to the generated fallback.
   todo?: string;
   // The runtime value of a `.default()` / `.prefault()` wrapper. Zod mode
-  // only — TS types can't carry runtime defaults, so fromType never sets it.
+  // only, TS types can't carry runtime defaults, so fromType never sets it.
   // emitInitialValues seeds the field with it when it is a JSON-serializable
   // primitive matching the field kind (string / finite number / boolean /
   // declared enum option); anything else (dates, objects, arrays) keeps the
@@ -46,11 +46,11 @@ export type SharedSpecProps = Readonly<{
   // guard refused its value (a function-valued resolved default, a
   // non-deterministic factory whose two reads disagreed, or a throwing
   // getter). Refusals decided later, at emit time (kind mismatch, todo
-  // fallback), are detected off `defaultValue` instead — see codegen's
+  // fallback), are detected off `defaultValue` instead, see codegen's
   // droppedDefaultFieldPaths, which mirrors both as stderr warnings.
   droppedDefault?: true;
   // Human helper text for the field, captured from zod's `.describe()` /
-  // `.meta({ description })` (one registry store in zod v4 — see fromZod's
+  // `.meta({ description })` (one registry store in zod v4, see fromZod's
   // capture note for the wrapper-precedence rule) or, in type mode, from the
   // member's leading JSDoc description. Emitters surface it in each kit's
   // helper-text slot; where the kit shares one slot with the error line, the
@@ -80,7 +80,7 @@ export type UnionVariant = Readonly<{
 
 // The three top-level zod string formats the generated schema can carry
 // (z.email() / z.url() / z.uuid()). The control stays a plain text input
-// either way — a format is a validation concern, not a widget choice — so
+// either way, a format is a validation concern, not a widget choice, so
 // only emitZodSchema consumes this. Set by fromJsonSchema (JSON Schema
 // `format`) and captured by fromZod from the top-level format schemas, so
 // the emitted validator round-trips; fromType never sets it (TS types
@@ -134,6 +134,6 @@ export type FieldSpec =
       }>);
 
 // "firstName" / "first_name" / "first-name" / "APIKey" → "First Name" etc.
-// (One splitting rule for the whole CLI — see ./casing.)
+// (One splitting rule for the whole CLI, see ./casing.)
 export const labelFromName = (name: string): string =>
   splitWords(name).map(capitalize).join(" ");

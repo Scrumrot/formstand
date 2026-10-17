@@ -11,7 +11,7 @@ import {
 } from "../src/wizard";
 import { fixturesDir, freshTmpDir, openApiFixture } from "./helpers";
 
-// The --wizard interview: scripted-answer runs (no TTY, no child process —
+// The --wizard interview: scripted-answer runs (no TTY, no child process,
 // the WizardIo seam is the whole point), the composed-command semantics
 // shared with the playground's builder, and the opt-in guarantees.
 
@@ -177,17 +177,17 @@ describe("runWizard", () => {
 
   it("re-asks on an invalid choice, an empty required answer, and a bad name", async () => {
     const { io, said } = scriptedIo([
-      "", // input: required — re-asks
+      "", // input: required, re-asks
       "src/schema.ts",
-      "7", // mode: not an option — re-asks
+      "7", // mode: not an option, re-asks
       "1", // zod
       "", // export
-      "banana", // ui: not an option — re-asks
+      "banana", // ui: not an option, re-asks
       "2", // mui
       "", // layout
       "", // sections
       "", // columns
-      "delete", // name: reserved word — re-asks
+      "delete", // name: reserved word, re-asks
       "ProfileForm",
       "", // out
       "", // live
@@ -211,9 +211,9 @@ describe("runWizard", () => {
     const { io } = scriptedIo(
       [
         "typo/schema.ts",
-        "n", // do not use the missing path — re-asks
+        "n", // do not use the missing path, re-asks
         "real/schema.ts",
-        "y", // real/schema.ts "missing" too in this fake fs — use anyway
+        "y", // real/schema.ts "missing" too in this fake fs, use anyway
         ...DEFAULT_WALK.slice(1),
       ],
       () => false,
@@ -233,7 +233,7 @@ describe("runWizard", () => {
         "", // sections
         "", // columns
         "", // name
-        "src/Taken.tsx", // exists — overwrite?
+        "src/Taken.tsx", // exists, overwrite?
         "n", // no: re-asks the path
         "src/Fresh.tsx", // exists too in this fake fs
         "y", // overwrite: --force
@@ -274,7 +274,7 @@ describe("runWizard", () => {
     expect(
       said.some((line) => line.includes("JSON Schema / OpenAPI document")),
     ).toBe(true);
-    // The zod/type question never appears — the extension IS the mode.
+    // The zod/type question never appears, the extension IS the mode.
     expect(
       said.some((line) => line.includes("Where does the form's shape come from")),
     ).toBe(false);
@@ -303,7 +303,7 @@ describe("runWizard", () => {
         "", // sections
         "", // columns
         "", // name
-        "", // out: required for module — re-asks
+        "", // out: required for module, re-asks
         "src/ProfileForm",
         "", // live
         // No form-prop question: the module layout rejects the flag, so

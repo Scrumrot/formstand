@@ -57,7 +57,7 @@ describe("fromZod description capture", () => {
     );
   });
 
-  it("captures .meta({ description }) — the same registry store", () => {
+  it("captures .meta({ description }), the same registry store", () => {
     expect(
       descriptionOf(walkOne(z.number().meta({ description: "gallons usable" }))),
     ).toBe("gallons usable");
@@ -143,7 +143,7 @@ describe("fromType JSDoc description capture", () => {
     );
     expect(descriptionOf(fieldSpec(ir, "grossWeight"))).toBe("1,000 lbs");
     expect(descriptionOf(fieldSpec(ir, "origin"))).toBe(
-      "ICAO code — four capital letters.",
+      "ICAO code, four capital letters.",
     );
     expect(descriptionOf(fieldSpec(ir, "undocumented"))).toBeUndefined();
   });
@@ -334,7 +334,7 @@ describe("single-file description emission", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Module layout, per kit — emission pins plus a real typecheck per kit
+// Module layout, per kit, emission pins plus a real typecheck per kit
 // ---------------------------------------------------------------------------
 
 const writeModule = (

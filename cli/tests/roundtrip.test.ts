@@ -26,7 +26,7 @@ describe("emitZodSchema", () => {
   // Formats and defaults ride into the generated validator (the JSON
   // Schema mode is the frontend that carries them): z.email()/z.url()/
   // z.uuid() emit as the top-level spellings, and a kind-matching default
-  // emits .default(literal). Re-walking the emitted source captures both —
+  // emits .default(literal). Re-walking the emitted source captures both,
   // with .default()'s one deliberate skew: it makes the input optional, so
   // a required-with-default field re-walks as optional.
   it("emits formats and defaults, and the emitted source walks back", async () => {
@@ -80,7 +80,7 @@ describe("emitZodSchema", () => {
     expect(walked.fields[1]?.spec).toEqual({
       kind: "enum",
       options: ["low", "high"],
-      // .default() makes the input optional — the deliberate skew above.
+      // .default() makes the input optional, the deliberate skew above.
       optional: true,
       nullable: false,
       defaultValue: "low",

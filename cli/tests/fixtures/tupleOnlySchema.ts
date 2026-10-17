@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // Regression (2026-08 container review): a root whose ONLY fields are
-// tuples — no object, no array, and no root scalar leaf, anywhere. Every
+// tuples, no object, no array, and no root scalar leaf, anywhere. Every
 // section-shaped gate (the single-file kit import gate, the module
 // hooks-file useField export) must count tuples themselves; each shipped
 // green while this shape emitted section chrome or hook imports with

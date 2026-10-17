@@ -20,7 +20,7 @@ export const rowContainersSchema = z.object({
             kind: z.literal("card"),
             cardNumber: z.string(),
             // A container INSIDE a variant: its scalar leaves bind as
-            // dotted variant sub-paths ("billing.zip" — formstand 0.20).
+            // dotted variant sub-paths ("billing.zip", formstand 0.20).
             billing: z.object({ zip: z.string(), plus4: z.number() }),
           }),
           z.object({ kind: z.literal("paypal"), email: z.string() }),

@@ -5,19 +5,19 @@ import { isReservedWord } from "./casing";
 // without the wizard. Three ground rules, from the roadmap:
 //
 // - Explicitly OPT-IN. Nothing here ever runs from a bare formstand-gen
-//   or a TTY sniff — the CLI streams to stdout by default and must stay
+//   or a TTY sniff, the CLI streams to stdout by default and must stay
 //   scriptable; a prompt that appears when a pipe does not would break CI
 //   and any agent driving the tool.
 // - No prompts dependency. The CLI carries two dependencies (jiti,
 //   typescript) on purpose; numbered lists over readline cover everything
 //   arrow-key pickers would, and they work identically when stdin is a
-//   pipe — which is also what makes the wizard testable.
+//   pipe, which is also what makes the wizard testable.
 // - Prompts write to STDERR (the caller wires io.say/io.ask there), so a
 //   run that ends with stdout output keeps that stream clean for piping.
 //
 // Pure core, IO at the edge: the flow talks to a WizardIo the caller
 // provides (readline in the CLI, a scripted fake in tests), and the
-// answers compose to argv through composeWizardArgs — the same
+// answers compose to argv through composeWizardArgs, the same
 // defaults-omitted semantics as the playground's CLI command builder.
 
 export type WizardIo = Readonly<{
@@ -31,7 +31,7 @@ export type WizardIo = Readonly<{
 
 export type WizardAnswers = Readonly<{
   input: string;
-  // "json" is never offered as a choice — a .json input file IS the mode
+  // "json" is never offered as a choice, a .json input file IS the mode
   // (the same extension dispatch the flag path uses), so the interview
   // detects it and swaps the zod/type questions for the --schema one.
   mode: "zod" | "type" | "json";
@@ -59,7 +59,7 @@ const quote = (arg: string): string =>
 
 // Defaults are omitted, --export only applies in zod mode, --schema only
 // in json mode, --schema-out only in the generated-schema modes (type and
-// json) with the single-file layout — the exact rules the playground's
+// json) with the single-file layout, the exact rules the playground's
 // command builder models (buildCommand in CliCommandBuilder.tsx); the two
 // must not drift.
 export const composeWizardArgs = (
@@ -95,7 +95,7 @@ export const composeWizardCommand = (answers: WizardAnswers): string =>
   ["formstand-gen", ...composeWizardArgs(answers).map(quote)].join(" ");
 
 // ---------------------------------------------------------------------------
-// Question primitives — each loops until it has a valid answer, so a typo
+// Question primitives, each loops until it has a valid answer, so a typo
 // re-asks instead of erroring out of a half-finished interview.
 // ---------------------------------------------------------------------------
 
@@ -159,16 +159,16 @@ const askYesNo = async (
 // ---------------------------------------------------------------------------
 
 const UI_CHOICES: readonly Choice[] = [
-  { value: "plain", label: "plain — formstand's bundled components, dependency-free" },
-  { value: "mui", label: "mui — Material UI, latest supported major" },
+  { value: "plain", label: "plain: formstand's bundled components, dependency-free" },
+  { value: "mui", label: "mui: Material UI, latest supported major" },
   { value: "mui@5", label: "mui@5" },
   { value: "mui@6", label: "mui@6" },
   { value: "mui@7", label: "mui@7" },
   { value: "mui@9", label: "mui@9" },
-  { value: "shadcn", label: "shadcn — @/components/ui" },
-  { value: "chakra", label: "chakra — Chakra UI 3" },
-  { value: "mantine", label: "mantine — Mantine 9" },
-  { value: "antd", label: "antd — Ant Design 6" },
+  { value: "shadcn", label: "shadcn: @/components/ui" },
+  { value: "chakra", label: "chakra: Chakra UI 3" },
+  { value: "mantine", label: "mantine: Mantine 9" },
+  { value: "antd", label: "antd: Ant Design 6" },
 ];
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -178,13 +178,13 @@ const askInput = async (io: WizardIo): Promise<string> => {
     candidate === ""
       ? "the input file is required"
       : /\.ya?ml$/i.test(candidate)
-        ? "YAML is not supported yet — convert it to JSON first (e.g. npx js-yaml api.yaml > api.json)"
+        ? "YAML is not supported yet, convert it to JSON first (e.g. npx js-yaml api.yaml > api.json)"
         : undefined,
   );
   if (io.fileExists(value)) return value;
   const anyway = await askYesNo(
     io,
-    `"${value}" does not exist here — use it anyway`,
+    `"${value}" does not exist here, use it anyway`,
     false,
   );
   return anyway ? value : askInput(io);
@@ -211,18 +211,18 @@ const askOut = async (
   if (out === "" || !io.fileExists(out)) return { out, force: false };
   const overwrite = await askYesNo(
     io,
-    `"${out}" already exists — overwrite it (--force)`,
+    `"${out}" already exists, overwrite it (--force)`,
     false,
   );
   return overwrite ? { out, force: true } : askOut(io, layout);
 };
 
 export const runWizard = async (io: WizardIo): Promise<WizardOutcome> => {
-  io.say("formstand-gen wizard — Enter accepts the [default] on any question.");
+  io.say("formstand-gen wizard: Enter accepts the [default] on any question.");
   io.say("");
 
   const input = await askInput(io);
-  // A .json input IS the mode — asking "zod or type?" about a document
+  // A .json input IS the mode, asking "zod or type?" about a document
   // neither applies to would be a trick question.
   const jsonInput = /\.json$/i.test(input);
   if (jsonInput) {
@@ -266,8 +266,8 @@ export const runWizard = async (io: WizardIo): Promise<WizardOutcome> => {
     io,
     "Layout (--layout)?",
     [
-      { value: "single", label: "single — one component file" },
-      { value: "module", label: "module — a feature-module folder (schema, hooks, fields, sections)" },
+      { value: "single", label: "single: one component file" },
+      { value: "module", label: "module: a feature-module folder (schema, hooks, fields, sections)" },
     ],
     "single",
   )) as WizardAnswers["layout"];
@@ -285,9 +285,9 @@ export const runWizard = async (io: WizardIo): Promise<WizardOutcome> => {
     io,
     "Field columns inside sections (--columns)?",
     [
-      { value: "1", label: "1 — everything stacks" },
-      { value: "2", label: "2 — two columns with room, one on a phone" },
-      { value: "3", label: "3 — three columns with room, one on a phone" },
+      { value: "1", label: "1: everything stacks" },
+      { value: "2", label: "2: two columns with room, one on a phone" },
+      { value: "3", label: "3: three columns with room, one on a phone" },
     ],
     "1",
   )) as WizardAnswers["columns"];
@@ -311,17 +311,17 @@ export const runWizard = async (io: WizardIo): Promise<WizardOutcome> => {
       : "";
   const live = await askYesNo(
     io,
-    "Live mode — no submit scaffold, values stream to an onValuesChange prop (--live)",
+    "Live mode, no submit scaffold, values stream to an onValuesChange prop (--live)",
     false,
   );
   // Single-file only: the module layout's form is a singleton the page
-  // already owns by importing it, so the CLI rejects the combination —
+  // already owns by importing it, so the CLI rejects the combination,
   // never compose a question whose answer cannot run.
   const formProp =
     layout === "single"
       ? await askYesNo(
           io,
-          "Page owns the form — component takes a form prop (--form-prop)",
+          "Page owns the form, component takes a form prop (--form-prop)",
           false,
         )
       : false;

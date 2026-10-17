@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // The per-field component-override fixture (config `fields`): a root string
-// (the twin project's ICAO case — options are DATA, not a zod enum), an enum
+// (the twin project's ICAO case, options are DATA, not a zod enum), an enum
 // to upgrade to a combobox, an array of objects with a string row field
 // ("crew.*.role"), a scalar string array ("tags.*"), a nested array-of-
 // arrays (options-prop threading through extracted Rows components), an

@@ -53,7 +53,7 @@ export const shadcnStubFile = path.join(testsDir, "stubs", "shadcn-ui.d.ts");
 
 // Maps the shadcn alias onto the repo's REAL Radix-based components
 // (examples/src/shadcn/ui), so the emitter is also validated against actual
-// shadcn/Radix prop contracts — the stub alone would only prove the emitter
+// shadcn/Radix prop contracts, the stub alone would only prove the emitter
 // agrees with its own assumptions. React's types are pinned to the root copy
 // because this program mixes examples files with the library source, and two
 // @types/react copies fail assignability at React 19's unique symbols.
@@ -77,8 +77,8 @@ const formatDiagnostic = (d: ts.Diagnostic): string => {
 };
 
 // The in-process typecheck harness: strict, react-jsx, with both bare
-// specifiers pinned to single copies — "formstand" to the library source and
-// "zod" to the root copy the library itself resolves — so the fixture's
+// specifiers pinned to single copies, "formstand" to the library source and
+// "zod" to the root copy the library itself resolves, so the fixture's
 // schema type and the library's z.ZodType are the same declarations.
 export const typecheckDiagnostics = (
   files: readonly string[],

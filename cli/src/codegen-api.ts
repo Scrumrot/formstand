@@ -1,7 +1,7 @@
-// The browser-safe codegen API — `formstand-cli/codegen`.
+// The browser-safe codegen API, `formstand-cli/codegen`.
 //
 // Everything downstream of the IR is a pure string builder: no Node built-ins
-// (fs/path), no jiti, no TypeScript compiler. So this surface runs anywhere —
+// (fs/path), no jiti, no TypeScript compiler. So this surface runs anywhere,
 // import it in a browser to generate form source client-side (the docs
 // Schema-builder demo does exactly this), in a build script, or in your own
 // tool. The pipeline is `zod schema -> fromZod -> FieldSpec IR -> emitters`;
@@ -9,7 +9,7 @@
 //
 // The main entry (`formstand-cli`) re-exports all of this AND adds fromType
 // (parse a TypeScript type/interface), which pulls the TypeScript compiler and
-// is Node-oriented — import fromType from the main entry, not here.
+// is Node-oriented, import fromType from the main entry, not here.
 
 export { fromZod, isZodSchema } from "./fromZod";
 
@@ -34,9 +34,9 @@ export type {
 } from "./codegen";
 
 // Per-field component overrides (formstand.config.ts `fields`): validate a
-// config block and stamp a walked IR — pure data-in/data-out, browser-safe
+// config block and stamp a walked IR, pure data-in/data-out, browser-safe
 // like the rest of this surface. (overridablePaths stays internal to
-// ./overrides — it is applyFieldOverrides' near-miss candidate walk, not a
+// ./overrides, it is applyFieldOverrides' near-miss candidate walk, not a
 // public surface.)
 export { applyFieldOverrides, parseFieldOverrides } from "./overrides";
 export type { FieldOverrideConfig, FieldOverrides } from "./overrides";
@@ -62,7 +62,7 @@ export type {
   UnionVariant,
 } from "./ir";
 
-// Naming helpers the emitters use — exported so a hand-built IR / custom
+// Naming helpers the emitters use, exported so a hand-built IR / custom
 // tooling can mirror the CLI's identifier and label conventions.
 export {
   camelCase,

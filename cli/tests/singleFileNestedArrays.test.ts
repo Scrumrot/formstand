@@ -5,7 +5,7 @@ import { fromZod } from "../src/fromZod";
 
 // Single-file nested-array extraction: an array inside an array row compiles to
 // a child {Stem}Rows component (its own useFieldArray, a typed `form` prop, and
-// p0/p1/... index threading) instead of a TODO — mirroring the module layout.
+// p0/p1/... index threading) instead of a TODO, mirroring the module layout.
 // (Generated output is typechecked against the real library in typecheck.test
 // via the nestedArraySchema fixture.)
 
@@ -30,7 +30,7 @@ describe("single-file nested arrays", () => {
       "ContactForm",
     );
     // No leftover TODO for the nested array.
-    expect(code).not.toContain("inside an array row — extract");
+    expect(code).not.toContain("inside an array row, extract");
     // A typed child component bound at the parent-indexed path.
     expect(code).toContain("import type { Form } from \"formstand\";");
     expect(code).toContain("const ContactsPhonesRows = ({");

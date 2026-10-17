@@ -23,7 +23,7 @@ import {
 
 // Per-field layout placement (formstand.config.ts `fields` span): config
 // parsing, validation against placements that cannot reach a grid, and the
-// per-ui cell each backend emits — one dialect per kit, same clamp rule.
+// per-ui cell each backend emits, one dialect per kit, same clamp rule.
 
 const spanSchema = z.object({
   reference: z.string(),
