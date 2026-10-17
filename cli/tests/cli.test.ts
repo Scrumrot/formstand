@@ -6,6 +6,7 @@ import { isInvokedAsScript, main } from "../src/cli";
 import { MUI_VERSIONS } from "../src/uiTarget";
 import {
   defaultExportFixture,
+  fixturesDir,
   freshTmpDir,
   typeFixture,
   typecheckDiagnostics,
@@ -13,6 +14,35 @@ import {
 } from "./helpers";
 
 describe("cli main", () => {
+  it("mirrors every walker TODO on stderr, not only the depth ones", async () => {
+    // A z.record degrades to a string stand-in with a TODO. The in-file
+    // comment existed; the terminal said nothing, so a degraded run looked
+    // clean. The dotted-key, depth, truncation, and dropped-default
+    // warnings were the only degradations mirrored before this.
+    const dir = freshTmpDir("cli-todo-stderr");
+    const out = path.join(dir, "RecordForm.tsx");
+    const chunks: string[] = [];
+    const spy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(((chunk: unknown): boolean => {
+        chunks.push(String(chunk));
+        return true;
+      }) as typeof process.stderr.write);
+    try {
+      expect(
+        await main([path.join(fixturesDir, "recordSchema.ts"), "--out", out]),
+      ).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
+    const text = chunks.join("");
+    expect(text).toContain(
+      'warning: field "meta": unsupported zod type "record"; defaulted to string',
+    );
+    // The healthy sibling draws no warning.
+    expect(text).not.toContain('warning: field "name"');
+  });
+
   it("zod mode writes a component with --out and refuses to overwrite", async () => {
     const dir = freshTmpDir("cli-zod");
     const out = path.join(dir, "ProfileForm.tsx");

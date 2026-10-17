@@ -40,9 +40,11 @@ import {
   emitZodSchema,
   collectOptionsProps,
   overBudgetFieldPaths,
+  todoFieldPaths,
   truncatedFieldPaths,
   unaddressableFieldPaths,
 } from "./codegen";
+import { NESTING_LIMIT_TODO } from "./depth";
 import { collectTestPlan } from "./testCases";
 import { emitComponentSpec, emitPlaywrightSpec } from "./testsEmit";
 import { fromJsonSchema } from "./fromJsonSchema";
@@ -1118,6 +1120,16 @@ const warnDegradedBindings = (
       `warning: field "${fieldPath}" has a .default() the CLI could not capture (non-primitive, non-deterministic, or degraded field); it starts blank — seed it by hand`,
     );
   });
+  // Every other walker TODO (an unsupported zod kind such as z.record, a
+  // callable type, a non-string enum, ...) used to live only in the emitted
+  // file, so a run that degraded a field looked clean on the terminal. The
+  // truncation marker is skipped here: the walker-budget warning above
+  // already names those paths with the flag that fixes them.
+  todoFieldPaths(ir)
+    .filter((site) => site.todo !== NESTING_LIMIT_TODO)
+    .forEach((site) => {
+      stderr(`warning: field "${site.path}": ${site.todo}`);
+    });
 };
 
 const runZodMode = async (
