@@ -71,8 +71,20 @@ export const canOpenInStackBlitz = (files: readonly DemoFile[]): boolean =>
     }),
   );
 
-// The demo's dependency slice: only the packages its sources actually
-// import (formstand always, since every demo binds a form).
+// The packages every seeded project needs regardless of what the demo
+// imports: formstand (every demo binds a form), react (the automatic JSX
+// runtime imports it without a visible specifier), and react-dom (the
+// generated src/main.tsx renders through react-dom/client). A seed that
+// listed only the demo's own imports booted to a 500 from vite, "Failed
+// to resolve import react-dom/client", on every demo that never named it.
+const BASE_DEPS: Readonly<Record<string, string>> = {
+  ...KNOWN_DEPS["formstand"],
+  ...KNOWN_DEPS["react"],
+  ...KNOWN_DEPS["react-dom"],
+};
+
+// The demo's dependency slice: the base set plus whatever else its sources
+// actually import (zod, typically).
 const dependenciesOf = (
   files: readonly DemoFile[],
 ): Readonly<Record<string, string>> =>
@@ -86,7 +98,7 @@ const dependenciesOf = (
     )
     .reduce<Readonly<Record<string, string>>>(
       (acc, name) => ({ ...acc, ...(KNOWN_DEPS[name] ?? {}) }),
-      KNOWN_DEPS["formstand"] ?? {},
+      BASE_DEPS,
     );
 
 // The component the seeded app renders: the root-level *Form.tsx (module
@@ -162,12 +174,18 @@ const projectFiles = (
         type: "module",
         scripts: { dev: "vite", build: "tsc --noEmit && vite build" },
         dependencies: deps,
+        // vite and plugin-react must agree: plugin-react 6 requires vite 8,
+        // and a seed that paired ^6 with vite ^7 failed `npm install` on
+        // StackBlitz (ERR_PACKAGE_PATH_NOT_EXPORTED when the dev server
+        // started). The pair is kept identical to examples/package.json,
+        // which tests/stackblitz.seed.test.ts pins, so the playground's own
+        // toolchain is the one the seeded project gets.
         devDependencies: {
           "@types/react": "^19.0.0",
           "@types/react-dom": "^19.0.0",
-          "@vitejs/plugin-react": "^6.0.0",
+          "@vitejs/plugin-react": "^6.1.1",
           typescript: "^5.9.0",
-          vite: "^7.0.0",
+          vite: "^8.3.0",
         },
         stackblitz: { startCommand: "npm run dev" },
       },
