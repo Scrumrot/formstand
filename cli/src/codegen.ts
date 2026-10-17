@@ -1826,6 +1826,15 @@ const unionLines = (
               ];
           }
         });
+      // A variant with nothing beyond the discriminant (or only common
+      // keys, already rendered above) has no block to render: an empty
+      // `cond && (<></>)` compiled but read as a bug. One comment keeps the
+      // variant visible to the reader.
+      if (inner(level).length === 0) {
+        return [
+          `${ind(level)}{/* variant ${commentText(q(variant.tag))}: only the discriminant, nothing else to render */}`,
+        ];
+      }
       // One real element needs no fragment. A lone TODO comment still does:
       // `cond && ({/* ... */})` is an empty parenthesized expression, which
       // does not parse — the fragment is what makes the comment legal JSX.

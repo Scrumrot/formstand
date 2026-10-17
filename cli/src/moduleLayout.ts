@@ -2808,6 +2808,14 @@ const rowUnionPieces = (
               ];
           }
         });
+      // Nothing beyond the discriminant (or only common keys, rendered
+      // above): no block, just a comment so the variant stays visible.
+      // Same rule as the single-file unionLines.
+      if (inner("").length === 0) {
+        return [
+          `      {/* variant ${commentText(q(variant.tag))}: only the discriminant, nothing else to render */}`,
+        ];
+      }
       // One real element needs no fragment; a lone TODO comment still does
       // (`cond && ({/* ... */})` is an empty parenthesized expression).
       const first = flattened[0];
@@ -4497,6 +4505,13 @@ const unionSectionFile = (
               ];
           }
         });
+      // Nothing beyond the discriminant (or only common keys, rendered
+      // above): no block, just a comment so the variant stays visible.
+      if (inner("").length === 0) {
+        return [
+          `      {/* variant ${commentText(q(variant.tag))}: only the discriminant, nothing else to render */}`,
+        ];
+      }
       // One real element needs no fragment; a lone TODO comment still does
       // (`cond && ({/* ... */})` is an empty parenthesized expression) —
       // same rule as the single-file unionLines.
