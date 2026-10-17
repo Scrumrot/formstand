@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 import { cn } from "../cn";
 
-// One alias for all six parts — every card piece is a styled <div>.
+// One alias for all six parts: every card piece is a styled <div>.
 export type CardProps = Readonly<ComponentProps<"div">>;
 
 export const Card = ({ className, ...props }: CardProps) => (

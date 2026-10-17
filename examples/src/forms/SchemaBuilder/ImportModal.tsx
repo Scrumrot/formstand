@@ -5,7 +5,7 @@ import { parseZod } from "./parseZod";
 // The Schema builder's import entry: a modal that takes code by paste OR by
 // file, in either supported dialect (a TypeScript type or a zod schema), and
 // hands the source back to the builder only once it actually parses. Parsing
-// here — not just on close — means a bad paste fails inside the modal with the
+// here (not just on close) means a bad paste fails inside the modal with the
 // real parser error, instead of silently producing an empty form behind it.
 
 export type ImportLang = "ts" | "zod";
@@ -54,7 +54,7 @@ export const ImportModal = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Close on Escape and focus the textarea on open — modal edge behaviour.
+  // Close on Escape and focus the textarea on open: modal edge behaviour.
   useEffect(() => {
     textareaRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
@@ -77,7 +77,7 @@ export const ImportModal = ({
     setLang(next);
     setError(null);
     // Only replace the textarea when it's untouched (empty or still a
-    // sample) — never clobber pasted or loaded content.
+    // sample); never clobber pasted or loaded content.
     const untouched =
       source.trim().length === 0 || source === samples.ts || source === samples.zod;
     if (untouched) {

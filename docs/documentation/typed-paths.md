@@ -50,7 +50,7 @@ The explicit `useField<TValue>` / `useFieldArray<TItem>` / `useVariantField<TVal
 
 ## Tuples, leaves, and dotted keys
 
-Tuples resolve **positionally**: `"coord.0"` on `z.tuple([z.number(), z.number()])` types as `number`, `"hetero.0.a"` reaches element 0's own shape, and an out-of-range index is simply not offered — unlike a plain array, whose `` `${number}` `` index accepts any position. Platform containers (`File`, `Blob`, `Map`, `Set`, `Promise`, functions) are path **leaves**: bind the container itself, never a path into it. And a literal key containing a dot (`"a.b"`) is not path-addressable — paths split on dots — so `FieldPath` does not offer it.
+Tuples resolve **positionally**: `"coord.0"` on `z.tuple([z.number(), z.number()])` types as `number`, `"hetero.0.a"` reaches element 0's own shape, and an out-of-range index is simply not offered, unlike a plain array, whose `` `${number}` `` index accepts any position. Platform containers (`File`, `Blob`, `Map`, `Set`, `Promise`, functions) are path **leaves**: bind the container itself, never a path into it. And a literal key containing a dot (`"a.b"`) is not path-addressable, since paths split on dots, so `FieldPath` does not offer it.
 
 ## Dynamic paths
 

@@ -59,7 +59,7 @@ export const onboardingSchema = z.object({
   personal: z.object({
     firstName: z.string().min(1, "required"),
     lastName: z.string().min(1, "required"),
-    // "No preferred name" is null, not "" — clearing the input round-trips
+    // "No preferred name" is null, not "": clearing the input round-trips
     // to null via field.emptyValue.
     preferredName: z.string().min(1, "clear the field for none").nullable(),
     email: z.email("valid email required"),
@@ -101,7 +101,7 @@ export const onboardingSchema = z.object({
 });
 
 // A blank draft: required numbers/enums start undefined and nullable
-// fields null — deliberately not schema-satisfying yet (hence the cast);
+// fields null, deliberately not schema-satisfying yet (hence the cast);
 // validation reports the gaps on submit. Shared by all three Onboarding
 // modules (plain, MUI, shadcn) so the drafts can't drift.
 export const blankOnboardingValues = {

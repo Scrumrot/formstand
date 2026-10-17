@@ -12,7 +12,7 @@ export const FIELD_KINDS = [
   "enum",
 ] as const;
 
-// Field names become identifiers, object keys, and formstand paths — and
+// Field names become identifiers, object keys, and formstand paths, and
 // paths split on ".", so dots are the one thing the CLI can't address.
 const nameField = z
   .string()

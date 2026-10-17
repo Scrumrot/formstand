@@ -12,7 +12,7 @@ import { EmploymentSection } from "./sections/EmploymentSection";
 import { EquipmentSection } from "./sections/EquipmentSection";
 import { PersonalSection } from "./sections/PersonalSection";
 
-// The Onboarding feature module rendered through shadcn/ui — the same
+// The Onboarding feature module rendered through shadcn/ui, the same
 // shared schema and hook architecture as the plain and MUI variants.
 export const ShadcnOnboardingForm = () => {
   useDemoForm(onboardingForm);

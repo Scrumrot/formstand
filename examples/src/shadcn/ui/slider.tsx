@@ -4,7 +4,7 @@ import { cn } from "../cn";
 
 // Single-thumb variant (the demos bind one number per slider); stock shadcn
 // renders one thumb per entry in `value`. The aria-label is routed to the
-// Thumb — that's the element carrying role="slider", and Radix gives a
+// Thumb: that's the element carrying role="slider", and Radix gives a
 // single thumb no name of its own (the Root is a <span>, so label
 // htmlFor/id association can't name it either).
 export type SliderProps = Readonly<

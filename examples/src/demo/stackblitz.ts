@@ -10,7 +10,7 @@ import type { DemoFile } from "./demoSources";
 // The bare specifiers a SELF-CONTAINED demo may import, with the versions
 // the seeded package.json pins. Kit demos import sibling adapters and ui/
 // files that are not part of their DemoFile set, so they never pass
-// canOpenInStackBlitz — which is the honest scope: the roadmap item is
+// canOpenInStackBlitz, which is the honest scope: the roadmap item is
 // "the demo source plus formstand from npm", not a rebuild of the
 // playground's kit scaffolding.
 const KNOWN_DEPS: Readonly<Record<string, Readonly<Record<string, string>>>> =
@@ -109,7 +109,7 @@ const entryOf = (
 };
 
 // A compact standalone stylesheet for the class names the demos use
-// (field/error/subtitle/primary/secondary/card) — enough to look
+// (field/error/subtitle/primary/secondary/card), enough to look
 // intentional outside the playground's full shell.
 const DEMO_CSS = `:root { color-scheme: dark; }
 body { margin: 0; padding: 32px; background: #0b0d12; color: #e6ebf5;
@@ -150,7 +150,7 @@ const projectFiles = (
     "index.html": [
       "<!doctype html>",
       `<html lang="en">`,
-      `  <head><meta charset="UTF-8" /><title>${title} — formstand</title></head>`,
+      `  <head><meta charset="UTF-8" /><title>${title} | formstand</title></head>`,
       `  <body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>`,
       "</html>",
       "",

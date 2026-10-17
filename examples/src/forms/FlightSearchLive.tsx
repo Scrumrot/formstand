@@ -10,16 +10,16 @@ import {
 // output. The two flags compose into the page-owned live form: the page
 // creates the instance with the exported useFlightSearchForm() hook, hands
 // it to the generated component via the `form` prop, and the values panel
-// is fed exclusively by `onValuesChange` — the generated component's
-// form.watchValues subscription, not a render-side hook — so the JSON dump
+// is fed exclusively by `onValuesChange` (the generated component's
+// form.watchValues subscription, not a render-side hook), so the JSON dump
 // updating per keystroke IS the proof that the live channel works. One
 // instance, two consumers, no submit anywhere: the twin's map-driven case
 // in miniature.
 //
 // origin/destination additionally ride the config `fields` autocomplete
 // override (see flightSearch.config.ts next to the schema): the fields stay
-// free-text ICAO strings, and this page supplies the suggestion DATA — an
-// airport list no zod enum could hold — through the generated
+// free-text ICAO strings, and this page supplies the suggestion DATA (an
+// airport list no zod enum could hold) through the generated
 // originOptions/destinationOptions props.
 
 const AIRPORTS: readonly string[] = [
@@ -41,7 +41,7 @@ export const FlightSearchLive = () => {
     <div>
       <p className="subtitle">
         The form is <code>formstand-gen --live --form-prop</code> output: no
-        submit scaffold — the component takes the page-owned <code>form</code>{" "}
+        submit scaffold: the component takes the page-owned <code>form</code>{" "}
         and streams every value change out through{" "}
         <code>onValuesChange</code>. The panel on the right renders only what
         that callback delivers: type anywhere and it updates per keystroke.

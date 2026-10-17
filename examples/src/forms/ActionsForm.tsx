@@ -56,7 +56,7 @@ export const ActionsForm = () => {
     { status: "idle", detail: "nothing saved yet", saves: 0 } as SaveState,
     {
       // The save-failure hook: a throwing action resolves quietly by
-      // contract, so surface it — here as the last verdict.
+      // contract, so surface it, here as the last verdict.
       onError: (error) =>
         form.setError(
           "",

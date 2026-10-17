@@ -270,7 +270,7 @@ export const MuiInvoiceBuilder = () => {
           variant="outlined"
           startIcon={<AddIcon />}
           onClick={() => {
-            // The new row's index is the PRE-push length — read it before
+            // The new row's index is the PRE-push length, so read it before
             // the op. focusField waits a frame so the row exists in the
             // DOM, then lands on its description input (the library's
             // "setFocus", keyed by path).
@@ -302,7 +302,7 @@ export const MuiInvoiceBuilder = () => {
           variant="filled"
           onClose={() => setSaved(false)}
         >
-          Invoice saved — adoptValues rebased the form to clean.
+          Invoice saved: adoptValues rebased the form to clean.
         </Alert>
       </Snackbar>
     </form>

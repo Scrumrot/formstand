@@ -101,7 +101,7 @@ return (
 Combined with `--live`, the generated component becomes pure rendering and `onValuesChange` subscribes to the form you passed. The playground's [live + form prop demo](https://scrumrot.github.io/formstand/examples/#/gen-live) is exactly this shape.
 
 ::: warning `--form-prop` is single-file only
-The CLI rejects `--form-prop` with `--layout module`. The module's field hooks are pre-wired to the singleton exported from `./hooks` (for example `profileForm`), so a `form` prop there could only ever be that same singleton: it was decorative when it told the truth and silently split state when it lied (the shell reading your instance while every field kept reading the module's own form). The page already **owns** the module's form by importing it — call `profileForm.reset(...)`, `adoptValues`, or `handleSubmit` on the instance directly.
+The CLI rejects `--form-prop` with `--layout module`. The module's field hooks are pre-wired to the singleton exported from `./hooks` (for example `profileForm`), so a `form` prop there could only ever be that same singleton: it was decorative when it told the truth and silently split state when it lied (the shell reading your instance while every field kept reading the module's own form). The page already **owns** the module's form by importing it, so call `profileForm.reset(...)`, `adoptValues`, or `handleSubmit` on the instance directly.
 
 If you need a per-mount instance instead of a singleton, use `--layout single` with `--form-prop`, or wire up `useForm` plus [`createFormContext`](../state#sharing-a-form-createformcontext) by hand.
 :::

@@ -8,7 +8,7 @@ import "prismjs/components/prism-tsx";
 export type CodeViewProps = Readonly<{
   source: string;
   // The shell's panel behavior (and its smoke assertions) key off
-  // .state-dump — demos embedding a CodeView in their own body pass a
+  // .state-dump; demos embedding a CodeView in their own body pass a
   // class list without it.
   className?: string;
 }>;
@@ -16,7 +16,7 @@ export type CodeViewProps = Readonly<{
 // Read-only highlighted source for the "View code" panel. Prism over an
 // editor (Monaco et al.) on purpose: the panel never edits, Prism is ~25KB
 // of ES5-safe regex-to-markup, and the token CSS lives with the playground
-// styles. The HTML injection is safe by construction — `source` is our own
+// styles. The HTML injection is safe by construction: `source` is our own
 // demo code inlined by Vite's ?raw at build time, and Prism escapes it
 // during tokenization.
 export const CodeView = ({

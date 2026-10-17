@@ -24,7 +24,7 @@ const schema = z
 
 const { Provider, useFormContext } = createFormContext<typeof schema>();
 
-// No form prop anywhere below — children reach the form through the typed
+// No form prop anywhere below: children reach the form through the typed
 // context, so paths still autocomplete and typo'd ones fail to compile.
 
 const DisplayNameField = () => {
@@ -85,7 +85,7 @@ export const ContextForm = () => {
       >
         <p className="subtitle">
           One <code>createFormContext</code> provider; every child below reads
-          the form from context — no prop drilling. The status bar is built
+          the form from context, no prop drilling. The status bar is built
           from the flag hooks (<code>useIsDirty</code> /{" "}
           <code>useIsValid</code> / <code>useIsSubmitting</code> /{" "}
           <code>useSubmitCount</code>); the schema-level refine surfaces via{" "}

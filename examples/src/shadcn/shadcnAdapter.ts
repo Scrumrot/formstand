@@ -1,7 +1,7 @@
 import type { UseFieldReturn } from "formstand";
 import { type ErrorSlice, ariaInvalid } from "../fieldErrors";
 
-// The formstand → shadcn/ui bridge — the Radix half only. shadcn's Input
+// The formstand → shadcn/ui bridge, the Radix half only. shadcn's Input
 // and Textarea take native DOM events, so the library's own exported
 // builders bind them with nothing extra:
 //
@@ -54,7 +54,7 @@ export const shadcnSwitchProps = <T extends boolean | null | undefined>(
 
 // Spread onto <Select> (the Radix Root); pair with your own SelectTrigger
 // (give the trigger `aria-invalid={ariaInvalid(field)}` for error styling).
-// Radix has no blur event on the root — closing the dropdown is the "done
+// Radix has no blur event on the root; closing the dropdown is the "done
 // editing" signal, so it maps to the field's blur trigger and onBlur-mode
 // forms validate when the menu closes.
 export type ShadcnSelectProps = Readonly<{
@@ -68,7 +68,7 @@ export const shadcnSelectProps = <T extends string | null | undefined>(
   field: UseFieldReturn<T>,
 ): ShadcnSelectProps => ({
   name: field.path,
-  // Radix shows the placeholder for "" — and never reports "" back through
+  // Radix shows the placeholder for "", and never reports "" back through
   // onValueChange (items can't carry an empty value), so the round-trip is
   // safe for fields that start empty.
   value: field.value ?? "",
@@ -96,7 +96,7 @@ export const shadcnRadioGroupProps = <T extends string | null | undefined>(
 
 // Radix sliders speak number[] (multi-thumb); a single-number field binds
 // to a one-element array. onValueChange fires continuously while dragging,
-// so validation waits for onValueCommit (mapped to the blur trigger) —
+// so validation waits for onValueCommit (mapped to the blur trigger);
 // onBlur-mode forms don't validate sixty times a second mid-drag.
 export type ShadcnSliderProps = Readonly<{
   name: string;

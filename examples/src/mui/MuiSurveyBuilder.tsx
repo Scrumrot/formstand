@@ -361,7 +361,7 @@ export const MuiSurveyBuilder = () => {
         at both levels. The question type switches its sub-editor, and a
         root-level <code>.refine</code> (keyed at <code>""</code>, read via{" "}
         <code>useFormError</code>) insists the survey has at least one
-        question overall — empty every section and publish to see it.
+        question overall; empty every section and publish to see it.
       </Typography>
 
       <Stack

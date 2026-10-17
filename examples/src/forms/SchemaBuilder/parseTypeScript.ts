@@ -4,7 +4,7 @@ import {
   labelFromName,
 } from "../../../../cli/src/codegen-api";
 
-// A focused parser for the TS-interface subset the CLI's type mode supports —
+// A focused parser for the TS-interface subset the CLI's type mode supports:
 // enough to paste an interface and generate a form, WITHOUT pulling the
 // multi-megabyte TypeScript compiler into the playground. It handles what
 // fromType handles (string/number/boolean/Date, arrays, nested objects,
@@ -37,7 +37,7 @@ const tokenize = (source: string): readonly Token[] => {
 
 // A cursor is threaded through the recursive descent as an index into the
 // token array; helpers return the next state alongside their result (no
-// mutation — the parser is a fold over tokens).
+// mutation; the parser is a fold over tokens).
 type Cursor = Readonly<{ tokens: readonly Token[]; i: number }>;
 
 const peek = (c: Cursor): Token | undefined => c.tokens[c.i];
@@ -56,7 +56,7 @@ const withFlags = (
   nullable: boolean,
 ): FieldSpec => ({ ...spec, optional, nullable });
 
-// Kinds base() constructs — every FieldSpec kind except "union" and "tuple"
+// Kinds base() constructs: every FieldSpec kind except "union" and "tuple"
 // (paste-TS detects neither: discriminated unions and tuple types both
 // degrade to a string field).
 type BaseKind = Exclude<FieldSpec["kind"], "union" | "tuple">;
@@ -185,7 +185,7 @@ const foldUnion = (
   );
 };
 
-// `{ a: string; b?: number }` — members until the matching `}`.
+// `{ a: string; b?: number }`: members until the matching `}`.
 const parseObjectType = (c: Cursor): TypeParse => {
   const open = advance(c); // past "{"
   const step = (

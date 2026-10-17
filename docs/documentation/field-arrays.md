@@ -36,7 +36,7 @@ The hook returns:
 - `fields`: `readonly { id: string; value: TItem }[]`; use `field.id` as the React `key`.
 - `items`: the raw array values (`readonly TItem[]`).
 - `length`: the current length.
-- `error`: the **array-level** error, for example from `z.array().min(1)`, keyed at the array's own path — plus `firstError`, the first message or `undefined`, same shorthand as `useField`.
+- `error`: the **array-level** error, for example from `z.array().min(1)`, keyed at the array's own path. `firstError` is the first message or `undefined`, same shorthand as `useField`.
 - `path`: the resolved array path, and `setError(errors)` / `clearError()`: the array-level server channel, so a "too many rows" verdict from your API is set and cleared from the hook that owns the array (same semantics as `field.setError`).
 - `push(item)`, `remove(index)`, `insert(index, item)`, `move(from, to)`, `swap(a, b)`: wrappers over the form's `arrayPush`, `arrayRemove`, `arrayInsert`, `arrayMove`, and `arraySwap` that also **revalidate the array path** when the form's validation mode calls for it, under the same gate as a field edit (`mode`, `reValidateMode`, submit state). That is why an array-level error like `min(1)` clears the moment a row is added rather than on the next submit. The imperative `form.arrayPush(...)` family stays validation-silent, exactly like `form.setValue`, because event-driven validation belongs to the hooks.
 

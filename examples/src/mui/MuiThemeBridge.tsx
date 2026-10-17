@@ -3,7 +3,7 @@ import { ScopedCssBaseline } from "@mui/material";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { useThemeMode } from "../theme";
 
-// One theme instance per mode (module scope — a fresh theme per render
+// One theme instance per mode (module scope; a fresh theme per render
 // would remount the whole emotion cache). The bridge follows the shell's
 // light/dark switch via ThemeModeContext.
 const themes = {

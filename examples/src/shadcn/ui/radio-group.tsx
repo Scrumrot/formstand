@@ -11,7 +11,7 @@ export const RadioGroup = ({ className, ...props }: RadioGroupProps) => (
   <RadioGroupPrimitive.Root
     data-slot="radio-group"
     // `group` lets the items react to aria-invalid set on the Root (where
-    // the adapter puts it) — Radix doesn't propagate the attribute down.
+    // the adapter puts it); Radix doesn't propagate the attribute down.
     className={cn("group grid gap-3", className)}
     {...props}
   />

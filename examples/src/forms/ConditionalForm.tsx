@@ -70,7 +70,7 @@ export const ConditionalForm = () => {
     >
       <p className="subtitle">
         Uses the library&apos;s bound <code>SelectField</code> /{" "}
-        <code>TextField</code> — labels, ids, <code>name</code>,{" "}
+        <code>TextField</code>: labels, ids, <code>name</code>,{" "}
         <code>aria-invalid</code> and error text come wired for free.
       </p>
 

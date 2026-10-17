@@ -14,7 +14,7 @@ import { FileTree } from "./FileTree";
 import { canOpenInStackBlitz, openInStackBlitz } from "./stackblitz";
 
 export type DemoShellProps = Readonly<{
-  // The demo's group title, name, and one-line description — the shell
+  // The demo's group title, name, and one-line description; the shell
   // renders them as the card header so every demo states what it shows.
   eyebrow: string;
   title: string;
@@ -45,8 +45,8 @@ export const useDemoForm = (form: unknown): void => {
   }, [register, form]);
 };
 
-// Multi-file demos (the Onboarding module) open on hooks.ts — the file that
-// explains the architecture — instead of alphabetical luck.
+// Multi-file demos (the Onboarding module) open on hooks.ts, the file that
+// explains the architecture, instead of alphabetical luck.
 const defaultFilePath = (files: readonly DemoFile[]): string =>
   files.find((file) => file.path === "hooks.ts")?.path ??
   files[0]?.path ??
@@ -172,7 +172,7 @@ export const DemoShell = ({
           {panel !== null ? (
             <aside className="demo-panel">
               {/* The header toggles are out of reach behind the mobile
-                  bottom sheet — give the sheet its own close. */}
+                  bottom sheet, so give the sheet its own close. */}
               <button
                 className="secondary panel-close"
                 type="button"

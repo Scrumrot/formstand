@@ -66,19 +66,19 @@ No server render and no shared-module concern, at the cost of the form not being
 
 ## React 19 form actions
 
-`useFormAction` and `useFormActionState` bind a form to the actions world — `<form action={...}>`, `useActionState`, server actions — with the same contract `handleSubmit` gives the onSubmit world: the schema validates **before** the action runs, `isSubmitting`/`submitCount` track it, a failed submission writes errors and marks its fields touched, and a throwing action goes through `onError` (dev builds warn when nothing observes a failure).
+`useFormAction` and `useFormActionState` bind a form to the actions world (`<form action={...}>`, `useActionState`, server actions) with the same contract `handleSubmit` gives the onSubmit world: the schema validates **before** the action runs, `isSubmitting`/`submitCount` track it, a failed submission writes errors and marks its fields touched, and a throwing action goes through `onError` (dev builds warn when nothing observes a failure).
 
-The handler receives parsed, typed data, not `FormData` — formstand inputs are controlled, so the store is the source of truth and the schema has already judged it. The raw `FormData` still arrives as the last argument for what only it carries: uncontrolled inputs sharing the `<form>`, file pickers.
+The handler receives parsed, typed data, not `FormData`: formstand inputs are controlled, so the store is the source of truth and the schema has already judged it. The raw `FormData` still arrives as the last argument for what only it carries: uncontrolled inputs sharing the `<form>`, file pickers.
 
 ```tsx
 // Plain action:
 const save = useFormAction(form, async (data) => {
   await api.save(data);         // data: z.output<typeof schema>
-}, { onError: () => form.setError("", "Could not save — try again") });
+}, { onError: () => form.setError("", "Could not save. Try again.") });
 
 <form action={save}>...</form>
 
-// With result state — the handler shape mirrors useActionState's
+// With result state: the handler shape mirrors useActionState's
 // (prevState, payload), with parsed data spliced in, so a "use server"
 // function slots straight in:
 const [result, saveAction, isPending] = useFormActionState(
@@ -88,9 +88,9 @@ const [result, saveAction, isPending] = useFormActionState(
 );
 ```
 
-A submission that fails validation returns the **previous** state unchanged: the field errors already live in the form store where the bound components read them, so the action state stays what it is — the last verdict an action actually produced.
+A submission that fails validation returns the **previous** state unchanged: the field errors already live in the form store where the bound components read them, so the action state stays what it is: the last verdict an action actually produced.
 
-Two honest notes. This is a *client-side* integration: React's no-JS progressive enhancement only works when the server action itself is passed to the form, which by definition skips any client wrapper — for that path, validate on the server with the same zod schema and treat the bridge as the hydrated experience. And React 19's post-action reset only clears **uncontrolled** fields; formstand inputs are controlled, so the form's values survive the action untouched.
+Two honest notes. This is a *client-side* integration: React's no-JS progressive enhancement only works when the server action itself is passed to the form, which by definition skips any client wrapper. For that path, validate on the server with the same zod schema and treat the bridge as the hydrated experience. And React 19's post-action reset only clears **uncontrolled** fields; formstand inputs are controlled, so the form's values survive the action untouched.
 
 ## Hydration checklist
 

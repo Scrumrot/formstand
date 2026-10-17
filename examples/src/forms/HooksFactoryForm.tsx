@@ -18,10 +18,10 @@ const schema = z.object({
   lineItems: z.array(lineItemSchema).min(1, "at least one item"),
 });
 
-// The form lives at module scope — one instance for the app's lifetime —
+// The form lives at module scope (one instance for the app's lifetime)
 // and createFormHooks bakes it into the hooks it returns. No provider, no
 // form prop: components below just import their domain's hooks. (Because
-// the form never unmounts, edits here survive switching tabs — that's the
+// the form never unmounts, edits here survive switching tabs; that's the
 // singleton behaving as designed. Per-mount lifecycles want useForm +
 // createFormContext instead.)
 const invoiceForm = createForm(schema, {
@@ -40,7 +40,7 @@ export const {
   useInvoiceIsSubmitting,
 } = createFormHooks(invoiceForm, "invoice");
 
-// No `form` prop — the row's hooks are already wired to the invoice form,
+// No `form` prop: the row's hooks are already wired to the invoice form,
 // and paths stay schema-typed (a typo'd path is a compile error).
 const LineItemRow = ({
   index,
@@ -117,7 +117,7 @@ export const HooksFactoryForm = () => {
       }}
     >
       <p style={{ color: "#8b94a7", fontSize: 13, marginTop: 0 }}>
-        <code>createFormHooks(form, "invoice")</code> — the form is a module
+        <code>createFormHooks(form, "invoice")</code>: the form is a module
         singleton and every hook is pre-wired to it: no provider, no{" "}
         <code>form</code> prop anywhere below. Edits survive switching tabs
         (the form never unmounts); Reset puts it back.

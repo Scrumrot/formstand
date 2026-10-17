@@ -65,7 +65,7 @@ import { ShadcnSettingsForm } from "./shadcn/ShadcnSettingsForm";
 import { ShadcnSignupForm } from "./shadcn/ShadcnSignupForm";
 import { ShadcnTeamForm } from "./shadcn/ShadcnTeamForm";
 
-// One key list for tabs and sources — adding a demo without a source entry
+// One key list for tabs and sources: adding a demo without a source entry
 // (or vice versa) is a compile error.
 type TabKey = DemoSourceKey;
 
@@ -75,7 +75,7 @@ type Tab = Readonly<{
   render: () => ReactElement;
 }>;
 
-// The wrapper div is shadcn's MuiThemeBridge equivalent — the Tailwind theme
+// The wrapper div is shadcn's MuiThemeBridge equivalent: the Tailwind theme
 // variables and the scoped preflight both key off .shadcn-scope. Every
 // shadcn demo goes through this helper so a new tab can't forget the scope
 // (an unwrapped demo renders unthemed and unreset).
@@ -99,9 +99,9 @@ const shadcnTab = (
 type KitBridgeProps = Readonly<{ children: ReactNode }>;
 
 // Chakra v3's default system injects UNSCOPED global CSS (`*`/body/html
-// preflight resets plus defaultConfig's globalCss — placeholder and
+// preflight resets plus defaultConfig's globalCss: placeholder and
 // selection colors, html color-scheme) that would restyle the whole
-// playground shell while the tab is mounted — so the bridge builds its own
+// playground shell while the tab is mounted, so the bridge builds its own
 // system with BOTH layers scoped under .chakra-scope (the same scoping
 // pattern as the shadcn tabs) and puts that class on the wrapper. Root
 // selectors (html/body/:root) become the scope element itself; everything
@@ -147,7 +147,7 @@ const MantineBridge = ({ children }: KitBridgeProps) => {
   return <MantineProvider forceColorScheme={mode}>{children}</MantineProvider>;
 };
 
-// antd needs no provider to function — ConfigProvider here is purely the
+// antd needs no provider to function; ConfigProvider here is purely the
 // optional theming hook, swapping the token algorithm for dark mode.
 const AntdBridge = ({ children }: KitBridgeProps) => {
   const mode = useThemeMode();
@@ -317,7 +317,7 @@ const TABS: readonly Tab[] = [
   {
     key: "genDeepNest",
     // The single-file layout exports no form instance (useForm inside the
-    // component), so there is nothing to register with useDemoForm — the
+    // component), so there is nothing to register with useDemoForm: the
     // View state panel stays empty, like the builder tabs.
     label: "Gen: deep nesting",
     render: () => <DeepBoundaryForm />,
@@ -329,7 +329,7 @@ const TABS: readonly Tab[] = [
   },
   // The three kit demos are the SAME Onboarding schema and the same
   // chrome (--sections panel --columns 2) as the mui tab above, with the
-  // --ui backend varying — but note the layouts differ too: the mui tab is
+  // --ui backend varying, but note the layouts differ too: the mui tab is
   // --layout module (it doubles as the module-layout showcase), while
   // these three are single-file. Flipping between the four tabs still
   // compares the kit backends directly; just remember the file structure
@@ -423,23 +423,23 @@ const GROUP_OF: Readonly<Record<TabKey, GroupTitle>> = {
   schemaBuilder: "Generated",
 };
 
-// One honest line per demo — what it shows, in the library's own terms.
+// One honest line per demo: what it shows, in the library's own terms.
 // Exhaustive over TabKey (like GROUP_OF), so a new demo without a blurb is
 // a compile error.
 const BLURBS: Readonly<Record<TabKey, string>> = {
   basic:
     "The smallest real form, plus a live switcher for every validation mode and reValidateMode.",
   bound:
-    "The four shipped components — TextField, NumberField, SelectField, CheckboxField — with their a11y wiring and a validity-gated submit.",
+    "The four shipped components (TextField, NumberField, SelectField, CheckboxField) with their a11y wiring and a validity-gated submit.",
   context:
     "createFormContext: zero prop drilling with typed paths intact, the flag hooks as a status bar, and adoptValues as the post-save rebase.",
   hooksFactory:
-    'createFormHooks(form, "invoice"): a module-singleton form baked into exported hooks — no provider, no form prop anywhere.',
+    'createFormHooks(form, "invoice"): a module-singleton form baked into exported hooks: no provider, no form prop anywhere.',
   onboarding:
     "A 26-field, five-section feature module: one file per field, one per section, with path-scoped dirty/valid badges in each section header.",
   nested: "Nested object paths and the full handleSubmit flow.",
   array:
-    "useFieldArray basics: push, remove, and reorder with stable row ids. Ops revalidate the array path — after a submit, remove the last row and the min(1) message appears live; add one back and it clears, no resubmit.",
+    "useFieldArray basics: push, remove, and reorder with stable row ids. Ops revalidate the array path: after a submit, remove the last row and the min(1) message appears live; add one back and it clears, no resubmit.",
   async:
     "An async refine username check with debounce, isValidating spinners, and race handling.",
   wizard:
@@ -457,7 +457,7 @@ const BLURBS: Readonly<Record<TabKey, string>> = {
     "React 19 form actions: useFormActionState validates before the action runs and keeps the last verdict.",
   file: "File inputs and validating File values.",
   derived:
-    "Computed values via selectors — consistent by construction, never stored.",
+    "Computed values via selectors: consistent by construction, never stored.",
   tag: "A tag input over an array of primitives.",
   perf: "A 200-row stress test showing per-field re-render isolation.",
   muiCheckout:
@@ -475,16 +475,16 @@ const BLURBS: Readonly<Record<TabKey, string>> = {
   shadSignup:
     "An async username check isolated to its subschema, a cross-field password confirmation, and a must-accept Checkbox.",
   shadCheckout:
-    "A checkout over shadcn/ui — the Radix dialect (onCheckedChange, onValueChange) bound through the adapter.",
+    "A checkout over shadcn/ui: the Radix dialect (onCheckedChange, onValueChange) bound through the adapter.",
   shadSettings:
     "Settings over shadcn/ui components with aria-invalid error styling.",
   shadTeam: "A team editor: field arrays over shadcn/ui cards.",
   onboardingShadcn:
     "The Onboarding feature module over shadcn/ui: collapsible sections with dirty/valid badges.",
   genMui:
-    "formstand-gen's untouched --layout module --ui mui --sections panel output — CI regenerates it and fails on drift.",
+    "formstand-gen's untouched --layout module --ui mui --sections panel output; CI regenerates it and fails on drift.",
   genKitchenSink:
-    "Every schema kind and wrapper the CLI supports in one form — tuple included — as untouched --layout module output.",
+    "Every schema kind and wrapper the CLI supports in one form, tuple included, as untouched --layout module output.",
   genDeepNest:
     "Nine levels of nesting, untouched single-file output: leaves exactly AT formstand's 9-segment FieldPath budget bind real controls, while the level past it degrades to a // TODO.",
   genArrayStress:
@@ -494,18 +494,18 @@ const BLURBS: Readonly<Record<TabKey, string>> = {
   genMantine:
     "The same Onboarding schema through --ui mantine: Mantine v9's TextInput/NativeSelect/Switch with their built-in label and error props, untouched single-file output.",
   genAntd:
-    "The same Onboarding schema through --ui antd: Ant Design v6 bound as plain controlled components — no antd Form/Form.Item anywhere — untouched single-file output.",
+    "The same Onboarding schema through --ui antd: Ant Design v6 bound as plain controlled components (no antd Form/Form.Item anywhere), untouched single-file output.",
   genLive:
-    "formstand-gen --live --form-prop output: the page owns the form via the exported useFlightSearchForm() hook, and onValuesChange streams every keystroke into the values panel — no submit scaffold anywhere.",
+    "formstand-gen --live --form-prop output: the page owns the form via the exported useFlightSearchForm() hook, and onValuesChange streams every keystroke into the values panel; no submit scaffold anywhere.",
   cliCommand:
-    "Fill the options and the formstand-gen command updates live — the command line is useFormSelector-derived state.",
+    "Fill the options and the formstand-gen command updates live: the command line is useFormSelector-derived state.",
   schemaBuilder:
     "Design a schema and the real formstand-gen emitters regenerate the files on every keystroke, right in your browser.",
 };
 
-// Demos whose content is legitimately wide — Perf's autofill grid, the
+// Demos whose content is legitimately wide (Perf's autofill grid, the
 // Schema builder's field rows + output viewer, the Invoice table, the live
-// demo's form + values panel — skip the demo body's readable-measure cap.
+// demo's form + values panel) skip the demo body's readable-measure cap.
 const WIDE_DEMOS: ReadonlySet<TabKey> = new Set([
   "perf",
   "schemaBuilder",
@@ -527,7 +527,7 @@ const GROUPS = GROUP_TITLES.map((title) => ({
 }));
 
 // Every demo gets a direct link: the tab key in kebab-case after "#/"
-// (e.g. #/schema-builder). Hash routing on purpose — the playground deploys
+// (e.g. #/schema-builder). Hash routing on purpose: the playground deploys
 // to static GitHub Pages, where deep paths would 404 without server tricks.
 const slugOf = (key: TabKey): string =>
   key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);

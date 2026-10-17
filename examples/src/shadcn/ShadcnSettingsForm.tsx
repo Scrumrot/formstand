@@ -103,7 +103,7 @@ export const ShadcnSettingsForm = () => {
       <p className="text-sm text-muted-foreground">
         Save is gated on <code>useIsDirty && useIsValid</code>; the badges are{" "}
         <code>form.dirtyFields()</code> live. Saving calls{" "}
-        <code>adoptValues</code> (rebase, not reset) — Discard calls{" "}
+        <code>adoptValues</code> (rebase, not reset); Discard calls{" "}
         <code>reset()</code> back to the last saved state.
       </p>
 
@@ -156,7 +156,7 @@ export const ShadcnSettingsForm = () => {
         <CardHeader>
           <CardTitle>Notifications</CardTitle>
           <CardDescription>
-            Radix switches — <code>onCheckedChange</code> via the adapter.
+            Radix switches: <code>onCheckedChange</code> via the adapter.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
@@ -196,7 +196,7 @@ export const ShadcnSettingsForm = () => {
         </Button>
         {saved && !isDirty ? (
           <span className="text-sm text-muted-foreground">
-            saved — the badges are gone until the next edit.
+            saved: the badges are gone until the next edit.
           </span>
         ) : null}
       </div>

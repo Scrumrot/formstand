@@ -9,13 +9,13 @@ import {
 // The "I already have a zod schema" entry to the Schema builder. The user
 // pastes a `z.object({ ... })` (their own code, in their own tab), we
 // evaluate it against the bundled zod, then hand the runtime schema to the
-// REAL `fromZod` — the same walk `npx formstand-gen schema.ts` runs. So this
+// REAL `fromZod`, the same walk `npx formstand-gen schema.ts` runs. So this
 // mode shares the paste-TS mode's ParseResult contract and the identical
 // IR -> emitters path; only the frontend differs.
 //
 // Evaluation is `new Function("z", ...)`: the pasted source is the user's own
 // code running in their own browser with nothing but the bundled `z` passed
-// in — the REPL trust model. No source is fetched, sent, or persisted; the
+// in: the REPL trust model. No source is fetched, sent, or persisted; the
 // worst a paste can do is what the user could already do in their own devtools
 // console. That is the same bargain the paste-TS parser makes, without the
 // multi-megabyte TypeScript compiler.
@@ -26,7 +26,7 @@ export type ParseResult =
 
 // Drop `import ...` lines (people paste `import { z } from "zod"` with their
 // schema) and unwrap `export ` so `export const x = ...` evaluates as a plain
-// declaration. Purely textual — line-oriented, good enough for pasted source.
+// declaration. Purely textual: line-oriented, good enough for pasted source.
 const stripImportsAndExports = (source: string): string =>
   source
     .split("\n")
@@ -34,7 +34,7 @@ const stripImportsAndExports = (source: string): string =>
     .map((line) => line.replace(/^\s*export\s+/, ""))
     .join("\n");
 
-// The name of the LAST top-level `const/let/var NAME =` — the schema is
+// The name of the LAST top-level `const/let/var NAME =`; the schema is
 // almost always the final declaration (`const contactSchema = z.object(...)`).
 // Used both to know what to return from the evaluated body and to name the
 // component. Returns null for a bare expression paste.

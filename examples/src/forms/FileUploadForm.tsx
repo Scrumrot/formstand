@@ -37,7 +37,7 @@ export const FileUploadForm = () => {
     >
       <p className="subtitle">
         File objects survive the immutable spread (reference is preserved).
-        Persistence/autosave wouldn't work here without a custom serializer —
+        Persistence/autosave wouldn't work here without a custom serializer;
         File isn't JSON-encodable.
       </p>
 
@@ -63,7 +63,7 @@ export const FileUploadForm = () => {
         />
         <div style={{ fontSize: 12, color: "#8b94a7", marginTop: 4 }}>
           {file.value instanceof File
-            ? `${(file.value as File).name} — ${(file.value as File).size} bytes`
+            ? `${(file.value as File).name} (${(file.value as File).size} bytes)`
             : "no file selected"}
         </div>
         <span className="error">{file.error?.[0] ?? " "}</span>

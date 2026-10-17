@@ -65,7 +65,7 @@ export const ServerErrorsForm = () => {
     >
       <p className="subtitle">
         Try <code>admin</code> as username, or any <code>@banned.com</code>{" "}
-        email — the fake server rejects with field-level errors. Server errors
+        email: the fake server rejects with field-level errors. Server errors
         survive background revalidation and release when you edit the field;
         the first offending input is focused via{" "}
         <code>focusFirstError</code>.

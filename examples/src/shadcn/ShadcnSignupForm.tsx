@@ -78,7 +78,7 @@ export const ShadcnSignupForm = () => {
       <CardHeader>
         <CardTitle>Create your account</CardTitle>
         <CardDescription>
-          onBlur mode — try <code>tim</code> as the username: the async
+          onBlur mode. Try <code>tim</code> as the username: the async
           availability check runs against just that field's subschema.
         </CardDescription>
       </CardHeader>
@@ -145,7 +145,7 @@ export const ShadcnSignupForm = () => {
         </Button>
         {created !== null ? (
           <p className="text-sm text-muted-foreground">
-            welcome, <span className="text-foreground">{created}</span> —
+            welcome, <span className="text-foreground">{created}</span>:
             submit resolved <code>kind: "valid"</code>.
           </p>
         ) : null}

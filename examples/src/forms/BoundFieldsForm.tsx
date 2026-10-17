@@ -20,7 +20,7 @@ const schema = z.object({
 
 export const BoundFieldsForm = () => {
   const form = useForm(schema, {
-    // `plan` starts undefined — SelectField stays controlled and shows the
+    // `plan` starts undefined, so SelectField stays controlled and shows the
     // placeholder option; `terms` false so useIsValid gates the button.
     initialValues: { name: "", email: "", seats: 1, terms: false },
     mode: "onBlur",
@@ -44,7 +44,7 @@ export const BoundFieldsForm = () => {
         The four shipped bound components. Each wires up a label,{" "}
         <code>name</code>, <code>aria-invalid</code>,{" "}
         <code>aria-describedby</code> and a <code>role=&quot;alert&quot;</code>{" "}
-        error — inspect the DOM. The submit button is gated on{" "}
+        error; inspect the DOM. The submit button is gated on{" "}
         <code>useIsValid</code> (enabled by <code>validateOnMount</code>).
       </p>
 

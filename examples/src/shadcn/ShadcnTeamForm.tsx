@@ -78,7 +78,7 @@ type MemberRowProps = Readonly<{
 }>;
 
 // One memoized component per row: the per-row useField subscriptions keep
-// each row's reads self-contained, and memo (every prop here is stable —
+// each row's reads self-contained, and memo (every prop here is stable:
 // useFieldArray's move/remove are useCallback'd) is what actually stops
 // keystrokes in one row, or in the team name, from re-rendering the others.
 // Without memo the parent re-renders on any member edit (its useFieldArray
@@ -152,7 +152,7 @@ export const ShadcnTeamForm = () => {
       <CardHeader>
         <CardTitle>Team roster</CardTitle>
         <CardDescription>
-          <code>useFieldArray</code> rows with stable ids — reorder after
+          <code>useFieldArray</code> rows with stable ids: reorder after
           editing and the drafts follow their rows. Duplicate emails are a
           cross-row <code>superRefine</code>.
         </CardDescription>

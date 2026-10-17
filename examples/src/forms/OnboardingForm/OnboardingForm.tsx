@@ -13,7 +13,7 @@ import { EquipmentSection } from "./sections/EquipmentSection";
 import { PersonalSection } from "./sections/PersonalSection";
 
 // The form body composes sections; sections compose fields; fields bind
-// paths. Nothing in this tree passes `form` — every hook comes pre-wired
+// paths. Nothing in this tree passes `form`; every hook comes pre-wired
 // from ./hooks (createFormHooks over one module-level form; useForm +
 // createFormContext is the per-mount alternative).
 export const OnboardingForm = () => {

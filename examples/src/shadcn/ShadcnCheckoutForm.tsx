@@ -54,7 +54,7 @@ const schema = z.object({
     .int("whole units only")
     .min(1, "at least 1")
     .max(99, "99 max"),
-  // "No note" is null, not "" — clearing the textarea round-trips to null
+  // "No note" is null, not "": clearing the textarea round-trips to null
   // via field.emptyValue.
   giftNote: z.string().max(120, "120 chars max").nullable(),
 });
@@ -78,7 +78,7 @@ export const ShadcnCheckoutForm = () => {
   const giftNote = useField(form, "giftNote");
   const [placed, setPlaced] = useState(false);
 
-  // Derived money line — recomputes only when the inputs it reads change.
+  // Derived money line; recomputes only when the inputs it reads change.
   const total = useFormSelector(form, (state) => {
     const rate =
       SHIPPING.find((s) => s.value === state.values.shipping)?.price ?? 0;
@@ -91,7 +91,7 @@ export const ShadcnCheckoutForm = () => {
         <CardTitle>Checkout</CardTitle>
         <CardDescription>
           Radix Select and RadioGroup speak <code>onValueChange</code>, not
-          DOM events — the adapter maps closing the dropdown to the blur
+          DOM events; the adapter maps closing the dropdown to the blur
           trigger.
         </CardDescription>
       </CardHeader>
@@ -157,7 +157,7 @@ export const ShadcnCheckoutForm = () => {
             {...textInputProps(giftNote)}
           />
           <p className="text-sm text-muted-foreground">
-            nullable field — store value is{" "}
+            nullable field; store value is{" "}
             <code>{giftNote.value === null ? "null" : "a string"}</code>;
             clearing it writes null back, not "".
           </p>
@@ -180,7 +180,7 @@ export const ShadcnCheckoutForm = () => {
       </CardFooter>
       {placed ? (
         <p className="px-4 pb-2 text-sm text-muted-foreground">
-          order placed — thanks!
+          order placed, thanks!
         </p>
       ) : null}
     </Card>

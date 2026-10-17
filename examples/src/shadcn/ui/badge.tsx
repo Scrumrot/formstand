@@ -4,7 +4,7 @@ import { cn } from "../cn";
 export type BadgeProps = Readonly<ComponentProps<"span">>;
 
 // Trimmed from stock shadcn: the playground only renders outline badges, so
-// the cva variant machinery is gone — restore it from upstream if a demo
+// the cva variant machinery is gone; restore it from upstream if a demo
 // ever needs the filled variants.
 export const Badge = ({ className, ...props }: BadgeProps) => (
   <span

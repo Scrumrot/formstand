@@ -69,7 +69,7 @@ export const ArrayForm = () => {
     mode: "onBlur",
   });
   useDemoForm(form);
-  // The item type is inferred from the schema through the path — push()
+  // The item type is inferred from the schema through the path: push()
   // below knows a user is { email: string } with no annotation.
   const users = useFieldArray(form, "users");
 
@@ -96,7 +96,7 @@ export const ArrayForm = () => {
         />
       ))}
 
-      {/* The ARRAY-level error (z.array(...).min(1)) — ops revalidate the
+      {/* The ARRAY-level error (z.array(...).min(1)): ops revalidate the
           array path, so once the revalidate gate is open (post-submit),
           removing the last row surfaces this line and pushing a row clears
           it, live. */}

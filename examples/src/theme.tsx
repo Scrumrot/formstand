@@ -14,7 +14,7 @@ export type ThemeMode = "dark" | "light";
 
 // VitePress's own storage key: the docs site and the playground share an
 // origin, so using the same key makes the theme ONE preference across both
-// surfaces — flip it on either side and the other follows, no sync code.
+// surfaces: flip it on either side and the other follows, no sync code.
 // VitePress also stores "auto" (follow the OS); we treat that like unset.
 const STORAGE_KEY = "vitepress-theme-appearance";
 const LEGACY_KEY = "fs-theme";
@@ -66,7 +66,7 @@ export const useThemeModeState = () => {
   return { mode, toggle };
 };
 
-// The repo's star count for the GitHub link — best-effort decoration:
+// The repo's star count for the GitHub link. Best-effort decoration:
 // cached per session, silent on any failure, and skipped entirely under
 // vitest so CI never talks to the GitHub API.
 export const useGitHubStars = (repo: string): number | null => {
@@ -101,7 +101,7 @@ export const useGitHubStars = (repo: string): number | null => {
         }
       })
       .catch(() => {
-        // decoration only — the link works without a count
+        // decoration only; the link works without a count
       });
     return () => controller.abort();
   }, [repo]);

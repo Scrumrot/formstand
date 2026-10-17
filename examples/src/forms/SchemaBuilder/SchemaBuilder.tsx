@@ -207,8 +207,8 @@ const SectionEditor = ({ form, index, onRemove, ...move }: SectionEditorProps) =
         </div>
         <div className="field" style={{ flex: 2 }}>
           <select {...selectProps(kind)}>
-            <option value="object">object — one group of fields</option>
-            <option value="array">array — repeating rows</option>
+            <option value="object">object: one group of fields</option>
+            <option value="array">array: repeating rows</option>
           </select>
         </div>
         <MoveButtons {...move} />
@@ -340,7 +340,7 @@ const GeneratedOutput = ({ files: generated, formName, error }: GeneratedOutputP
 };
 
 // Worked examples so the import modal (and paste mode) generate something on
-// first open — one per dialect, the same Contact shape either way.
+// first open, one per dialect, the same Contact shape either way.
 const SAMPLE_TS = `interface Contact {
   fullName: string;
   email: string;
@@ -414,7 +414,7 @@ export const SchemaBuilder = () => {
   const deferredPasteSource = useDeferredValue(pasteSource);
 
   // One emit path, two IR sources. Build mode reads the field rows; paste
-  // mode parses the imported source (a TS type or a zod schema) into IR —
+  // mode parses the imported source (a TS type or a zod schema) into IR;
   // both feed the REAL emitters. The option axes (ui/layout/sections/columns)
   // come from the form in either mode.
   const output = useMemo(() => {
@@ -453,7 +453,7 @@ export const SchemaBuilder = () => {
   return (
     <div>
       <p className="subtitle-text" style={{ color: "#8b94a7", fontSize: 13, marginTop: 0 }}>
-        Design a schema — or paste a TypeScript type — and the{" "}
+        Design a schema (or paste a TypeScript type) and the{" "}
         <strong>real formstand-gen emitters</strong> (imported from the CLI's
         source, running in your browser) regenerate the files on every
         keystroke, the same output <code>npx formstand-gen</code> writes to
@@ -544,7 +544,7 @@ export const SchemaBuilder = () => {
         <div className="field" style={{ marginTop: 16 }}>
           <div className="row" style={{ alignItems: "center", gap: 12 }}>
             <label style={{ flex: 1, margin: 0 }}>
-              {LANG_LABEL[pasteLang]} — the component name comes from it, edit
+              {LANG_LABEL[pasteLang]}; the component name comes from it, edit
               below to regenerate
             </label>
             <button
@@ -567,13 +567,13 @@ export const SchemaBuilder = () => {
               <>
                 Supports string / number / boolean / Date, arrays, nested
                 objects, string-literal unions, and optional / nullable.
-                Anything else becomes a text field with a TODO — same as{" "}
+                Anything else becomes a text field with a TODO, same as{" "}
                 <code>formstand-gen --type</code>.
               </>
             ) : (
               <>
                 Evaluated in your browser with the bundled zod, then walked by
-                the real <code>fromZod</code> — the same IR{" "}
+                the real <code>fromZod</code>, the same IR{" "}
                 <code>npx formstand-gen schema.ts</code> builds.
               </>
             )}

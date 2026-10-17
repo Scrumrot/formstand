@@ -24,7 +24,7 @@ const crc32 = (bytes: Uint8Array): number =>
 const le = (value: number, size: number): readonly number[] =>
   Array.from({ length: size }, (_, index) => (value >>> (8 * index)) & 0xff);
 
-// DOS timestamp for 1980-01-01 00:00 — fixed so the same input always
+// DOS timestamp for 1980-01-01 00:00, fixed so the same input always
 // produces the same archive.
 const DOS_TIME = 0;
 const DOS_DATE = 0x0021;

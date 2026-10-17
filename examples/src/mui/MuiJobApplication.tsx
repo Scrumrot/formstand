@@ -124,7 +124,7 @@ export const MuiJobApplication = () => {
     >
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         The email check is an async <code>.refine</code> (600ms fake server,
-        300ms debounce) — <code>taken@example.com</code> is taken. Ask for
+        300ms debounce); <code>taken@example.com</code> is taken. Ask for
         more than {formatUsd(SERVER_SALARY_CAP)} and the submit handler
         rejects via <code>form.setError</code>: that server error sticks
         until you move the slider again.

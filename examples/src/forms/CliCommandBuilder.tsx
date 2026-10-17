@@ -11,7 +11,7 @@ import { z } from "zod";
 import { useDemoForm } from "../demo/DemoShell";
 
 // A formstand form that builds a formstand-gen command: the options are a
-// zod schema (cross-field rule included — type mode needs a type name),
+// zod schema (cross-field rule included: type mode needs a type name),
 // and the command string is DERIVED state via useFormSelector, recomputed
 // per keystroke and never stored.
 
@@ -60,7 +60,7 @@ const quote = (arg: string): string =>
   /[\s"']/.test(arg) ? JSON.stringify(arg) : arg;
 
 // One-shot runners resolve a PACKAGE by the name they are given, and the
-// package is formstand-cli while formstand-gen is only its binary — a bare
+// package is formstand-cli while formstand-gen is only its binary; a bare
 // "yarn dlx formstand-gen" 404s against the registry. Each runner has its
 // own spelling for "fetch package X, run binary Y"; npx's -p form also
 // keeps working after formstand-cli is installed locally.
@@ -149,7 +149,7 @@ export const CliCommandBuilder = () => {
     <div>
       <p className="subtitle-text" style={{ color: "#8b94a7", fontSize: 13, marginTop: 0 }}>
         Fill out the options and the <code>formstand-gen</code> command updates
-        live — the command line is <code>useFormSelector</code> derived state,
+        live: the command line is <code>useFormSelector</code> derived state,
         and "type mode needs a type name" is a cross-field{" "}
         <code>superRefine</code>.
       </p>
@@ -280,7 +280,7 @@ export const CliCommandBuilder = () => {
       <div className="field">
         <label className="row" style={{ gap: 8 }}>
           <input {...checkboxProps(live)} />
-          Live mode — no submit scaffold, values-subscription prop (--live)
+          Live mode: no submit scaffold, values-subscription prop (--live)
         </label>
         <label
           className="row"
@@ -290,9 +290,9 @@ export const CliCommandBuilder = () => {
             {...checkboxProps(formProp)}
             disabled={layout.value === "module"}
           />
-          Page owns the form — component takes a form prop (--form-prop
+          Page owns the form: component takes a form prop (--form-prop
           {layout.value === "module"
-            ? "; single-file only — the module's form is a singleton the page imports"
+            ? "; single-file only: the module's form is a singleton the page imports"
             : ""}
           )
         </label>

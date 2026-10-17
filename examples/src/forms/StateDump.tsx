@@ -21,7 +21,7 @@ export const StateDump = <TSchema extends z.ZodType>({
     isValidating: state.isValidating,
   }));
   // dirtyFields() builds a fresh array per call, so it needs its own
-  // shallow-compared subscription — as a key inside the object above, the
+  // shallow-compared subscription; as a key inside the object above, the
   // object's shallow compare would see a new array reference on every pass
   // and loop the store subscription (React error #185).
   const dirtyFields = useFormSelectorShallow(form, () => form.dirtyFields());

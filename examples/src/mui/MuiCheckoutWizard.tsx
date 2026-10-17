@@ -247,7 +247,7 @@ const PaymentStep = ({ form }: StepProps) => {
   );
 };
 
-// Its own component so only the Review step subscribes to every value — the
+// Its own component so only the Review step subscribes to every value: the
 // useFormValues whole-values subscription is isolated to this subtree, so
 // the wizard shell doesn't re-render per keystroke on earlier steps.
 const ReviewStep = ({ form }: StepProps) => {
@@ -271,7 +271,7 @@ const ReviewStep = ({ form }: StepProps) => {
   return (
     <Box>
       <Alert severity="info" sx={{ mb: 1 }}>
-        Everything below is read straight from the store via a selector — the
+        Everything below is read straight from the store via a selector; the
         inputs from earlier steps are unmounted, the values persist.
       </Alert>
       <List dense>
@@ -320,7 +320,7 @@ export const MuiCheckoutWizard = () => {
           : [...CONTACT_SHIPPING_PATHS, ...BILLING_PATHS]
         : PAYMENT_PATHS;
     // validateFields settles synchronously for sync schemas; an async schema
-    // returns { kind: "pending", promise } — awaiting the promise covers both.
+    // returns { kind: "pending", promise }; awaiting the promise covers both.
     const result = form.validateFields(paths);
     const settled = result.kind === "pending" ? await result.promise : result;
     if (settled.kind === "valid") {
@@ -389,7 +389,7 @@ export const MuiCheckoutWizard = () => {
           variant="filled"
           onClose={() => setOrderPlaced(false)}
         >
-          Order placed — the typed payload came out of handleSubmit.
+          Order placed: the typed payload came out of handleSubmit.
         </Alert>
       </Snackbar>
     </form>

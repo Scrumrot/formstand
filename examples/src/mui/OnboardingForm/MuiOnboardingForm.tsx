@@ -12,7 +12,7 @@ import { EmploymentSection } from "./sections/EmploymentSection";
 import { EquipmentSection } from "./sections/EquipmentSection";
 import { PersonalSection } from "./sections/PersonalSection";
 
-// The Onboarding feature module rendered through Material UI — the same
+// The Onboarding feature module rendered through Material UI, the same
 // shared schema and hook architecture as the plain and shadcn variants.
 // (The playground wraps this tab in MuiThemeBridge; in an app, put your
 // ThemeProvider wherever it usually lives.)

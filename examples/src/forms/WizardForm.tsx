@@ -14,7 +14,7 @@ import { z } from "zod";
 // The multi-step story: ONE form and one schema behind a wizard.
 // useFormSteps gates next() on the current step's fields validating
 // clean (the confirm-password refine fires inside step 1), back() never
-// validates, and the step headers are plain goTo() calls — a forward
+// validates, and the step headers are plain goTo() calls; a forward
 // jump lands on the first step that fails instead of skipping past it.
 
 const schema = z

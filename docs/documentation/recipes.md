@@ -10,7 +10,7 @@ Map a failed request onto fields with `setError`; the [server channel](./errors)
 const onSubmit = form.handleSubmit(async (data) => {
   const res = await api.createUser(data);
   if (!res.ok) {
-    // e.g. { username: "already taken" } — addErrors takes the server's
+    // e.g. { username: "already taken" }; addErrors takes the server's
     // runtime-keyed map as-is, no per-path casts
     form.addErrors(
       Object.fromEntries(
@@ -55,7 +55,7 @@ useEffect(() => {
 
 ## Multi-step wizard
 
-`useFormSteps` is this recipe as a hook — per-step gating, touched-marking on a refused advance, land-on-first-invalid jumps, live per-step status. See [Multi-step forms](./multi-step). The hand-rolled core, when you want to own the navigation state yourself:
+`useFormSteps` is this recipe as a hook: per-step gating, touched-marking on a refused advance, land-on-first-invalid jumps, live per-step status. See [Multi-step forms](./multi-step). The hand-rolled core, when you want to own the navigation state yourself:
 
 ```tsx
 const STEP_FIELDS = [
@@ -72,7 +72,7 @@ const next = async () => {
 
 ## Masked and formatted inputs
 
-Phone numbers, currency, percentages — anything with a display format — hit the same wall number inputs do: a naive controlled input re-renders the canonical format on every keystroke and eats the separators mid-entry. `useMaskedInput` is `useNumberInput`'s raw-text pattern for any parsed/formatted value: partial entries stay visible without touching the form, complete entries push immediately, blur snaps to the canonical format, and an external write (`reset`, `adoptValues`) wins over local text.
+Phone numbers, currency, percentages, anything with a display format: they all hit the same wall number inputs do: a naive controlled input re-renders the canonical format on every keystroke and eats the separators mid-entry. `useMaskedInput` is `useNumberInput`'s raw-text pattern for any parsed/formatted value: partial entries stay visible without touching the form, complete entries push immediately, blur snaps to the canonical format, and an external write (`reset`, `adoptValues`) wins over local text.
 
 ```tsx
 import { useMaskedInput, type MaskedParse } from "formstand";
@@ -81,7 +81,7 @@ const parsePhone = (text: string): MaskedParse<string> => {
   const digits = text.replace(/\D/g, "");
   if (text.trim() === "") return { kind: "empty" };
   if (digits.length === 10) return { kind: "value", value: digits };
-  return { kind: "invalid" };  // partial — kept as local text
+  return { kind: "invalid" };  // partial, kept as local text
 };
 const formatPhone = (d: string) => `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
 

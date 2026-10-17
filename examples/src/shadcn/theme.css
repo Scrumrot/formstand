@@ -12,7 +12,7 @@
  * variables through Tailwind's theme namespace. `inline` makes utilities
  * reference var(--background) at the use site, so defining the palette on
  * `.shadcn-scope` (instead of shadcn's usual `:root`) is all the scoping
- * needed — the values inherit down to every component in the subtree.
+ * needed; the values inherit down to every component in the subtree.
  */
 @theme inline {
   --color-background: var(--background);
@@ -40,7 +40,7 @@
 }
 
 /* The zinc palette's dark values by default; the shell's theme toggle
- * (html[data-theme="light"]) swaps in the light zinc set below — no `.dark`
+ * (html[data-theme="light"]) swaps in the light zinc set below: no `.dark`
  * class, no `dark:` variants in the components. */
 .shadcn-scope {
   --radius: 0.625rem;

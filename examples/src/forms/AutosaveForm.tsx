@@ -93,7 +93,7 @@ export const AutosaveForm = () => {
         Title edits: {titleChanges} (tracked via{" "}
         <code>form.watchValue("title", ...)</code>). Changed since the restored
         draft: {dirtyPaths.length > 0 ? dirtyPaths.join(", ") : "nothing"}{" "}
-        (from the <code>dirty</code> map — <code>form.diff()</code> would give
+        (from the <code>dirty</code> map; <code>form.diff()</code> would give
         the matching PATCH payload).
       </p>
 

@@ -61,7 +61,7 @@ const Benchmark = ({ size, appendResult }: BenchmarkProps) => {
   const schema = useMemo(() => buildSchema(size), [size]);
   const initial = useMemo(() => buildInitial(size), [size]);
   const form = useForm(schema, { initialValues: initial, mode: "onSubmit" });
-  // Registered like every demo — the shell mounts the state panel only
+  // Registered like every demo; the shell mounts the state panel only
   // while it's open, so a closed panel costs the benchmark nothing. (An
   // OPEN panel re-renders its JSON dump inside every timed flushSync
   // iteration, which is why the copy says to close it before running.)
@@ -79,7 +79,7 @@ const Benchmark = ({ size, appendResult }: BenchmarkProps) => {
   const runBenchmark = () => {
     // field0 on purpose: it's the first input in the grid, so you can watch
     // it tick to iter-99 without scrolling (the target field is arbitrary
-    // for the measurement — one subscribed field re-renders either way).
+    // for the measurement; one subscribed field re-renders either way).
     const path = "field0";
     const before = renderCounterRef.current.count;
     const start = performance.now();
@@ -136,7 +136,7 @@ export const PerfBenchmarkForm = () => {
       <p style={{ color: "#8b94a7", fontSize: 14, marginTop: 0 }}>
         Synthetic benchmark: a flat form with N string fields rendered via{" "}
         <code>useField</code>. Run it and watch <code>field0</code> (top-left)
-        tick to <code>iter-99</code> — the "renders / setValue" column counts
+        tick to <code>iter-99</code>; the "renders / setValue" column counts
         how many Row components re-render per write (ideally 1: only the
         targeted field). The inputs are live too; type in any of them. Keep
         the View state panel <em>closed</em> while running: an open panel

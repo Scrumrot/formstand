@@ -1,6 +1,6 @@
 // The in-browser half of formstand-gen: everything downstream of the CLI's
 // IR is a pure string builder (no Node APIs), so the playground imports the
-// REAL emitters straight from cli/src — same code that runs on npx, not a
+// REAL emitters straight from cli/src: same code that runs on npx, not a
 // port. The builder form's values map directly onto FieldSpec, skipping the
 // CLI's zod/TS parsing frontends entirely.
 import {

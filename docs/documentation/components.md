@@ -64,7 +64,7 @@ const name = useField(form, "name");
 <input {...textInputProps(name)} />
 <input {...checkboxProps(useField(form, "agree"))} />
 <select {...selectProps(useField(form, "theme"))}>
-  <option value="">—</option>
+  <option value="">(none)</option>
   <option value="light">Light</option>
 </select>
 <input {...numberInputProps(useField(form, "age"))} step="1" />
@@ -107,7 +107,7 @@ function PaymentFields({ form }: { form: Form<typeof schema> }) {
 }
 ```
 
-`useVariantField(form, unionPath, field)` types the result as the field's value across the variants that resolve it, widened with `| undefined`, since the field is absent while a different variant is active. Since 0.20 the field argument is a **path**, not just a key: `useVariantField(form, "payment", "billing.zip")` reaches inside a variant-only object, and `"span.0"` binds a position of a variant-only tuple, riding the same typed-path machinery as `useField` (leaf classification and tuple positionality included). A path no variant resolves, or one rooted at a common key (the discriminant included — those bind with plain `useField`), is a compile error. Call it unconditionally (React's rules) and render the matching fields based on the discriminant. `createFormHooks` exposes a bound `use{Name}VariantField`, and `formstand-gen` generates this shape for discriminated-union fields.
+`useVariantField(form, unionPath, field)` types the result as the field's value across the variants that resolve it, widened with `| undefined`, since the field is absent while a different variant is active. Since 0.20 the field argument is a **path**, not just a key: `useVariantField(form, "payment", "billing.zip")` reaches inside a variant-only object, and `"span.0"` binds a position of a variant-only tuple, riding the same typed-path machinery as `useField` (leaf classification and tuple positionality included). A path no variant resolves, or one rooted at a common key (the discriminant included; those bind with plain `useField`), is a compile error. Call it unconditionally (React's rules) and render the matching fields based on the discriminant. `createFormHooks` exposes a bound `use{Name}VariantField`, and `formstand-gen` generates this shape for discriminated-union fields.
 
 The union path can be row-indexed. A union that is an **array's row item** binds the same way from inside a row component, with a template path:
 
@@ -120,7 +120,7 @@ Both the `` `pavements.${number}` `` template and a literal `"pavements.0"` reso
 
 ## Composite fields: `useFields`
 
-One control backed by several schema paths — a coordinate pair behind a single map-driven input, a range's min and max, a date span — binds them together with `useFields`:
+One control backed by several schema paths (a coordinate pair behind a single map-driven input, a range's min and max, a date span) binds them together with `useFields`:
 
 ```tsx
 const location = useFields(form, ["latitude", "longitude"]);
@@ -132,7 +132,7 @@ const [latitude, longitude] = location.fields; // full, typed field bindings
 
 Each element of `fields` is a complete `useField` result, position-typed from the tuple, so it spreads into the same prop builders and components a solo binding would. The wrapper adds the combined view: `error` merges every path's messages in path order and dedupes them, so a cross-field `superRefine` that stamps both paths reads once; `firstError` is its display shorthand; `touched`, `dirty`, and `isValidating` answer "any of them"; and `onBlur` blurs every path under the form's validation mode, so the composite behaves like one control losing focus.
 
-The paths tuple is part of the hook contract: it expands to exactly that many `useField` calls, so its length and order must be stable across renders. Pass a literal or a module-level constant — a tuple that changes length throws React's own hooks-count error at the offending render.
+The paths tuple is part of the hook contract: it expands to exactly that many `useField` calls, so its length and order must be stable across renders. Pass a literal or a module-level constant: a tuple that changes length throws React's own hooks-count error at the offending render.
 
 ## `NumberField` and partial entries
 
@@ -153,13 +153,13 @@ What should a cleared input write back? `useField` answers by **introspecting th
 - `.optional()` → clearing writes `undefined` (also the default for unrecognized shapes).
 - For schema-less forms (a bare `FieldFormApi` without a schema), it falls back to a runtime heuristic: `null` if the field's *initial value* was `null`, else `undefined`.
 
-Alongside it sits `field.clearable`: whether the schema **accepts** that empty value. Optional, nullable, and defaulted fields do (`.default()` fills the `undefined` at parse, so clearing reads as "back to the default"); a bare required field does not — its `emptyValue` is `undefined` only as the library-wide fallback, and writing that would trade a visible value the schema can judge for a hole it rejects.
+Alongside it sits `field.clearable`: whether the schema **accepts** that empty value. Optional, nullable, and defaulted fields do (`.default()` fills the `undefined` at parse, so clearing reads as "back to the default"); a bare required field does not: its `emptyValue` is `undefined` only as the library-wide fallback, and writing that would trade a visible value the schema can judge for a hole it rejects.
 
-The builders use the pair consistently: `numberInputProps` and `NumberField` write `emptyValue` when the text is empty (a number has no `""` representation, so the blank is the only honest value either way); `textInputProps` and `selectProps` write `emptyValue` on a cleared value when the field is `clearable` — so `z.string().optional()` clears to `undefined` and reads pristine again, `z.string().nullable()` clears to `null`, and a required text field cleared to `""` just stays `""`. `checkboxProps` is the deliberate exception: a checkbox has exactly two visual states, so unchecking always writes `false`, because restoring `null` on uncheck would make `false` unreachable for a nullable boolean. If "unset" must be distinguishable from "no", use a select or radio group instead.
+The builders use the pair consistently: `numberInputProps` and `NumberField` write `emptyValue` when the text is empty (a number has no `""` representation, so the blank is the only honest value either way); `textInputProps` and `selectProps` write `emptyValue` on a cleared value when the field is `clearable`, so `z.string().optional()` clears to `undefined` and reads pristine again, `z.string().nullable()` clears to `null`, and a required text field cleared to `""` just stays `""`. `checkboxProps` is the deliberate exception: a checkbox has exactly two visual states, so unchecking always writes `false`, because restoring `null` on uncheck would make `false` unreachable for a nullable boolean. If "unset" must be distinguishable from "no", use a select or radio group instead.
 
 ## `SelectField` placeholder and null handling
 
-A native `<select>` with a value that matches no option silently *displays* the first option while your state says otherwise. `SelectField` stays controlled by rendering an empty `<option value="">` whenever the bound `<select>` displays `""`, which covers `undefined`, `null`, and `""` field values (the condition derives from `selectProps`' own value coercion), or whenever you pass `placeholder`, in which case your placeholder text shows. For a **clearable** field (nullable, optional, or defaulted — see `field.clearable` above) the empty option is also selectable and stays visible after a choice, so picking it clears the field back to its `emptyValue`; on a required field it is a disabled placeholder, since there is no legal blank to clear to. One override: if your `options` list itself contains a `""`-valued entry, that explicit, labelled option **is** the blank state, so the implicit option and the `placeholder` are suppressed and the browser can't pair the value with an unlabelled duplicate:
+A native `<select>` with a value that matches no option silently *displays* the first option while your state says otherwise. `SelectField` stays controlled by rendering an empty `<option value="">` whenever the bound `<select>` displays `""`, which covers `undefined`, `null`, and `""` field values (the condition derives from `selectProps`' own value coercion), or whenever you pass `placeholder`, in which case your placeholder text shows. For a **clearable** field (nullable, optional, or defaulted; see `field.clearable` above) the empty option is also selectable and stays visible after a choice, so picking it clears the field back to its `emptyValue`; on a required field it is a disabled placeholder, since there is no legal blank to clear to. One override: if your `options` list itself contains a `""`-valued entry, that explicit, labelled option **is** the blank state, so the implicit option and the `placeholder` are suppressed and the browser can't pair the value with an unlabelled duplicate:
 
 ```tsx
 <SelectField

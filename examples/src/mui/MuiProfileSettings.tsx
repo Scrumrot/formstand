@@ -118,7 +118,7 @@ export const MuiProfileSettings = () => {
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Save is gated on <code>useIsDirty && useIsValid</code>; the chips
         below are <code>form.dirtyFields()</code> live. Saving calls{" "}
-        <code>adoptValues</code> (rebase, not reset) — Discard calls{" "}
+        <code>adoptValues</code> (rebase, not reset); Discard calls{" "}
         <code>reset()</code> back to the last saved state.
       </Typography>
 
@@ -144,7 +144,7 @@ export const MuiProfileSettings = () => {
                 {...muiTextFieldProps(bio)}
                 helperText={
                   bio.error?.[0] ??
-                  `bio is a nullable field — its store value is ${bioText}. ` +
+                  `bio is a nullable field; its store value is ${bioText}. ` +
                     "Clear the text and it round-trips to null " +
                     "(field.emptyValue), not an empty string."
                 }
@@ -238,7 +238,7 @@ export const MuiProfileSettings = () => {
           variant="filled"
           onClose={() => setSaved(false)}
         >
-          Settings saved — the dirty chips are gone until the next edit.
+          Settings saved: the dirty chips are gone until the next edit.
         </Alert>
       </Snackbar>
     </Box>

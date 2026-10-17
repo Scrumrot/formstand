@@ -1,6 +1,6 @@
 /// <reference path="./raw.d.ts" />
 // The triple-slash reference (not vite/client) carries the `*?raw` module
-// declaration into every program that pulls this file in — the root
+// declaration into every program that pulls this file in: the root
 // typecheck and the vitest smoke test compile it without Vite's types.
 import arraySrc from "../forms/ArrayForm.tsx?raw";
 import asyncSrc from "../forms/AsyncForm.tsx?raw";
@@ -48,7 +48,7 @@ import shadTeamSrc from "../shadcn/ShadcnTeamForm.tsx?raw";
 
 // The playground shell adds a one-line useDemoForm registration (plus its
 // import) to every demo so the "View state" panel works. Those lines are
-// harness, not library API — strip them from the displayed source so
+// harness, not library API; strip them from the displayed source so
 // copy-pasted code compiles outside the playground.
 const stripHarness = (source: string): string =>
   source
@@ -57,7 +57,7 @@ const stripHarness = (source: string): string =>
     .join("\n");
 
 // Every demo's source is a file list: single-file demos hold one entry,
-// module demos (Onboarding) hold the whole folder — the shell shows a file
+// module demos (Onboarding) hold the whole folder; the shell shows a file
 // tree when there is more than one.
 export type DemoFile = Readonly<{ path: string; source: string }>;
 
@@ -131,7 +131,7 @@ const onboardingShadcnFiles = moduleFiles(
 // In zod mode the CLI RE-EXPORTS the input schema rather than copying it, so
 // this module's schema.ts is one line pointing at ../../forms/OnboardingForm.
 // That file is outside the glob, which left the flagship "here is what the
-// generator emits" demo unable to show the schema that drove it — the one
+// generator emits" demo unable to show the schema that drove it, the one
 // file a reader most wants. Append the input alongside the module's own
 // files, pathed so it reads as the input rather than part of the output.
 const generatedMuiFiles: readonly DemoFile[] = [
@@ -200,11 +200,11 @@ const sources = {
   // The untouched single-file DeepBoundaryForm.tsx next to the module
   // folders: its l1...l8 leaves sit exactly AT formstand's FieldPath budget
   // (9 segments) and bind real controls, while the l9 level's 10-segment
-  // leaf exceeds it — the CLI degrades that subtree to a `// TODO`.
+  // leaf exceeds it; the CLI degrades that subtree to a `// TODO`.
   genDeepNest: single("DeepBoundaryForm.tsx", deepBoundarySrc),
   genArrayStress: nestedArrayStressFiles,
   // The three kit demos: one schema (Onboarding), one chrome, three
-  // --ui backends — each an untouched single-file output.
+  // --ui backends, each an untouched single-file output.
   genChakra: single("ChakraOnboardingForm.tsx", chakraOnboardingSrc),
   genMantine: single("MantineOnboardingForm.tsx", mantineOnboardingSrc),
   genAntd: single("AntdOnboardingForm.tsx", antdOnboardingSrc),

@@ -5,11 +5,11 @@ import { firstError, hasError } from "../fieldErrors";
 
 // The formstand → Material UI bridge, the same adapter shape
 // `formstand-gen --ui mui` emits. Each builder takes a `useField` result
-// and returns a spreadable props object for the matching MUI component —
+// and returns a spreadable props object for the matching MUI component,
 // like the library's own textInputProps, but speaking MUI's dialect:
 // validity as an `error` boolean plus a `helperText` line instead of
 // `aria-invalid` (MUI wires the aria attributes itself). Numbers go through
-// the library's exported useNumberInput — MUI's TextField is a text input,
+// the library's exported useNumberInput: MUI's TextField is a text input,
 // and that hook is the text-preserving binding behind NumberField (partial
 // entries like "-" and "1." stay visible while typing). The stateless
 // numberInputProps builder remains the right choice for NATIVE
@@ -61,14 +61,14 @@ export type UseMuiNumberFieldPropsReturn = Readonly<{
 // A hook, not a builder: useNumberInput keeps the raw text in local state
 // while it doesn't parse, so intermediate entries survive keystrokes. Call
 // it at component top (`const props = useMuiNumberFieldProps(field)`) and
-// spread onto a TextField — inputMode rides in via slotProps.input since
+// spread onto a TextField; inputMode rides in via slotProps.input since
 // the control stays a text input.
 export const useMuiNumberFieldProps = <T extends number | null | undefined>(
   field: UseFieldReturn<T>,
 ): UseMuiNumberFieldPropsReturn => {
   // Widened for useNumberInput (via unknown: setValue's parameter is
   // contravariant, so a required-number field isn't directly convertible):
-  // clearing still writes emptyValue — the same runtime the old
+  // clearing still writes emptyValue, the same runtime the old
   // per-keystroke `as T` cast produced, asserted once here instead.
   const binding = useNumberInput(
     field as unknown as UseFieldReturn<number | null | undefined>,

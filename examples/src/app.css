@@ -9,7 +9,7 @@
  *    button.primary…), so nothing in it can reach the shadcn components
  *    and outrank their layered utilities.
  * If styles.css ever grows a bare element rule, it WOULD beat every layered
- * rule below — keep it class-scoped (see the note at its top).
+ * rule below; keep it class-scoped (see the note at its top).
  *
  * The layer statement pins Tailwind's canonical order up front, including
  * `components` even though nothing declares it yet: an undeclared layer
