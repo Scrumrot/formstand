@@ -161,11 +161,22 @@ type SectionPlan = Readonly<{
   fields: readonly FieldPlan[];
 }>;
 
+// One root-level entry of the form body, in the order the schema declares
+// its keys. The body used to render every root field first and every
+// section after, so a schema like { name, address, email } came out as
+// name, email, address: the single-file layout preserves declaration
+// order, and a form's reading order is part of what the author wrote.
+type BodyItem =
+  | Readonly<{ kind: "field"; field: FieldPlan }>
+  | Readonly<{ kind: "section"; section: SectionPlan }>
+  | Readonly<{ kind: "todo"; text: string }>;
+
 type Plan = Readonly<{
   fields: readonly FieldPlan[];
   sections: readonly SectionPlan[];
   rootFields: readonly FieldPlan[]; // top-level scalars, rendered in the body
   rootTodos: readonly string[]; // dot-keys etc. surfaced in the body
+  body: readonly BodyItem[]; // rootFields, sections, rootTodos in schema order
 }>;
 
 // Whether the subtree holds a discriminated-union field at any addressable
@@ -282,18 +293,36 @@ const buildPlan = (root: ObjectSpec, naming: Naming, budget: number): Plan => {
 
   const sectionLeafFields = sections.flatMap((section) => section.fields);
 
+  const rootTodoText = (name: string): string =>
+    `{/* TODO: field ${commentText(q(name))} skipped, "." in a key is not path-addressable (see formstand docs) */}`;
+
   const rootTodos = root.fields
     .filter((field) => isUnaddressable(field.name))
-    .map(
-      (field) =>
-        `{/* TODO: field ${commentText(q(field.name))} skipped, "." in a key is not path-addressable (see formstand docs) */}`,
-    );
+    .map((field) => rootTodoText(field.name));
+
+  // The body in declaration order: each root key resolves to the field or
+  // section planned for it above (lookups by name, so the dedupe suffixes
+  // the two passes decided are kept), or to its dotted-key TODO.
+  const fieldByName = new Map(
+    rootFields.map((field) => [field.segments[0] ?? "", field]),
+  );
+  const sectionByKey = new Map(sections.map((section) => [section.key, section]));
+  const body = root.fields.flatMap((field): readonly BodyItem[] => {
+    if (isUnaddressable(field.name)) {
+      return [{ kind: "todo", text: rootTodoText(field.name) }];
+    }
+    const planned = fieldByName.get(field.name);
+    if (planned !== undefined) return [{ kind: "field", field: planned }];
+    const section = sectionByKey.get(field.name);
+    return section === undefined ? [] : [{ kind: "section", section }];
+  });
 
   return {
     fields: [...rootFields, ...sectionLeafFields],
     sections,
     rootFields,
     rootTodos,
+    body,
   };
 };
 
@@ -4294,15 +4323,18 @@ const formFile = (
       ...shell.open,
       ...onSubmitAttrLines(formExpr, scaffold.live),
       ...shell.afterSubmit,
-      ...plan.rootTodos.map((todo) => `${shell.bodyIndent}${todo}`),
-      ...plan.rootFields.map(
-        (field) =>
-          `${shell.bodyIndent}<${field.componentName}${optionsPropsAttrs(leafOptionsProp(field.spec))} />`,
-      ),
-      ...plan.sections.map(
-        (section) =>
-          `${shell.bodyIndent}<${section.componentName}${optionsPropsAttrs(sectionOptionsProps(section.spec))} />`,
-      ),
+      // Schema order: root fields, sections, and dotted-key TODOs interleave
+      // exactly as the keys were declared (see BodyItem).
+      ...plan.body.map((item): string => {
+        switch (item.kind) {
+          case "todo":
+            return `${shell.bodyIndent}${item.text}`;
+          case "field":
+            return `${shell.bodyIndent}<${item.field.componentName}${optionsPropsAttrs(leafOptionsProp(item.field.spec))} />`;
+          case "section":
+            return `${shell.bodyIndent}<${item.section.componentName}${optionsPropsAttrs(sectionOptionsProps(item.section.spec))} />`;
+        }
+      }),
       ...(scaffold.live ? [] : shell.submitButton),
       ...shell.close,
       "  );",

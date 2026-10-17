@@ -26,6 +26,7 @@ import { collidingSchema } from "./fixtures/collidingSchema";
 import { leafFreeSchema } from "./fixtures/leafFreeSchema";
 import { MySchema } from "./fixtures/MySchema";
 import { recordSchema } from "./fixtures/recordSchema";
+import { bodyOrderSchema } from "./fixtures/bodyOrderSchema";
 
 // Emit a module for a named fixture schema into `dir`, write every file
 // preserving the folder structure, and return the files + written paths.
@@ -354,6 +355,36 @@ describe("emitModuleForm degraded leaves", () => {
     const muiDir = freshTmpDir("module-record-mui");
     const mui = generateModule(recordSchema, "recordSchema", "RecordForm", muiDir, "mui");
     expect(typecheckDiagnostics(mui.written, muiStubPaths)).toEqual([]);
+  });
+});
+
+describe("emitModuleForm body order", () => {
+  // The body used to render every root field first and every section after,
+  // so { name, address, email, contacts } came out as name, email, address,
+  // contacts. The single-file layout keeps declaration order; so does the
+  // module body now.
+  it("interleaves root fields and sections in schema order", () => {
+    const dir = freshTmpDir("module-body-order");
+    const { files, written } = generateModule(
+      bodyOrderSchema,
+      "bodyOrderSchema",
+      "BodyOrderForm",
+      dir,
+    );
+    const body = files.find((f) => f.path === "BodyOrderForm.tsx")?.content ?? "";
+    const tags = [
+      "<NameField />",
+      "<AddressSection />",
+      "<EmailField />",
+      "<TagsSection />",
+      "<AgreedField />",
+    ];
+    const order = tags.map((tag) => body.indexOf(tag));
+    expect(order.every((index) => index >= 0)).toBe(true);
+    // Sorted positions equal the declared positions: the body follows the
+    // schema, with the two sections between the fields that surround them.
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(typecheckDiagnostics(written)).toEqual([]);
   });
 });
 
