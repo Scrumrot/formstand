@@ -982,7 +982,12 @@ const loadModule = async (
   inputAbs: string,
   inputAsTyped: string,
 ): Promise<Readonly<Record<string, unknown>>> => {
-  const jiti = createJiti(import.meta.url);
+  // jiti's runtime module cache is shared across createJiti instances, so a
+  // fresh instance per call did NOT give --watch a fresh module: the second
+  // import after an edit returned the first run's exports (verified with a
+  // probe that added an export between two loads). moduleCache: false makes
+  // every load re-evaluate the input; a one-shot run pays nothing for it.
+  const jiti = createJiti(import.meta.url, { moduleCache: false });
   try {
     return (await jiti.import(pathToFileURL(inputAbs).href)) as Readonly<
       Record<string, unknown>
