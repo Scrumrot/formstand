@@ -78,7 +78,7 @@ A `.json` input file switches the front-end: the document is read as a bare JSON
 | `type: "object"` with `properties` | a section; `required` sets which fields are optional |
 | `type: "array"` with `items` | a `useFieldArray` row section |
 | `prefixItems` | a tuple with fixed positional controls |
-| `oneOf` with an OpenAPI `discriminator` | a discriminated union bound through `useVariantField` |
+| `oneOf` with an OpenAPI `discriminator` | a discriminated union bound through `useVariantField`. Each branch's tag may be spelled as a `const` (3.1), a single-value `enum` (3.0), or an entry in `discriminator.mapping` keyed by the branch's `$ref`; a branch with none of these degrades with a TODO naming it |
 | `allOf` of object schemas | one merged section (properties merge, `required` lists union) |
 | `type: ["X", "null"]`, `nullable: true`, or `oneOf` with a null branch | a nullable field, whichever dialect spells it |
 | `default` (JSON primitives) | seeds `initialValues` **and** emits `.default(value)` in the generated schema, so a server-side parse of an omitted field defaults the way the document said (note zod's `.default()` makes the input optional) |

@@ -25,7 +25,7 @@ ProfileForm/
                    component. A union or tuple nested inside an object section binds
                    inside that section's component (its hooks hoist there), the way a
                    row's union or tuple binds inside its Row
-  ProfileForm.tsx  the body composing sections and root-level fields
+  ProfileForm.tsx  the body composing root-level fields and sections, in schema order
   index.ts         the folder's public API
 ```
 
