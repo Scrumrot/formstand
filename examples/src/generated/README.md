@@ -1,4 +1,4 @@
-# Generated demos — do not hand-edit
+# Generated demos: do not hand-edit
 
 Everything in this folder is emitted by `formstand-gen` (the exact command
 lives in `scripts/generate-cli-demos.mjs`). CI regenerates it and fails on

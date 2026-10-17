@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// Hand-written INPUTS for the generated boundary demos — each schema is
+// Hand-written INPUTS for the generated boundary demos; each schema is
 // chosen to push a different edge of the CLI's supported surface and of the
 // library's runtime (deep nesting near the depth budget, every scalar kind
 // with optional/nullable/default/pipe wrappers, tuples, three-level nested
@@ -9,7 +9,7 @@ import { z } from "zod";
 // tests/react/generated-boundary.test.tsx) instead of editing.
 
 // Every supported field kind and wrapper in one schema, plus a tuple and a
-// two-level object nest — the "does everything still generate and run"
+// two-level object nest, the "does everything still generate and run"
 // probe.
 export const kitchenSinkSchema = z.object({
   title: z.string().min(2).max(40),
@@ -45,11 +45,11 @@ export const kitchenSinkSchema = z.object({
 
 // Nine levels of object nesting straddling formstand's typed-path budget
 // (FieldPath stops at 9 SEGMENTS by default): the l1...l8 leaves are
-// 9-segment paths — exactly AT the limit, so they bind real controls —
+// 9-segment paths, exactly AT the limit, so they bind real controls,
 // while the extra l9 level puts its leaf at 10 segments, which the CLI
 // degrades to a `// TODO`. Both sides of the boundary in one form, plus a
 // branch exercising every wrapper the walkers unwrap. (The walkers' default
-// nesting budget is derived from the path budget — 9 + 2 = 11 — so the
+// nesting budget is derived from the path budget (9 + 2 = 11), so the
 // chain generates at default flags; see scripts/generate-cli-demos.mjs.)
 export const deepBoundarySchema = z.object({
   l1: z.object({
@@ -81,7 +81,7 @@ export const deepBoundarySchema = z.object({
   }),
 });
 
-// Three-level nested arrays (teams → members → phones — the CLI's
+// Three-level nested arrays (teams → members → phones, the CLI's
 // recursive row extraction) plus a duplicate-prone primitive array, the
 // exact shape the row-id machinery is fuzzed against.
 export const nestedArrayStressSchema = z.object({
