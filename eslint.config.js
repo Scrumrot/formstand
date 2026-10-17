@@ -10,6 +10,9 @@ export default tseslint.config(
       "coverage/**",
       "docs/.vitepress/cache/**",
       "docs/.vitepress/dist/**",
+      // Claude Code worktrees (review and fix agents check the repo out
+      // under here); linting them doubles every error and is never wanted.
+      ".claude/**",
       "cli/dist/**",
       "cli/tests/.tmp/**",
     ],

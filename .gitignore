@@ -19,3 +19,7 @@ examples/src/recipes/
 # e2e screenshot output (uploaded as CI artifacts, never committed)
 examples/e2e/artifacts/
 tests/.generated/
+
+# Claude Code local state: per-user settings and agent worktrees
+.claude/settings.local.json
+.claude/worktrees/
