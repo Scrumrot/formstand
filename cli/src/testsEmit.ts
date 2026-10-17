@@ -4,6 +4,7 @@ import {
   blankNeedsCast,
   emitInitialValues,
   pathDepthOption,
+  todoFieldPaths,
 } from "./codegen";
 import type { FieldSpec } from "./ir";
 import type { GeneratedTestPlan } from "./testCases";
@@ -87,6 +88,13 @@ export const emitComponentSpec = (
     .map((name) => ` ${name}={[]}`)
     .join("");
   const submitSkip = asyncSchema;
+  // A walker-degraded leaf (a record, a callable, an unsupported kind) is a
+  // string stand-in, so its "valid" sample is a string the real schema
+  // rejects: the round trip cannot pass as emitted. The literal stays (it
+  // still typechecks against FormValues through the cast) and the case is
+  // written out but skipped, naming the paths to replace by hand.
+  const degraded = todoFieldPaths(ir);
+  const roundTripSkip = submitSkip || degraded.length > 0;
   const blankInvalidPaths = [...plan.requiredPaths, ...plan.arrayMinPaths];
   const hasBlankInvalid = blankInvalidPaths.length > 0;
 
@@ -149,7 +157,17 @@ export const emitComponentSpec = (
           "  // Async schema: see the stub note above.",
         ]
       : []),
-    `  ${itLine(submitSkip)}("filled with valid values, submit resolves the parsed payload", async () => {`,
+    ...(degraded.length > 0
+      ? [
+          "  // Degraded field(s) in the schema: " +
+            degraded.map((site) => q(site.path)).join(", ") +
+            ".",
+          "  // Each stands in as a text field (see its TODO in the component), so",
+          "  // validValues carries a string the real validator rejects. Replace",
+          "  // the placeholder value(s) with a legal one, then delete the .skip.",
+        ]
+      : []),
+    `  ${itLine(roundTripSkip)}("filled with valid values, submit resolves the parsed payload", async () => {`,
     "    const form = makeForm();",
     "    form.setValues(validValues);",
     "    const result = await submitForm(form);",

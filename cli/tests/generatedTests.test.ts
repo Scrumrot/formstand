@@ -76,6 +76,65 @@ describe("the test plan derives only what the IR carries", () => {
   });
 });
 
+describe("samples the spec can actually pass", () => {
+  it("a sub-unit exclusive window samples its midpoint, not the bound", () => {
+    // gt(0).lt(1): the unit-stepped candidates (1 from below, 0 from
+    // above) cross, and min() of them used to hand back 0, which gt(0)
+    // rejects: the spec failed on its own valid sample, and the bound
+    // probe filled the SAME value as "bad" and "good".
+    const ratioSchema = z.object({ ratio: z.number().gt(0).lt(1) });
+    const ratioPlan = collectTestPlan(fromZod(ratioSchema));
+    expect(ratioPlan.boundChecks).toEqual([
+      { path: "ratio", label: "Ratio", reason: "at or below 0", bad: "0", good: "0.5" },
+    ]);
+    expect(ratioPlan.validValues).toContain("ratio: 0.5");
+    const values: unknown = new Function(`return ${ratioPlan.validValues};`)();
+    expect(ratioSchema.safeParse(values).success).toBe(true);
+  });
+
+  it("a one-sided or unit-wide window keeps the edge sample", () => {
+    const plan2 = collectTestPlan(
+      fromZod(
+        z.object({
+          below: z.number().lt(1),
+          exact: z.number().min(5).max(5),
+          narrowInt: z.int().gte(0.2).lt(1.5),
+        }),
+      ),
+    );
+    expect(plan2.validValues).toContain("below: 0");
+    expect(plan2.validValues).toContain("exact: 5");
+    expect(plan2.validValues).toContain("narrowInt: 1");
+  });
+
+  it("a degraded leaf skips the round trip and names the path", () => {
+    const degradedIr = fromZod(
+      z.object({ name: z.string(), meta: z.record(z.string(), z.string()) }),
+    );
+    const out = emitComponentSpec({
+      runner: "vitest",
+      formName: "MetaForm",
+      schemaImport: { name: "metaSchema", from: "./metaSchema", kind: "named" },
+      ir: degradedIr,
+      plan: collectTestPlan(degradedIr),
+      componentImport: "./MetaForm",
+      skipRender: false,
+      asyncSchema: false,
+      optionsProps: [],
+    });
+    expect(out).toContain(
+      'it.skip("filled with valid values, submit resolves the parsed payload"',
+    );
+    expect(out).toContain('// Degraded field(s) in the schema: "meta".');
+    // The literal itself stays: it must still typecheck against FormValues.
+    expect(out).toContain('meta: "filled"');
+    // A healthy schema keeps the live round trip.
+    expect(spec()).toContain(
+      'it("filled with valid values, submit resolves the parsed payload"',
+    );
+  });
+});
+
 describe("the component spec", () => {
   it("asserts presence at every blank-invalid path and round-trips schema.parse", () => {
     const code = spec();

@@ -122,6 +122,14 @@ const stringSample = (spec: StringSpec): string => {
 // edge on an integer steps to the next whole number (`.int().gt(0.5)` is
 // 1, not 1.5), and a non-integer walks one unit past an exclusive edge so
 // the sample stays a readable literal.
+//
+// When BOTH edges exist and the unit-stepped candidates cross (the window
+// is narrower than one unit: `.gt(0).lt(1)` gives lowest 1, highest 0),
+// the old min(lowest, highest) picked the bound itself and the generated
+// spec failed on its own "valid" sample. The midpoint is inside any
+// non-empty window regardless of exclusivity; for an integer field whose
+// window holds no whole number there is no legal sample at all, so the
+// midpoint is emitted anyway and the round trip reports it.
 const numberSample = (spec: NumberSpec): number => {
   const checks = spec.checks;
   if (checks === undefined) return 1;
@@ -146,7 +154,10 @@ const numberSample = (spec: NumberSpec): number => {
         : int
           ? Math.floor(checks.max)
           : checks.max;
-  return Math.min(lowest, highest);
+  const bothBounded = checks.min !== undefined && checks.max !== undefined;
+  return bothBounded && lowest > highest
+    ? ((checks.min ?? 0) + (checks.max ?? 0)) / 2
+    : Math.min(lowest, highest);
 };
 
 // The rejecting sample for a bounded field, or null when the field carries

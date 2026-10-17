@@ -346,16 +346,20 @@ export const overBudgetFieldPaths = (
 // it reports facts about the IR itself (truncation, dropped defaults), not
 // emitter decisions, so no frontier applies. The root is skipped (it has no
 // path to name).
-const matchingSpecPaths = (
+type PathedSpec = Readonly<{ path: string; spec: FieldSpec }>;
+
+const matchingSpecs = (
   ir: FieldSpec,
   match: (spec: FieldSpec) => boolean,
-): readonly string[] => {
+): readonly PathedSpec[] => {
   const walk = (
     spec: FieldSpec,
     segments: readonly string[],
-  ): readonly string[] => [
-    ...(segments.length > 0 && match(spec) ? [segments.join(".")] : []),
-    ...((): readonly string[] => {
+  ): readonly PathedSpec[] => [
+    ...(segments.length > 0 && match(spec)
+      ? [{ path: segments.join("."), spec }]
+      : []),
+    ...((): readonly PathedSpec[] => {
       switch (spec.kind) {
         case "object":
           return spec.fields.flatMap((field) =>
@@ -381,6 +385,11 @@ const matchingSpecPaths = (
   return walk(ir, []);
 };
 
+const matchingSpecPaths = (
+  ir: FieldSpec,
+  match: (spec: FieldSpec) => boolean,
+): readonly string[] => matchingSpecs(ir, match).map((entry) => entry.path);
+
 // The paths the WALKER truncated (nesting budget exhausted before the leaf
 // was reached): their specs are string-kind stand-ins whose kind and flags
 // may be wrong, so blankNeedsCast forces the initialValues cast and the CLI
@@ -403,6 +412,20 @@ export const droppedDefaultFieldPaths = (ir: FieldSpec): readonly string[] =>
         isScalarSpec(spec) &&
         defaultLiteral(spec as ScalarSpec) === undefined),
   );
+
+// Every walker-stamped TODO in the IR with its path: the degraded leaves
+// (unsupported zod kinds, callable types, records, truncation). Emitters
+// put the text in a comment next to the stand-in; the CLI mirrors each one
+// on stderr; the generated spec skips its round trip over them (the
+// stand-in's valid sample is a string the real validator rejects). Depth
+// TODOs are emitter decisions, not IR facts, so they never appear here.
+export type TodoSite = Readonly<{ path: string; todo: string }>;
+
+export const todoFieldPaths = (ir: FieldSpec): readonly TodoSite[] =>
+  matchingSpecs(ir, (spec) => spec.todo !== undefined).map(({ path, spec }) => ({
+    path,
+    todo: spec.todo ?? "",
+  }));
 
 // The unaddressable field paths in an IR, for the CLI to surface as stderr
 // warnings alongside the in-file TODO comments.
