@@ -2348,11 +2348,21 @@ const fieldFile = (
     "label?: string",
     ...optionsPropsTypeFields(optionsProps),
   ];
+  // A degraded leaf (a record, a callable, an unsupported kind) is a string
+  // stand-in, but the bound hook infers the REAL value type from the path
+  // (Record<string, string> for a z.record), which no text control accepts:
+  // the file shipped a type error. The single-file layout avoids this by
+  // pinning its Bound components to useField<string | null | undefined>;
+  // the module layout has no per-kind Bound component, so the pin is a cast
+  // at the one binding site. The TODO above it tells the reader to replace
+  // the control; the cast only keeps the module compiling until they do.
+  const degraded = field.spec.todo !== undefined;
   return {
     path: `fields/${field.componentName}.tsx`,
     content: [
       HEADER,
       ...imports,
+      ...(degraded ? [`import type { UseFieldReturn } from "formstand";`] : []),
       `import { ${naming.hook("Field")} } from "../hooks";`,
       "",
       `export type ${propsType} = Readonly<{ ${propsTypeFields.join("; ")} }>;`,
@@ -2367,7 +2377,13 @@ const fieldFile = (
       ...(isAutocompleteLeaf(field.spec)
         ? [`  // ${autocompleteSiteComment(field.spec)}`]
         : []),
-      `  const field = ${hookName}();`,
+      ...(degraded
+        ? [
+            "  // The schema's value here is not text; this placeholder binds it as",
+            "  // text so the module compiles. Swap the control and drop the cast.",
+            `  const field = ${hookName}() as unknown as UseFieldReturn<string | null | undefined>;`,
+          ]
+        : [`  const field = ${hookName}();`]),
       ...numberPropsBindings(ui, [{ varName: "field", spec: field.spec }]),
       "  return (",
       ...leafJsx(ui, field.spec, "field", "{label}", `{${q(path)}}`, "    "),

@@ -25,6 +25,7 @@ import { hostileSchema } from "./fixtures/hostileSchema";
 import { collidingSchema } from "./fixtures/collidingSchema";
 import { leafFreeSchema } from "./fixtures/leafFreeSchema";
 import { MySchema } from "./fixtures/MySchema";
+import { recordSchema } from "./fixtures/recordSchema";
 
 // Emit a module for a named fixture schema into `dir`, write every file
 // preserving the folder structure, and return the files + written paths.
@@ -334,6 +335,25 @@ describe("emitModuleForm kit uis", () => {
     );
     expect(files.map((f) => f.path)).not.toContain("adapter.ts");
     expect(typecheckDiagnostics(written, muiStubPaths)).toEqual([]);
+  });
+});
+
+describe("emitModuleForm degraded leaves", () => {
+  // A z.record leaf stands in as a string with a TODO. The single-file
+  // layout compiles because its Bound components pin useField to the text
+  // value type; the module layout's field file bound useXField("meta")
+  // (a Record<string, string>) straight into a text control and shipped a
+  // type error in fields/MetaField.tsx.
+  it("a record field's file typechecks under plain and mui", () => {
+    const plainDir = freshTmpDir("module-record-plain");
+    const plain = generateModule(recordSchema, "recordSchema", "RecordForm", plainDir);
+    const metaField = plain.files.find((f) => f.path === "fields/MetaField.tsx");
+    expect(metaField?.content).toContain("// TODO: unsupported zod type");
+    expect(typecheckDiagnostics(plain.written)).toEqual([]);
+
+    const muiDir = freshTmpDir("module-record-mui");
+    const mui = generateModule(recordSchema, "recordSchema", "RecordForm", muiDir, "mui");
+    expect(typecheckDiagnostics(mui.written, muiStubPaths)).toEqual([]);
   });
 });
 
