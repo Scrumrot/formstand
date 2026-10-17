@@ -310,7 +310,18 @@ const walkFields = (
     if (field.name.includes(".") || field.spec.todo !== undefined) return acc;
     const path = prefix === "" ? field.name : `${prefix}.${field.name}`;
     if (field.spec.kind === "object") {
-      return merge(acc, walkFields(field.spec.fields, path));
+      const inner = walkFields(field.spec.fields, path);
+      // An optional/nullable object starts undefined/null (emitInitialValues),
+      // so a blank submit never reaches its members: zod does not check the
+      // children of an absent parent. Listing them as blank-invalid would
+      // assert errors that cannot appear. Bound, format, and fill cases
+      // stay: a fill materializes the parent, and the probe then validates.
+      return merge(
+        acc,
+        field.spec.optional || field.spec.nullable
+          ? { ...inner, required: [], arrayMin: [] }
+          : inner,
+      );
     }
     // The array itself is judged (its row minimum), its rows are not: the
     // blank form holds none.

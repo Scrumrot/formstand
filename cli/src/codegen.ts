@@ -532,11 +532,20 @@ const blankLeaf = (spec: ScalarSpec): BlankLeaf => {
   }
 };
 
-// Blank-form defaults per blankLeaf; arrays start empty, and objects are
-// always materialized (even optional ones) so their fields are addressable.
+// Blank-form defaults per blankLeaf; arrays start empty; a REQUIRED object
+// is materialized so its fields are addressable from the first render.
 export const emitInitialValues = (spec: FieldSpec, level = 0): string => {
   switch (spec.kind) {
     case "object": {
+      // An optional/nullable object starts EMPTY, like an optional union:
+      // seeding `{ street: "", zip: "" }` into `billing: address.optional()`
+      // made a blank form submit a billing object the user never filled, and
+      // zod then rejected its required members, so the form could not submit
+      // blank at all (a phantom object). formstand paths under it stay
+      // addressable (setValue materializes the parent on the first write),
+      // so the fields render and bind exactly as before.
+      if (spec.optional) return "undefined";
+      if (spec.nullable) return "null";
       const fields = spec.fields.map(
         (field) =>
           `${ind(level + 1)}${propKey(field.name)}: ${emitInitialValues(field.spec, level + 1)},`,
@@ -580,8 +589,12 @@ export const emitInitialValues = (spec: FieldSpec, level = 0): string => {
 // type annotation is used exactly when the draft genuinely typechecks.
 export const blankNeedsCast = (spec: FieldSpec): boolean => {
   switch (spec.kind) {
+    // An optional/nullable object starts undefined/null, which genuinely
+    // satisfies its input type whatever its members would have needed.
     case "object":
-      return spec.fields.some((field) => blankNeedsCast(field.spec));
+      return spec.optional || spec.nullable
+        ? false
+        : spec.fields.some((field) => blankNeedsCast(field.spec));
     case "array":
       return false;
     // A tuple materializes every element's blank, so any element that can't
