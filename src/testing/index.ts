@@ -87,18 +87,20 @@ export const fillAndBlurField = <
   blurField(form, path);
 };
 
-// Fill several fields in one call — entries are applied in order, each
-// through the full fillField recipe. The object shape is deliberately
-// runtime-keyed (a test's fixture data), so values are checked per key
-// where the paths are literal and degrade to unknown otherwise.
+// Fill several fields in one call: entries are applied in order, each
+// through the full fillField recipe. Each value is typed from its own key
+// (a mapped type over the path union), the same contract fillField has
+// per call: `fillFields(form, { age: "x" })` is a compile error exactly
+// as `fillField(form, "age", "x")` is. Fixtures that are genuinely
+// runtime-keyed cast at the call site.
 export const fillFields = <
   TSchema extends z.ZodType,
   D extends PathDepth = DefaultPathDepth,
 >(
   form: Form<TSchema, D>,
-  values: Readonly<
-    Partial<Record<FieldPath<z.input<TSchema>, D>, unknown>>
-  >,
+  values: Readonly<{
+    [P in FieldPath<z.input<TSchema>, D>]?: FieldValue<z.input<TSchema>, P>;
+  }>,
 ): void => {
   Object.entries(values).forEach(([path, value]) => {
     fillField(

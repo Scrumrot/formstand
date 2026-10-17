@@ -1,7 +1,7 @@
 import { type ChangeEvent, type ReactNode, useId, useState } from "react";
 import type { z } from "zod";
 import type { Form } from "../core/createForm";
-import type { FieldPath, PathDepth } from "../core/fieldPath";
+import type { FieldPath, FieldValue, PathDepth } from "../core/fieldPath";
 import {
   checkboxProps,
   dateInputProps,
@@ -27,6 +27,42 @@ export type PathsOf<F extends FieldFormApi> = F extends Form<
   infer D extends PathDepth
 >
   ? FieldPath<z.input<TSchema>, D>
+  : string;
+
+// The subset of a form's paths whose VALUE a control can hold: TextField
+// takes string-valued paths, NumberField number-valued ones, and so on.
+// Before this filter `<TextField path="age" />` on a z.number() compiled
+// and stored the string "42", failing validation at submit, while the
+// lower-level `textInputProps(useField(form, "age"))` had always been a
+// compile error; the beginner API was less safe than the expert one.
+// Distributes over the FieldPath union and keeps the paths whose
+// FieldValue is assignable to V (V always includes null | undefined, so
+// optional and nullable fields qualify). A bare FieldFormApi keeps plain
+// string paths, as PathsOf does.
+export type PathsAccepting<F extends FieldFormApi, V> = F extends Form<
+  infer TSchema extends z.ZodType,
+  infer D extends PathDepth
+>
+  ? PathsWhereValue<z.input<TSchema>, FieldPath<z.input<TSchema>, D>, V>
+  : string;
+
+type PathsWhereValue<Values, P extends string, V> = P extends unknown
+  ? FieldValue<Values, P> extends V
+    ? P
+    : never
+  : never;
+
+// The string values a select at `path` may hold: the field's own literal
+// union for an enum (so an option outside z.enum([...]) is a compile
+// error at the option), plain string for a free z.string(), and any
+// string for a bare FieldFormApi.
+export type SelectValueAt<
+  F extends FieldFormApi,
+  P extends string,
+> = F extends Form<infer TSchema extends z.ZodType, infer D extends PathDepth>
+  ? P extends FieldPath<z.input<TSchema>, D>
+    ? Extract<NonNullable<FieldValue<z.input<TSchema>, P>>, string>
+    : string
   : string;
 
 // Structural stand-in for React.Ref<T>: accepts useRef objects and callback
@@ -109,7 +145,7 @@ const FieldShell = ({
 
 export type TextFieldProps<F extends FieldFormApi = FieldFormApi> = Readonly<{
   form: F;
-  path: PathsOf<F>;
+  path: PathsAccepting<F, string | null | undefined>;
   label?: ReactNode;
   placeholder?: string;
   type?: "text" | "password" | "email" | "url" | "tel";
@@ -150,7 +186,7 @@ export const TextField = <F extends FieldFormApi>({
 
 export type DateFieldProps<F extends FieldFormApi = FieldFormApi> = Readonly<{
   form: F;
-  path: PathsOf<F>;
+  path: PathsAccepting<F, Date | null | undefined>;
   label?: ReactNode;
   min?: string;
   max?: string;
@@ -195,7 +231,7 @@ export const DateField = <F extends FieldFormApi>({
 export type NumberFieldProps<F extends FieldFormApi = FieldFormApi> =
   Readonly<{
     form: F;
-    path: PathsOf<F>;
+    path: PathsAccepting<F, number | null | undefined>;
     label?: ReactNode;
     placeholder?: string;
     ref?: FieldRef<HTMLInputElement>;
@@ -305,7 +341,7 @@ export const NumberField = <F extends FieldFormApi>({
 export type CheckboxFieldProps<F extends FieldFormApi = FieldFormApi> =
   Readonly<{
     form: F;
-    path: PathsOf<F>;
+    path: PathsAccepting<F, boolean | null | undefined>;
     label?: ReactNode;
     ref?: FieldRef<HTMLInputElement>;
   }>;
@@ -341,14 +377,20 @@ export type SelectFieldOption<T extends string> = Readonly<{
   label: ReactNode;
 }>;
 
+// P is the chosen path; the options' values are checked against the
+// field's own string union at that path (SelectValueAt), so an option the
+// schema's z.enum does not list is a compile error where it is written.
 export type SelectFieldProps<
-  T extends string,
   F extends FieldFormApi = FieldFormApi,
+  P extends PathsAccepting<F, string | null | undefined> = PathsAccepting<
+    F,
+    string | null | undefined
+  >,
 > = Readonly<{
   form: F;
-  path: PathsOf<F>;
+  path: P;
   label?: ReactNode;
-  options: readonly SelectFieldOption<T>[];
+  options: readonly SelectFieldOption<SelectValueAt<F, P>>[];
   // Shown as a disabled first option while the field has no value, so the
   // select stays controlled and the blank state is visible instead of
   // silently displaying the first option. Ignored when `options` itself
@@ -358,17 +400,20 @@ export type SelectFieldProps<
   ref?: FieldRef<HTMLSelectElement>;
 }>;
 
-export const SelectField = <T extends string, F extends FieldFormApi>({
+export const SelectField = <
+  F extends FieldFormApi,
+  P extends PathsAccepting<F, string | null | undefined>,
+>({
   form,
   path,
   label,
   options,
   placeholder,
   ref,
-}: SelectFieldProps<T, F>) => {
+}: SelectFieldProps<F, P>) => {
   // null included: a nullable enum's "not chosen yet" must render the empty
   // option, or the browser shows the first real option while state stays null.
-  const field = useField<T | null | undefined>(form, path);
+  const field = useField<SelectValueAt<F, P> | null | undefined>(form, path);
   const a11y = useFieldA11y(field.error);
   const select = selectProps(field);
   // A clearable field (nullable, optional, or defaulted) must be clearable

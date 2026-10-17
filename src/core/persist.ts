@@ -42,13 +42,17 @@ export type PersistOptions<TSchema extends z.ZodType> = Readonly<{
   // exactly as it was, so existing drafts survive an upgrade.
   version?: string | number;
   // How a found draft is applied on start, and what load() does later.
-  // "adopt" (default) uses form.adoptValues — the draft becomes the new
-  // baseline, so the form reads CLEAN. "restore" uses form.setValues — the
-  // draft loads but stays DIRTY vs the original initial values. "manual"
-  // never auto-applies; the caller decides when via the returned load(),
-  // which then applies with adopt semantics (a caller-triggered load is a
-  // rebase, not an edit — pick "restore" if you want dirty-vs-initials).
-  apply?: "adopt" | "restore" | "manual";
+  // "adopt" (default) uses form.adoptValues: the draft becomes the new
+  // baseline, so the form reads CLEAN. "edit" uses form.setValues: the
+  // draft loads but stays DIRTY against the original initial values.
+  // "manual" never auto-applies; the caller decides when via the returned
+  // load(), which then applies with adopt semantics (a caller-triggered
+  // load is a rebase, not an edit; pick "edit" for dirty-vs-initials).
+  // "restore" is the pre-0.22 spelling of "edit", kept as an alias: it
+  // collided with form.restore(snapshot), which puts back a whole
+  // FormState, and with load() (which used to be called restore), three
+  // restore-ish words for three behaviors.
+  apply?: "adopt" | "edit" | "restore" | "manual";
 }>;
 
 export type PersistHandle = Readonly<{
@@ -140,7 +144,9 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
   // "restore" is a plain values write (dirty vs the original initials);
   // "adopt" and "manual" rebase via adoptValues so the draft reads clean.
   const applyDraft = (values: z.input<TSchema>): void =>
-    apply === "restore" ? form.setValues(values) : form.adoptValues(values);
+    apply === "edit" || apply === "restore"
+      ? form.setValues(values)
+      : form.adoptValues(values);
 
   // The shape the draft is checked against, in stored form. Round-tripping
   // the reference through JSON puts both sides in the same representation.

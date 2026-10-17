@@ -38,6 +38,28 @@
   on a `z.tuple` no longer compiles; it could only ever grow a fixed-arity
   value the schema rejects.
 
+### Changed
+
+- **Bound components type their `path` by value.** `TextField` accepts
+  string-valued paths, `NumberField` number-valued, `DateField` Date-valued,
+  `CheckboxField` boolean-valued, `SelectField` string-valued (optional and
+  nullable fields qualify everywhere). `<TextField path="age" />` on a
+  `z.number()` used to compile and store `"42"`; it is a compile error now,
+  as `textInputProps(useField(form, "age"))` always was. Type-level only:
+  the code it rejects was already a runtime bug. `PathsAccepting<F, V>`
+  and `SelectValueAt<F, P>` are exported beside `PathsOf`.
+- **`SelectField` checks its options against the field.** An option whose
+  `value` is not in the path's `z.enum` is a compile error at the option;
+  a free `z.string()` path still takes any string. `SelectFieldProps` is
+  now generic over the form and the path (`SelectFieldProps<F, P>`) rather
+  than the option value type.
+- **`fillFields` types each value from its key**, the contract `fillField`
+  already had; a wrong-typed fixture value is a compile error.
+- **`persistForm`'s `apply: "edit"`** is the new spelling for "load the
+  draft as an edit, dirty against the initial values". `"restore"` keeps
+  working as an alias; it collided with `form.restore(snapshot)` and with
+  the former `restore()` method.
+
 ## 0.21.0 — 2026-09-23
 
 ### Fixed
