@@ -1520,11 +1520,24 @@ export const createForm = <
       if (next.values !== state.values) {
         clearArrayOpsUnder(store, "");
       }
+      // A values patch is also a bulk write under the documented release
+      // contract (FormState.serverErrors: an entry releases when the value
+      // on its spine changes), so it releases exactly what setValues
+      // releases: the entries whose slice actually changed. An explicit
+      // serverErrors patch in the same call wins as given, which is what
+      // setValues followed by setErrors would leave behind: the caller is
+      // stating the channel for the new values.
+      const serverErrors =
+        patch.serverErrors !== undefined
+          ? patch.serverErrors
+          : next.values !== state.values
+            ? releaseChangedSlices(state.serverErrors, state.values, next.values)
+            : state.serverErrors;
       store.setState(() => ({
         ...next,
         ...errorChannels(state, {
           schemaErrors: next.schemaErrors,
-          serverErrors: next.serverErrors,
+          serverErrors,
         }),
       }));
     },

@@ -299,3 +299,70 @@ describe("validateFieldsAsync takes the subschema fast path", () => {
     expect(form.getState().isValidating).toEqual({});
   });
 });
+
+describe("updateState values patches release server errors", () => {
+  const schema = z.object({
+    name: z.string(),
+    email: z.string(),
+    address: z.object({ street: z.string() }),
+  });
+  const build = () => {
+    const form = createForm(schema, {
+      initialValues: { name: "a", email: "e", address: { street: "s" } },
+    });
+    form.setError("name", "taken");
+    form.setError("email", "bounced");
+    form.setError("address", "unknown");
+    form.setError("", "form-level");
+    return form;
+  };
+
+  it("releases the entries whose value slice changed, like setValues", () => {
+    const form = build();
+    form.updateState((s) => ({ values: { ...s.values, name: "b" } }));
+    expect(form.getState().serverErrors).toEqual({
+      email: ["bounced"],
+      address: ["unknown"],
+    });
+    expect(form.getState().errors["name"]).toBeUndefined();
+  });
+
+  it("a nested write releases the container verdict and keeps siblings", () => {
+    const form = build();
+    form.updateState((s) => ({
+      values: { ...s.values, address: { street: "t" } },
+    }));
+    expect(form.getState().serverErrors).toEqual({
+      name: ["taken"],
+      email: ["bounced"],
+    });
+  });
+
+  it("a values patch that changes nothing keeps every entry", () => {
+    const form = build();
+    const before = form.getState().serverErrors;
+    form.updateState((s) => ({ values: { ...s.values } }));
+    // The reference moved but every slice (the form-level "" entry's whole
+    // object included) compares equal by value, so nothing releases and
+    // the channel keeps its identity.
+    expect(form.getState().serverErrors).toBe(before);
+  });
+
+  it("an explicit serverErrors patch alongside values is taken as given", () => {
+    const form = build();
+    form.updateState((s) => ({
+      values: { ...s.values, name: "b" },
+      serverErrors: { name: ["still taken"] },
+    }));
+    // Equivalent to setValues then setErrors: the caller is stating the
+    // channel for the new values, so nothing is released out of it.
+    expect(form.getState().serverErrors).toEqual({ name: ["still taken"] });
+  });
+
+  it("a patch without values leaves the channel alone", () => {
+    const form = build();
+    const before = form.getState().serverErrors;
+    form.updateState((s) => ({ touched: { ...s.touched, name: true } }));
+    expect(form.getState().serverErrors).toBe(before);
+  });
+});
