@@ -286,6 +286,13 @@ type WalkAcc = Readonly<{
   formats: readonly FormatCase[];
   bounds: readonly BoundCase[];
   fills: readonly LabelFill[];
+  // EVERY label a blank render shows a labeled control under (scalar
+  // leaves, degraded placeholders, a union's discriminant and its first
+  // variant's leaves), whatever its validity. getByLabelText throws on a
+  // repeated label, so uniqueness must be judged against all of them, not
+  // against the blank-invalid subset: a required "Age" beside an optional
+  // "Age" in another section was picked before, and the spec threw.
+  labels: readonly string[];
 }>;
 
 const EMPTY: WalkAcc = {
@@ -294,6 +301,7 @@ const EMPTY: WalkAcc = {
   formats: [],
   bounds: [],
   fills: [],
+  labels: [],
 };
 
 const merge = (a: WalkAcc, b: WalkAcc): WalkAcc => ({
@@ -302,15 +310,37 @@ const merge = (a: WalkAcc, b: WalkAcc): WalkAcc => ({
   formats: [...a.formats, ...b.formats],
   bounds: [...a.bounds, ...b.bounds],
   fills: [...a.fills, ...b.fills],
+  labels: [...a.labels, ...b.labels],
 });
+
+const labelCounts = (labels: readonly string[]): ReadonlyMap<string, number> =>
+  labels.reduce<ReadonlyMap<string, number>>(
+    (map, label) => new Map([...map, [label, (map.get(label) ?? 0) + 1]]),
+    new Map(),
+  );
 
 const walkFields = (
   fields: readonly NamedField[],
   prefix: string,
 ): WalkAcc =>
   fields.reduce((acc, field) => {
-    if (field.name.includes(".") || field.spec.todo !== undefined) return acc;
+    // A dotted key has no binding at all (the emitters skip it), so it shows
+    // no control; a degraded leaf renders its placeholder under the label
+    // and counts for uniqueness but takes part in no case.
+    if (field.name.includes(".")) return acc;
+    if (field.spec.todo !== undefined) {
+      return merge(acc, { ...EMPTY, labels: [field.label] });
+    }
     const path = prefix === "" ? field.name : `${prefix}.${field.name}`;
+    // The discriminant select carries the union's label; the first variant
+    // is the one the blank form materializes, so its leaves are on screen.
+    if (field.spec.kind === "union") {
+      const first = field.spec.variants[0];
+      return merge(acc, {
+        ...EMPTY,
+        labels: [field.label, ...(first?.fields ?? []).map((f) => f.label)],
+      });
+    }
     if (field.spec.kind === "object") {
       const inner = walkFields(field.spec.fields, path);
       // An optional/nullable object starts undefined/null (emitInitialValues),
@@ -370,33 +400,25 @@ const walkFields = (
         : field.spec.kind === "number"
           ? [{ label: field.label, text: String(numberSample(field.spec)) }]
           : [];
-    return merge(acc, { ...EMPTY, required, formats, bounds, fills });
+    return merge(acc, {
+      ...EMPTY,
+      required,
+      formats,
+      bounds,
+      fills,
+      labels: [field.label],
+    });
   }, EMPTY);
-
-const dedupeByLabel = (fills: readonly LabelFill[]): readonly LabelFill[] => {
-  const counts = fills.reduce<ReadonlyMap<string, number>>(
-    (map, fill) =>
-      new Map([...map, [fill.label, (map.get(fill.label) ?? 0) + 1]]),
-    new Map(),
-  );
-  return fills.filter((fill) => counts.get(fill.label) === 1);
-};
 
 export const collectTestPlan = (ir: FieldSpec): GeneratedTestPlan => {
   const walked = ir.kind === "object" ? walkFields(ir.fields, "") : EMPTY;
-  const fills = dedupeByLabel(walked.fills);
-  // The render/browser blank-submit case queries by label, so the chosen
-  // control's label must be unambiguous among the blank-invalid set.
-  const requiredLabelCounts = walked.required.reduce<
-    ReadonlyMap<string, number>
-  >(
-    (map, entry) =>
-      new Map([...map, [entry.label, (map.get(entry.label) ?? 0) + 1]]),
-    new Map(),
-  );
-  const firstInvalid = walked.required.find(
-    (entry) => requiredLabelCounts.get(entry.label) === 1,
-  );
+  // The render/browser layers query by label, so a fill and the blank-submit
+  // control must each be unambiguous among EVERY rendered label (see
+  // WalkAcc.labels), not only among the fills or the blank-invalid set.
+  const counts = labelCounts(walked.labels);
+  const unique = (label: string): boolean => counts.get(label) === 1;
+  const fills = walked.fills.filter((fill) => unique(fill.label));
+  const firstInvalid = walked.required.find((entry) => unique(entry.label));
   return {
     requiredPaths: walked.required,
     arrayMinPaths: walked.arrayMin,
