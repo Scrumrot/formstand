@@ -22,6 +22,8 @@ import {
 
 const initialValues = deepInitialValues;
 
+type FlatArraySchema = z.ZodObject<{ tags: z.ZodArray<z.ZodString> }>;
+
 describe("useForm + hooks with pathDepth", () => {
   it("useForm mirrors createForm's literal D inference", () => {
     const { result } = renderHook(() =>
@@ -113,8 +115,13 @@ describe("useForm + hooks with pathDepth", () => {
     expectTypeOf<TwoArgField["value"]>().toEqualTypeOf<
       z.input<typeof deepSchema>["a"]
     >();
-    type TwoArgArray = ReturnType<typeof useFieldArray<typeof deepSchema, "a">>;
-    expectTypeOf<TwoArgArray["items"]>().toEqualTypeOf<readonly never[]>();
+    // useFieldArray's P is an ARRAY path, and the pyramid's only array sits
+    // past the default budget, so the two-arg arity is pinned on a flat
+    // schema whose array path is in range.
+    type TwoArgArray = ReturnType<
+      typeof useFieldArray<FlatArraySchema, "tags">
+    >;
+    expectTypeOf<TwoArgArray["items"]>().toEqualTypeOf<readonly string[]>();
     // The widened budget is reachable explicitly as the LAST argument.
     type ThreeArgField = ReturnType<
       typeof useField<typeof deepSchema, typeof TEN, 12>

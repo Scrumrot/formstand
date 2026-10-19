@@ -198,3 +198,49 @@ export type FieldValue<T, P extends string> = [T] extends [NonNullable<T>]
     ? FieldValue<StepValue<T, Head>, Tail>
     : StepValue<T, P>
   : FieldValue<NonNullable<T>, P> | undefined;
+
+// The item type the array ops accept at a path, from the path's FieldValue.
+// FieldValue re-adds `| undefined` for arrays reached through optional
+// ancestors (and a nullable array holds null), so the value is stripped
+// before extracting; the op runtime treats both empties as []. A TUPLE
+// resolves to never: its length is a literal, so `number extends
+// T["length"]` fails, and a push/insert the types blessed could only grow
+// a fixed-arity value the schema rejects. A non-array resolves to never
+// too, so a write against it is an immediate error. Non-distributive on
+// purpose (the tuple wrapping) so a union value is judged as one type.
+export type ArrayItemOf<T> = [NonNullable<T>] extends [readonly (infer U)[]]
+  ? number extends NonNullable<T>["length"]
+    ? U
+    : never
+  : never;
+
+// True when the value is a variable-length array (optional/nullable
+// wrappers stripped); false for tuples and everything else. The predicate
+// behind ArrayFieldPath, kept separate from ArrayItemOf so an array OF
+// never (z.array(z.never())) still counts as an array path.
+type IsListValue<V> = [NonNullable<V>] extends [readonly unknown[]]
+  ? number extends NonNullable<V>["length"]
+    ? true
+    : false
+  : false;
+
+// The subset of a form's typed paths whose value is a variable-length
+// array: what the index-only array ops (arrayRemove/arrayMove/arraySwap)
+// and useFieldArray's path accept. Before this filter `form.arrayRemove(
+// "name", 0)` on a z.string() compiled (the op then warned and skipped at
+// runtime) while arrayPush already rejected the same path through its
+// never-typed item; the hook accepted a tuple path whose push the core
+// refused. Built like PathsAccepting: distribute over the FieldPath union
+// and keep the members whose FieldValue passes the predicate, so
+// optional/nullable arrays and template paths with a numeric hole
+// (`rows.${number}.tags`) all qualify. D rides FieldPath's own
+// normalization, so it is safe to consume from a later type parameter the
+// way the hook overloads do.
+export type ArrayFieldPath<T, D extends number = DefaultPathDepth> =
+  ArrayPathsWhere<T, FieldPath<T, D>>;
+
+type ArrayPathsWhere<T, P extends string> = P extends unknown
+  ? IsListValue<FieldValue<T, P>> extends true
+    ? P
+    : never
+  : never;

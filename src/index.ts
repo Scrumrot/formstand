@@ -14,6 +14,10 @@ export type { FormState, ErrorMap, BoolMap } from "./core/types";
 export { parsePath, getAtPath, setAtPath } from "./core/path";
 export type { PathSegment } from "./core/path";
 export type {
+  // The array-path filter and item type the array ops and useFieldArray
+  // are typed with; ArrayPathsOf below is the form-level spelling.
+  ArrayFieldPath,
+  ArrayItemOf,
   DefaultPathDepth,
   FieldPath,
   FieldValue,
@@ -141,7 +145,12 @@ export type {
   SelectFieldProps,
   SelectFieldOption,
   FieldRef,
+  // The path filters behind the bound components' `path` props, for
+  // custom components with the same contract: any path (PathsOf), paths
+  // holding a value type (PathsAccepting), array paths (ArrayPathsOf),
+  // and a select's legal option values (SelectValueAt).
   PathsOf,
+  ArrayPathsOf,
 } from "./react/fields";
 export { focusFirstError, focusField } from "./react/focusError";
 export { useFieldArray } from "./react/useFieldArray";

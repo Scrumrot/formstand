@@ -18,7 +18,7 @@ describe("array op on non-array value", () => {
     // The typed surface rejects this at compile time ("name" is not an array
     // path); the cast simulates a dynamic/untyped caller hitting the runtime
     // guard.
-    form.arrayPush("name", "x" as never);
+    form.arrayPush("name" as never, "x" as never);
     expect(console.warn).toHaveBeenCalledOnce();
     expect(form.getState().values).toEqual({ name: "Tim" });
   });

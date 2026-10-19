@@ -51,15 +51,14 @@ describe("useFieldArray typed paths", () => {
     expect(result.current.items[0]?.title).toBe("t1");
   });
 
-  it("binds a non-array path as never, so every write errors", () => {
+  it("rejects a non-array path at the call (it used to bind with a never item)", () => {
     const { result } = renderHook(() => {
       const form = useForm(schema, { initialValues });
+      // @ts-expect-error "title" is a string path, not an array path
       return useFieldArray(form, "title");
     });
-    expectTypeOf(result.current.push).parameter(0).toEqualTypeOf<never>();
-    // @ts-expect-error a scalar path has no item type to push
-    const pushString = () => result.current.push("nope");
-    expect(typeof pushString).toBe("function");
+    // The runtime still answers sanely for the untyped escape hatches.
+    expect(result.current.length).toBe(0);
   });
 
   it("rejects a typo'd path against the FieldPath union", () => {

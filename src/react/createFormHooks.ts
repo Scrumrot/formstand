@@ -1,6 +1,8 @@
 import type { z } from "zod";
 import type { Form } from "../core/createForm";
 import type {
+  ArrayFieldPath,
+  ArrayItemOf,
   DefaultPathDepth,
   FieldPath,
   FieldValue,
@@ -20,7 +22,6 @@ import {
   useVariantField,
 } from "./useVariantField";
 import {
-  type ArrayItemOf,
   type FieldArrayFormApi,
   type UseFieldArrayReturn,
   useFieldArray,
@@ -101,7 +102,8 @@ export type BoundUseFieldArray<
   (
     pathSelector: (state: FormState<z.input<TSchema>>) => string,
   ): UseFieldArrayReturn<unknown>;
-  <P extends FieldPath<z.input<TSchema>, D>>(
+  // Array paths only, like the unbound hook's typed overload.
+  <P extends ArrayFieldPath<z.input<TSchema>, D>>(
     path: P,
   ): UseFieldArrayReturn<ArrayItemOf<FieldValue<z.input<TSchema>, P>>>;
 };

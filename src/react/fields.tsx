@@ -1,7 +1,12 @@
 import { type ChangeEvent, type ReactNode, useId, useState } from "react";
 import type { z } from "zod";
 import type { Form } from "../core/createForm";
-import type { FieldPath, FieldValue, PathDepth } from "../core/fieldPath";
+import type {
+  ArrayFieldPath,
+  FieldPath,
+  FieldValue,
+  PathDepth,
+} from "../core/fieldPath";
 import {
   checkboxProps,
   dateInputProps,
@@ -51,6 +56,18 @@ type PathsWhereValue<Values, P extends string, V> = P extends unknown
     ? P
     : never
   : never;
+
+// The form-level spelling of the core's ArrayFieldPath: the paths a
+// `form` prop's array ops and useFieldArray accept (variable-length arrays,
+// optional/nullable included, tuples excluded). For a component that takes
+// a form and an array path, the way PathsOf serves one taking any path. A
+// bare FieldFormApi keeps plain string paths.
+export type ArrayPathsOf<F extends FieldFormApi> = F extends Form<
+  infer TSchema extends z.ZodType,
+  infer D extends PathDepth
+>
+  ? ArrayFieldPath<z.input<TSchema>, D>
+  : string;
 
 // The string values a select at `path` may hold: the field's own literal
 // union for an enum (so an option outside z.enum([...]) is a compile

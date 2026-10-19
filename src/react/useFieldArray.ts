@@ -10,8 +10,9 @@ import {
 } from "../core/arrayOpLog";
 import type { Form } from "../core/createForm";
 import type {
+  ArrayFieldPath,
+  ArrayItemOf,
   DefaultPathDepth,
-  FieldPath,
   FieldValue,
   PathDepth,
 } from "../core/fieldPath";
@@ -323,14 +324,6 @@ const deriveIds = (
   return next;
 };
 
-// The element type at an array-valued path. FieldValue re-adds `| undefined`
-// for arrays reached through optional ancestors, so strip that before
-// extracting; a non-array path yields `never`, which makes every write
-// (`push(never)`) an immediate error instead of a silently-`unknown` bind.
-export type ArrayItemOf<T> = [NonNullable<T>] extends [readonly (infer U)[]]
-  ? U
-  : never;
-
 // The readable-error trap-guard, mirroring useField's: an explicit type
 // argument (`useFieldArray<Item>(typedForm, "users")`) arity-matches ONLY
 // the one-type-parameter overloads, and the structural one's brand then
@@ -382,10 +375,22 @@ export function useFieldArray<TItem = unknown>(
 ): UseFieldArrayReturn<TItem>;
 // D last with a default (P's constraint forward-references it), preserving
 // the arity of explicit instantiations like
-// `useFieldArray<typeof schema, "tags">`.
+// `useFieldArray<typeof schema, "tags">`. P is an ARRAY path (the core's
+// ArrayFieldPath: variable-length arrays only, optional/nullable included):
+// a scalar path used to bind here with a never-typed item (every write an
+// error, the hook itself not), and a tuple path bound with the tuple's
+// element union while the core refused the same push. The item type comes
+// from the core's ArrayItemOf, so the hook and form.arrayPush agree.
+// The `& string` is load-bearing: P's constraint depends on D, which is
+// inferred from the SAME call, so while P is being inferred the constraint
+// is a deferred conditional type and TS cannot see that it is made of
+// string literals. Without a visible primitive constraint the "users"
+// candidate widens to `string`, fails the constraint, and P falls back to
+// the whole array-path union (every item type at once). Intersecting with
+// string keeps the literal, exactly as FieldPath's own shape happened to.
 export function useFieldArray<
   TSchema extends z.ZodType,
-  P extends FieldPath<z.input<TSchema>, D>,
+  P extends ArrayFieldPath<z.input<TSchema>, D> & string,
   D extends PathDepth = DefaultPathDepth,
 >(
   form: Form<TSchema, D>,

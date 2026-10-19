@@ -16,6 +16,8 @@ import { isFieldDirty, isPlainObject, valuesEqual } from "./equality";
 import { isDevBuild, isDevToolsBuild } from "./env";
 import { entryAt, flagAt } from "./maps";
 import type {
+  ArrayFieldPath,
+  ArrayItemOf,
   DefaultPathDepth,
   FieldPath,
   FieldValue,
@@ -113,17 +115,6 @@ export type SubmitResult<TOutput> =
   | Readonly<{ kind: "invalid"; errors: ErrorMap }>
   | Readonly<{ kind: "skipped" }>
   | Readonly<{ kind: "error"; error: unknown }>;
-
-// The item type the array ops accept at a path. A TUPLE resolves to never:
-// its length is a literal, so `number extends T["length"]` fails, and a
-// push/insert/remove that the types blessed could only ever grow or shrink
-// a fixed-arity value the schema rejects. Variable-length arrays (length is
-// `number`) resolve to their element type as before.
-type ArrayItemOf<T> = T extends readonly (infer U)[]
-  ? number extends T["length"]
-    ? U
-    : never
-  : never;
 
 // Root-level errors (schema-wide .refine) live at the "" key.
 type ErrorPath<TValues, D extends PathDepth = DefaultPathDepth> =
@@ -271,22 +262,34 @@ export type Form<
     onInvalid?: InvalidSubmitHandler,
     options?: SubmitOptions,
   ) => Promise<SubmitResult<z.output<TSchema>>>;
-  arrayPush: <P extends FieldPath<z.input<TSchema>, D>>(
+  // Every array op takes an ARRAY path (ArrayFieldPath: variable-length
+  // arrays, optional/nullable included, tuples and scalars excluded), so a
+  // misaddressed op is blamed on the path argument. The index-only ops
+  // used to take any FieldPath and compile against a z.string(), then warn
+  // and skip at runtime.
+  arrayPush: <P extends ArrayFieldPath<z.input<TSchema>, D>>(
     path: P,
-    item: ArrayItemOf<NonNullable<FieldValue<z.input<TSchema>, P>>>,
+    item: ArrayItemOf<FieldValue<z.input<TSchema>, P>>,
   ) => void;
-  arrayRemove: (path: FieldPath<z.input<TSchema>, D>, index: number) => void;
-  arrayInsert: <P extends FieldPath<z.input<TSchema>, D>>(
+  arrayRemove: (
+    path: ArrayFieldPath<z.input<TSchema>, D>,
+    index: number,
+  ) => void;
+  arrayInsert: <P extends ArrayFieldPath<z.input<TSchema>, D>>(
     path: P,
     index: number,
-    item: ArrayItemOf<NonNullable<FieldValue<z.input<TSchema>, P>>>,
+    item: ArrayItemOf<FieldValue<z.input<TSchema>, P>>,
   ) => void;
   arrayMove: (
-    path: FieldPath<z.input<TSchema>, D>,
+    path: ArrayFieldPath<z.input<TSchema>, D>,
     from: number,
     to: number,
   ) => void;
-  arraySwap: (path: FieldPath<z.input<TSchema>, D>, a: number, b: number) => void;
+  arraySwap: (
+    path: ArrayFieldPath<z.input<TSchema>, D>,
+    a: number,
+    b: number,
+  ) => void;
   handleSubmit: (
     onValid: SubmitHandler<TSchema>,
     onInvalid?: InvalidSubmitHandler,
