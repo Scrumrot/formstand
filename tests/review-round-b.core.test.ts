@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createForm } from "../src/core/createForm";
 import { isDevBuild, isDevToolsBuild } from "../src/core/env";
+import { isFieldDirty, valuesEqual } from "../src/core/equality";
 import { flattenIssues } from "../src/core/validation";
 
 // The October 2026 review's round B core findings, each pinned by the probe
@@ -403,5 +404,34 @@ describe("state-exposing devtools gates fail closed without a readable NODE_ENV"
     vi.stubGlobal("process", undefined);
     createForm(schema, { initialValues: { name: "" }, devtools: true });
     expect(connect).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("equality edge cases: invalid Dates and signed zero", () => {
+  it("two invalid Dates compare equal; a valid one does not match", () => {
+    expect(valuesEqual(new Date(NaN), new Date(NaN))).toBe(true);
+    expect(valuesEqual(new Date(NaN), new Date(0))).toBe(false);
+    expect(isFieldDirty(new Date(NaN), new Date(NaN))).toBe(false);
+    expect(isFieldDirty({ at: new Date(NaN) }, { at: new Date(NaN) })).toBe(false);
+  });
+
+  it("-0 equals 0 (the input renders both as \"0\"); NaN still equals NaN", () => {
+    expect(valuesEqual(-0, 0)).toBe(true);
+    expect(isFieldDirty(-0, 0)).toBe(false);
+    expect(isFieldDirty([-0], [0])).toBe(false);
+    expect(valuesEqual(Number.NaN, Number.NaN)).toBe(true);
+    expect(valuesEqual(0, 1)).toBe(false);
+  });
+
+  it("a form reads clean after -0 over an initial 0 and an invalid Date re-pick", () => {
+    const schema = z.object({ qty: z.number(), when: z.date() });
+    const form = createForm(schema, {
+      initialValues: { qty: 0, when: new Date(NaN) },
+    });
+    form.setValue("qty", -0);
+    form.setValue("when", new Date(NaN));
+    expect(form.getFieldState("qty").dirty).toBe(false);
+    expect(form.getFieldState("when").dirty).toBe(false);
+    expect(form.dirtyFields()).toEqual([]);
   });
 });

@@ -11,8 +11,17 @@ export const isPlainObject = (v: unknown): v is Record<string, unknown> => {
 // mistaken for "unchanged".
 export const valuesEqual = (a: unknown, b: unknown): boolean => {
   if (Object.is(a, b)) return true;
+  // Numbers compare with `===` semantics on top of Object.is: Object.is
+  // alone keeps NaN equal to itself (wanted) but tells -0 from 0, and a
+  // number input renders both as "0", so a field holding -0 against an
+  // initial 0 read as permanently dirty with nothing visible to undo.
+  if (typeof a === "number" && typeof b === "number") return a === b;
   if (a instanceof Date && b instanceof Date) {
-    return a.getTime() === b.getTime();
+    // Two invalid Dates are equal: their timestamps are both NaN, which
+    // `===` denies, so a cleared or half-typed date against an invalid
+    // initial read as dirty forever.
+    const [ta, tb] = [a.getTime(), b.getTime()];
+    return ta === tb || (Number.isNaN(ta) && Number.isNaN(tb));
   }
   if (Array.isArray(a) && Array.isArray(b)) {
     return a.length === b.length && a.every((v, i) => valuesEqual(v, b[i]));
