@@ -125,6 +125,14 @@ In-flight state is observable: field-level passes set `state.isValidating[path]`
 
 Field-scoped validation is **not** a CPU optimization. From the repo's benchmarks (`bench/README.md`, 50 string fields plus a nested object and 20 array rows), a full-form parse costs about 6 µs when valid and about 30 µs with one invalid field, which is invisible next to a 16 ms frame even per keystroke. The subschema fast path earns its complexity by validating a field in *isolation*: without it, any schema containing an async refine, such as a server-side uniqueness check, would fire that refine on every keystroke in **every** field. It also keeps per-keystroke cost flat as forms grow.
 
+## Security notes
+
+Client-side validation is a user-experience feature. Three places where that distinction has teeth:
+
+- **Re-validate on the server.** `handleSubmit`, `useFormAction`, and `useFormActionState` hand your handler data the schema has already accepted, but only the browser ran that parse. A server action is an endpoint any client can call with arbitrary arguments, so the server parses `data` with the same schema on every request; the client pass only shapes the hydrated experience. See [React 19 form actions](./ssr#react-19-form-actions).
+- **Persisted drafts are untrusted input.** `persistForm` reads whatever sits under its storage key, applies the shape guard and `version` check, and adopts the result **without validating it**, so a draft that fails the schema loads with an empty error map. Anything with write access to that storage (another tab, an extension, a shared machine) can put values there. Call `form.validate()` after a draft loads when UI is gated on validity, and never treat loaded values as judged. See [Persistence](./state#persistence).
+- **The CLI runs your modules.** `formstand-gen` loads the schema module and `formstand.config.ts` through jiti, which executes them, imports included. Point it only at files you would run with `node`, and treat a schema file from an untrusted source the way you would any script. See the CLI [quick start](./cli/quick-start#from-a-zod-schema) and [config page](./cli/config#project-defaults).
+
 ## Next
 
 - [Errors: schema & server](./errors): where validation results land, and how server errors coexist with them.
