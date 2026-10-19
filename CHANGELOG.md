@@ -59,11 +59,14 @@
 - `--name profileForm` passed validation and the generated spec rendered
   `<profileForm />`, which JSX reads as a DOM tag; the name must now start
   with an uppercase letter.
-- `--force` over a module folder left the previous run's files in place (a
-  removed section's `sections/GoneSection.tsx` survived and still
-  compiled). Files that carry the generator header on their first line and
-  are not in the new set are removed, with a `removed <path>` line on
-  stderr; a file without the header is yours and is never touched.
+- `--force` over a module folder left the previous run's files in place
+  silently (a removed section's `sections/GoneSection.tsx` survived and
+  still compiled). Files that carry the generator header on their first
+  line and are not in the new set are now named on stderr as
+  `warning: stale: <path>`, so the leftover is visible. They are not
+  deleted: the header says the file is yours to edit, and a folder can hold
+  a single-file component from another run under the same header, so
+  removal is left to you.
 - `--schema constructor` (or `toString`, `__proto__`) resolved a prototype
   member of the component store and generated a degraded form named after
   it; lookups and pointer segments use own keys only, so it reports "no

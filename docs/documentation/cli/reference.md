@@ -28,7 +28,7 @@ formstand-gen <input file> [flags]
 | `--template FILE` | a custom template module for a kit formstand doesn't ship. `--layout single` only, and it overrides `--ui`. See [Templates](./templates) |
 | `--tests vitest\|jest\|playwright` | emit generated specs beside the component, as a comma list. `vitest` and `jest` are the same component spec with different globals, so pick one; `playwright` adds a browser spec and needs `tests.playwright.baseURL` in the [config](./config). Store-level cases import `formstand/testing` (formstand 0.20 or newer); render cases use the config's `tests.renderWrapper`. Requires `--out` |
 | `--watch` | regenerate whenever the input changes; requires `--out` |
-| `--force` | allow overwriting existing files. Under `--layout module` it also removes the previous run's generated files the new run no longer writes (recognized by the generator header on their first line; a file without it is yours and is never touched), with a `removed <path>` line on stderr |
+| `--force` | allow overwriting existing files. Under `--layout module` it also names the previous run's generated files the new run no longer writes (recognized by the generator header on their first line) with a `warning: stale: <path>` line on stderr. Nothing is deleted: a generated file is yours to edit, so removing a stale one is left to you |
 | `--wizard` | ask the flag questions interactively, one at a time. Runs alone; see below |
 | `--help`, `-h` | usage |
 

@@ -72,7 +72,7 @@ exists and `--force` isn't set, nothing is written.
 | `--template <file>` | a custom template for a kit formstand doesn't ship; `--layout single` only |
 | `--tests <list>` | emit generated specs beside the component: a comma list of `vitest`, `jest`, `playwright` (vitest and jest are the same component spec with different globals; pick one). Requires `--out` |
 | `--watch` | regenerate whenever the input changes; requires `--out` |
-| `--force` | overwrite existing output files; under `--layout module` also removes the previous run's generated files the new run no longer writes (never a file without the generator header) |
+| `--force` | overwrite existing output files; under `--layout module` also names, on stderr, the previous run's generated files the new run no longer writes (nothing is deleted) |
 | `--wizard` | ask the flag questions interactively, one at a time; runs alone |
 | `--help` | usage |
 
