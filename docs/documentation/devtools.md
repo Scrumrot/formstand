@@ -16,7 +16,7 @@ const Page = () => {
 };
 ```
 
-It ships in the `formstand` package as a subpath, so there is nothing extra to install and no version to keep in step with the library. **It renders nothing in production builds**, on the same `NODE_ENV` gate the store's devtools option uses, so leaving it mounted will not leak your form state into a shipped page.
+It ships in the `formstand` package as a subpath, so there is nothing extra to install and no version to keep in step with the library. **It renders nothing in production builds**, on the same `NODE_ENV` gate the store's devtools option uses, so leaving it mounted will not leak your form state into a shipped page. That gate fails closed: the panel (and the store's Redux DevTools connection) is enabled only when `process.env.NODE_ENV` is readable and is not `"production"`. A runtime with no `process` at all, such as a CDN/ESM import, Deno, or a worker, is treated as production, unlike the library's console warnings, which fail open because a warning costs nothing. In such a runtime, define `NODE_ENV` through your bundler to see the panel during development.
 
 ## What it shows
 
@@ -34,7 +34,7 @@ It ships in the `formstand` package as a subpath, so there is nothing extra to i
 
 | Prop | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `form` | `Form<TSchema>` | required | the form to inspect |
+| `form` | `Form<TSchema, D>` | required | the form to inspect; a widened `pathDepth` form is accepted as-is (`FormstandDevtoolsProps<TSchema, D>` carries the depth) |
 | `position` | `"bottom-right" \| "bottom-left" \| "top-right" \| "top-left"` | `"bottom-right"` | which corner the panel anchors to |
 | `defaultOpen` | `boolean` | `false` | start expanded instead of as a toggle button |
 | `label` | `string` | `"formstand"` | shown on the toggle, for telling two mounted panels apart |

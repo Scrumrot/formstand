@@ -76,7 +76,7 @@ For display, `field.firstError` is the first message or `undefined`, covering bo
 A server verdict describes a specific value. It's automatically released when:
 
 1. **The value on its spine changes.** `setValue`, `resetField`, or an array op at the path, a *descendant*, or an *ancestor* releases it. Editing `address.street` releases a verdict on `address`, since the container it judged changed, and replacing `address` wholesale releases a verdict on `address.street`. Array ops release verdicts on the array itself, while row-level entries follow their rows through re-indexing: a verdict on `items.1.name` moves to `items.0.name` when row 0 is removed, because that row's value didn't change.
-2. **A `setValues` bulk write changes its value slice.** Only entries whose slice actually changed are released; a verdict on an untouched field survives a `setValues` that rewrites its siblings.
+2. **A bulk write changes its value slice.** `setValues`, and an `updateState` patch that carries `values`, release only the entries whose slice actually changed; a verdict on an untouched field survives a rewrite of its siblings.
 3. **A field-scoped validation targets its path.** `validateField`, `validateFieldAsync`, or `validateFields` on the path supersede the server verdict, since you explicitly asked for a fresh judgment there. (`validateField("")` counts as a full pass and, like `validate()`, leaves the server channel alone.)
 4. **You clear or rebase:** `clearErrors`, `reset`, or `adoptValues`.
 

@@ -110,12 +110,14 @@ With `debounceMs` set, each triggering interaction resets a timer; when it fires
 
 `validateField("")` is a whole-form pass and behaves exactly like `validate()`.
 
+The plural `validateFields` / `validateFieldsAsync` apply the same rule to a batch: when **every** requested path extracts a subschema, only those slots are parsed (the async pass parses them in parallel), and one path that falls back sends the whole batch through a single full parse scoped per path. This is what `useFormSteps` runs on each `next()`, so a wizard step pays for its own fields rather than the whole schema, and an async refine on a later step's field does not fire on an earlier step's advance.
+
 ## Race handling
 
 Async validation is guarded on two axes, so out-of-order network responses can't corrupt the error map:
 
 - **Per-path sequence counters.** Each async pass takes a sequence number for its path; a result only writes if it's still the latest pass for that path. A stale "username taken" response can't overwrite a newer "ok".
-- **Values-reference guard.** Each pass records the `values` reference it validated. If `values` changed during the await (`setValue`, `reset`, `adoptValues`, and so on), the write is dropped, because the result describes values that no longer exist.
+- **Stale-value guard.** Each pass records what it validated and drops its write if that is no longer the live value. A subschema pass compares its own **slot**: a `username` check keeps its verdict when you move on and type into `email` while it is in flight, and drops it only if `username` itself changed. A full-parse pass (an ancestor refine may read any field) compares the whole `values` reference, as do `reset` and `adoptValues`, which also release every in-flight pass's ownership.
 
 In-flight state is observable: field-level passes set `state.isValidating[path]` (surfaced as `useField(...).isValidating`), and whole-form async passes set the `state.isValidatingForm` boolean. `useIsValidating(form)` reads both as one boolean-only subscription ("is anything checking right now" for a global spinner), and `useIsValidating(form, "shipping")` scopes it to a subtree, same prefix semantics as `useIsDirty`/`useIsValid`. `createFormHooks` exposes the bound `use{Name}IsValidating`.
 

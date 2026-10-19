@@ -32,17 +32,17 @@ Everything importable via `import type { ... } from "formstand"`:
 
 - **Core:** `Form`, `CreateFormOptions`, `SubmitHandler`, `InvalidSubmitHandler`, `SubmitOptions`, `SubmitResult`, `ResetOptions`, `ReadonlyStoreApi`, `FieldSnapshot`
 - **State:** `FormState`, `ErrorMap`, `BoolMap`
-- **Paths:** `PathSegment`, `FieldPath`, `FieldValue`, `PathDepth` (the legal `pathDepth` budgets, the literals 0–25), `DefaultPathDepth` (the default budget, 9)
+- **Paths:** `PathSegment`, `FieldPath`, `FieldValue`, `PathDepth` (the legal `pathDepth` budgets, the literals 0–25), `DefaultPathDepth` (the default budget, 9), `ArrayFieldPath<Values, D>` (the subset of `FieldPath` whose value is a variable-length array, what every `form.array*` op and `useFieldArray` accept) and `ArrayItemOf<V>` (the item type the array ops take at a value: the element type of a variable-length array, optional/nullable stripped, `never` for a tuple or a non-array)
 - **Validation:** `ValidationResult`, `SettledValidationResult`, `FieldValidationResult`, `SettledFieldValidationResult`, `FieldsValidationResult`, `SettledFieldsValidationResult`, `ValidationMode`, `ValidationTrigger`
 - **Hooks:** `FormStateApi`, `UseFieldReturn`, `FieldFormApi`, `FieldPathArg`, `UseFieldOptions`, `UseFieldArrayReturn`, `FieldArrayFormApi`, `FieldArrayEntry`, `UseFieldsReturn` (what [`useFields`](../components#composite-fields-usefields) returns), `FormProviderProps`, `FormContextApi`
 - **Discriminated unions:** `VariantKeys`, `VariantFieldPath`, `VariantFieldValue`, `UnionValueAt`, the path and value types behind [`useVariantField`](../components#discriminated-unions)
 - **Masked inputs:** `MaskedInputBinding`, `MaskedInputOptions`, `MaskedParse` (what [`useMaskedInput`](../recipes#masked-and-formatted-inputs) takes and returns)
 - **Multi-step:** `FormStep`, `StepStatus`, `UseFormStepsReturn` (the [`useFormSteps`](../multi-step) contract)
 - **Form actions:** `FormActionHandler`, `FormActionStateHandler`, `FormActionOptions` (the [React 19 bridge](../ssr#react-19-form-actions))
-- **Components:** `TextFieldProps`, `NumberFieldProps`, `DateFieldProps`, `CheckboxFieldProps`, `SelectFieldProps`, `SelectFieldOption`, `SelectValueAt`, `FieldRef`, `PathsOf`, `PathsAccepting`, `NumberInputBinding` (what [`useNumberInput`](./components#usenumberinput-field) returns)
+- **Components:** `TextFieldProps`, `NumberFieldProps`, `DateFieldProps`, `CheckboxFieldProps`, `SelectFieldProps`, `SelectFieldOption`, `FieldRef`, `NumberInputBinding` (what [`useNumberInput`](./components#usenumberinput-field) returns), and the path filters behind the bound components' `path` props, for custom components with the same contract: `PathsOf<F>` (every typed path of a form prop), `PathsAccepting<F, V>` (the paths whose value is assignable to `V`), `ArrayPathsOf<F>` (the array paths, the form-level spelling of `ArrayFieldPath`), and `SelectValueAt<F, P>` (the option values a select at `P` may hold)
 - **Prop builders:** `TextInputProps`, `NumberInputProps`, `DateInputProps`, `CheckboxProps`, `SelectProps`, `ParsedNumberText`, `ParsedDateText`
 - **Persistence:** `PersistOptions`, `PersistStorage`, `PersistHandle` (see [`persistForm`](../state#persistence))
-- **Pre-wired hooks:** `FormHooks` (the whole object [`createFormHooks`](../state#pre-wired-hooks-createformhooks) returns) and its member shapes `BoundUseField`, `BoundUseFieldArray`, `BoundUseSelector`, `BoundUseFlag`
+- **Pre-wired hooks:** `FormHooks` (the whole object [`createFormHooks`](../state#pre-wired-hooks-createformhooks) returns) and its member shapes `BoundUseField`, `BoundUseFieldArray`, `BoundUseFields`, `BoundUseVariantField`, `BoundUseSelector`, `BoundUseFlag`
 
 From the `formstand/testing` subpath (see [Testing](../testing)):
 
@@ -50,7 +50,7 @@ From the `formstand/testing` subpath (see [Testing](../testing)):
 
 From the `formstand/devtools` subpath (see [Devtools](../devtools)):
 
-- `FormstandDevtools`, `FormstandDevtoolsProps`, `DevtoolsPosition`
+- `FormstandDevtools`, `FormstandDevtoolsProps<TSchema, D>` (the depth parameter defaults, so a `pathDepth`-widened form is accepted), `DevtoolsPosition`
 - `leafPaths(values)` and `unmatchedErrorKeys(errorKeys, leaves)`, the path walk behind the panel's field table. Exported because the behaviour is worth reusing in a custom panel: empty containers count as leaves, array rows get a path each, and `unmatchedErrorKeys` is what surfaces the root `""` key and array-level messages that no field covers.
 
 ## The structural form interfaces

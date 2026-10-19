@@ -33,7 +33,10 @@ form.setValue("naem", "x");             // compile error: no such path
 form.setTouched("users.0.emial");       // compile error
 form.validateField("users.0.email");    // paths checked here too
 form.arrayPush("users", { email: "", age: 0 }); // item type checked
+form.arrayRemove("name", 0);            // compile error: not an array path
 ```
+
+Every array op (`arrayPush`, `arrayInsert`, `arrayRemove`, `arrayMove`, `arraySwap`) and `useFieldArray` take an **array path** only: a path whose value is a variable-length `z.array`, optional or nullable included. A scalar path or a `z.tuple` path is a compile error at the path argument. The filter is exported as `ArrayFieldPath<Values>` and, for a `form` prop, `ArrayPathsOf<F>`.
 
 Optional and nullable object levels stay addressable: for `profile: z.object({...}).optional()`, the path `"profile.name"` typechecks, and its `FieldValue` is widened with `| undefined` because the parent may be absent at runtime.
 

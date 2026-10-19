@@ -98,7 +98,7 @@ form.updateState((state) => ({
 }));
 ```
 
-The patch type omits `errors`, since it is derived. Patch `schemaErrors` and `serverErrors` instead and the merged map is recomputed. Note that `updateState` is a raw patch: unlike `setValue`, it does not run the [server-error release contract](./errors#when-a-server-error-is-released) for you.
+The patch type omits `errors`, since it is derived. Patch `schemaErrors` and `serverErrors` instead and the merged map is recomputed. A `values` patch is a bulk write under the [server-error release contract](./errors#when-a-server-error-is-released), exactly like `setValues`: server entries whose value slice changed are released, untouched siblings keep theirs. When the same patch also sets `serverErrors`, that map is taken as given (what `setValues` followed by `setErrors` would leave behind).
 
 ## Persistence
 

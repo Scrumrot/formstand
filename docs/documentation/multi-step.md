@@ -59,7 +59,7 @@ Each step declares the paths it owns; a container path covers its whole subtree,
 
 ## What the navigation promises
 
-- **`next()`** validates the current step's fields (through `validateFieldsAsync`, so async refines are covered) and advances only when they come back clean. A failed advance writes the step's errors and **marks the errored fields touched**, exactly like a failed submit, so touched-gated error UIs show why the wizard refused. On the last step it validates without advancing (submit is the last step's "next") and still resolves whether the step was clean, so `if (await wizard.next())` reads the same everywhere.
+- **`next()`** validates the current step's fields (through `validateFieldsAsync`, so async refines are covered; only the step's own slots are parsed when every path extracts a subschema, see [field-scoped validation](./validation#how-field-scoped-validation-works)) and advances only when they come back clean. A failed advance writes the step's errors and **marks the errored fields touched**, exactly like a failed submit, so touched-gated error UIs show why the wizard refused. On the last step it validates without advancing (submit is the last step's "next") and still resolves whether the step was clean, so `if (await wizard.next())` reads the same everywhere.
 - **`back()`** never validates. Leaving a half-filled step backward is normal.
 - **`goTo(target)`** is free going backward. Going **forward** it validates every step from the current one up to (not including) the target and lands on the first one that fails, errors visible, so a clickable step header can be a plain `goTo()` without letting anyone skip past an invalid step. It resolves the index actually landed on.
 

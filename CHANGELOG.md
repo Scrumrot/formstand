@@ -101,9 +101,70 @@
 - **Array ops reject tuple paths at the type level.** `arrayPush("pair", x)`
   on a `z.tuple` no longer compiles; it could only ever grow a fixed-arity
   value the schema rejects.
+- **`flattenIssues` and the plural error writes scale linearly.** The
+  issue grouping rebuilt its accumulator with a spread per issue, so
+  `validate()` on 3000 empty rows spent 1.3 s grouping what zod parsed in
+  7 ms; it now groups once through a Map. The same per-entry spread sat in
+  `validateFieldsAsync`'s in-flight flags and in `addErrors`, which both
+  now run one pass over the map.
+- **Error keys named after `Object.prototype` members no longer crash or
+  leak.** `setError("constructor", "x")`, `addErrors({ constructor: [...] })`,
+  and `validate()` on a schema with a `constructor` field threw inside the
+  store write (a bare `prev[k]` read `Object` as the previous error list);
+  `getFieldState("toString").touched` and the `useField` / `useFieldArray`
+  selectors read prototype functions as field state. Every runtime-keyed
+  read of `errors`, `touched`, and `isValidating` is now an own-key read.
+- **An async field verdict survives an unrelated field's change.** A
+  subschema `validateFieldAsync("username")` dropped its result, and
+  cleared its in-flight flag, the moment any other value changed while it
+  was in flight; it now compares its own slot, so "username taken" lands
+  after you move on to `email`. Full-form scopes (an ancestor refine may
+  read any field) keep the whole-values compare.
+- **`validateFieldsAsync` takes the subschema fast path.** It always parsed
+  the whole schema while the sync `validateFields` parsed only the
+  requested slots, so `useFormSteps` paid for every other step's fields on
+  each `next()` and an async refine on another step's field fired every
+  time. The async plural now mirrors the sync routing (all paths extract:
+  parse those slots, in parallel; any path bails: one full parse) and
+  judges staleness per path.
+- **`updateState` values patches release server errors.** A patch that
+  carries `values` now runs the same release as `setValues`: entries whose
+  value slice changed go, untouched siblings stay. An explicit
+  `serverErrors` in the same patch is taken as given.
+- **The devtools gates fail closed without a readable `NODE_ENV`.**
+  `FormstandDevtools` rendered the full state panel and the zustand
+  devtools middleware stayed enabled in a CDN/ESM, Deno, or worker
+  production build, because "no `process`" read as a dev build. Both now
+  gate on `isDevToolsBuild()`, true only when `process.env.NODE_ENV` is a
+  readable string other than `"production"`; the console warnings keep the
+  fail-open `isDevBuild()`.
+- **Two invalid Dates compare equal, and -0 equals 0, in dirty tracking.**
+  A field holding `new Date(NaN)` against an invalid initial read as
+  permanently dirty, and `-0` over an initial `0` was dirty while the input
+  rendered `"0"` either way.
 
 ### Changed
 
+- **Array ops and `useFieldArray` take array paths only.** `arrayRemove`,
+  `arrayMove`, and `arraySwap` accepted any `FieldPath`, so
+  `form.arrayRemove("name", 0)` on a `z.string()` compiled (and warned at
+  runtime), while `useFieldArray(form, "pair")` on a `z.tuple` bound with
+  the tuple's element union and `useFieldArray(form, "name")` bound with a
+  `never` item. Every array op and the hook's typed overload now constrain
+  the path to `ArrayFieldPath<Values, D>`: variable-length arrays, optional
+  and nullable included, tuples and scalars excluded, template paths like
+  `` `rows.${number}.tags` `` kept. Type-level only: the code it rejects was
+  already a runtime no-op or a schema failure. `ArrayFieldPath`,
+  `ArrayItemOf` (the one item type, tuple arm included, now shared by the
+  core and the hook), and the form-level `ArrayPathsOf<F>` are exported
+  beside `PathsOf`.
+- **`PathsAccepting` and `SelectValueAt` are actually exported**, as the
+  entry below has claimed since 0.21; `BoundUseFields` and
+  `BoundUseVariantField` join the other `Bound*` types.
+- **`FormstandDevtoolsProps` carries the form's depth.**
+  `<FormstandDevtools form={createForm(s, { pathDepth: 12 })} />` was a
+  type error against the depth-less `Form<TSchema>` prop; the props now
+  take `D extends PathDepth = DefaultPathDepth`. Widening only.
 - **Bound components type their `path` by value.** `TextField` accepts
   string-valued paths, `NumberField` number-valued, `DateField` Date-valued,
   `CheckboxField` boolean-valued, `SelectField` string-valued (optional and
