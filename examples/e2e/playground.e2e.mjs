@@ -24,6 +24,18 @@ const fail = (message) => {
 };
 const ok = (message) => console.log(`ok: ${message}`);
 
+// Every demo is a lazy chunk behind one Suspense boundary. A hash-only
+// goto on the same origin resolves "networkidle" before React has even
+// requested the chunk, so a check that runs straight after it sees the
+// "Loading demo..." fallback (17 px tall, no controls) and calls a correct
+// build blank. Wait for the fallback to leave; a chunk the browser already
+// has never shows it, and the locator is detached at once.
+const demoReady = async (page) => {
+  await page
+    .locator(".demo-loading")
+    .waitFor({ state: "detached", timeout: 15_000 });
+};
+
 const waitForServer = async (url, tries = 50) => {
   for (const attempt of Array.from({ length: tries }, (_, i) => i)) {
     try {
@@ -104,6 +116,7 @@ try {
   // Viewport pinning: the widest tabs must not pan sideways.
   for (const route of ["#/schema-builder", "#/gen-mui", "#/perf", "#/basic"]) {
     await phone.goto(`${BASE}${route}`, { waitUntil: "networkidle" });
+    await demoReady(phone);
     const metrics = await phone.evaluate(() => ({
       scrollW: document.scrollingElement.scrollWidth,
       clientW: document.scrollingElement.clientWidth,
@@ -170,6 +183,7 @@ try {
   ];
   for (const route of SAMPLE) {
     await desktop.goto(`${BASE}${route}`, { waitUntil: "networkidle" });
+    await demoReady(desktop);
     const integrity = await desktop.evaluate(() => {
       const body = document.querySelector(".demo-body");
       const title = document.querySelector(".demo-title");
