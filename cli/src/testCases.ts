@@ -236,8 +236,10 @@ const validLiteral = (spec: FieldSpec, level: number): string => {
       return "true";
     case "date":
       return `new Date("2026-01-02T00:00:00.000Z")`;
+    // JSON.stringify, like every other literal: an option carrying a quote
+    // or a backslash (z.enum(['say "hi"'])) interpolated raw broke the spec.
     case "enum":
-      return `"${spec.options[0] ?? ""}"`;
+      return JSON.stringify(spec.options[0] ?? "");
     case "object":
       return spec.fields.length === 0
         ? "{}"
@@ -265,7 +267,7 @@ const validLiteral = (spec: FieldSpec, level: number): string => {
       if (first === undefined) return "{}";
       return [
         "{",
-        `${child}${propKey(spec.discriminant)}: "${first.tag}",`,
+        `${child}${propKey(spec.discriminant)}: ${JSON.stringify(first.tag)},`,
         ...first.fields.map(
           (field) =>
             `${child}${propKey(field.name)}: ${validLiteral(field.spec, level + 1)},`,
