@@ -25,7 +25,7 @@ form.handleSubmit(async (data) => {
 
 And because a submit handler that **throws** resolves `{kind: "error"}` without writing any state, wire the save-failure path explicitly: pass `onError` and the form shows something instead of silently re-enabling the button (dev builds warn when an unobserved handler failure resolves):
 
-```ts
+```tsx
 <form
   onSubmit={form.handleSubmit(
     async (data) => await api.create(data), // network failure throws
@@ -95,7 +95,7 @@ const schema = z
 Read it with the shortcut hook:
 
 ```tsx
-import { useFormError } from "formstand";
+import { useFormError, type FormStateApi } from "formstand";
 
 const FormError = ({ form }: { form: FormStateApi }) => {
   const error = useFormError(form); // state.errors[""]

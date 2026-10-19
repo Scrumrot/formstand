@@ -66,7 +66,7 @@ Your zod schema is the single source of truth: it defines the value types, the s
 Subscribes to a single path's value, error, touched, dirty, and validating state, plus write helpers:
 
 ```tsx
-import { useField, textInputProps } from "formstand";
+import { useField, textInputProps, type Form } from "formstand";
 
 const NameInput = ({ form }: { form: Form<typeof schema> }) => {
   const name = useField(form, "name");
