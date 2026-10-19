@@ -281,6 +281,14 @@ body {
   color: var(--text-muted);
   max-width: 68ch;
 }
+/* The Suspense fallback while a demo's lazy chunk (or its source text)
+ * loads: quiet, same measure as the body copy, no spinner because the wait
+ * is one small request. */
+.demo-loading {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
 .demo-actions {
   display: flex;
   align-items: center;

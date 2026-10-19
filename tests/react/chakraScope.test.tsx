@@ -6,7 +6,7 @@
 // the scope class.
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { ChakraBridge } from "../../examples/src/App";
+import { ChakraBridge } from "../../examples/src/demo/ChakraBridge";
 import { ThemeModeProvider } from "../../examples/src/theme";
 
 afterEach(cleanup);

@@ -1,10 +1,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
-// Mantine requires its global stylesheet (component classes + the CSS
-// variables MantineProvider fills in). Imported BEFORE app.css so the
-// playground shell's own body/typography rules keep winning on ties.
-import "@mantine/core/styles.css";
+// Only the shell's own stylesheet loads up front. Kit stylesheets (Mantine's
+// 568 kB sheet, notably) arrive with their tab's lazy chunk; see
+// demo/MantineBridge.tsx for how the cascade order stays correct.
 import "./app.css";
 
 const root = document.getElementById("root");

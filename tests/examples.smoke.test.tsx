@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { App } from "../examples/src/App";
@@ -46,7 +52,7 @@ const renderAppAndGetTabs = (): readonly HTMLElement[] => {
 describe("examples playground smoke test", () => {
   it.each(Array.from({ length: TAB_COUNT }, (_, index) => index))(
     "tab %i renders content and has working View code / View state toggles",
-    (index) => {
+    async (index) => {
       const tabs = renderAppAndGetTabs();
       const tab = tabs[index];
       expect(tab).toBeDefined();
@@ -56,6 +62,21 @@ describe("examples playground smoke test", () => {
       const card = document.querySelector<HTMLElement>(".card");
       expect(card).not.toBeNull();
       const scope = within(card as HTMLElement);
+
+      // Demos are React.lazy chunks: wait for the shell's Suspense fallback
+      // to give way to the demo before asserting on its DOM. The kit tabs
+      // (Chakra, Mantine, antd, the Schema builder's emitters) take several
+      // seconds to transform on first import under vitest, well past
+      // waitFor's one-second default; the per-test timeout is the real cap.
+      await waitFor(
+        () => {
+          expect(
+            (card as HTMLElement).querySelector(".demo-body .demo-loading"),
+            `lazy demo still loading on tab "${tab.textContent}"`,
+          ).toBeNull();
+        },
+        { timeout: 20_000 },
+      );
 
       // The demo itself rendered DOM — asserted on the shell's demo-body
       // wrapper, not the card, so the shell's own buttons can't satisfy it.
@@ -68,13 +89,20 @@ describe("examples playground smoke test", () => {
       // View code: the shell shows the tab's source (the default file for
       // multi-file demos), which always contains a form-creation call —
       // with the playground-harness useDemoForm lines stripped so copied
-      // code compiles outside the playground.
+      // code compiles outside the playground. The source text is fetched
+      // on demand (one chunk per file), so the panel is awaited too.
       const codeButton = scope.getByRole("button", { name: "View code" });
       fireEvent.click(codeButton);
-      const codePre = statePres(card as HTMLElement).find((pre) =>
-        /\b(useForm|createForm)\(/.test(pre.textContent ?? ""),
+      const codePre = await waitFor(
+        () => {
+          const pre = statePres(card as HTMLElement).find((candidate) =>
+            /\b(useForm|createForm)\(/.test(candidate.textContent ?? ""),
+          );
+          expect(pre, `code panel on tab "${tab.textContent}"`).toBeDefined();
+          return pre;
+        },
+        { timeout: 10_000 },
       );
-      expect(codePre, `code panel on tab "${tab.textContent}"`).toBeDefined();
       expect(codePre?.textContent ?? "").not.toContain("useDemoForm");
       fireEvent.click(codeButton);
       expect(statePres(card as HTMLElement)).toHaveLength(0);

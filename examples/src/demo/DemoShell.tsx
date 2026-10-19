@@ -1,7 +1,9 @@
 import {
   type ReactNode,
+  Suspense,
   createContext,
   useContext,
+  useEffect,
   useLayoutEffect,
   useState,
 } from "react";
@@ -9,7 +11,11 @@ import type { z } from "zod";
 import type { Form } from "formstand";
 import { StateDump } from "../forms/StateDump";
 import { CodeView } from "./CodeView";
-import type { DemoFile } from "./demoSources";
+import {
+  type DemoFile,
+  type DemoSourceFile,
+  loadDemoFiles,
+} from "./demoSources";
 import { FileTree } from "./FileTree";
 import { canOpenInStackBlitz, openInStackBlitz } from "./stackblitz";
 
@@ -22,7 +28,7 @@ export type DemoShellProps = Readonly<{
   // Wide demos (grids, tables, side-by-side viewers) opt out of the
   // readable-measure cap on the demo body.
   wide?: boolean;
-  files: readonly DemoFile[];
+  files: readonly DemoSourceFile[];
   children: ReactNode;
 }>;
 
@@ -45,16 +51,46 @@ export const useDemoForm = (form: unknown): void => {
   }, [register, form]);
 };
 
+// The demo's source text, fetched on demand (the file LIST is static, the
+// text lives in per-file chunks; see demoSources). Loaded when the shell
+// mounts rather than when the code panel opens because the StackBlitz
+// button needs the import graph to decide whether it may show at all; the
+// cost is this one demo's own files, not the whole playground's.
+type SourcesState =
+  | Readonly<{ kind: "loading" }>
+  | Readonly<{ kind: "ready"; files: readonly DemoFile[] }>;
+
+// No cancellation on purpose: the shell is keyed by tab, so `files` never
+// changes for a mounted shell, and a resolution after unmount is a no-op.
+const useDemoSources = (files: readonly DemoSourceFile[]): SourcesState => {
+  const [state, setState] = useState<SourcesState>({ kind: "loading" });
+  useEffect(() => {
+    void loadDemoFiles(files).then((loaded) =>
+      setState({ kind: "ready", files: loaded }),
+    );
+  }, [files]);
+  return state;
+};
+
 // Multi-file demos (the Onboarding module) open on hooks.ts, the file that
 // explains the architecture, instead of alphabetical luck.
-const defaultFilePath = (files: readonly DemoFile[]): string =>
+const defaultFilePath = (files: readonly DemoSourceFile[]): string =>
   files.find((file) => file.path === "hooks.ts")?.path ??
   files[0]?.path ??
   "";
 
-const CodePanel = ({ files }: Readonly<{ files: readonly DemoFile[] }>) => {
+type CodePanelProps = Readonly<{
+  files: readonly DemoSourceFile[];
+  sources: SourcesState;
+}>;
+
+const CodePanel = ({ files, sources }: CodePanelProps) => {
   const [selected, setSelected] = useState(() => defaultFilePath(files));
-  const current = files.find((file) => file.path === selected) ?? files[0];
+  const current =
+    sources.kind === "ready"
+      ? (sources.files.find((file) => file.path === selected) ??
+        sources.files[0])
+      : undefined;
 
   return (
     <div className="code-panel">
@@ -63,7 +99,11 @@ const CodePanel = ({ files }: Readonly<{ files: readonly DemoFile[] }>) => {
           <FileTree files={files} selected={selected} onSelect={setSelected} />
         </div>
       ) : null}
-      {current !== undefined ? <CodeView source={current.source} /> : null}
+      {current !== undefined ? (
+        <CodeView source={current.source} />
+      ) : (
+        <p className="demo-loading">Loading source...</p>
+      )}
     </div>
   );
 };
@@ -117,6 +157,7 @@ export const DemoShell = ({
 }: DemoShellProps) => {
   const [form, setForm] = useState<unknown>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
+  const sources = useDemoSources(files);
 
   const toggle = (next: Panel) =>
     setPanel((current) => (current === next ? null : next));
@@ -154,12 +195,12 @@ export const DemoShell = ({
             {/* Only self-contained demos open standalone: kit demos import
                 sibling adapters that are not part of their file set, so
                 the button would hand StackBlitz a broken project. */}
-            {canOpenInStackBlitz(files) ? (
+            {sources.kind === "ready" && canOpenInStackBlitz(sources.files) ? (
               <button
                 className="secondary"
                 type="button"
                 title="open this demo as a fresh StackBlitz project"
-                onClick={() => openInStackBlitz(title, files)}
+                onClick={() => openInStackBlitz(title, sources.files)}
               >
                 StackBlitz
               </button>
@@ -168,7 +209,16 @@ export const DemoShell = ({
           </div>
         </header>
         <div className={`demo-split ${panel !== null ? "panel-open" : ""}`}>
-          <div className={`demo-body${wide ? " wide" : ""}`}>{children}</div>
+          <div className={`demo-body${wide ? " wide" : ""}`}>
+            {/* Demos are React.lazy chunks (App.tsx); this is the one
+                boundary that catches them, so a tab switch paints the
+                shell header at once and the body when its chunk lands. */}
+            <Suspense
+              fallback={<p className="demo-loading">Loading demo...</p>}
+            >
+              {children}
+            </Suspense>
+          </div>
           {panel !== null ? (
             <aside className="demo-panel">
               {/* The header toggles are out of reach behind the mobile
@@ -183,7 +233,9 @@ export const DemoShell = ({
               {panel === "state" && form !== null ? (
                 <StateDump form={form as Form<z.ZodType>} />
               ) : null}
-              {panel === "code" ? <CodePanel files={files} /> : null}
+              {panel === "code" ? (
+                <CodePanel files={files} sources={sources} />
+              ) : null}
             </aside>
           ) : null}
         </div>

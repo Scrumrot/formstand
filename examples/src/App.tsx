@@ -1,373 +1,189 @@
-import { type ReactElement, type ReactNode, useEffect, useState } from "react";
+import {
+  type ComponentType,
+  type ReactNode,
+  lazy,
+  useEffect,
+  useState,
+} from "react";
 import {
   ThemeModeProvider,
   type ThemeMode,
   useGitHubStars,
-  useThemeMode,
   useThemeModeState,
 } from "./theme";
-import { ChakraProvider, createSystem, defaultConfig } from "@chakra-ui/react";
-import { MantineProvider } from "@mantine/core";
-import { ConfigProvider as AntdConfigProvider, theme as antdTheme } from "antd";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import FolderRoundedIcon from "@mui/icons-material/FolderRounded";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import { DemoShell, useDemoForm } from "./demo/DemoShell";
 import { DEMO_SOURCES, type DemoSourceKey } from "./demo/demoSources";
-import { ArrayForm } from "./forms/ArrayForm";
-import { AsyncForm } from "./forms/AsyncForm";
-import { AutosaveForm } from "./forms/AutosaveForm";
-import { BasicForm } from "./forms/BasicForm";
-import { BoundFieldsForm } from "./forms/BoundFieldsForm";
-import { CliCommandBuilder } from "./forms/CliCommandBuilder";
-import { ConditionalForm } from "./forms/ConditionalForm";
-import { ContextForm } from "./forms/ContextForm";
-import { DependentFieldsForm } from "./forms/DependentFieldsForm";
-import { DerivedFieldForm } from "./forms/DerivedFieldForm";
-import { FileUploadForm } from "./forms/FileUploadForm";
-import { FlightSearchLive } from "./forms/FlightSearchLive";
-import { AntdOnboardingForm } from "./generated/AntdOnboardingForm";
-import { ChakraOnboardingForm } from "./generated/ChakraOnboardingForm";
-import { DeepBoundaryForm } from "./generated/DeepBoundaryForm";
-import { MantineOnboardingForm } from "./generated/MantineOnboardingForm";
-import { KitchenSinkForm, kitchenSinkForm } from "./generated/KitchenSinkForm";
-import {
-  NestedArrayStressForm,
-  nestedArrayStressForm,
-} from "./generated/NestedArrayStressForm";
-import {
-  OnboardingForm as GeneratedOnboardingForm,
-  onboardingForm as generatedOnboardingForm,
-} from "./generated/OnboardingForm";
-import { HooksFactoryForm } from "./forms/HooksFactoryForm";
-import { OnboardingForm } from "./forms/OnboardingForm";
-import { InvoiceForm } from "./forms/InvoiceForm";
-import { NestedArraysForm } from "./forms/NestedArraysForm";
-import { NestedForm } from "./forms/NestedForm";
-import { ActionsForm } from "./forms/ActionsForm";
-import { OptimisticForm } from "./forms/OptimisticForm";
-import { PerfBenchmarkForm } from "./forms/PerfBenchmarkForm";
-import { SchemaBuilder } from "./forms/SchemaBuilder/SchemaBuilder";
-import { ServerErrorsForm } from "./forms/ServerErrorsForm";
-import { TagInputForm } from "./forms/TagInputForm";
-import { WizardForm } from "./forms/WizardForm";
-import { MuiCheckoutWizard } from "./mui/MuiCheckoutWizard";
-import { MuiInvoiceBuilder } from "./mui/MuiInvoiceBuilder";
-import { MuiJobApplication } from "./mui/MuiJobApplication";
-import { MuiProfileSettings } from "./mui/MuiProfileSettings";
-import { MuiSurveyBuilder } from "./mui/MuiSurveyBuilder";
-import { MuiOnboardingForm } from "./mui/OnboardingForm";
 import { MuiThemeBridge } from "./mui/MuiThemeBridge";
-import { ShadcnOnboardingForm } from "./shadcn/OnboardingForm";
-import { ShadcnCheckoutForm } from "./shadcn/ShadcnCheckoutForm";
-import { ShadcnSettingsForm } from "./shadcn/ShadcnSettingsForm";
-import { ShadcnSignupForm } from "./shadcn/ShadcnSignupForm";
-import { ShadcnTeamForm } from "./shadcn/ShadcnTeamForm";
 
 // One key list for tabs and sources: adding a demo without a source entry
 // (or vice versa) is a compile error.
 type TabKey = DemoSourceKey;
 
-type Tab = Readonly<{
-  key: TabKey;
+// Every demo is a React.lazy chunk: the main bundle carries the shell (and
+// MUI, which the sidebar tree and the code panel's file tree already need)
+// while each tab's component, its UI kit, and its stylesheet load on first
+// visit. Before this, App imported all 43 demos eagerly into one 2.9 MB
+// chunk. The wrapper kinds below are the pieces the SHELL already has
+// loaded; kit providers that would drag a kit into the main chunk (Chakra,
+// Mantine, antd) live inside the lazy module instead (demo/*Bridge.tsx).
+type Wrap = "none" | "mui" | "shadcn";
+
+type LazyModule = Readonly<{ default: ComponentType }>;
+
+type Demo = Readonly<{
   label: string;
-  render: () => ReactElement;
+  wrap: Wrap;
+  load: () => Promise<LazyModule>;
 }>;
 
-// The wrapper div is shadcn's MuiThemeBridge equivalent: the Tailwind theme
-// variables and the scoped preflight both key off .shadcn-scope. Every
-// shadcn demo goes through this helper so a new tab can't forget the scope
-// (an unwrapped demo renders unthemed and unreset).
-const shadcnTab = (
-  key: TabKey,
+// React.lazy wants a module with a default export and the repo bans default
+// exports, so each loader names the export it wants.
+const pick =
+  <K extends string>(
+    load: () => Promise<Readonly<Record<K, ComponentType>>>,
+    key: K,
+  ): (() => Promise<LazyModule>) =>
+  () =>
+    load().then((module) => ({ default: module[key] }));
+
+// The generated module-layout forms ship without the playground harness
+// (they are the CLI's untouched output), so this wrapper registers their
+// exported form with the shell to power the View state panel.
+const registered = (Component: ComponentType, form: unknown): ComponentType => {
+  const RegisteredDemo = () => {
+    useDemoForm(form);
+    return <Component />;
+  };
+  return RegisteredDemo;
+};
+
+const demo = (
   label: string,
-  Demo: () => ReactElement,
-): Tab => ({
-  key,
-  label,
-  render: () => (
-    <div className="shadcn-scope">
-      <Demo />
-    </div>
+  wrap: Wrap,
+  load: () => Promise<LazyModule>,
+): Demo => ({ label, wrap, load });
+
+// Exhaustive over TabKey (it IS the Record's key set), in sidebar order:
+// a new source entry without a demo here is a compile error, not a missing
+// tab. Object key order is insertion order for string keys, which is what
+// TAB_KEYS relies on below.
+const DEMOS: Readonly<Record<TabKey, Demo>> = {
+  basic: demo("Basic + modes", "none", pick(() => import("./forms/BasicForm"), "BasicForm")),
+  bound: demo("Bound fields", "none", pick(() => import("./forms/BoundFieldsForm"), "BoundFieldsForm")),
+  context: demo("Form context", "none", pick(() => import("./forms/ContextForm"), "ContextForm")),
+  hooksFactory: demo("Hooks factory", "none", pick(() => import("./forms/HooksFactoryForm"), "HooksFactoryForm")),
+  onboarding: demo("Onboarding", "none", pick(() => import("./forms/OnboardingForm"), "OnboardingForm")),
+  nested: demo("Nested + submit", "none", pick(() => import("./forms/NestedForm"), "NestedForm")),
+  array: demo("Field array", "none", pick(() => import("./forms/ArrayForm"), "ArrayForm")),
+  async: demo("Async", "none", pick(() => import("./forms/AsyncForm"), "AsyncForm")),
+  wizard: demo("Wizard", "none", pick(() => import("./forms/WizardForm"), "WizardForm")),
+  conditional: demo("Conditional", "none", pick(() => import("./forms/ConditionalForm"), "ConditionalForm")),
+  invoice: demo("Invoice", "none", pick(() => import("./forms/InvoiceForm"), "InvoiceForm")),
+  nestedArrays: demo("Nested arrays", "none", pick(() => import("./forms/NestedArraysForm"), "NestedArraysForm")),
+  server: demo("Server errors", "none", pick(() => import("./forms/ServerErrorsForm"), "ServerErrorsForm")),
+  autosave: demo("Autosave", "none", pick(() => import("./forms/AutosaveForm"), "AutosaveForm")),
+  dependent: demo("Dependent", "none", pick(() => import("./forms/DependentFieldsForm"), "DependentFieldsForm")),
+  optimistic: demo("Optimistic", "none", pick(() => import("./forms/OptimisticForm"), "OptimisticForm")),
+  actions: demo("Actions", "none", pick(() => import("./forms/ActionsForm"), "ActionsForm")),
+  file: demo("File upload", "none", pick(() => import("./forms/FileUploadForm"), "FileUploadForm")),
+  derived: demo("Derived", "none", pick(() => import("./forms/DerivedFieldForm"), "DerivedFieldForm")),
+  tag: demo("Tags", "none", pick(() => import("./forms/TagInputForm"), "TagInputForm")),
+  perf: demo("Perf", "none", pick(() => import("./forms/PerfBenchmarkForm"), "PerfBenchmarkForm")),
+  muiCheckout: demo("MUI: Checkout", "mui", pick(() => import("./mui/MuiCheckoutWizard"), "MuiCheckoutWizard")),
+  muiJob: demo("MUI: Job form", "mui", pick(() => import("./mui/MuiJobApplication"), "MuiJobApplication")),
+  muiInvoice: demo("MUI: Invoice", "mui", pick(() => import("./mui/MuiInvoiceBuilder"), "MuiInvoiceBuilder")),
+  muiSettings: demo("MUI: Settings", "mui", pick(() => import("./mui/MuiProfileSettings"), "MuiProfileSettings")),
+  muiSurvey: demo("MUI: Survey", "mui", pick(() => import("./mui/MuiSurveyBuilder"), "MuiSurveyBuilder")),
+  onboardingMui: demo("MUI: Onboarding", "mui", pick(() => import("./mui/OnboardingForm"), "MuiOnboardingForm")),
+  shadSignup: demo("shadcn: Signup", "shadcn", pick(() => import("./shadcn/ShadcnSignupForm"), "ShadcnSignupForm")),
+  shadCheckout: demo("shadcn: Checkout", "shadcn", pick(() => import("./shadcn/ShadcnCheckoutForm"), "ShadcnCheckoutForm")),
+  shadSettings: demo("shadcn: Settings", "shadcn", pick(() => import("./shadcn/ShadcnSettingsForm"), "ShadcnSettingsForm")),
+  shadTeam: demo("shadcn: Team", "shadcn", pick(() => import("./shadcn/ShadcnTeamForm"), "ShadcnTeamForm")),
+  onboardingShadcn: demo("shadcn: Onboarding", "shadcn", pick(() => import("./shadcn/OnboardingForm"), "ShadcnOnboardingForm")),
+  cliCommand: demo("CLI command builder", "none", pick(() => import("./forms/CliCommandBuilder"), "CliCommandBuilder")),
+  // The builder imports the CLI's real emitters (cli/src/codegen-api, about
+  // 170 kB); lazy-loading the tab keeps them out of the main chunk.
+  schemaBuilder: demo("Schema builder", "none", pick(() => import("./forms/SchemaBuilder/SchemaBuilder"), "SchemaBuilder")),
+  genMui: demo("Onboarding (CLI output)", "mui", () =>
+    import("./generated/OnboardingForm").then((module) => ({
+      default: registered(module.OnboardingForm, module.onboardingForm),
+    })),
   ),
-});
-
-// Scoped provider bridges for the generated kit demos, each following the
-// shell's light/dark switch the way MuiThemeBridge does. They wrap only the
-// demo content, so the kits' theming never leaks into the playground shell.
-type KitBridgeProps = Readonly<{ children: ReactNode }>;
-
-// Chakra v3's default system injects UNSCOPED global CSS (`*`/body/html
-// preflight resets plus defaultConfig's globalCss: placeholder and
-// selection colors, html color-scheme) that would restyle the whole
-// playground shell while the tab is mounted, so the bridge builds its own
-// system with BOTH layers scoped under .chakra-scope (the same scoping
-// pattern as the shadcn tabs) and puts that class on the wrapper. Root
-// selectors (html/body/:root) become the scope element itself; everything
-// else nests under it. The scoping regression test asserts this through
-// ChakraBridge (rendering it and inspecting the injected CSS), so nothing
-// here needs exporting beyond the bridge itself.
-const scopeSelector = (selector: string): string =>
-  selector
-    .split(",")
-    .map((part) => {
-      const trimmed = part.trim();
-      return trimmed === "html" || trimmed === "body" || trimmed === ":root"
-        ? ".chakra-scope"
-        : `.chakra-scope ${trimmed}`;
-    })
-    .join(", ");
-
-const chakraScopedSystem = createSystem(
-  {
-    ...defaultConfig,
-    globalCss: Object.fromEntries(
-      Object.entries(defaultConfig.globalCss ?? {}).map(
-        ([selector, styles]) => [scopeSelector(selector), styles],
+  genKitchenSink: demo("Gen: kitchen sink", "none", () =>
+    import("./generated/KitchenSinkForm").then((module) => ({
+      default: registered(module.KitchenSinkForm, module.kitchenSinkForm),
+    })),
+  ),
+  // The single-file layout exports no form instance (useForm inside the
+  // component), so there is nothing to register with useDemoForm: the
+  // View state panel stays empty, like the builder tabs.
+  genDeepNest: demo("Gen: deep nesting", "none", pick(() => import("./generated/DeepBoundaryForm"), "DeepBoundaryForm")),
+  genArrayStress: demo("Gen: nested arrays", "none", () =>
+    import("./generated/NestedArrayStressForm").then((module) => ({
+      default: registered(
+        module.NestedArrayStressForm,
+        module.nestedArrayStressForm,
       ),
-    ),
-  },
-  { preflight: { scope: ".chakra-scope" } },
-);
-
-export const ChakraBridge = ({ children }: KitBridgeProps) => {
-  const mode = useThemeMode();
-  return (
-    <ChakraProvider value={chakraScopedSystem}>
-      <div className={`chakra-scope ${mode}`}>{children}</div>
-    </ChakraProvider>
-  );
-};
-
-// Mantine takes the scheme as a prop; its global stylesheet is imported in
-// main.tsx (component classes are inert until this provider mounts).
-const MantineBridge = ({ children }: KitBridgeProps) => {
-  const mode = useThemeMode();
-  return <MantineProvider forceColorScheme={mode}>{children}</MantineProvider>;
-};
-
-// antd needs no provider to function; ConfigProvider here is purely the
-// optional theming hook, swapping the token algorithm for dark mode.
-const AntdBridge = ({ children }: KitBridgeProps) => {
-  const mode = useThemeMode();
-  return (
-    <AntdConfigProvider
-      theme={{
-        algorithm:
-          mode === "dark" ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
-      }}
-    >
-      {children}
-    </AntdConfigProvider>
-  );
-};
-
-// The generated module ships without the playground harness (it's the
-// CLI's untouched output), so this wrapper registers its form with the
-// shell to power the View state panel.
-const GeneratedOnboardingDemo = () => {
-  useDemoForm(generatedOnboardingForm);
-  return <GeneratedOnboardingForm />;
-};
-
-const GeneratedKitchenSinkDemo = () => {
-  useDemoForm(kitchenSinkForm);
-  return <KitchenSinkForm />;
-};
-
-const GeneratedNestedArrayStressDemo = () => {
-  useDemoForm(nestedArrayStressForm);
-  return <NestedArrayStressForm />;
-};
-
-const TABS: readonly Tab[] = [
-  { key: "basic", label: "Basic + modes", render: () => <BasicForm /> },
-  { key: "bound", label: "Bound fields", render: () => <BoundFieldsForm /> },
-  { key: "context", label: "Form context", render: () => <ContextForm /> },
-  {
-    key: "hooksFactory",
-    label: "Hooks factory",
-    render: () => <HooksFactoryForm />,
-  },
-  {
-    key: "onboarding",
-    label: "Onboarding",
-    render: () => <OnboardingForm />,
-  },
-  { key: "nested", label: "Nested + submit", render: () => <NestedForm /> },
-  { key: "array", label: "Field array", render: () => <ArrayForm /> },
-  { key: "async", label: "Async", render: () => <AsyncForm /> },
-  { key: "wizard", label: "Wizard", render: () => <WizardForm /> },
-  {
-    key: "conditional",
-    label: "Conditional",
-    render: () => <ConditionalForm />,
-  },
-  { key: "invoice", label: "Invoice", render: () => <InvoiceForm /> },
-  {
-    key: "nestedArrays",
-    label: "Nested arrays",
-    render: () => <NestedArraysForm />,
-  },
-  {
-    key: "server",
-    label: "Server errors",
-    render: () => <ServerErrorsForm />,
-  },
-  { key: "autosave", label: "Autosave", render: () => <AutosaveForm /> },
-  {
-    key: "dependent",
-    label: "Dependent",
-    render: () => <DependentFieldsForm />,
-  },
-  {
-    key: "optimistic",
-    label: "Optimistic",
-    render: () => <OptimisticForm />,
-  },
-  { key: "actions", label: "Actions", render: () => <ActionsForm /> },
-  { key: "file", label: "File upload", render: () => <FileUploadForm /> },
-  { key: "derived", label: "Derived", render: () => <DerivedFieldForm /> },
-  { key: "tag", label: "Tags", render: () => <TagInputForm /> },
-  { key: "perf", label: "Perf", render: () => <PerfBenchmarkForm /> },
-  {
-    key: "muiCheckout",
-    label: "MUI: Checkout",
-    render: () => (
-      <MuiThemeBridge>
-        <MuiCheckoutWizard />
-      </MuiThemeBridge>
-    ),
-  },
-  {
-    key: "muiJob",
-    label: "MUI: Job form",
-    render: () => (
-      <MuiThemeBridge>
-        <MuiJobApplication />
-      </MuiThemeBridge>
-    ),
-  },
-  {
-    key: "muiInvoice",
-    label: "MUI: Invoice",
-    render: () => (
-      <MuiThemeBridge>
-        <MuiInvoiceBuilder />
-      </MuiThemeBridge>
-    ),
-  },
-  {
-    key: "muiSettings",
-    label: "MUI: Settings",
-    render: () => (
-      <MuiThemeBridge>
-        <MuiProfileSettings />
-      </MuiThemeBridge>
-    ),
-  },
-  {
-    key: "muiSurvey",
-    label: "MUI: Survey",
-    render: () => (
-      <MuiThemeBridge>
-        <MuiSurveyBuilder />
-      </MuiThemeBridge>
-    ),
-  },
-  {
-    key: "onboardingMui",
-    label: "MUI: Onboarding",
-    render: () => (
-      <MuiThemeBridge>
-        <MuiOnboardingForm />
-      </MuiThemeBridge>
-    ),
-  },
-  shadcnTab("shadSignup", "shadcn: Signup", ShadcnSignupForm),
-  shadcnTab("shadCheckout", "shadcn: Checkout", ShadcnCheckoutForm),
-  shadcnTab("shadSettings", "shadcn: Settings", ShadcnSettingsForm),
-  shadcnTab("shadTeam", "shadcn: Team", ShadcnTeamForm),
-  shadcnTab("onboardingShadcn", "shadcn: Onboarding", ShadcnOnboardingForm),
-  {
-    key: "cliCommand",
-    label: "CLI command builder",
-    render: () => <CliCommandBuilder />,
-  },
-  {
-    key: "schemaBuilder",
-    label: "Schema builder",
-    render: () => <SchemaBuilder />,
-  },
-  {
-    key: "genMui",
-    label: "Onboarding (CLI output)",
-    render: () => (
-      <MuiThemeBridge>
-        <GeneratedOnboardingDemo />
-      </MuiThemeBridge>
-    ),
-  },
-  {
-    key: "genKitchenSink",
-    label: "Gen: kitchen sink",
-    render: () => <GeneratedKitchenSinkDemo />,
-  },
-  {
-    key: "genDeepNest",
-    // The single-file layout exports no form instance (useForm inside the
-    // component), so there is nothing to register with useDemoForm: the
-    // View state panel stays empty, like the builder tabs.
-    label: "Gen: deep nesting",
-    render: () => <DeepBoundaryForm />,
-  },
-  {
-    key: "genArrayStress",
-    label: "Gen: nested arrays",
-    render: () => <GeneratedNestedArrayStressDemo />,
-  },
+    })),
+  ),
   // The three kit demos are the SAME Onboarding schema and the same
   // chrome (--sections panel --columns 2) as the mui tab above, with the
   // --ui backend varying, but note the layouts differ too: the mui tab is
   // --layout module (it doubles as the module-layout showcase), while
   // these three are single-file. Flipping between the four tabs still
   // compares the kit backends directly; just remember the file structure
-  // axis. Single-file layout: useForm lives inside the component, so (like
-  // genDeepNest) there is no form instance to register with useDemoForm.
-  {
-    key: "genChakra",
-    label: "Gen: Chakra UI",
-    render: () => (
-      <ChakraBridge>
-        <ChakraOnboardingForm />
-      </ChakraBridge>
-    ),
-  },
-  {
-    key: "genMantine",
-    label: "Gen: Mantine",
-    render: () => (
-      <MantineBridge>
-        <MantineOnboardingForm />
-      </MantineBridge>
-    ),
-  },
-  {
-    key: "genAntd",
-    label: "Gen: Ant Design",
-    render: () => (
-      <AntdBridge>
-        <AntdOnboardingForm />
-      </AntdBridge>
-    ),
-  },
-  {
-    key: "genLive",
-    label: "Gen: live + form prop",
-    render: () => <FlightSearchLive />,
-  },
-];
+  // axis. Each kit's provider bridge lives in the lazy module with the
+  // generated form, so the kit itself loads with its tab.
+  genChakra: demo("Gen: Chakra UI", "none", pick(() => import("./demo/ChakraBridge"), "ChakraOnboardingDemo")),
+  genMantine: demo("Gen: Mantine", "none", pick(() => import("./demo/MantineBridge"), "MantineOnboardingDemo")),
+  genAntd: demo("Gen: Ant Design", "none", pick(() => import("./demo/AntdBridge"), "AntdOnboardingDemo")),
+  genLive: demo("Gen: live + form prop", "none", pick(() => import("./forms/FlightSearchLive"), "FlightSearchLive")),
+};
+
+const TAB_KEYS = Object.keys(DEMOS) as readonly TabKey[];
+
+// Object.fromEntries loses the key set (it returns a string index signature),
+// so this keeps the exhaustive Record type across a per-value map; the cast
+// is sound because the entries are the input's own keys.
+const mapValues = <K extends string, V, R>(
+  record: Readonly<Record<K, V>>,
+  map: (value: V) => R,
+): Readonly<Record<K, R>> =>
+  Object.fromEntries(
+    Object.entries<V>(record).map(([key, value]) => [key, map(value)]),
+  ) as Readonly<Record<K, R>>;
+
+// One lazy component per tab, created once at module scope: React.lazy
+// caches the resolved module, and a fresh lazy() per render would remount
+// the demo (and refetch) on every shell re-render.
+const LAZY_DEMOS: Readonly<Record<TabKey, ComponentType>> = mapValues(
+  DEMOS,
+  (entry) => lazy(entry.load),
+);
+
+type WrapperProps = Readonly<{ children: ReactNode }>;
+
+const Unwrapped = ({ children }: WrapperProps) => <>{children}</>;
+
+// shadcn's MuiThemeBridge equivalent: the Tailwind theme variables and the
+// scoped preflight both key off .shadcn-scope. Every shadcn demo goes
+// through this wrapper so a new tab can't forget the scope (an unwrapped
+// demo renders unthemed and unreset).
+const ShadcnScope = ({ children }: WrapperProps) => (
+  <div className="shadcn-scope">{children}</div>
+);
+
+// Exhaustive over Wrap: a new wrapper kind without a component is a compile
+// error.
+const WRAPPERS: Readonly<Record<Wrap, ComponentType<WrapperProps>>> = {
+  none: Unwrapped,
+  mui: MuiThemeBridge,
+  shadcn: ShadcnScope,
+};
 
 type GroupTitle =
   | "Core"
@@ -523,7 +339,10 @@ const GROUP_TITLES: readonly GroupTitle[] = [
 
 const GROUPS = GROUP_TITLES.map((title) => ({
   title,
-  tabs: TABS.filter((tab) => GROUP_OF[tab.key] === title),
+  tabs: TAB_KEYS.filter((key) => GROUP_OF[key] === title).map((key) => ({
+    key,
+    label: DEMOS[key].label,
+  })),
 }));
 
 // Every demo gets a direct link: the tab key in kebab-case after "#/"
@@ -533,7 +352,7 @@ const slugOf = (key: TabKey): string =>
   key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
 
 const KEY_BY_SLUG: Readonly<Record<string, TabKey>> = Object.fromEntries(
-  TABS.map((tab) => [slugOf(tab.key), tab.key]),
+  TAB_KEYS.map((key) => [slugOf(key), key]),
 );
 
 const tabFromHash = (): TabKey | undefined =>
@@ -653,7 +472,9 @@ export const App = () => {
   const { active, select } = useHashTab("basic");
   const { mode, toggle } = useThemeModeState();
   const [navOpen, setNavOpen] = useState(false);
-  const current = TABS.find((t) => t.key === active);
+  const current = DEMOS[active];
+  const Demo = LAZY_DEMOS[active];
+  const Wrapper = WRAPPERS[current.wrap];
   const choose = (key: TabKey) => {
     select(key);
     // Picking a demo from the mobile drawer should land you ON the demo.
@@ -803,18 +624,18 @@ export const App = () => {
 
     <main className="content">
       <div className="content-inner">
-        {current !== undefined ? (
-          <DemoShell
-            key={current.key}
-            eyebrow={GROUP_OF[current.key]}
-            title={current.label}
-            blurb={BLURBS[current.key]}
-            wide={WIDE_DEMOS.has(current.key)}
-            files={DEMO_SOURCES[current.key]}
-          >
-            {current.render()}
-          </DemoShell>
-        ) : null}
+        <DemoShell
+          key={active}
+          eyebrow={GROUP_OF[active]}
+          title={current.label}
+          blurb={BLURBS[active]}
+          wide={WIDE_DEMOS.has(active)}
+          files={DEMO_SOURCES[active]}
+        >
+          <Wrapper>
+            <Demo />
+          </Wrapper>
+        </DemoShell>
       </div>
     </main>
   </div>

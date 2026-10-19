@@ -3,10 +3,14 @@ import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutl
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import { MuiThemeBridge } from "../mui/MuiThemeBridge";
-import type { DemoFile } from "./demoSources";
+
+// Only the path matters to the tree, so it accepts both the shell's static
+// file list (sources not yet loaded) and the Schema builder's generated
+// files (sources in hand); the tree renders before any source text arrives.
+type TreePath = Readonly<{ path: string }>;
 
 export type FileTreeProps = Readonly<{
-  files: readonly DemoFile[];
+  files: readonly TreePath[];
   selected: string;
   onSelect: (path: string) => void;
 }>;
@@ -19,7 +23,7 @@ type TreeNode = Readonly<{
 
 // Fold the flat path list into a folder tree, preserving the incoming file
 // order (demoSources sorts modules into reading order).
-const buildTree = (files: readonly DemoFile[]): readonly TreeNode[] =>
+const buildTree = (files: readonly TreePath[]): readonly TreeNode[] =>
   files.reduce<readonly TreeNode[]>((nodes, file) => {
     const segments = file.path.split("/");
     const insert = (

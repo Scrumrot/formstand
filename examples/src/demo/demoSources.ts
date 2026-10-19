@@ -1,50 +1,55 @@
-/// <reference path="./raw.d.ts" />
 // The triple-slash reference (not vite/client) carries the `*?raw` module
-// declaration into every program that pulls this file in: the root
-// typecheck and the vitest smoke test compile it without Vite's types.
-import arraySrc from "../forms/ArrayForm.tsx?raw";
-import asyncSrc from "../forms/AsyncForm.tsx?raw";
-import autosaveSrc from "../forms/AutosaveForm.tsx?raw";
-import basicSrc from "../forms/BasicForm.tsx?raw";
-import boundSrc from "../forms/BoundFieldsForm.tsx?raw";
-import cliCommandSrc from "../forms/CliCommandBuilder.tsx?raw";
-import onboardingInputSchemaSrc from "../forms/OnboardingForm/schema.ts?raw";
-import antdOnboardingSrc from "../generated/AntdOnboardingForm.tsx?raw";
-import chakraOnboardingSrc from "../generated/ChakraOnboardingForm.tsx?raw";
-import deepBoundarySrc from "../generated/DeepBoundaryForm.tsx?raw";
-import mantineOnboardingSrc from "../generated/MantineOnboardingForm.tsx?raw";
-import schemaBuilderSrc from "../forms/SchemaBuilder/SchemaBuilder.tsx?raw";
-import schemaBuilderSchemaSrc from "../forms/SchemaBuilder/builderSchema.ts?raw";
-import schemaBuilderGenerateSrc from "../forms/SchemaBuilder/generate.ts?raw";
-import schemaBuilderZipSrc from "../forms/SchemaBuilder/zip.ts?raw";
-import schemaBuilderParseSrc from "../forms/SchemaBuilder/parseTypeScript.ts?raw";
-import conditionalSrc from "../forms/ConditionalForm.tsx?raw";
-import contextSrc from "../forms/ContextForm.tsx?raw";
-import dependentSrc from "../forms/DependentFieldsForm.tsx?raw";
-import derivedSrc from "../forms/DerivedFieldForm.tsx?raw";
-import fileSrc from "../forms/FileUploadForm.tsx?raw";
-import flightSearchLiveSrc from "../forms/FlightSearchLive.tsx?raw";
-import flightSearchFormSrc from "../generated/FlightSearchForm.tsx?raw";
-import flightSearchSchemaSrc from "../generated/flightSearchSchema.ts?raw";
-import hooksFactorySrc from "../forms/HooksFactoryForm.tsx?raw";
-import invoiceSrc from "../forms/InvoiceForm.tsx?raw";
-import nestedArraysSrc from "../forms/NestedArraysForm.tsx?raw";
-import nestedSrc from "../forms/NestedForm.tsx?raw";
-import actionsSrc from "../forms/ActionsForm.tsx?raw";
-import optimisticSrc from "../forms/OptimisticForm.tsx?raw";
-import perfSrc from "../forms/PerfBenchmarkForm.tsx?raw";
-import serverSrc from "../forms/ServerErrorsForm.tsx?raw";
-import tagSrc from "../forms/TagInputForm.tsx?raw";
-import wizardSrc from "../forms/WizardForm.tsx?raw";
-import muiCheckoutSrc from "../mui/MuiCheckoutWizard.tsx?raw";
-import muiInvoiceSrc from "../mui/MuiInvoiceBuilder.tsx?raw";
-import muiJobSrc from "../mui/MuiJobApplication.tsx?raw";
-import muiSettingsSrc from "../mui/MuiProfileSettings.tsx?raw";
-import muiSurveySrc from "../mui/MuiSurveyBuilder.tsx?raw";
-import shadCheckoutSrc from "../shadcn/ShadcnCheckoutForm.tsx?raw";
-import shadSettingsSrc from "../shadcn/ShadcnSettingsForm.tsx?raw";
-import shadSignupSrc from "../shadcn/ShadcnSignupForm.tsx?raw";
-import shadTeamSrc from "../shadcn/ShadcnTeamForm.tsx?raw";
+// declaration and the import.meta.glob slice into every program that pulls
+// this file in, so the root typecheck and the vitest smoke test compile it
+// without Vite's types. An `import type` cannot carry ambient declarations,
+// hence the directive the lint rule would otherwise flag.
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference -- see above
+/// <reference path="./raw.d.ts" />
+
+// Every demo's source is a FILE LIST, static so the View code panel's tree
+// renders the moment it opens, with the source TEXT behind a loader. The
+// loaders are non-eager import.meta.glob entries: Vite emits one small
+// chunk per file and fetches it on demand, where the eager version used to
+// inline ~436 kB of demo text into the main bundle for a panel most visits
+// never open.
+export type DemoSourceFile = Readonly<{
+  path: string;
+  load: () => Promise<string>;
+}>;
+
+// A loaded file, what CodeView and the StackBlitz seed consume.
+export type DemoFile = Readonly<{ path: string; source: string }>;
+
+type RawLoaders = Readonly<Record<string, () => Promise<string>>>;
+
+// One map of every raw-text loader the playground can show, keyed by the
+// glob's relative path. Module folders are globbed whole so a new field
+// file joins its demo's tree without a registration line here.
+const RAW: RawLoaders = {
+  ...import.meta.glob("../forms/*.tsx", { query: "?raw", import: "default" }),
+  ...import.meta.glob("../forms/OnboardingForm/**/*.{ts,tsx}", {
+    query: "?raw",
+    import: "default",
+  }),
+  ...import.meta.glob("../forms/SchemaBuilder/*.{ts,tsx}", {
+    query: "?raw",
+    import: "default",
+  }),
+  ...import.meta.glob("../mui/*.tsx", { query: "?raw", import: "default" }),
+  ...import.meta.glob("../mui/OnboardingForm/**/*.{ts,tsx}", {
+    query: "?raw",
+    import: "default",
+  }),
+  ...import.meta.glob("../shadcn/*.tsx", { query: "?raw", import: "default" }),
+  ...import.meta.glob("../shadcn/OnboardingForm/**/*.{ts,tsx}", {
+    query: "?raw",
+    import: "default",
+  }),
+  ...import.meta.glob("../generated/**/*.{ts,tsx}", {
+    query: "?raw",
+    import: "default",
+  }),
+};
 
 // The playground shell adds a one-line useDemoForm registration (plus its
 // import) to every demo so the "View state" panel works. Those lines are
@@ -56,13 +61,19 @@ const stripHarness = (source: string): string =>
     .filter((line) => !line.includes("useDemoForm"))
     .join("\n");
 
-// Every demo's source is a file list: single-file demos hold one entry,
-// module demos (Onboarding) hold the whole folder; the shell shows a file
-// tree when there is more than one.
-export type DemoFile = Readonly<{ path: string; source: string }>;
+// A loader for one glob key. A key the glob did not match resolves to a
+// visible marker instead of throwing: the panel then shows the problem and
+// the smoke test's "source contains useForm(" assertion fails on it, which
+// is louder than a rejected promise swallowed by an effect.
+const loaderFor = (key: string): (() => Promise<string>) => {
+  const load = RAW[key];
+  return load === undefined
+    ? () => Promise.resolve(`// no raw source registered for ${key}`)
+    : () => load().then(stripHarness);
+};
 
-const single = (path: string, raw: string): readonly DemoFile[] => [
-  { path, source: stripHarness(raw) },
+const single = (path: string, key: string): readonly DemoSourceFile[] => [
+  { path, load: loaderFor(key) },
 ];
 
 // Reading order for the module demos' file trees.
@@ -86,128 +97,88 @@ const moduleRank = (path: string): number => {
   return index === -1 ? MODULE_ORDER.length : index;
 };
 
-const moduleFiles = (
-  globbed: Readonly<Record<string, string>>,
-  prefix: string,
-): readonly DemoFile[] =>
-  Object.entries(globbed)
-    .map(([path, raw]) => ({
-      path: path.replace(prefix, ""),
-      source: stripHarness(raw),
-    }))
+// Every glob entry under `prefix`, pathed relative to it and sorted into
+// reading order.
+const moduleFiles = (prefix: string): readonly DemoSourceFile[] =>
+  Object.keys(RAW)
+    .filter((key) => key.startsWith(prefix))
+    .map((key) => ({ path: key.replace(prefix, ""), load: loaderFor(key) }))
     .sort(
       (a, b) =>
         moduleRank(a.path) - moduleRank(b.path) ||
         a.path.localeCompare(b.path),
     );
 
-const onboardingFiles = moduleFiles(
-  import.meta.glob("../forms/OnboardingForm/**/*.{ts,tsx}", {
-    query: "?raw",
-    import: "default",
-    eager: true,
-  }),
-  "../forms/OnboardingForm/",
-);
-
-const onboardingMuiFiles = moduleFiles(
-  import.meta.glob("../mui/OnboardingForm/**/*.{ts,tsx}", {
-    query: "?raw",
-    import: "default",
-    eager: true,
-  }),
-  "../mui/OnboardingForm/",
-);
-
-const onboardingShadcnFiles = moduleFiles(
-  import.meta.glob("../shadcn/OnboardingForm/**/*.{ts,tsx}", {
-    query: "?raw",
-    import: "default",
-    eager: true,
-  }),
-  "../shadcn/OnboardingForm/",
-);
-
 // In zod mode the CLI RE-EXPORTS the input schema rather than copying it, so
 // this module's schema.ts is one line pointing at ../../forms/OnboardingForm.
-// That file is outside the glob, which left the flagship "here is what the
-// generator emits" demo unable to show the schema that drove it, the one
-// file a reader most wants. Append the input alongside the module's own
-// files, pathed so it reads as the input rather than part of the output.
-const generatedMuiFiles: readonly DemoFile[] = [
-  ...moduleFiles(
-    import.meta.glob("../generated/OnboardingForm/**/*.{ts,tsx}", {
-      query: "?raw",
-      import: "default",
-      eager: true,
-    }),
-    "../generated/OnboardingForm/",
-  ),
+// That file is outside the module folder, which left the flagship "here is
+// what the generator emits" demo unable to show the schema that drove it,
+// the one file a reader most wants. Append the input alongside the module's
+// own files, pathed so it reads as the input rather than part of the output.
+const generatedMuiFiles: readonly DemoSourceFile[] = [
+  ...moduleFiles("../generated/OnboardingForm/"),
   {
     path: "(input) forms/OnboardingForm/schema.ts",
-    source: stripHarness(onboardingInputSchemaSrc),
+    load: loaderFor("../forms/OnboardingForm/schema.ts"),
   },
 ];
 
-const kitchenSinkFiles = moduleFiles(
-  import.meta.glob("../generated/KitchenSinkForm/**/*.{ts,tsx}", {
-    query: "?raw",
-    import: "default",
-    eager: true,
-  }),
-  "../generated/KitchenSinkForm/",
-);
-
-const nestedArrayStressFiles = moduleFiles(
-  import.meta.glob("../generated/NestedArrayStressForm/**/*.{ts,tsx}", {
-    query: "?raw",
-    import: "default",
-    eager: true,
-  }),
-  "../generated/NestedArrayStressForm/",
-);
-
 const sources = {
-  basic: single("BasicForm.tsx", basicSrc),
-  bound: single("BoundFieldsForm.tsx", boundSrc),
-  context: single("ContextForm.tsx", contextSrc),
-  hooksFactory: single("HooksFactoryForm.tsx", hooksFactorySrc),
-  onboarding: onboardingFiles,
-  nested: single("NestedForm.tsx", nestedSrc),
-  array: single("ArrayForm.tsx", arraySrc),
-  async: single("AsyncForm.tsx", asyncSrc),
-  wizard: single("WizardForm.tsx", wizardSrc),
-  conditional: single("ConditionalForm.tsx", conditionalSrc),
-  invoice: single("InvoiceForm.tsx", invoiceSrc),
-  nestedArrays: single("NestedArraysForm.tsx", nestedArraysSrc),
-  server: single("ServerErrorsForm.tsx", serverSrc),
-  autosave: single("AutosaveForm.tsx", autosaveSrc),
-  dependent: single("DependentFieldsForm.tsx", dependentSrc),
-  actions: single("ActionsForm.tsx", actionsSrc),
-  optimistic: single("OptimisticForm.tsx", optimisticSrc),
-  file: single("FileUploadForm.tsx", fileSrc),
-  derived: single("DerivedFieldForm.tsx", derivedSrc),
-  tag: single("TagInputForm.tsx", tagSrc),
-  perf: single("PerfBenchmarkForm.tsx", perfSrc),
-  muiCheckout: single("MuiCheckoutWizard.tsx", muiCheckoutSrc),
-  muiJob: single("MuiJobApplication.tsx", muiJobSrc),
-  muiInvoice: single("MuiInvoiceBuilder.tsx", muiInvoiceSrc),
-  muiSettings: single("MuiProfileSettings.tsx", muiSettingsSrc),
-  muiSurvey: single("MuiSurveyBuilder.tsx", muiSurveySrc),
-  onboardingMui: onboardingMuiFiles,
+  basic: single("BasicForm.tsx", "../forms/BasicForm.tsx"),
+  bound: single("BoundFieldsForm.tsx", "../forms/BoundFieldsForm.tsx"),
+  context: single("ContextForm.tsx", "../forms/ContextForm.tsx"),
+  hooksFactory: single("HooksFactoryForm.tsx", "../forms/HooksFactoryForm.tsx"),
+  onboarding: moduleFiles("../forms/OnboardingForm/"),
+  nested: single("NestedForm.tsx", "../forms/NestedForm.tsx"),
+  array: single("ArrayForm.tsx", "../forms/ArrayForm.tsx"),
+  async: single("AsyncForm.tsx", "../forms/AsyncForm.tsx"),
+  wizard: single("WizardForm.tsx", "../forms/WizardForm.tsx"),
+  conditional: single("ConditionalForm.tsx", "../forms/ConditionalForm.tsx"),
+  invoice: single("InvoiceForm.tsx", "../forms/InvoiceForm.tsx"),
+  nestedArrays: single("NestedArraysForm.tsx", "../forms/NestedArraysForm.tsx"),
+  server: single("ServerErrorsForm.tsx", "../forms/ServerErrorsForm.tsx"),
+  autosave: single("AutosaveForm.tsx", "../forms/AutosaveForm.tsx"),
+  dependent: single(
+    "DependentFieldsForm.tsx",
+    "../forms/DependentFieldsForm.tsx",
+  ),
+  actions: single("ActionsForm.tsx", "../forms/ActionsForm.tsx"),
+  optimistic: single("OptimisticForm.tsx", "../forms/OptimisticForm.tsx"),
+  file: single("FileUploadForm.tsx", "../forms/FileUploadForm.tsx"),
+  derived: single("DerivedFieldForm.tsx", "../forms/DerivedFieldForm.tsx"),
+  tag: single("TagInputForm.tsx", "../forms/TagInputForm.tsx"),
+  perf: single("PerfBenchmarkForm.tsx", "../forms/PerfBenchmarkForm.tsx"),
+  muiCheckout: single("MuiCheckoutWizard.tsx", "../mui/MuiCheckoutWizard.tsx"),
+  muiJob: single("MuiJobApplication.tsx", "../mui/MuiJobApplication.tsx"),
+  muiInvoice: single("MuiInvoiceBuilder.tsx", "../mui/MuiInvoiceBuilder.tsx"),
+  muiSettings: single("MuiProfileSettings.tsx", "../mui/MuiProfileSettings.tsx"),
+  muiSurvey: single("MuiSurveyBuilder.tsx", "../mui/MuiSurveyBuilder.tsx"),
+  onboardingMui: moduleFiles("../mui/OnboardingForm/"),
   genMui: generatedMuiFiles,
-  genKitchenSink: kitchenSinkFiles,
+  genKitchenSink: moduleFiles("../generated/KitchenSinkForm/"),
   // The untouched single-file DeepBoundaryForm.tsx next to the module
   // folders: its l1...l8 leaves sit exactly AT formstand's FieldPath budget
   // (9 segments) and bind real controls, while the l9 level's 10-segment
   // leaf exceeds it; the CLI degrades that subtree to a `// TODO`.
-  genDeepNest: single("DeepBoundaryForm.tsx", deepBoundarySrc),
-  genArrayStress: nestedArrayStressFiles,
+  genDeepNest: single(
+    "DeepBoundaryForm.tsx",
+    "../generated/DeepBoundaryForm.tsx",
+  ),
+  genArrayStress: moduleFiles("../generated/NestedArrayStressForm/"),
   // The three kit demos: one schema (Onboarding), one chrome, three
   // --ui backends, each an untouched single-file output.
-  genChakra: single("ChakraOnboardingForm.tsx", chakraOnboardingSrc),
-  genMantine: single("MantineOnboardingForm.tsx", mantineOnboardingSrc),
-  genAntd: single("AntdOnboardingForm.tsx", antdOnboardingSrc),
+  genChakra: single(
+    "ChakraOnboardingForm.tsx",
+    "../generated/ChakraOnboardingForm.tsx",
+  ),
+  genMantine: single(
+    "MantineOnboardingForm.tsx",
+    "../generated/MantineOnboardingForm.tsx",
+  ),
+  genAntd: single(
+    "AntdOnboardingForm.tsx",
+    "../generated/AntdOnboardingForm.tsx",
+  ),
   // Explicit order: the untouched --live --form-prop output leads (the code
   // panel opens on the exported useFlightSearchForm hook and the
   // onValuesChange prop), then the hand-written consumer page that wires
@@ -215,32 +186,47 @@ const sources = {
   genLive: [
     {
       path: "FlightSearchForm.tsx",
-      source: stripHarness(flightSearchFormSrc),
+      load: loaderFor("../generated/FlightSearchForm.tsx"),
     },
     {
       path: "FlightSearchLive.tsx",
-      source: stripHarness(flightSearchLiveSrc),
+      load: loaderFor("../forms/FlightSearchLive.tsx"),
     },
     {
       path: "flightSearchSchema.ts",
-      source: stripHarness(flightSearchSchemaSrc),
+      load: loaderFor("../generated/flightSearchSchema.ts"),
     },
   ],
-  cliCommand: single("CliCommandBuilder.tsx", cliCommandSrc),
+  cliCommand: single("CliCommandBuilder.tsx", "../forms/CliCommandBuilder.tsx"),
   // Explicit order (not the module glob): the component leads so the code
-  // panel opens on the useForm call, then the schema and the emitter bridge.
+  // panel opens on the useForm call, then the schema, the emitter bridge,
+  // the import modal and the two parsers it calls, then the zip writer.
+  // Every file SchemaBuilder.tsx imports is listed: a reader who copies
+  // the demo needs the parsers too, and the eval notice in the paste tab
+  // points at parseZod.ts by name.
   schemaBuilder: [
-    { path: "SchemaBuilder.tsx", source: stripHarness(schemaBuilderSrc) },
-    { path: "builderSchema.ts", source: stripHarness(schemaBuilderSchemaSrc) },
-    { path: "generate.ts", source: stripHarness(schemaBuilderGenerateSrc) },
-    { path: "parseTypeScript.ts", source: stripHarness(schemaBuilderParseSrc) },
-    { path: "zip.ts", source: stripHarness(schemaBuilderZipSrc) },
-  ],
-  shadSignup: single("ShadcnSignupForm.tsx", shadSignupSrc),
-  shadCheckout: single("ShadcnCheckoutForm.tsx", shadCheckoutSrc),
-  shadSettings: single("ShadcnSettingsForm.tsx", shadSettingsSrc),
-  shadTeam: single("ShadcnTeamForm.tsx", shadTeamSrc),
-  onboardingShadcn: onboardingShadcnFiles,
+    "SchemaBuilder.tsx",
+    "builderSchema.ts",
+    "generate.ts",
+    "ImportModal.tsx",
+    "parseTypeScript.ts",
+    "parseZod.ts",
+    "zip.ts",
+  ].map((path) => ({
+    path,
+    load: loaderFor(`../forms/SchemaBuilder/${path}`),
+  })),
+  shadSignup: single("ShadcnSignupForm.tsx", "../shadcn/ShadcnSignupForm.tsx"),
+  shadCheckout: single(
+    "ShadcnCheckoutForm.tsx",
+    "../shadcn/ShadcnCheckoutForm.tsx",
+  ),
+  shadSettings: single(
+    "ShadcnSettingsForm.tsx",
+    "../shadcn/ShadcnSettingsForm.tsx",
+  ),
+  shadTeam: single("ShadcnTeamForm.tsx", "../shadcn/ShadcnTeamForm.tsx"),
+  onboardingShadcn: moduleFiles("../shadcn/OnboardingForm/"),
 } as const;
 
 // App.tsx derives its TabKey from this map, so the tab list and the source
@@ -248,5 +234,15 @@ const sources = {
 export type DemoSourceKey = keyof typeof sources;
 
 export const DEMO_SOURCES: Readonly<
-  Record<DemoSourceKey, readonly DemoFile[]>
+  Record<DemoSourceKey, readonly DemoSourceFile[]>
 > = sources;
+
+// Resolve a demo's file list to loaded sources, in list order.
+export const loadDemoFiles = (
+  files: readonly DemoSourceFile[],
+): Promise<readonly DemoFile[]> =>
+  Promise.all(
+    files.map((file) =>
+      file.load().then((source) => ({ path: file.path, source })),
+    ),
+  );
