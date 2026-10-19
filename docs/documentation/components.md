@@ -36,7 +36,9 @@ Props:
 | `NumberField` | `form`, `path`, `label?`, `placeholder?`, `ref?` |
 | `DateField` | `form`, `path`, `label?`, `min?`, `max?`, `ref?` |
 | `CheckboxField` | `form`, `path`, `label?`, `ref?` |
-| `SelectField<T>` | `form`, `path`, `label?`, `options` (`{ value: T; label: ReactNode }[]`), `placeholder?`, `ref?` |
+| `SelectField` | `form`, `path`, `label?`, `options` (`readonly SelectFieldOption<SelectValueAt<F, P>>[]`, that is `{ value; label: ReactNode }` with `value` narrowed to the field's own string union), `placeholder?`, `ref?` |
+
+`path` is typed **by value**, not just by existence: `TextField` accepts the schema's string-valued paths, `NumberField` number-valued, `DateField` `Date`-valued, `CheckboxField` boolean-valued, and `SelectField` string-valued (optional and nullable fields qualify in each case). `<TextField form={form} path="age" />` on a `z.number()` is a compile error, which is the same rule `textInputProps(useField(form, "age"))` always enforced. `SelectField` goes one step further: `SelectFieldProps<F, P>` is generic over the form and the chosen path, and each option's `value` is checked against that path's own string union, so an option a `z.enum([...])` does not list is a compile error where it is written. The rule is spelled `PathsAccepting<F, V>` in the [API reference](./api/components).
 
 Each renders a `div.zf-field` wrapping an optional `<label>` (correctly associated via `htmlFor`/`id`), the input, and the field's first error message in a `span.zf-error`. Style them with those class names.
 
@@ -50,7 +52,7 @@ Every bound component ships with:
 - The error message rendered with `role="alert"`, so assistive tech announces it when it appears.
 - A `ref` prop forwarding to the underlying `<input>`/`<select>` (object refs and callback refs both work), for custom focus logic. For "focus this field now" you rarely need one, since [`focusField(path)`](./recipes#focus-a-field-imperatively) finds the control by its `name`.
 
-Because every bound component takes the `form` itself, `path` is checked against the schema: on a real `Form<TSchema>` a typo'd `path` is a compile error, and template-literal paths like `` `users.${index}.email` `` in array rows still typecheck, following the same rules as [typed paths](./typed-paths) everywhere else.
+Because every bound component takes the `form` itself, `path` is checked against the schema: on a real `Form<TSchema>` a typo'd `path` is a compile error, so is a path whose value the control cannot hold (see the by-value rule above), and template-literal paths like `` `users.${index}.email` `` in array rows still typecheck, following the same rules as [typed paths](./typed-paths) everywhere else.
 
 ## Prop builders for custom markup
 
