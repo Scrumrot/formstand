@@ -196,7 +196,11 @@ const resolvePointer = (root: unknown, pointer: string): unknown => {
     .reduce<unknown>(
       (node, segment) =>
         isRecord(node)
-          ? node[segment]
+          ? // Own keys only: "#/components/constructor" must miss, not
+            // land on Object.prototype.constructor.
+            Object.hasOwn(node, segment)
+            ? node[segment]
+            : undefined
           : Array.isArray(node)
             ? node[Number(segment)]
             : undefined,
@@ -877,8 +881,11 @@ const selectSchema = (
         name: /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(last) ? last : undefined,
       };
     }
+    // Own keys only: `--schema constructor` (or toString, __proto__) used to
+    // resolve a prototype member and generate a degraded form named after
+    // it instead of reporting that no such schema exists.
     const store = NAME_STORES.map((segments) => storeAt(root, segments)).find(
-      (candidate) => candidate !== null && candidate[select] !== undefined,
+      (candidate) => candidate !== null && Object.hasOwn(candidate, select),
     );
     if (store === null || store === undefined) {
       const available = NAME_STORES.flatMap((segments) => {
