@@ -28,6 +28,7 @@ import {
   commentText,
   DEGRADED_PIN,
   degradedPin,
+  lineCommentText,
   isAutocompleteLeaf,
   isTextareaLeaf,
   describedLeafKinds,
@@ -2404,9 +2405,11 @@ const fieldFile = (
       `  label = ${q(field.label)},`,
       ...optionsProps.map((name) => `  ${name},`),
       `}: ${propsType}) => {`,
-      ...todoTexts(field.spec).map((text) => `  // TODO: ${text}`),
+      // Line comments: a line terminator inside schema-derived text would
+      // end the comment and run the rest as code (see lineCommentText).
+      ...todoTexts(field.spec).map((text) => `  // TODO: ${lineCommentText(text)}`),
       ...(isAutocompleteLeaf(field.spec)
-        ? [`  // ${autocompleteSiteComment(field.spec)}`]
+        ? [`  // ${lineCommentText(autocompleteSiteComment(field.spec))}`]
         : []),
       ...(degraded
         ? [

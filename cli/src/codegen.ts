@@ -195,8 +195,25 @@ export const jsxText = (value: string): string => `{${q(value)}}`;
 export const templateEscape = (value: string): string =>
   value.replace(/[\\`]|\$\{/g, (match) => `\\${match}`);
 
-// Block-comment body: "*/" would end the comment early.
-export const commentText = (value: string): string => value.replace(/\*\//g, "*\\/");
+// Line-comment body: a `//` comment ends at the first LineTerminator, and
+// JavaScript knows four (\n, \r, U+2028, U+2029). Schema-derived text (a
+// JSON Schema $ref or type string, a TODO built from either) reaches
+// `// TODO: ...` lines in generated TypeScript, so a terminator inside it
+// would turn the rest of the text into CODE in the user's module (a $ref of
+// "#/x\n  injected: z.string(), //" minted a real property). Every run of
+// terminators collapses to one space; the text stays readable, the comment
+// stays a comment. Applied at every `//` emission site that carries
+// schema text, and to the stderr mirror of the same text.
+export const lineCommentText = (value: string): string =>
+  value.replace(/[\r\n\u2028\u2029]+/g, " ");
+
+// Block-comment body: "*/" would end the comment early. Line terminators
+// are collapsed here too: a block comment survives them, but a TODO is one
+// line everywhere it appears (block comment, line comment, stderr), so the
+// three mirrors read the same and a hostile document cannot spread one
+// TODO over the lines below it.
+export const commentText = (value: string): string =>
+  lineCommentText(value).replace(/\*\//g, "*\\/");
 
 export const pascalJoin = (segments: readonly string[]): string =>
   segments.map(pascalCase).join("");
@@ -708,7 +725,7 @@ const zodExpr = (spec: FieldSpec, level: number): string => {
       case "object": {
         const fields = spec.fields.flatMap((field) => [
           ...(field.spec.todo !== undefined
-            ? [`${ind(level + 1)}// TODO: ${field.spec.todo}`]
+            ? [`${ind(level + 1)}// TODO: ${lineCommentText(field.spec.todo)}`]
             : []),
           `${ind(level + 1)}${propKey(field.name)}: ${zodExpr(field.spec, level + 1)},`,
         ]);
@@ -723,7 +740,7 @@ const zodExpr = (spec: FieldSpec, level: number): string => {
             `${ind(level + 2)}${propKey(spec.discriminant)}: z.literal(${q(variant.tag)}),`,
             ...variant.fields.flatMap((field) => [
               ...(field.spec.todo !== undefined
-                ? [`${ind(level + 2)}// TODO: ${field.spec.todo}`]
+                ? [`${ind(level + 2)}// TODO: ${lineCommentText(field.spec.todo)}`]
                 : []),
               `${ind(level + 2)}${propKey(field.name)}: ${zodExpr(field.spec, level + 2)},`,
             ]),

@@ -39,6 +39,7 @@ import {
   emitTemplateForm,
   emitZodSchema,
   collectOptionsProps,
+  lineCommentText,
   overBudgetFieldPaths,
   todoFieldPaths,
   truncatedFieldPaths,
@@ -1062,6 +1063,15 @@ const stderr = (text: string): void => {
   process.stderr.write(`${text}\n`);
 };
 
+// A warning is ONE line. Field paths and TODO texts come from the schema
+// document (a JSON Schema key or $ref can hold a newline), and a line
+// terminator inside the warning would let the document forge a second
+// line ("wrote src/Evil.tsx") on the terminal. Same sanitizer the emitters
+// apply to `//` comments, so the two mirrors agree.
+const warn = (text: string): void => {
+  stderr(lineCommentText(text));
+};
+
 const firstLine = (e: unknown): string =>
   (e instanceof Error ? e.message : String(e)).split("\n")[0] ?? "";
 
@@ -1093,7 +1103,7 @@ const warnDegradedBindings = (
   specRequested: boolean,
 ): void => {
   unaddressableFieldPaths(ir).forEach((fieldPath) => {
-    stderr(
+    warn(
       `warning: field "${fieldPath}" skipped, "." in a key is not path-addressable (see formstand docs)`,
     );
   });
@@ -1103,7 +1113,7 @@ const warnDegradedBindings = (
   // different frontiers, so the walk is told which one is emitting.
   overBudgetFieldPaths(ir, depthWarningFrontier(layout), pathBudget).forEach(
     (fieldPath) => {
-      stderr(
+      warn(
         `warning: path "${fieldPath}" exceeds formstand's typed FieldPath depth (${pathBudget}); emitted a TODO, raise --path-depth or bind it by hand`,
       );
     },
@@ -1112,14 +1122,14 @@ const warnDegradedBindings = (
   // string-kind placeholders whose kind may be wrong, the initialValues
   // cast keeps the file compiling, but the field needs hand attention.
   truncatedFieldPaths(ir).forEach((fieldPath) => {
-    stderr(
+    warn(
       `warning: path "${fieldPath}" exceeds the walker nesting budget (${walkerBudget}); field degraded to a placeholder, raise --max-depth or bind by hand`,
     );
   });
   // Defaults the capture guard or the emitter refused start blank despite
   // the schema's .default(), never silently.
   droppedDefaultFieldPaths(ir).forEach((fieldPath) => {
-    stderr(
+    warn(
       `warning: field "${fieldPath}" has a .default() the CLI could not capture (non-primitive, non-deterministic, or degraded field); it starts blank, seed it by hand`,
     );
   });
@@ -1131,7 +1141,7 @@ const warnDegradedBindings = (
   todoFieldPaths(ir)
     .filter((site) => site.todo !== NESTING_LIMIT_TODO)
     .forEach((site) => {
-      stderr(`warning: field "${site.path}": ${site.todo}`);
+      warn(`warning: field "${site.path}": ${site.todo}`);
     });
   // Checks the walker does not model (a regex, a multipleOf, a refine, a
   // date bound): the control and schema entry are still right, but the
@@ -1141,7 +1151,7 @@ const warnDegradedBindings = (
   // written: without --tests nothing degrades, the component is complete.
   if (specRequested) {
     unmodeledCheckPaths(ir).forEach((site) => {
-      stderr(
+      warn(
         `warning: field "${site.path}" has checks the generator does not model (${site.checks.join(", ")}); the generated spec skips its round trip`,
       );
     });
