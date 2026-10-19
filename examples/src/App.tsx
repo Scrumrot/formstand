@@ -260,7 +260,8 @@ const BLURBS: Readonly<Record<TabKey, string>> = {
     "An async refine username check with debounce, isValidating spinners, and race handling.",
   wizard:
     "Multi-step with useFormSteps: next() gates on the current step, goTo lands on the first invalid step.",
-  conditional: "Fields that appear based on other fields' values.",
+  conditional:
+    "A z.discriminatedUnion payment method: the discriminant binds with useField, the branch-only fields with useVariantField, and the submit payload carries only the active branch.",
   invoice: "A larger, realistic form: line-item arrays with derived totals.",
   nestedArrays: "Arrays inside array rows, with ids stable at both levels.",
   server:
