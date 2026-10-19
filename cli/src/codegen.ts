@@ -2979,6 +2979,25 @@ const PLAIN_BUILDER: Readonly<Record<string, string>> = {
 export const plainBuilderName = (kind: string): string =>
   PLAIN_BUILDER[kind] ?? "textInputProps";
 
+// The plain backend's error-line wiring, shared with the module layout so
+// the two cannot drift. The id derives from the bound path at RUNTIME
+// (`${field.path}-error`), the same way the autocomplete datalist id does:
+// deterministic, unique per field and per array row, and needing no
+// component boundary (so no useId) at a static leaf. `pathExpr` is the
+// expression that yields the path in the emitted code (`path` inside an
+// in-file component, `${fieldVar}.path` at a hoisted leaf). The
+// aria-describedby is attached only while the error shows, like formstand's
+// bound components, so assistive tech is never pointed at an unrendered
+// node; aria-invalid already comes from the prop builders.
+export const plainErrorIdAttr = (pathExpr: string): string =>
+  `id={\`\${${pathExpr}}-error\`}`;
+
+export const plainDescribedByAttr = (
+  fieldVar: string,
+  pathExpr: string,
+): string =>
+  `aria-describedby={${fieldVar}.error?.[0] !== undefined ? \`\${${pathExpr}}-error\` : undefined}`;
+
 // A control rendered from a bound field variable, using the raw prop
 // builders, the discriminant select and every variant field of a union.
 const plainVariantLeaf = (
@@ -2987,9 +3006,11 @@ const plainVariantLeaf = (
   label: string,
   level: number,
 ): readonly string[] => {
+  const pathExpr = `${fieldVar}.path`;
+  const describedBy = plainDescribedByAttr(fieldVar, pathExpr);
   const error = [
     `${ind(level + 1)}{${fieldVar}.error?.[0] !== undefined ? (`,
-    `${ind(level + 2)}<p role="alert">{${fieldVar}.error?.[0]}</p>`,
+    `${ind(level + 2)}<p ${plainErrorIdAttr(pathExpr)} role="alert">{${fieldVar}.error?.[0]}</p>`,
     `${ind(level + 1)}) : null}`,
   ];
   // The always-visible muted helper line, plain keeps the description in
@@ -3005,7 +3026,7 @@ const plainVariantLeaf = (
       return [
         `${ind(level)}<div className="zf-field">`,
         `${ind(level + 1)}<label className="zf-label">`,
-        `${ind(level + 2)}<input {...checkboxProps(${fieldVar})} /> ${jsxText(label)}`,
+        `${ind(level + 2)}<input {...checkboxProps(${fieldVar})} ${describedBy} /> ${jsxText(label)}`,
         `${ind(level + 1)}</label>`,
         ...desc,
         ...error,
@@ -3015,7 +3036,7 @@ const plainVariantLeaf = (
       return [
         `${ind(level)}<div className="zf-field">`,
         `${ind(level + 1)}<label className="zf-label">${jsxText(label)}</label>`,
-        `${ind(level + 1)}<select {...selectProps(${fieldVar})}>`,
+        `${ind(level + 1)}<select {...selectProps(${fieldVar})} ${describedBy}>`,
         `${ind(level + 2)}<option value="">{"Select…"}</option>`,
         ...spec.options.map(
           (option) =>
@@ -3032,7 +3053,7 @@ const plainVariantLeaf = (
       return [
         `${ind(level)}<div className="zf-field">`,
         `${ind(level + 1)}<label className="zf-label">${jsxText(label)}</label>`,
-        `${ind(level + 1)}<input {...${PLAIN_BUILDER[spec.kind]}(${fieldVar})} />`,
+        `${ind(level + 1)}<input {...${PLAIN_BUILDER[spec.kind]}(${fieldVar})} ${describedBy} />`,
         ...desc,
         ...error,
         `${ind(level)}</div>`,
@@ -3076,7 +3097,11 @@ const plainAutocompleteBody = (
   '    <div className="zf-field">',
   '      <label className="zf-label">',
   "        {label}",
-  "        <input list={`${path}-datalist`} {...textInputProps(field)} />",
+  "        <input",
+  "          list={`${path}-datalist`}",
+  "          {...textInputProps(field)}",
+  `          ${plainDescribedByAttr("field", "path")}`,
+  "        />",
   "      </label>",
   "      <datalist id={`${path}-datalist`}>",
   "        {options.map((option) => (",
@@ -3084,7 +3109,7 @@ const plainAutocompleteBody = (
   "        ))}",
   "      </datalist>",
   "      {field.error?.[0] !== undefined ? (",
-  '        <p role="alert">{field.error?.[0]}</p>',
+  `        <p ${plainErrorIdAttr("path")} role="alert">{field.error?.[0]}</p>`,
   "      ) : null}",
   "    </div>",
   "  );",
@@ -3107,10 +3132,14 @@ const PLAIN_TEXTAREA_BODY: readonly string[] = [
   '    <div className="zf-field">',
   '      <label className="zf-label">',
   "        {label}",
-  "        <textarea rows={3} {...textInputProps(field)} />",
+  "        <textarea",
+  "          rows={3}",
+  "          {...textInputProps(field)}",
+  `          ${plainDescribedByAttr("field", "path")}`,
+  "        />",
   "      </label>",
   "      {field.error?.[0] !== undefined ? (",
-  '        <p role="alert">{field.error?.[0]}</p>',
+  `        <p ${plainErrorIdAttr("path")} role="alert">{field.error?.[0]}</p>`,
   "      ) : null}",
   "    </div>",
   "  );",
@@ -3140,10 +3169,13 @@ const PLAIN_PLACEHOLDER_BODY: readonly string[] = [
   '    <div className="zf-field">',
   '      <label className="zf-label">',
   "        {label}",
-  "        <input {...textInputProps(field)} />",
+  "        <input",
+  "          {...textInputProps(field)}",
+  `          ${plainDescribedByAttr("field", "path")}`,
+  "        />",
   "      </label>",
   "      {field.error?.[0] !== undefined ? (",
-  '        <p role="alert">{field.error?.[0]}</p>',
+  `        <p ${plainErrorIdAttr("path")} role="alert">{field.error?.[0]}</p>`,
   "      ) : null}",
   "    </div>",
   "  );",
@@ -3183,7 +3215,10 @@ const PLAIN_ENUM_SELECT_BODY: readonly string[] = [
   '    <div className="zf-field">',
   '      <label className="zf-label">',
   "        {label}",
-  "        <select {...selectProps(field)}>",
+  "        <select",
+  "          {...selectProps(field)}",
+  `          ${plainDescribedByAttr("field", "path")}`,
+  "        >",
   '          <option value="">{placeholder}</option>',
   "          {options.map((option) => (",
   "            <option key={option.value} value={option.value}>",
@@ -3193,7 +3228,7 @@ const PLAIN_ENUM_SELECT_BODY: readonly string[] = [
   "        </select>",
   "      </label>",
   "      {field.error?.[0] !== undefined ? (",
-  '        <p role="alert">{field.error?.[0]}</p>',
+  `        <p ${plainErrorIdAttr("path")} role="alert">{field.error?.[0]}</p>`,
   "      ) : null}",
   "    </div>",
   "  );",

@@ -87,7 +87,9 @@ describe("textarea override: emission", () => {
       schemaImport: { name: "profileSchema", from: "./schema", kind: "named" },
     });
     expect(plain).toContain("const TextareaField = ");
-    expect(plain).toContain("<textarea rows={3} {...textInputProps(field)} />");
+    expect(plain).toContain(
+      "<textarea\n          rows={3}\n          {...textInputProps(field)}",
+    );
   });
 
   it("composes with span: the widened cell wraps the textarea control", () => {

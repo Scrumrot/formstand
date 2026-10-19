@@ -29,7 +29,7 @@ describe("TS-enum-backed z.enum compiles in the plain single-file layout", () =>
     // The runtime values are still the enum's values, not its keys.
     expect(plain.code).toContain('{ value: "red", label: "Red" }');
     expect(plain.code).not.toContain('value: "Red"');
-    expect(plain.code).toContain("<select {...selectProps(field)}>");
+    expect(plain.code).toContain("<select\n          {...selectProps(field)}");
   });
 
   it("the walker marks the enum as TS-enum-backed", () => {

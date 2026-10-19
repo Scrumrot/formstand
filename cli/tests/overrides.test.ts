@@ -366,7 +366,11 @@ describe("single-file overrides emission", () => {
   it("plain renders the in-file AutocompleteField with a native datalist", () => {
     expect(plain.code).toContain("const AutocompleteField = ({");
     expect(plain.code).toContain(
-      "<input list={`${path}-datalist`} {...textInputProps(field)} />",
+      "<input\n          list={`${path}-datalist`}\n          {...textInputProps(field)}",
+    );
+    // The control is described by its error line (see plainAria.test.ts).
+    expect(plain.code).toContain(
+      "aria-describedby={field.error?.[0] !== undefined ? `${path}-error` : undefined}",
     );
     expect(plain.code).toContain("<datalist id={`${path}-datalist`}>");
     expect(plain.code).toContain(
@@ -565,7 +569,11 @@ describe("module-layout overrides emission", () => {
     expect(icao).toContain(
       "// autocomplete override: suggestions from the icaoOptions prop; free text stays allowed",
     );
-    expect(icao).toContain("<input list={`${field.path}-datalist`} {...textInputProps(field)} />");
+    expect(icao).toContain("list={`${field.path}-datalist`}");
+    expect(icao).toContain("{...textInputProps(field)}");
+    expect(icao).toContain(
+      "aria-describedby={field.error?.[0] !== undefined ? `${field.path}-error` : undefined}",
+    );
     expect(icao).toContain("{icaoOptions.map((option) => (");
     // A section-nested leaf (meta.region) threads through its field file
     // too.

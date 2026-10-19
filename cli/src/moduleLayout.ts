@@ -47,6 +47,8 @@ import {
   overDepthBudget,
   pathSegmentCount,
   plainBuilderName,
+  plainDescribedByAttr,
+  plainErrorIdAttr,
   variantLeavesOf,
   propKey,
   q,
@@ -833,12 +835,16 @@ const autocompleteLeafJsx = (
         `${indent}<div>`,
         `${indent}  <label>`,
         `${indent}    ${labelAttr}`,
-        `${indent}    <input list=${listAttr} {...textInputProps(${varName})} />`,
+        `${indent}    <input`,
+        `${indent}      list=${listAttr}`,
+        `${indent}      {...textInputProps(${varName})}`,
+        `${indent}      ${plainDescribedByAttr(varName, `${varName}.path`)}`,
+        `${indent}    />`,
         `${indent}  </label>`,
         ...datalist,
         ...desc,
         `${indent}  {${varName}.error?.[0] !== undefined ? (`,
-        `${indent}    <p role="alert">{${varName}.error?.[0]}</p>`,
+        `${indent}    <p ${plainErrorIdAttr(`${varName}.path`)} role="alert">{${varName}.error?.[0]}</p>`,
         `${indent}  ) : null}`,
         `${indent}</div>`,
       ];
@@ -962,10 +968,14 @@ const leafJsx = (
   }
   switch (ui) {
     case "plain": {
+      // The error line's id and the control's aria-describedby, from the
+      // bound path at runtime (see plainDescribedByAttr in codegen): one
+      // derivation for the single-file backend and this layout.
+      const describedBy = plainDescribedByAttr(varName, `${varName}.path`);
       const control =
         spec.kind === "enum"
           ? [
-              `${indent}    <select {...selectProps(${varName})}>`,
+              `${indent}    <select {...selectProps(${varName})} ${describedBy}>`,
               `${indent}      <option value="">{"Select…"}</option>`,
               ...spec.options.map(
                 (option) =>
@@ -974,9 +984,11 @@ const leafJsx = (
               `${indent}    </select>`,
             ]
           : isTextareaLeaf(spec)
-            ? [`${indent}    <textarea rows={3} {...textInputProps(${varName})} />`]
+            ? [
+                `${indent}    <textarea rows={3} {...textInputProps(${varName})} ${describedBy} />`,
+              ]
             : [
-                `${indent}    <input {...${plainBuilderName(spec.kind)}(${varName})} />`,
+                `${indent}    <input {...${plainBuilderName(spec.kind)}(${varName})} ${describedBy} />`,
               ];
       // The always-visible muted helper line, plain keeps the description
       // in its own slot next to the error line (mirrors the single-file
@@ -995,7 +1007,7 @@ const leafJsx = (
         `${indent}  </label>`,
         ...desc,
         `${indent}  {${varName}.error?.[0] !== undefined ? (`,
-        `${indent}    <p role="alert">{${varName}.error?.[0]}</p>`,
+        `${indent}    <p ${plainErrorIdAttr(`${varName}.path`)} role="alert">{${varName}.error?.[0]}</p>`,
         `${indent}  ) : null}`,
         `${indent}</div>`,
       ];
