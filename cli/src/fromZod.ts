@@ -528,6 +528,15 @@ const walkNode = (
       // z.enum([...]) list maps each value to itself. The distinction is
       // what tells the emitters z.input is the enum TYPE (see ir.ts).
       const tsEnum = entries.some(([key, value]) => key !== value);
+      // zod constructs z.enum([]) without complaint and then rejects every
+      // value, so a select with no option and a schema no submit can pass
+      // would be emitted as if it were fine. Named instead.
+      if (options !== null && options.length === 0) {
+        return fallback(
+          flags,
+          "empty enum has no option to choose from; defaulted to string",
+        );
+      }
       return options !== null
         ? {
             kind: "enum",

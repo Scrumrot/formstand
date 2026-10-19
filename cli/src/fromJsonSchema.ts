@@ -91,19 +91,34 @@ const lengthChecksOf = (
   return Object.keys(checks).length === 0 ? undefined : checks;
 };
 
-// Draft 2020-12 exclusiveMinimum/exclusiveMaximum are numbers (draft-04's
-// boolean flag form is ignored: a `true` beside `minimum` would need the
-// bound re-read from `minimum`, and no modern generator emits it). When both
-// an inclusive and an exclusive bound exist, the tighter one wins; ties go
-// exclusive since it is the stricter of the two.
+// Draft 2020-12 exclusiveMinimum/exclusiveMaximum are numbers; draft-04
+// spelled them as a boolean flag beside minimum/maximum (`minimum: 5,
+// exclusiveMinimum: true`), still common in hand-written and older
+// generated documents, and ignoring the flag silently loosened the bound to
+// inclusive. The flag reads as the bound itself in exclusive form. When
+// both an inclusive and an exclusive bound exist, the tighter one wins;
+// ties go exclusive since it is the stricter of the two.
+const exclusiveBound = (
+  flagOrValue: unknown,
+  inclusive: number | undefined,
+): number | undefined =>
+  flagOrValue === true ? inclusive : finiteKeyword(flagOrValue);
+
+// multipleOf rides into the validator only when it is a positive finite
+// number (zod's .multipleOf() rejects 0 and negatives at parse time).
+const multipleOfKeyword = (value: unknown): number | undefined => {
+  const n = finiteKeyword(value);
+  return n !== undefined && n > 0 ? n : undefined;
+};
+
 const numberChecksOf = (
   schema: JsonRecord,
   int: boolean,
 ): NumberChecks | undefined => {
   const min = finiteKeyword(schema["minimum"]);
-  const xmin = finiteKeyword(schema["exclusiveMinimum"]);
+  const xmin = exclusiveBound(schema["exclusiveMinimum"], min);
   const max = finiteKeyword(schema["maximum"]);
-  const xmax = finiteKeyword(schema["exclusiveMaximum"]);
+  const xmax = exclusiveBound(schema["exclusiveMaximum"], max);
   const lower: Pick<NumberChecks, "min" | "minExclusive"> =
     xmin !== undefined && (min === undefined || xmin >= min)
       ? { min: xmin, minExclusive: true }
@@ -116,6 +131,7 @@ const numberChecksOf = (
     ...(int ? { int: true } : {}),
     ...lower,
     ...upper,
+    ...boundProps("multipleOf", multipleOfKeyword(schema["multipleOf"])),
   };
   return Object.keys(checks).length === 0 ? undefined : checks;
 };
@@ -123,10 +139,49 @@ const numberChecksOf = (
 const checksProps = <T>(checks: T | undefined): Readonly<{ checks?: T }> =>
   checks === undefined ? {} : { checks };
 
-// RFC 6901: "/" and "~" in a property name are escaped as ~1 and ~0; ~1
-// must be unescaped first or "~01" would round-trip wrong.
+const unmodeledProps = (
+  names: readonly string[],
+): Readonly<{ unmodeledChecks?: readonly string[] }> =>
+  names.length === 0 ? {} : { unmodeledChecks: names };
+
+// Whether a `pattern` compiles under JavaScript's RegExp. JSON Schema
+// patterns are ECMA-262 dialect by specification, but documents carry
+// PCRE-isms (possessive quantifiers, inline flags) that RegExp refuses, and
+// `.regex(new RegExp(...))` with one of those would throw when the generated
+// module LOADS, in every consumer. The try/catch is the operator-input
+// boundary: the outcome is a value the walker switches on.
+type PatternOutcome =
+  | Readonly<{ kind: "compiles" }>
+  | Readonly<{ kind: "invalid"; reason: string }>;
+
+const compilePattern = (pattern: string): PatternOutcome => {
+  try {
+    // RegExp is callable without `new`; only the throw matters here.
+    RegExp(pattern);
+    return { kind: "compiles" };
+  } catch (e) {
+    return {
+      kind: "invalid",
+      reason: e instanceof Error ? e.message : String(e),
+    };
+  }
+};
+
+// RFC 6901 in a URI fragment: percent-decoding comes first (a "#/$defs/
+// My%20Type" pointer names the "My Type" key), THEN "~1" and "~0" unescape
+// to "/" and "~", ~1 before ~0 or "~01" would round-trip wrong. A malformed
+// percent sequence is operator input, not a crash: the segment is kept as
+// typed and the lookup simply misses.
+const percentDecode = (segment: string): string => {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+};
+
 const unescapePointerSegment = (segment: string): string =>
-  segment.replace(/~1/g, "/").replace(/~0/g, "~");
+  percentDecode(segment).replace(/~1/g, "/").replace(/~0/g, "~");
 
 // Resolve a "#/a/b" pointer against the document root. Returns undefined for
 // a dangling pointer, the two callers disagree on how loud that is (a
@@ -209,7 +264,13 @@ const descriptionProps = (
 };
 
 // `enum` of strings → the IR enum; `const` is a single-option enum, the same
-// reading fromZod/fromType give a lone string literal.
+// reading fromZod/fromType give a lone string literal. A `null` entry in
+// the list is how OpenAPI 3.0 (`nullable: true`) and 3.1 (`type:
+// ["string", "null"]`) both spell a nullable enum, the list must repeat
+// the null for the value to validate, so it is the nullable flag, not an
+// option: stripped and marked. An empty list (or one that was only null)
+// has no option to pick and no value a submit could carry, so it is named
+// rather than emitted as `z.enum([])`.
 const enumSpec = (schema: JsonRecord, flags: Flags): FieldSpec | null => {
   const constValue = schema["const"];
   if (constValue !== undefined) {
@@ -219,26 +280,75 @@ const enumSpec = (schema: JsonRecord, flags: Flags): FieldSpec | null => {
   }
   const raw = schema["enum"];
   if (raw === undefined) return null;
-  const options = stringArray(raw);
+  if (!Array.isArray(raw)) {
+    return fallback(flags, "non-string enum; defaulted to string");
+  }
+  const nonNull = raw.filter((entry) => entry !== null);
+  const withNull: Flags = {
+    ...flags,
+    nullable: flags.nullable || nonNull.length < raw.length,
+  };
+  if (nonNull.length === 0) {
+    return fallback(
+      withNull,
+      "empty enum has no option to choose from; defaulted to string",
+    );
+  }
+  const options = stringArray(nonNull);
   return options !== null
-    ? { kind: "enum", options, ...flags }
-    : fallback(flags, "non-string enum; defaulted to string");
+    ? { kind: "enum", options, ...withNull }
+    : fallback(withNull, "non-string enum; defaulted to string");
 };
 
-// Each branch resolved one $ref level (discriminated-union branches are
-// almost always written as refs into components/schemas), NOT walked, the
-// caller decides what the branch set means before spending depth on it.
+const withoutKeys = (
+  record: JsonRecord,
+  keys: readonly string[],
+): JsonRecord =>
+  Object.fromEntries(
+    Object.entries(record).filter(([key]) => !keys.includes(key)),
+  );
+
+// One composition branch, resolved but NOT walked (the caller decides what
+// the branch set means before spending depth on it): $ref chains are
+// followed to their end (`Alias2 -> Alias -> Base`), and a branch that is
+// itself an allOf is flattened to one object schema, so `Leaf: allOf
+// [Mid, ...]` over `Mid: allOf [Base, ...]` merges all the way down. The
+// seen-set is the cycle guard for refs that loop (`A: allOf [{$ref A}]`):
+// a repeat resolves to undefined, which no merge accepts, so the caller
+// degrades with a TODO instead of recursing forever. A dangling $ref stays
+// as written so the walk can name it. An allOf that will not merge stays
+// as written too; walking it one level down reports why.
+const resolveBranch = (
+  branch: unknown,
+  ctx: Context,
+  seen: ReadonlySet<unknown>,
+): unknown => {
+  if (!isRecord(branch)) return branch;
+  if (seen.has(branch)) return undefined;
+  const nextSeen: ReadonlySet<unknown> = new Set([...seen, branch]);
+  const ref = branch["$ref"];
+  if (typeof ref === "string") {
+    const target = resolvePointer(ctx.root, ref);
+    return target === undefined ? branch : resolveBranch(target, ctx, nextSeen);
+  }
+  const allOf = branch["allOf"];
+  if (Array.isArray(allOf)) {
+    const merged = mergedAllOf(
+      allOf.map((inner) => resolveBranch(inner, ctx, nextSeen)),
+      withoutKeys(branch, ["allOf"]),
+    );
+    return merged ?? branch;
+  }
+  return branch;
+};
+
+// Discriminated-union branches are almost always written as refs into
+// components/schemas; each is resolved (chains and nested allOf included).
 const resolvedBranches = (
   branches: readonly unknown[],
   ctx: Context,
 ): readonly unknown[] =>
-  branches.map((branch) => {
-    if (!isRecord(branch)) return branch;
-    const ref = branch["$ref"];
-    return typeof ref === "string"
-      ? (resolvePointer(ctx.root, ref) ?? branch)
-      : branch;
-  });
+  branches.map((branch) => resolveBranch(branch, ctx, new Set()) ?? branch);
 
 // oneOf/anyOf where every branch is a string const → an enum (the JSON
 // Schema idiom for enums-with-descriptions).
@@ -407,26 +517,42 @@ const objectSpec = (
   };
 };
 
-// allOf merging: every branch (after one $ref resolution) must be an object
-// schema; their properties merge (later branches win a name collision, the
-// composition-order rule) and their required lists union. Deeper allOf
-// algebra (branch-level constraints on the same property) is out of scope,
-// the merged properties walk as written.
+// An allOf branch that can take part in an object merge: an object schema
+// (typed so, or untyped with `properties`), or a constraint-only branch
+// (`{ required: [...] }`, `{ description }`) that adds no member. Anything
+// typed as something else (a string enum, say) cannot merge into members.
+const mergeableObject = (branch: unknown): JsonRecord | null =>
+  isRecord(branch) &&
+  (branch["type"] === undefined || branch["type"] === "object") &&
+  (branch["properties"] === undefined || isRecord(branch["properties"]))
+    ? branch
+    : null;
+
+// allOf merging: every resolved branch must be mergeable (see above); their
+// properties merge (later branches win a name collision, the
+// composition-order rule) and their required lists union. The OUTER
+// schema's own keywords survive the merge: 3.0 documents hang `nullable`,
+// `description`, and `default` on the allOf site, and dropping them made
+// `{ allOf: [{$ref}], nullable: true }` a required object. The outer's own
+// `properties`/`required` (2020-12 allows them beside allOf) join as the
+// last branch. Deeper allOf algebra (branch-level constraints on the same
+// property) is out of scope, the merged properties walk as written.
 const mergedAllOf = (
   branches: readonly unknown[],
-  ctx: Context,
+  outer: JsonRecord,
 ): JsonRecord | null => {
-  const objects = resolvedBranches(branches, ctx).map((branch) =>
-    isRecord(branch) && isRecord(branch["properties"]) ? branch : null,
-  );
+  const objects = [...branches, outer].map(mergeableObject);
   if (!objects.every((branch): branch is JsonRecord => branch !== null)) {
     return null;
   }
   return {
+    ...withoutKeys(outer, ["properties", "required"]),
     type: "object",
     properties: Object.fromEntries(
       objects.flatMap((branch) =>
-        Object.entries(branch["properties"] as JsonRecord),
+        isRecord(branch["properties"])
+          ? Object.entries(branch["properties"])
+          : [],
       ),
     ),
     required: objects.flatMap((branch) => stringArray(branch["required"]) ?? []),
@@ -519,17 +645,44 @@ const walkNode = (
         `$ref "${ref}" does not resolve; defaulted to string`,
       );
     }
-    return walk(target, flags, ctx, depth);
+    // 3.0's `{ $ref, nullable: true }`: the flag sits at the SITE, and the
+    // walk of the target returned before the type switch's nullable merge
+    // could see it. (The site's description and default are applied by the
+    // enclosing walk(), outermost wins.)
+    return walk(
+      target,
+      { ...flags, nullable: flags.nullable || schema["nullable"] === true },
+      ctx,
+      depth,
+    );
   }
   const allOf = schema["allOf"];
   if (Array.isArray(allOf)) {
-    const merged = mergedAllOf(allOf, ctx);
-    return merged !== null
-      ? walkNode(merged, flags, ctx, depth)
-      : fallback(
-          flags,
-          "allOf with non-object branches is not supported; defaulted to string",
-        );
+    const outer = withoutKeys(schema, ["allOf"]);
+    const resolved = allOf.map((branch) =>
+      resolveBranch(branch, ctx, new Set([schema])),
+    );
+    const sole = resolved[0];
+    // A single-branch allOf is 3.0's way to attach description/nullable to
+    // a $ref (keywords beside $ref were ignored before 2020-12): whatever
+    // the branch is, the result is that branch with the site's keywords
+    // layered on top. Walked (not walkNode) so the branch's own description
+    // applies when the site has none, as a plain $ref site would.
+    if (
+      resolved.length === 1 &&
+      isRecord(sole) &&
+      mergeableObject(sole) === null
+    ) {
+      return walk({ ...sole, ...outer }, flags, ctx, depth);
+    }
+    const merged = mergedAllOf(resolved, outer);
+    if (merged !== null) return walkNode(merged, flags, ctx, depth);
+    return fallback(
+      flags,
+      resolved.some((branch) => branch === undefined)
+        ? "allOf branch refers back to itself; defaulted to string"
+        : "allOf with non-object branches is not supported; defaulted to string",
+    );
   }
   const branches = schema["oneOf"] ?? schema["anyOf"];
   if (Array.isArray(branches)) {
@@ -609,18 +762,54 @@ const walkNode = (
             : format === "uuid"
               ? ("uuid" as const)
               : undefined;
-      const checks = checksProps(
-        lengthChecksOf(schema, "minLength", "maxLength"),
-      );
-      return zodFormat === undefined
-        ? { kind: "string", ...checks, ...withNull }
-        : { kind: "string", format: zodFormat, ...checks, ...withNull };
+      // A `pattern` rides into the validator as .regex() when RegExp accepts
+      // it; one it refuses is a TODO (the field would otherwise ship with
+      // the contract silently dropped, which is what this comment promised
+      // not to do). Any other format (ipv4, hostname, binary, ...) keeps a
+      // text control and an unconstrained string: zod has no spelling for
+      // it here. Both the pattern and such a format are recorded as
+      // unmodeled, the generated spec's sample is built blind to them.
+      const pattern = schema["pattern"];
+      const compiled =
+        typeof pattern === "string" ? compilePattern(pattern) : undefined;
+      if (compiled !== undefined && compiled.kind === "invalid") {
+        return fallback(
+          withNull,
+          `pattern ${JSON.stringify(pattern)} is not a valid JavaScript regular expression (${compiled.reason}); defaulted to string`,
+        );
+      }
+      const regex =
+        compiled !== undefined && typeof pattern === "string"
+          ? { regex: pattern }
+          : {};
+      const lengths = lengthChecksOf(schema, "minLength", "maxLength");
+      const checks: StringChecks = { ...lengths, ...regex };
+      const unmodeled = unmodeledProps([
+        ...(compiled === undefined ? [] : ["pattern"]),
+        ...(typeof format === "string" && zodFormat === undefined
+          ? [format]
+          : []),
+      ]);
+      return {
+        kind: "string",
+        ...(zodFormat === undefined ? {} : { format: zodFormat }),
+        ...checksProps(Object.keys(checks).length === 0 ? undefined : checks),
+        ...unmodeled,
+        ...withNull,
+      };
     }
     case "number":
     case "integer":
       return {
         kind: "number",
         ...checksProps(numberChecksOf(schema, typed.type === "integer")),
+        // multipleOf reaches the validator (.multipleOf) but never the
+        // sample, so the spec skips its round trip over it.
+        ...unmodeledProps(
+          multipleOfKeyword(schema["multipleOf"]) === undefined
+            ? []
+            : ["multipleOf"],
+        ),
         ...withNull,
       };
     case "boolean":

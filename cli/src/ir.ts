@@ -104,6 +104,13 @@ export type StringFormat = "email" | "url" | "uuid";
 export type StringChecks = Readonly<{
   minLength?: number;
   maxLength?: number;
+  // A JSON Schema `pattern`, as written, already verified to compile under
+  // JavaScript's RegExp by the walker that set it. Emitted as
+  // `.regex(new RegExp(<source>))`; the generated tests never sample it (the
+  // node also lists "pattern" under unmodeledChecks, so the spec's round
+  // trip is skipped), and no control changes. JSON Schema mode only: zod
+  // mode never re-emits its schema, and types carry no patterns.
+  regex?: string;
 }>;
 
 export type NumberChecks = Readonly<{
@@ -113,6 +120,9 @@ export type NumberChecks = Readonly<{
   minExclusive?: true;
   maxExclusive?: true;
   int?: true;
+  // A JSON Schema `multipleOf`, emitted as `.multipleOf(n)`. Same stance as
+  // `regex`: carried into the validator, not sampled by the tests.
+  multipleOf?: number;
 }>;
 
 export type ArrayChecks = Readonly<{

@@ -689,6 +689,7 @@ const numberChain = (
     minExclusive?: true;
     maxExclusive?: true;
     int?: true;
+    multipleOf?: number;
   }> | undefined,
 ): string =>
   checks === undefined
@@ -701,7 +702,20 @@ const numberChain = (
         ...(checks.max === undefined
           ? []
           : [`.${checks.maxExclusive === true ? "lt" : "lte"}(${checks.max})`]),
+        ...(checks.multipleOf === undefined
+          ? []
+          : [`.multipleOf(${checks.multipleOf})`]),
       ].join("");
+
+// A JSON Schema pattern as `.regex(new RegExp("..."))`, never a regex
+// literal: the source may contain `/`, and JSON.stringify yields a string
+// literal that reads back to exactly the source the walker compiled. The
+// walker only sets `regex` for a pattern RegExp accepts, so the generated
+// module cannot throw at load.
+const regexChain = (checks: Readonly<{ regex?: string }> | undefined): string =>
+  checks?.regex === undefined
+    ? ""
+    : `.regex(new RegExp(${JSON.stringify(checks.regex)}))`;
 
 const zodExpr = (spec: FieldSpec, level: number): string => {
   const base = ((): string => {
@@ -712,7 +726,8 @@ const zodExpr = (spec: FieldSpec, level: number): string => {
         // stays a plain text input, the constraint belongs to validation.
         return (
           (spec.format === undefined ? "z.string()" : `z.${spec.format}()`) +
-          lengthChain(spec.checks)
+          lengthChain(spec.checks) +
+          regexChain(spec.checks)
         );
       case "number":
         return `z.number()${numberChain(spec.checks)}`;

@@ -1,0 +1,94 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "OpenAPI 3.0 idioms", "version": "1.0.0" },
+  "paths": {},
+  "components": {
+    "schemas": {
+      "Status": {
+        "type": "string",
+        "enum": ["active", "inactive"],
+        "description": "The component's own description"
+      },
+      "Base": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string" }
+        }
+      },
+      "Mid": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Base" },
+          {
+            "type": "object",
+            "properties": { "mid": { "type": "string" } }
+          }
+        ]
+      },
+      "Leaf": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Mid" },
+          {
+            "type": "object",
+            "required": ["leaf"],
+            "properties": { "leaf": { "type": "number" } }
+          }
+        ]
+      },
+      "Alias": { "$ref": "#/components/schemas/Base" },
+      "Alias2": { "$ref": "#/components/schemas/Alias" },
+      "My Type": {
+        "type": "object",
+        "properties": { "spaced": { "type": "boolean" } }
+      },
+      "Profile": {
+        "type": "object",
+        "required": ["status", "refStatus", "code", "step", "count", "nothing"],
+        "properties": {
+          "status": {
+            "allOf": [{ "$ref": "#/components/schemas/Status" }],
+            "nullable": true,
+            "description": "Current status"
+          },
+          "refStatus": {
+            "$ref": "#/components/schemas/Status",
+            "nullable": true
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["a", "b", null],
+            "nullable": true
+          },
+          "mode31": {
+            "type": ["string", "null"],
+            "enum": ["x", "y", null]
+          },
+          "leaf": { "$ref": "#/components/schemas/Leaf" },
+          "alias": { "$ref": "#/components/schemas/Alias2" },
+          "spaced": { "$ref": "#/components/schemas/My%20Type" },
+          "merged": {
+            "allOf": [
+              { "$ref": "#/components/schemas/Base" },
+              {
+                "type": "object",
+                "properties": { "extra": { "type": "string" } }
+              }
+            ],
+            "nullable": true,
+            "description": "Merged with outer keywords"
+          },
+          "code": { "type": "string", "pattern": "^[A-Z]{3}$" },
+          "badCode": { "type": "string", "pattern": "(unclosed" },
+          "step": { "type": "number", "multipleOf": 0.5 },
+          "ip": { "type": "string", "format": "ipv4" },
+          "count": {
+            "type": "integer",
+            "minimum": 5,
+            "exclusiveMinimum": true
+          },
+          "nothing": { "type": "string", "enum": [] }
+        }
+      }
+    }
+  }
+}
