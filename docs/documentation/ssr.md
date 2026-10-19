@@ -100,7 +100,9 @@ const [result, saveAction, isPending] = useFormActionState(
 
 A submission that fails validation returns the **previous** state unchanged: the field errors already live in the form store where the bound components read them, so the action state stays what it is: the last verdict an action actually produced.
 
-Two honest notes. This is a *client-side* integration: React's no-JS progressive enhancement only works when the server action itself is passed to the form, which by definition skips any client wrapper. For that path, validate on the server with the same zod schema and treat the bridge as the hydrated experience. And React 19's post-action reset only clears **uncontrolled** fields; formstand inputs are controlled, so the form's values survive the action untouched.
+One rule that holds on every path: a `"use server"` function must parse `data` with the same schema on the server, every time it runs. The bridge validates in the browser before calling the action, but a server action is a network endpoint, and any client can invoke it with arbitrary arguments; the `data` it receives is typed as `z.output<typeof schema>` only because the client promised so. The bridge shapes the hydrated experience (errors in the store, touched fields, pending state); it is not a guard the server can rely on.
+
+Two honest notes. This is a *client-side* integration: React's no-JS progressive enhancement only works when the server action itself is passed to the form, which by definition skips any client wrapper. For that path the server parse above is the only validation there is, and the bridge is the hydrated experience on top of it. And React 19's post-action reset only clears **uncontrolled** fields; formstand inputs are controlled, so the form's values survive the action untouched.
 
 ## Hydration checklist
 
