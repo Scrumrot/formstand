@@ -1,118 +1,6 @@
 # Changelog
 
-## formstand-cli Unreleased
-
-### Fixed
-
-- `--watch` regenerated from a stale module: jiti's runtime module cache
-  survives a fresh `createJiti` per run, so a field added while watching
-  never reached the output. The loader now disables that cache.
-- The config file's `tests` block (`runners`, `renderWrapper`,
-  `playwright.baseURL` / `route`) was read and then dropped as an unknown
-  key, so it never reached the spec emitter. It is now validated with the
-  same loud errors as the other keys and applied: `runners` is the
-  `--tests` default, kit specs render through the configured wrapper, and
-  the Playwright spec is emitted when a base URL is configured.
-- Generated specs no longer fail on their own valid sample. A number
-  bounded on both sides by an exclusive window narrower than one unit
-  (`z.number().gt(0).lt(1)`) sampled the bound itself (0); it now samples
-  the midpoint (0.5), and the bound probe fills distinct bad and good
-  values. A schema with a degraded leaf (a `z.record`, a callable, an
-  unsupported kind) emits its round-trip case as `it.skip` with a comment
-  naming the path, since the stand-in's text sample can never parse.
-- The module layout's field file for a degraded leaf (for example a
-  `z.record`) did not compile: the bound hook inferred the real value type
-  and spread it into a text control. The binding is now pinned to the text
-  control's value type, with the TODO kept above it.
-- OpenAPI 3.0 discriminated unions: a branch tag spelled as a single-value
-  `enum` (3.0 has no `const`) or supplied only through
-  `discriminator.mapping` degraded to a string. All three spellings now
-  walk to the same union, and a branch that still lacks a tag is named in
-  the TODO.
-- Every walker TODO (unsupported zod kinds such as `z.record`, callable
-  types, non-string enums, recursive schemas) is now mirrored on stderr as
-  `warning: field "<path>": <todo>`; only the depth, truncation, dotted-key,
-  and dropped-default degradations were mirrored before.
-- Type mode: a function-typed member was dropped silently (the generated
-  schema lost a key of the type it mirrors); it now becomes the
-  string-plus-TODO placeholder. An index-signature-only object type
-  (`Record<string, number>`) walked to an empty section and an empty
-  `z.object({})`; it now degrades to a TODO like `z.record` does.
-- Discriminant-only union variants (a branch with no fields beyond the
-  tag) emitted an empty `{x.value === "pickup" && (<></>)}` block in every
-  kit and in the module layout. The block is replaced by a one-line comment
-  naming the variant.
-- Generated probe-case titles were duplicated when two sections shared a
-  field label; a repeated label now carries its path in the title
-  (`Email (billing.email) rejects ...`).
-- Plain single-file output did not compile for any degraded leaf (a
-  `z.record`, `z.bigint`, `z.lazy`, `z.any`, a non-string literal or enum,
-  `z.map`): the stand-in was bound as `<TextField path="meta" />`, and the
-  library's bound components now type `path` by value, so a non-text leaf is
-  a compile error. The stand-in now renders an in-file `PlaceholderField`
-  bound through `useField` pinned to the text control's value type, the TODO
-  kept above it. Degraded leaves inside union variants are pinned at their
-  hoisted binding in every single-file backend (the kits failed there too).
-- `z.coerce.number()` / `.date()` / `.boolean()` emitted a typed control
-  whose path the input type (`unknown`) refuses, in both layouts. Coerced
-  schemas now degrade to a TODO stand-in naming the reason.
-- The module layout bound a degraded leaf inside an array row (an object
-  row, a tuple row, a union row) and in a union section without the field
-  file's pin, so those files did not compile. Every row and variant binding
-  now carries the same cast, and the section file imports the type. A
-  variant whose only field is degraded also gets the fragment its TODO
-  comment needs (two JSX nodes under `&& (...)` did not parse).
-- `z.enum(Color)` / `z.nativeEnum(Color)` over a TypeScript enum did not
-  compile in the plain single-file layout: `SelectField` checks each option
-  literal against the field's type, which is the enum itself. The walker
-  marks such enums and plain renders them through an in-file
-  `EnumSelectField` on the raw `selectProps` builder, options unchanged.
-- The generated spec's "filled with valid values" round trip ran live over
-  checks the walker never modeled (`.regex()`, `.startsWith()`,
-  `.multipleOf()`, a `.refine()`, `z.date().min()`, formats such as
-  `z.ipv4()`), and failed on its own sample. The walker now records the
-  unmodeled check kinds per path, the case is emitted as `it.skip` with the
-  paths and reasons in a comment (as it already was for degraded leaves),
-  and `--tests` mirrors each on stderr. The emitted schema is unchanged.
-  The method-form `.email()` / `.url()` / `.uuid()` are now modeled like
-  `z.email()` (blank-invalid, a format probe, the format in the schema).
-- Security: schema text could break out of a `//` comment into generated
-  TypeScript. A JSON Schema `$ref` or `type` string carrying a line
-  terminator (`\n`, `\r`, U+2028, U+2029) reached `// TODO: ...` lines in
-  the emitted schema and module field files, so the text after the
-  terminator became code (a `$ref` of `"#/x\n  injected: z.string(), //"`
-  minted a real property). Every comment and every stderr warning built
-  from schema text now collapses line terminators to a space, so a hostile
-  document can neither add code nor forge a `wrote ...` line.
-- An enum option or union tag containing `"` or `\` broke the generated
-  spec's valid-values literal (interpolated raw where everything else was
-  JSON-quoted).
-- Module layout file names that differed only in case (`email` / `eMail`
-  to `EmailField.tsx` / `EMailField.tsx`) were one file on Windows and
-  macOS, the second overwriting the first. Component names are now deduped
-  case-insensitively (`EMailField2`).
-- The `--template` with `--layout module` error no longer promises module
-  support; it says templates apply to the single-file layout only.
-
-### Changed
-
-- Optional and nullable objects start empty. `billing: address.optional()`
-  used to seed `{ street: "", zip: "" }`, so a blank form carried a billing
-  object nobody filled and could not submit; it now seeds `undefined`
-  (nullable: `null`), like an optional union. This is a behavior change for
-  generated forms: an untouched optional section passes validation on
-  submit. Paths under it stay addressable and materialize on the first
-  write, the `initialValues` cast is no longer forced by their members, and
-  the generated spec's blank-submit case no longer lists them.
-- The module layout's form body is emitted in schema order, interleaving
-  root fields and sections as declared, instead of all root fields first and
-  every section after.
-- The generated-file header now reads
-  `// Generated by formstand-cli: edit freely, this file is yours.`; it and
-  every other emitted string (TODO text, spec titles, help, wizard labels,
-  error messages) no longer contain an em dash.
-
-## Unreleased
+## 0.22.0 — 2026-10-19
 
 ### Fixed
 
@@ -258,6 +146,118 @@
   start.
 - Docs site: reference tables stop stacking at phone width, and the
   dark-mode "Get started" button meets AA contrast.
+
+## formstand-cli 0.23.0 — 2026-10-19
+
+### Fixed
+
+- `--watch` regenerated from a stale module: jiti's runtime module cache
+  survives a fresh `createJiti` per run, so a field added while watching
+  never reached the output. The loader now disables that cache.
+- The config file's `tests` block (`runners`, `renderWrapper`,
+  `playwright.baseURL` / `route`) was read and then dropped as an unknown
+  key, so it never reached the spec emitter. It is now validated with the
+  same loud errors as the other keys and applied: `runners` is the
+  `--tests` default, kit specs render through the configured wrapper, and
+  the Playwright spec is emitted when a base URL is configured.
+- Generated specs no longer fail on their own valid sample. A number
+  bounded on both sides by an exclusive window narrower than one unit
+  (`z.number().gt(0).lt(1)`) sampled the bound itself (0); it now samples
+  the midpoint (0.5), and the bound probe fills distinct bad and good
+  values. A schema with a degraded leaf (a `z.record`, a callable, an
+  unsupported kind) emits its round-trip case as `it.skip` with a comment
+  naming the path, since the stand-in's text sample can never parse.
+- The module layout's field file for a degraded leaf (for example a
+  `z.record`) did not compile: the bound hook inferred the real value type
+  and spread it into a text control. The binding is now pinned to the text
+  control's value type, with the TODO kept above it.
+- OpenAPI 3.0 discriminated unions: a branch tag spelled as a single-value
+  `enum` (3.0 has no `const`) or supplied only through
+  `discriminator.mapping` degraded to a string. All three spellings now
+  walk to the same union, and a branch that still lacks a tag is named in
+  the TODO.
+- Every walker TODO (unsupported zod kinds such as `z.record`, callable
+  types, non-string enums, recursive schemas) is now mirrored on stderr as
+  `warning: field "<path>": <todo>`; only the depth, truncation, dotted-key,
+  and dropped-default degradations were mirrored before.
+- Type mode: a function-typed member was dropped silently (the generated
+  schema lost a key of the type it mirrors); it now becomes the
+  string-plus-TODO placeholder. An index-signature-only object type
+  (`Record<string, number>`) walked to an empty section and an empty
+  `z.object({})`; it now degrades to a TODO like `z.record` does.
+- Discriminant-only union variants (a branch with no fields beyond the
+  tag) emitted an empty `{x.value === "pickup" && (<></>)}` block in every
+  kit and in the module layout. The block is replaced by a one-line comment
+  naming the variant.
+- Generated probe-case titles were duplicated when two sections shared a
+  field label; a repeated label now carries its path in the title
+  (`Email (billing.email) rejects ...`).
+- Plain single-file output did not compile for any degraded leaf (a
+  `z.record`, `z.bigint`, `z.lazy`, `z.any`, a non-string literal or enum,
+  `z.map`): the stand-in was bound as `<TextField path="meta" />`, and the
+  library's bound components now type `path` by value, so a non-text leaf is
+  a compile error. The stand-in now renders an in-file `PlaceholderField`
+  bound through `useField` pinned to the text control's value type, the TODO
+  kept above it. Degraded leaves inside union variants are pinned at their
+  hoisted binding in every single-file backend (the kits failed there too).
+- `z.coerce.number()` / `.date()` / `.boolean()` emitted a typed control
+  whose path the input type (`unknown`) refuses, in both layouts. Coerced
+  schemas now degrade to a TODO stand-in naming the reason.
+- The module layout bound a degraded leaf inside an array row (an object
+  row, a tuple row, a union row) and in a union section without the field
+  file's pin, so those files did not compile. Every row and variant binding
+  now carries the same cast, and the section file imports the type. A
+  variant whose only field is degraded also gets the fragment its TODO
+  comment needs (two JSX nodes under `&& (...)` did not parse).
+- `z.enum(Color)` / `z.nativeEnum(Color)` over a TypeScript enum did not
+  compile in the plain single-file layout: `SelectField` checks each option
+  literal against the field's type, which is the enum itself. The walker
+  marks such enums and plain renders them through an in-file
+  `EnumSelectField` on the raw `selectProps` builder, options unchanged.
+- The generated spec's "filled with valid values" round trip ran live over
+  checks the walker never modeled (`.regex()`, `.startsWith()`,
+  `.multipleOf()`, a `.refine()`, `z.date().min()`, formats such as
+  `z.ipv4()`), and failed on its own sample. The walker now records the
+  unmodeled check kinds per path, the case is emitted as `it.skip` with the
+  paths and reasons in a comment (as it already was for degraded leaves),
+  and `--tests` mirrors each on stderr. The emitted schema is unchanged.
+  The method-form `.email()` / `.url()` / `.uuid()` are now modeled like
+  `z.email()` (blank-invalid, a format probe, the format in the schema).
+- Security: schema text could break out of a `//` comment into generated
+  TypeScript. A JSON Schema `$ref` or `type` string carrying a line
+  terminator (`\n`, `\r`, U+2028, U+2029) reached `// TODO: ...` lines in
+  the emitted schema and module field files, so the text after the
+  terminator became code (a `$ref` of `"#/x\n  injected: z.string(), //"`
+  minted a real property). Every comment and every stderr warning built
+  from schema text now collapses line terminators to a space, so a hostile
+  document can neither add code nor forge a `wrote ...` line.
+- An enum option or union tag containing `"` or `\` broke the generated
+  spec's valid-values literal (interpolated raw where everything else was
+  JSON-quoted).
+- Module layout file names that differed only in case (`email` / `eMail`
+  to `EmailField.tsx` / `EMailField.tsx`) were one file on Windows and
+  macOS, the second overwriting the first. Component names are now deduped
+  case-insensitively (`EMailField2`).
+- The `--template` with `--layout module` error no longer promises module
+  support; it says templates apply to the single-file layout only.
+
+### Changed
+
+- Optional and nullable objects start empty. `billing: address.optional()`
+  used to seed `{ street: "", zip: "" }`, so a blank form carried a billing
+  object nobody filled and could not submit; it now seeds `undefined`
+  (nullable: `null`), like an optional union. This is a behavior change for
+  generated forms: an untouched optional section passes validation on
+  submit. Paths under it stay addressable and materialize on the first
+  write, the `initialValues` cast is no longer forced by their members, and
+  the generated spec's blank-submit case no longer lists them.
+- The module layout's form body is emitted in schema order, interleaving
+  root fields and sections as declared, instead of all root fields first and
+  every section after.
+- The generated-file header now reads
+  `// Generated by formstand-cli: edit freely, this file is yours.`; it and
+  every other emitted string (TODO text, spec titles, help, wizard labels,
+  error messages) no longer contain an em dash.
 
 ## 0.21.0 — 2026-09-23
 
