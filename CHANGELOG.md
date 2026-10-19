@@ -1,5 +1,20 @@
 # Changelog
 
+## formstand-cli Unreleased
+
+### Fixed
+
+- **The plain backend's error lines are described to their controls.** The
+  in-file `AutocompleteField`, `TextareaField`, `PlaceholderField` and
+  `EnumSelectField`, the union variant leaves, and the module layout's field
+  files and array rows emitted a bare `<p role="alert">` with no id and a
+  control with no `aria-describedby`, so assistive tech heard the field but
+  never its message. The error line now owns `${field.path}-error` and the
+  control points at it while the error shows (the same runtime derivation
+  the autocomplete datalist id already used, unique per array row with no
+  `useId`); `aria-invalid` keeps coming from the prop builders. The kit
+  backends were already wired through their own components.
+
 ## Unreleased
 
 ### Docs
@@ -35,6 +50,33 @@
   links to the sections that hold the detail.
 - Roadmap: `--path-depth` moves to the shipped list. The remaining em
   dashes in the roadmap and the VitePress theme comments are reworded.
+- Playground: every demo is a lazy chunk. The main bundle drops from
+  2.95 MB (779 kB gzip) to 381 kB (116 kB gzip) and the main stylesheet
+  from 601 kB to 34 kB; each tab's component, kit and stylesheet load on
+  first visit, and the View code panel fetches source text on demand
+  behind a static file tree. Mantine's sheet loads as its `@layer` variant
+  so the shell's unlayered rules keep winning regardless of load order.
+- Playground: the Conditional demo is a `z.discriminatedUnion` bound with
+  `useField` for the discriminant and `useVariantField` for the branch
+  fields, and the payload carries only the active branch (the flat version
+  submitted the hidden card number alongside the bank fields).
+- Playground: the hand-rolled demos wire each error line to its input
+  (`aria-describedby`, `aria-invalid`, `aria-live`) through one shared
+  helper and focus the first errored control after a failed submit; the
+  View state / View code toggles expose `aria-pressed`; the MUI Invoice,
+  shadcn Team and shadcn Onboarding contact rows label their
+  placeholder-only cells.
+- Playground: the Autosave status reads "Draft restored" after a restore
+  instead of "Unsaved changes"; the Schema builder's Zod paste tab says
+  that pasted code runs in the page and its View code list includes
+  `ImportModal.tsx` and `parseZod.ts`; the Perf demo's inputs follow the
+  theme; the light theme's eyebrow (6.76:1) and muted text (4.88:1) clear
+  the AA floor; the theme preference is written only when the user
+  toggles, so a docs visitor's "auto" survives opening the playground.
+- Playground: the generated kitchen sink's input schema carries human
+  messages on every check, so an empty submit no longer shows zod's raw
+  messages, and the regenerated plain output carries the CLI's new aria
+  wiring. `examples/src` is now linted with the library's rule set.
 
 ## 0.22.0 — 2026-10-19
 
