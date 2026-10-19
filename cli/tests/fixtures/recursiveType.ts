@@ -12,6 +12,9 @@ export type Tree = {
 
 export type WithFunction = {
   name: string;
+  // The bare global type IS the shape under test (the lint rule is right
+  // for application code; here it would remove the case).
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
   fn: Function;
   handler: () => void;
 };
