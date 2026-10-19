@@ -1,12 +1,20 @@
 <script setup lang="ts">
 // "Open in StackBlitz" for the docs' example listings, reusing the
 // playground's own seed builder and demo sources, so there is one source
-// of truth for what a standalone project contains and which demos qualify. The
-// imports are pure data + a click-time DOM POST, so SSR renders nothing
-// stateful. A demo that is not self-contained renders nothing at all,
-// mirroring the playground button's gate.
-import { computed } from "vue";
-import { DEMO_SOURCES, type DemoSourceKey } from "../../../examples/src/demo/demoSources";
+// of truth for what a standalone project contains and which demos qualify.
+// The source map carries LOADERS, not text (the playground fetches each
+// file's source on demand so its main chunk stays small), so the files are
+// loaded here on mount: the server render emits nothing, which also means
+// no hydration mismatch, and the button appears once the imports have been
+// read and the demo proves self-contained. A demo that is not renders
+// nothing at all, mirroring the playground button's gate.
+import { computed, onMounted, ref } from "vue";
+import {
+  DEMO_SOURCES,
+  type DemoFile,
+  type DemoSourceKey,
+  loadDemoFiles,
+} from "../../../examples/src/demo/demoSources";
 import {
   canOpenInStackBlitz,
   openInStackBlitz,
@@ -14,8 +22,16 @@ import {
 
 const props = defineProps<{ demo: DemoSourceKey; title: string }>();
 
-const files = computed(() => DEMO_SOURCES[props.demo] ?? []);
-const openable = computed(() => canOpenInStackBlitz(files.value));
+const loaded = ref<readonly DemoFile[] | null>(null);
+onMounted(() => {
+  void loadDemoFiles(DEMO_SOURCES[props.demo] ?? []).then((files) => {
+    loaded.value = files;
+  });
+});
+const files = computed(() => loaded.value ?? []);
+const openable = computed(
+  () => loaded.value !== null && canOpenInStackBlitz(loaded.value),
+);
 </script>
 
 <template>
