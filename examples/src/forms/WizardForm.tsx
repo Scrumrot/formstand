@@ -10,7 +10,7 @@ import {
 } from "formstand";
 import { useState } from "react";
 import { useDemoForm } from "../demo/DemoShell";
-import { fieldA11y } from "../demo/fieldA11y";
+import { fieldA11y } from "./fieldA11y";
 import { z } from "zod";
 
 // The multi-step story: ONE form and one schema behind a wizard.

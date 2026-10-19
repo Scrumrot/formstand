@@ -27,6 +27,9 @@ type RawLoaders = Readonly<Record<string, () => Promise<string>>>;
 // file joins its demo's tree without a registration line here.
 const RAW: RawLoaders = {
   ...import.meta.glob("../forms/*.tsx", { query: "?raw", import: "default" }),
+  // The shared error-wiring helper the hand-rolled demos import (a .ts file,
+  // so the *.tsx glob above does not reach it).
+  ...import.meta.glob("../forms/fieldA11y.ts", { query: "?raw", import: "default" }),
   ...import.meta.glob("../forms/OnboardingForm/**/*.{ts,tsx}", {
     query: "?raw",
     import: "default",
@@ -74,6 +77,24 @@ const loaderFor = (key: string): (() => Promise<string>) => {
 
 const single = (path: string, key: string): readonly DemoSourceFile[] => [
   { path, load: loaderFor(key) },
+];
+
+// The hand-rolled demos wire their error lines through one shared helper,
+// imported as "./fieldA11y". A demo opens in StackBlitz only when every
+// relative import resolves inside its own file set (canOpenInStackBlitz),
+// and the seeded project lays the set out flat under src/, so the helper
+// ships beside the demo under the same relative path it imports. Leaving it
+// out would hide the button on every one of these demos, in the playground
+// and in the docs, which is exactly what happened when the helper first
+// landed; tests/stackblitz.gate.test.ts pins the pairing.
+const A11Y_HELPER: DemoSourceFile = {
+  path: "fieldA11y.ts",
+  load: loaderFor("../forms/fieldA11y.ts"),
+};
+
+const withA11y = (path: string, key: string): readonly DemoSourceFile[] => [
+  ...single(path, key),
+  A11Y_HELPER,
 ];
 
 // Reading order for the module demos' file trees.
@@ -124,29 +145,29 @@ const generatedMuiFiles: readonly DemoSourceFile[] = [
 ];
 
 const sources = {
-  basic: single("BasicForm.tsx", "../forms/BasicForm.tsx"),
+  basic: withA11y("BasicForm.tsx", "../forms/BasicForm.tsx"),
   bound: single("BoundFieldsForm.tsx", "../forms/BoundFieldsForm.tsx"),
-  context: single("ContextForm.tsx", "../forms/ContextForm.tsx"),
-  hooksFactory: single("HooksFactoryForm.tsx", "../forms/HooksFactoryForm.tsx"),
+  context: withA11y("ContextForm.tsx", "../forms/ContextForm.tsx"),
+  hooksFactory: withA11y("HooksFactoryForm.tsx", "../forms/HooksFactoryForm.tsx"),
   onboarding: moduleFiles("../forms/OnboardingForm/"),
-  nested: single("NestedForm.tsx", "../forms/NestedForm.tsx"),
-  array: single("ArrayForm.tsx", "../forms/ArrayForm.tsx"),
-  async: single("AsyncForm.tsx", "../forms/AsyncForm.tsx"),
-  wizard: single("WizardForm.tsx", "../forms/WizardForm.tsx"),
-  conditional: single("ConditionalForm.tsx", "../forms/ConditionalForm.tsx"),
-  invoice: single("InvoiceForm.tsx", "../forms/InvoiceForm.tsx"),
-  nestedArrays: single("NestedArraysForm.tsx", "../forms/NestedArraysForm.tsx"),
+  nested: withA11y("NestedForm.tsx", "../forms/NestedForm.tsx"),
+  array: withA11y("ArrayForm.tsx", "../forms/ArrayForm.tsx"),
+  async: withA11y("AsyncForm.tsx", "../forms/AsyncForm.tsx"),
+  wizard: withA11y("WizardForm.tsx", "../forms/WizardForm.tsx"),
+  conditional: withA11y("ConditionalForm.tsx", "../forms/ConditionalForm.tsx"),
+  invoice: withA11y("InvoiceForm.tsx", "../forms/InvoiceForm.tsx"),
+  nestedArrays: withA11y("NestedArraysForm.tsx", "../forms/NestedArraysForm.tsx"),
   server: single("ServerErrorsForm.tsx", "../forms/ServerErrorsForm.tsx"),
-  autosave: single("AutosaveForm.tsx", "../forms/AutosaveForm.tsx"),
-  dependent: single(
+  autosave: withA11y("AutosaveForm.tsx", "../forms/AutosaveForm.tsx"),
+  dependent: withA11y(
     "DependentFieldsForm.tsx",
     "../forms/DependentFieldsForm.tsx",
   ),
-  actions: single("ActionsForm.tsx", "../forms/ActionsForm.tsx"),
-  optimistic: single("OptimisticForm.tsx", "../forms/OptimisticForm.tsx"),
-  file: single("FileUploadForm.tsx", "../forms/FileUploadForm.tsx"),
-  derived: single("DerivedFieldForm.tsx", "../forms/DerivedFieldForm.tsx"),
-  tag: single("TagInputForm.tsx", "../forms/TagInputForm.tsx"),
+  actions: withA11y("ActionsForm.tsx", "../forms/ActionsForm.tsx"),
+  optimistic: withA11y("OptimisticForm.tsx", "../forms/OptimisticForm.tsx"),
+  file: withA11y("FileUploadForm.tsx", "../forms/FileUploadForm.tsx"),
+  derived: withA11y("DerivedFieldForm.tsx", "../forms/DerivedFieldForm.tsx"),
+  tag: withA11y("TagInputForm.tsx", "../forms/TagInputForm.tsx"),
   perf: single("PerfBenchmarkForm.tsx", "../forms/PerfBenchmarkForm.tsx"),
   muiCheckout: single("MuiCheckoutWizard.tsx", "../mui/MuiCheckoutWizard.tsx"),
   muiJob: single("MuiJobApplication.tsx", "../mui/MuiJobApplication.tsx"),

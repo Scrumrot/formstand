@@ -6,7 +6,7 @@ import {
   useFormSelector,
 } from "formstand";
 import { useDemoForm } from "../demo/DemoShell";
-import { fieldA11y } from "../demo/fieldA11y";
+import { fieldA11y } from "./fieldA11y";
 import { z } from "zod";
 
 const TAKEN = new Set(["admin", "root", "tim"]);

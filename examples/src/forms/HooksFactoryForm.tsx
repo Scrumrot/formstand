@@ -7,7 +7,7 @@ import {
 } from "formstand";
 import { z } from "zod";
 import { useDemoForm } from "../demo/DemoShell";
-import { fieldA11y } from "../demo/fieldA11y";
+import { fieldA11y } from "./fieldA11y";
 
 const lineItemSchema = z.object({
   description: z.string().min(1, "required"),

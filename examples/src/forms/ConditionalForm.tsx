@@ -7,7 +7,7 @@ import {
   useVariantField,
 } from "formstand";
 import { useDemoForm } from "../demo/DemoShell";
-import { fieldA11y } from "../demo/fieldA11y";
+import { fieldA11y } from "./fieldA11y";
 import { z } from "zod";
 
 // Conditional fields as the schema sees them: ONE discriminated union, not
