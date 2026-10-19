@@ -14,10 +14,10 @@ export const NewsletterField = ({
     <div>
       <label>
         {label}
-        <input {...checkboxProps(field)} />
+        <input {...checkboxProps(field)} aria-describedby={field.error?.[0] !== undefined ? `${field.path}-error` : undefined} />
       </label>
       {field.error?.[0] !== undefined ? (
-        <p role="alert">{field.error?.[0]}</p>
+        <p id={`${field.path}-error`} role="alert">{field.error?.[0]}</p>
       ) : null}
     </div>
   );

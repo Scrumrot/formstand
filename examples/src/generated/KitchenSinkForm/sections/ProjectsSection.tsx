@@ -39,10 +39,10 @@ const ProjectsTagsRow = ({
       <div>
         <label>
           {"Tags"}
-          <input {...textInputProps(field)} />
+          <input {...textInputProps(field)} aria-describedby={field.error?.[0] !== undefined ? `${field.path}-error` : undefined} />
         </label>
         {field.error?.[0] !== undefined ? (
-          <p role="alert">{field.error?.[0]}</p>
+          <p id={`${field.path}-error`} role="alert">{field.error?.[0]}</p>
         ) : null}
       </div>
       <button type="button" onClick={onRemove}>
@@ -87,19 +87,19 @@ const ProjectsRow = ({
       <div>
         <label>
           {"Name"}
-          <input {...textInputProps(name)} />
+          <input {...textInputProps(name)} aria-describedby={name.error?.[0] !== undefined ? `${name.path}-error` : undefined} />
         </label>
         {name.error?.[0] !== undefined ? (
-          <p role="alert">{name.error?.[0]}</p>
+          <p id={`${name.path}-error`} role="alert">{name.error?.[0]}</p>
         ) : null}
       </div>
       <div>
         <label>
           {"Active"}
-          <input {...checkboxProps(active)} />
+          <input {...checkboxProps(active)} aria-describedby={active.error?.[0] !== undefined ? `${active.path}-error` : undefined} />
         </label>
         {active.error?.[0] !== undefined ? (
-          <p role="alert">{active.error?.[0]}</p>
+          <p id={`${active.path}-error`} role="alert">{active.error?.[0]}</p>
         ) : null}
       </div>
       <ProjectsTagsRows p0={index} />

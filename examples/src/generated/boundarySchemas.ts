@@ -11,36 +11,51 @@ import { z } from "zod";
 // Every supported field kind and wrapper in one schema, plus a tuple and a
 // two-level object nest, the "does everything still generate and run"
 // probe.
+// Human messages on every check: the generated form renders them verbatim,
+// and the playground tab used to greet an empty submit with zod's raw
+// "Too small: expected string to have >=2 characters". The messages are
+// input, not output, so they belong here and not in the generated files.
 export const kitchenSinkSchema = z.object({
-  title: z.string().min(2).max(40),
+  title: z
+    .string()
+    .min(2, "title needs at least 2 characters")
+    .max(40, "title is 40 characters at most"),
   contact: z.object({
-    email: z.email(),
+    email: z.email("enter a valid email address"),
     phone: z.string().optional(),
     address: z.object({
-      street: z.string().min(1),
+      street: z.string().min(1, "street is required"),
       city: z.string().default("Springfield"),
       zip: z.string().regex(/^\d{5}$/, "five digits"),
     }),
   }),
-  age: z.int().min(0).max(130),
-  rating: z.number().nullable(),
+  age: z
+    .int("age must be a whole number")
+    .min(0, "age cannot be negative")
+    .max(130, "age must be 130 or less"),
+  rating: z.number("rating must be a number").nullable(),
   newsletter: z.boolean().default(false),
-  birthday: z.date().nullable(),
-  plan: z.enum(["free", "pro", "enterprise"]),
+  birthday: z.date("enter a valid date").nullable(),
+  plan: z.enum(["free", "pro", "enterprise"], "pick a plan"),
   channel: z
     .union([z.literal("email"), z.literal("sms"), z.literal("push")])
     .optional(),
-  coordinates: z.tuple([z.number(), z.number()]),
-  aliases: z.array(z.string().min(1)).max(5),
+  coordinates: z.tuple([
+    z.number("latitude must be a number"),
+    z.number("longitude must be a number"),
+  ]),
+  aliases: z
+    .array(z.string().min(1, "an alias cannot be blank"))
+    .max(5, "five aliases at most"),
   projects: z
     .array(
       z.object({
-        name: z.string().min(1),
+        name: z.string().min(1, "project name is required"),
         tags: z.array(z.string()),
         active: z.boolean(),
       }),
     )
-    .min(1),
+    .min(1, "add at least one project"),
 });
 
 // Nine levels of object nesting straddling formstand's typed-path budget

@@ -15,7 +15,13 @@
 // (src/core/fieldPath.ts), so they bind real controls — while the l9
 // level's 10-segment leaf is past it, so the CLI degrades that subtree to
 // a `// TODO` comment. The `mixed` branch stays comfortably in budget.
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { StrictMode } from "react";
@@ -73,6 +79,39 @@ describe("generated KitchenSinkForm (untouched --layout module output)", () => {
         screen.getByRole("group", { name: new RegExp(`^${legend}`) }),
       ).toBeDefined();
     });
+    expect(console.error).not.toHaveBeenCalled();
+  });
+
+  it("an empty submit shows the fixture's human messages, described to their controls", async () => {
+    render(
+      <StrictMode>
+        <KitchenSinkForm />
+      </StrictMode>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+
+    // The plain backend's error line owns `${path}-error` and the control
+    // points at it through aria-describedby (aria-invalid comes from the
+    // prop builders); the message is the one boundarySchemas.ts wrote,
+    // not zod's raw "Too small: expected string to have >=2 characters".
+    const title = screen.getByLabelText("Title");
+    await waitFor(() => {
+      expect(title.getAttribute("aria-invalid")).toBe("true");
+    });
+    expect(title.getAttribute("aria-describedby")).toBe("title-error");
+    const message = document.getElementById("title-error");
+    expect(message?.getAttribute("role")).toBe("alert");
+    expect(message?.textContent).toBe("title needs at least 2 characters");
+
+    // A nested path keeps its dots in the id; the browser accepts them and
+    // the walk is a plain getElementById.
+    const street = screen.getByLabelText("Street");
+    expect(street.getAttribute("aria-describedby")).toBe(
+      "contact.address.street-error",
+    );
+    expect(
+      document.getElementById("contact.address.street-error")?.textContent,
+    ).toBe("street is required");
     expect(console.error).not.toHaveBeenCalled();
   });
 

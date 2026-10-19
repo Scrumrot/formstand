@@ -14,7 +14,7 @@ export const PlanField = ({
     <div>
       <label>
         {label}
-        <select {...selectProps(field)}>
+        <select {...selectProps(field)} aria-describedby={field.error?.[0] !== undefined ? `${field.path}-error` : undefined}>
           <option value="">{"Select…"}</option>
           <option value={"free"}>{"Free"}</option>
           <option value={"pro"}>{"Pro"}</option>
@@ -22,7 +22,7 @@ export const PlanField = ({
         </select>
       </label>
       {field.error?.[0] !== undefined ? (
-        <p role="alert">{field.error?.[0]}</p>
+        <p id={`${field.path}-error`} role="alert">{field.error?.[0]}</p>
       ) : null}
     </div>
   );

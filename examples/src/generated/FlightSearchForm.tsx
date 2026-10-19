@@ -48,7 +48,11 @@ const AutocompleteField = ({
     <div className="zf-field">
       <label className="zf-label">
         {label}
-        <input list={`${path}-datalist`} {...textInputProps(field)} />
+        <input
+          list={`${path}-datalist`}
+          {...textInputProps(field)}
+          aria-describedby={field.error?.[0] !== undefined ? `${path}-error` : undefined}
+        />
       </label>
       <datalist id={`${path}-datalist`}>
         {options.map((option) => (
@@ -56,7 +60,7 @@ const AutocompleteField = ({
         ))}
       </datalist>
       {field.error?.[0] !== undefined ? (
-        <p role="alert">{field.error?.[0]}</p>
+        <p id={`${path}-error`} role="alert">{field.error?.[0]}</p>
       ) : null}
     </div>
   );

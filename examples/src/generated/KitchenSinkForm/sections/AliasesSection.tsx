@@ -32,10 +32,10 @@ const AliasesRow = ({
       <div>
         <label>
           {"Aliases"}
-          <input {...textInputProps(field)} />
+          <input {...textInputProps(field)} aria-describedby={field.error?.[0] !== undefined ? `${field.path}-error` : undefined} />
         </label>
         {field.error?.[0] !== undefined ? (
-          <p role="alert">{field.error?.[0]}</p>
+          <p id={`${field.path}-error`} role="alert">{field.error?.[0]}</p>
         ) : null}
       </div>
       <button type="button" onClick={onRemove}>

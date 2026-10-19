@@ -39,10 +39,10 @@ const TeamsMembersPhonesRow = ({
       <div>
         <label>
           {"Phones"}
-          <input {...textInputProps(field)} />
+          <input {...textInputProps(field)} aria-describedby={field.error?.[0] !== undefined ? `${field.path}-error` : undefined} />
         </label>
         {field.error?.[0] !== undefined ? (
-          <p role="alert">{field.error?.[0]}</p>
+          <p id={`${field.path}-error`} role="alert">{field.error?.[0]}</p>
         ) : null}
       </div>
       <button type="button" onClick={onRemove}>
@@ -94,10 +94,10 @@ const TeamsMembersRow = ({
       <div>
         <label>
           {"Alias"}
-          <input {...textInputProps(alias)} />
+          <input {...textInputProps(alias)} aria-describedby={alias.error?.[0] !== undefined ? `${alias.path}-error` : undefined} />
         </label>
         {alias.error?.[0] !== undefined ? (
-          <p role="alert">{alias.error?.[0]}</p>
+          <p id={`${alias.path}-error`} role="alert">{alias.error?.[0]}</p>
         ) : null}
       </div>
       <TeamsMembersPhonesRows p0={p0} p1={index} />
@@ -142,10 +142,10 @@ const TeamsRow = ({
       <div>
         <label>
           {"Name"}
-          <input {...textInputProps(name)} />
+          <input {...textInputProps(name)} aria-describedby={name.error?.[0] !== undefined ? `${name.path}-error` : undefined} />
         </label>
         {name.error?.[0] !== undefined ? (
-          <p role="alert">{name.error?.[0]}</p>
+          <p id={`${name.path}-error`} role="alert">{name.error?.[0]}</p>
         ) : null}
       </div>
       <TeamsMembersRows p0={index} />

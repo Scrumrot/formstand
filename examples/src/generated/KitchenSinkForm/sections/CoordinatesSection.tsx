@@ -27,19 +27,19 @@ export const CoordinatesSection = ({
       <div>
         <label>
           {"Coordinates 1"}
-          <input {...numberInputProps(element0)} />
+          <input {...numberInputProps(element0)} aria-describedby={element0.error?.[0] !== undefined ? `${element0.path}-error` : undefined} />
         </label>
         {element0.error?.[0] !== undefined ? (
-          <p role="alert">{element0.error?.[0]}</p>
+          <p id={`${element0.path}-error`} role="alert">{element0.error?.[0]}</p>
         ) : null}
       </div>
       <div>
         <label>
           {"Coordinates 2"}
-          <input {...numberInputProps(element1)} />
+          <input {...numberInputProps(element1)} aria-describedby={element1.error?.[0] !== undefined ? `${element1.path}-error` : undefined} />
         </label>
         {element1.error?.[0] !== undefined ? (
-          <p role="alert">{element1.error?.[0]}</p>
+          <p id={`${element1.path}-error`} role="alert">{element1.error?.[0]}</p>
         ) : null}
       </div>
     </fieldset>
