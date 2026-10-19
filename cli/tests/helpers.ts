@@ -2,7 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
+import { vi } from "vitest";
+import { moduleSpecifier } from "../src/cli";
+import type { EmitFormOptions } from "../src/codegen";
+import { fromZod } from "../src/fromZod";
 import type { FieldSpec } from "../src/ir";
+import { type ModuleUi, emitModuleForm } from "../src/moduleLayout";
 
 export const testsDir = path.dirname(fileURLToPath(import.meta.url));
 export const cliDir = path.resolve(testsDir, "..");
@@ -118,6 +123,101 @@ export const freshTmpDir = (name: string): string => {
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 };
+
+// The generated spec imports formstand/testing, which the component
+// programs never need, so it is mapped only by the suites that typecheck a
+// spec (pass it as extraPaths).
+export const specPaths: Readonly<Record<string, readonly string[]>> = {
+  "formstand/testing": [
+    posix(path.join(repoRoot, "src", "testing", "index.ts")),
+  ],
+};
+
+// Emit a single-file component for a fixture schema into `dir`, write it,
+// and return the path and the code. The schema import points back at the
+// fixture module by name, so the written file typechecks against the real
+// fixture.
+export const writeSingleFile = (
+  emit: (options: EmitFormOptions) => string,
+  schema: unknown,
+  schemaName: string,
+  formName: string,
+  dir: string,
+): Readonly<{ file: string; code: string }> => {
+  const code = emit({
+    ir: fromZod(schema),
+    formName,
+    schemaImport: {
+      name: schemaName,
+      from: moduleSpecifier(dir, path.join(fixturesDir, `${schemaName}.ts`)),
+      kind: "named",
+    },
+  });
+  const file = path.join(dir, `${formName}.tsx`);
+  fs.writeFileSync(file, code, "utf8");
+  return { file, code };
+};
+
+export type WrittenModule = Readonly<{
+  files: readonly Readonly<{ path: string; content: string }>[];
+  written: readonly string[];
+}>;
+
+// Emit a module for a fixture schema into `dir`, write every file preserving
+// the folder structure, and return the files with their written paths.
+export const writeModuleFiles = (
+  schema: unknown,
+  schemaName: string,
+  formName: string,
+  dir: string,
+  ui: ModuleUi = "plain",
+): WrittenModule => {
+  const files = emitModuleForm({
+    ir: fromZod(schema),
+    formName,
+    ui,
+    schemaImport: {
+      name: schemaName,
+      from: moduleSpecifier(dir, path.join(fixturesDir, `${schemaName}.ts`)),
+      kind: "named",
+    },
+  });
+  const written = files.map((file) => {
+    const dest = path.join(dir, file.path);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, file.content, "utf8");
+    return dest;
+  });
+  return { files, written };
+};
+
+// Run `run` with process.stderr captured; returns everything it wrote.
+export const captureStderr = async (
+  run: () => Promise<unknown>,
+): Promise<string> => {
+  const chunks: string[] = [];
+  const spy = vi
+    .spyOn(process.stderr, "write")
+    .mockImplementation(((chunk: unknown): boolean => {
+      chunks.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write);
+  try {
+    await run();
+  } finally {
+    spy.mockRestore();
+  }
+  return chunks.join("");
+};
+
+export const listFiles = (dir: string): readonly string[] =>
+  fs
+    .readdirSync(dir, { withFileTypes: true })
+    .flatMap((entry) =>
+      entry.isDirectory()
+        ? listFiles(path.join(dir, entry.name))
+        : [path.join(dir, entry.name)],
+    );
 
 // Enum option order is not guaranteed identical between the zod walk
 // (declaration order) and the TS checker (which may reorder union members):

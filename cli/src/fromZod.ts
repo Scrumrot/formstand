@@ -23,6 +23,9 @@ type ZodDefLike = Readonly<{
   // and carry the format name here; .string().email() does NOT (its check
   // lives in the checks array), so only the top-level spellings round-trip.
   format?: unknown;
+  // z.coerce.*: the parser coerces ANY input, so z.input is `unknown`
+  // whatever `type` says. The walk degrades it rather than trust the type.
+  coerce?: unknown;
   innerType?: unknown;
   shape?: unknown;
   element?: unknown;
@@ -365,6 +368,16 @@ const walkNode = (
   }
   const nextSeen: ReadonlySet<unknown> = new Set([...seen, schema]);
   const type = typeof def.type === "string" ? def.type : "<unknown>";
+  // z.coerce.number() keeps type "number" but parses ANY input, so z.input
+  // is `unknown`: a number control bound to it fails typecheck (the path is
+  // not number-valued), and a number sample proves nothing about what the
+  // form holds. Degrade before the kind switch can trust the type.
+  if (def.coerce === true) {
+    return fallback(
+      flags,
+      `z.coerce.${type}() is not supported: the input type is unknown, bind it by hand`,
+    );
+  }
   switch (type) {
     case "string": {
       // Carry the three formats the generated schema can emit back
