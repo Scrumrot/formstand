@@ -35,6 +35,16 @@ export type SharedSpecProps = Readonly<{
   // Set when the source construct wasn't representable, emitters surface it
   // as a `// TODO: ...` comment next to the generated fallback.
   todo?: string;
+  // Check kinds the walker met on this node and does NOT model (zod mode
+  // only): a regex, a string format outside StringFormat, multipleOf, a
+  // refine, a date bound. The control and the emitted schema are still
+  // right as far as the IR knows, but the generated spec's round trip
+  // parses its sample with the REAL schema, and a sample built blind to
+  // the check fails it, so the spec skips that case over these paths and
+  // the CLI mirrors them on stderr. Names are zod's own check discriminants
+  // ("regex", "multiple_of", "custom"), string formats by their format
+  // name ("ipv4"). Absent means every check present was modeled.
+  unmodeledChecks?: readonly string[];
   // The runtime value of a `.default()` / `.prefault()` wrapper. Zod mode
   // only, TS types can't carry runtime defaults, so fromType never sets it.
   // emitInitialValues seeds the field with it when it is a JSON-serializable

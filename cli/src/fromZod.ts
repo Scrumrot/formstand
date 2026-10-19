@@ -2,6 +2,7 @@ import { FORMSTAND_PATH_DEPTH, NESTING_LIMIT_TODO } from "./depth";
 import {
   type FieldSpec,
   type NamedField,
+  type StringFormat,
   type UnionVariant,
   labelFromName,
 } from "./ir";
@@ -20,8 +21,9 @@ type Flags = Readonly<{ optional: boolean; nullable: boolean }>;
 type ZodDefLike = Readonly<{
   type?: unknown;
   // zod v4's top-level string formats (z.email() etc.) keep type "string"
-  // and carry the format name here; .string().email() does NOT (its check
-  // lives in the checks array), so only the top-level spellings round-trip.
+  // and carry the format name here; .string().email() carries it as a
+  // string_format check instead (see methodFormatOf), both spellings land
+  // as the same StringFormat.
   format?: unknown;
   // z.coerce.*: the parser coerces ANY input, so z.input is `unknown`
   // whatever `type` says. The walk degrades it rather than trust the type.
@@ -81,8 +83,9 @@ const descriptionOf = (schema: unknown): string | undefined => {
 // Duck-typed read of zod v4's checks array: each check's plain payload
 // lives at entry._zod.def ({ check: "min_length", minimum: 3 },
 // { check: "greater_than", value: 18, inclusive: true }, ...). Unknown
-// check kinds are ignored on purpose, bounds are an enrichment the
-// emitters and generated tests consume, never a gate on walking.
+// check kinds never gate the walk (bounds are an enrichment the emitters
+// and generated tests consume), but they are RECORDED on the spec as
+// unmodeledChecks, so the generated spec knows its blind sample may fail.
 const checkDefs = (
   def: Readonly<Record<string, unknown>>,
 ): readonly Readonly<Record<string, unknown>>[] => {
@@ -144,6 +147,98 @@ const lengthChecksOf = (
 // appends a number_format check carrying the same format string. Both
 // spellings must land as int: true, so the format is read in both places.
 const INT_FORMATS: ReadonlySet<unknown> = new Set(["safeint", "int32", "uint32"]);
+
+type CheckDef = Readonly<Record<string, unknown>>;
+
+// The string formats the IR carries (StringFormat). zod spells them two
+// ways: z.email() puts "email" on def.format, .string().email() appends a
+// string_format check whose format is "email". Both reach the same spec.
+const STRING_FORMATS: ReadonlySet<unknown> = new Set(["email", "url", "uuid"]);
+
+const asStringFormat = (value: unknown): StringFormat | undefined =>
+  STRING_FORMATS.has(value) ? (value as StringFormat) : undefined;
+
+// The method-form format, if any: the first string_format check naming a
+// format the IR carries. Other string_format checks (regex, starts_with,
+// ipv4, ...) are not formats the schema emitter can round-trip; they are
+// reported as unmodeled below.
+const methodFormatOf = (def: CheckDef): StringFormat | undefined =>
+  checkDefs(def)
+    .filter((check) => check["check"] === "string_format")
+    .map((check) => asStringFormat(check["format"]))
+    .find((format) => format !== undefined);
+
+// Which checks each node kind models, by zod's own discriminant. "overwrite"
+// (trim, toLowerCase, normalize) transforms and never rejects, so it is
+// harmless everywhere; everything else outside its kind's set is a check
+// the generated spec's sample cannot be trusted against.
+const isModeledStringCheck = (check: CheckDef): boolean =>
+  check["check"] === "min_length" ||
+  check["check"] === "max_length" ||
+  check["check"] === "length_equals" ||
+  check["check"] === "overwrite" ||
+  (check["check"] === "string_format" && STRING_FORMATS.has(check["format"]));
+
+const isModeledNumberCheck = (check: CheckDef): boolean =>
+  check["check"] === "greater_than" ||
+  check["check"] === "less_than" ||
+  check["check"] === "overwrite" ||
+  (check["check"] === "number_format" && INT_FORMATS.has(check["format"]));
+
+const isModeledArrayCheck = (check: CheckDef): boolean =>
+  check["check"] === "min_length" ||
+  check["check"] === "max_length" ||
+  check["check"] === "length_equals" ||
+  check["check"] === "overwrite";
+
+// Kinds whose checks the walk never reads: a date bound, a refine on a
+// boolean or enum or object. Only the harmless overwrite is modeled.
+const isHarmlessCheck = (check: CheckDef): boolean =>
+  check["check"] === "overwrite";
+
+// A check's reportable name: zod's discriminant, except the parameterized
+// pair where the parameter is what the reader needs ("regex" or "ipv4"
+// rather than "string_format", "float32" rather than "number_format").
+const checkName = (check: CheckDef): string => {
+  const kind = check["check"];
+  const format = check["format"];
+  return (kind === "string_format" || kind === "number_format") &&
+    typeof format === "string"
+    ? format
+    : typeof kind === "string"
+      ? kind
+      : "unknown";
+};
+
+// The unmodeledChecks spread for a node: every check its kind does not
+// model, plus `extra` names the caller found outside the checks array (a
+// top-level string format the IR cannot carry). Deduped, first-seen order,
+// absent when empty so modeled-only specs stay byte-identical.
+const unmodeledChecksOf = (
+  def: CheckDef,
+  isModeled: (check: CheckDef) => boolean,
+  extra: readonly string[] = [],
+): Readonly<{ unmodeledChecks?: readonly string[] }> => {
+  const names = [
+    ...extra,
+    ...checkDefs(def)
+      .filter((check) => !isModeled(check))
+      .map(checkName),
+  ].filter((name, index, all) => all.indexOf(name) === index);
+  return names.length === 0 ? {} : { unmodeledChecks: names };
+};
+
+// A wrapper (.optional(), .default(), .nullable(), ...) can carry its own
+// checks (`z.string().optional().refine(...)` refines the OPTIONAL): merge
+// them into the unwrapped spec's list, the wrapper's checks never modeled.
+const withWrapperChecks = (def: CheckDef, inner: FieldSpec): FieldSpec => {
+  const own = unmodeledChecksOf(def, isHarmlessCheck).unmodeledChecks ?? [];
+  if (own.length === 0) return inner;
+  const merged = [...(inner.unmodeledChecks ?? []), ...own].filter(
+    (name, index, all) => all.indexOf(name) === index,
+  );
+  return { ...inner, unmodeledChecks: merged };
+};
 
 // A tighter bound replaces the previous edge AND its exclusivity flag; a
 // rest-destructure would do it, but the lint forbids the unused binding.
@@ -381,16 +476,21 @@ const walkNode = (
   switch (type) {
     case "string": {
       // Carry the three formats the generated schema can emit back
-      // (emitZodSchema round-trips them as z.email()/z.url()/z.uuid());
-      // other formats (ipv4, emoji, ...) stay plain strings.
-      const format = def.format;
+      // (emitZodSchema round-trips them as z.email()/z.url()/z.uuid()),
+      // from either spelling (z.email() on the def, .string().email() as a
+      // check). Other formats (ipv4, emoji, ...) stay plain strings and are
+      // reported as unmodeled, the spec's sample cannot satisfy them.
+      const format = asStringFormat(def.format) ?? methodFormatOf(def);
       const checks = lengthChecksOf(def);
+      const unknownTopLevelFormat =
+        typeof def.format === "string" && asStringFormat(def.format) === undefined
+          ? [def.format]
+          : [];
       return {
         kind: "string",
-        ...(format === "email" || format === "url" || format === "uuid"
-          ? { format }
-          : {}),
+        ...(format === undefined ? {} : { format }),
         ...(checks === undefined ? {} : { checks }),
+        ...unmodeledChecksOf(def, isModeledStringCheck, unknownTopLevelFormat),
         ...flags,
       };
     }
@@ -400,13 +500,24 @@ const walkNode = (
       return {
         kind: "number",
         ...(checks === undefined ? {} : { checks }),
+        ...unmodeledChecksOf(def, isModeledNumberCheck),
         ...flags,
       };
     }
     case "boolean":
-      return { kind: "boolean", ...flags };
+      return {
+        kind: "boolean",
+        ...unmodeledChecksOf(def, isHarmlessCheck),
+        ...flags,
+      };
+    // A date's .min()/.max() are greater_than/less_than checks the IR has
+    // no slot for (DateChecks does not exist), so they report as unmodeled.
     case "date":
-      return { kind: "date", ...flags };
+      return {
+        kind: "date",
+        ...unmodeledChecksOf(def, isHarmlessCheck),
+        ...flags,
+      };
     case "enum": {
       const options = stringValues(
         typeof def.entries === "object" && def.entries !== null
@@ -414,7 +525,12 @@ const walkNode = (
           : null,
       );
       return options !== null
-        ? { kind: "enum", options, ...flags }
+        ? {
+            kind: "enum",
+            options,
+            ...unmodeledChecksOf(def, isHarmlessCheck),
+            ...flags,
+          }
         : fallback(flags, "non-string enum; defaulted to string");
     }
     case "literal": {
@@ -423,10 +539,14 @@ const walkNode = (
         ? { kind: "enum", options, ...flags }
         : fallback(flags, "non-string literal; defaulted to string");
     }
+    // An object-level .refine() (a cross-field rule) is a custom check on
+    // the object def: the spec's sample is built field by field and cannot
+    // know the rule, so it reports as unmodeled at the object's path.
     case "object":
       return {
         kind: "object",
         fields: fieldsFromShape(def.shape, depth - 1, nextSeen),
+        ...unmodeledChecksOf(def, isHarmlessCheck),
         ...flags,
       };
     case "array": {
@@ -440,6 +560,7 @@ const walkNode = (
           nextSeen,
         ),
         ...(checks === undefined ? {} : { checks }),
+        ...unmodeledChecksOf(def, isModeledArrayCheck),
         ...flags,
       };
     }
@@ -460,9 +581,15 @@ const walkNode = (
       return { kind: "tuple", elements, ...flags, ...restTodo };
     }
     case "optional":
-      return walk(def.innerType, { ...flags, optional: true }, depth, nextSeen);
+      return withWrapperChecks(
+        def,
+        walk(def.innerType, { ...flags, optional: true }, depth, nextSeen),
+      );
     case "nullable":
-      return walk(def.innerType, { ...flags, nullable: true }, depth, nextSeen);
+      return withWrapperChecks(
+        def,
+        walk(def.innerType, { ...flags, nullable: true }, depth, nextSeen),
+      );
     // A .default() means the *input* may omit the value, and the wrapped
     // value is what the generated initialValues should start from. zod v4's
     // `def.defaultValue` is a GETTER that already resolves the user's
@@ -499,9 +626,12 @@ const walkNode = (
       // the degradation on stderr (the field starts blank despite its
       // .default()). Captured values can still be refused later at emit
       // time, droppedDefaultFieldPaths covers those off `defaultValue`.
-      return capturable
-        ? { ...inner, defaultValue: first }
-        : { ...inner, droppedDefault: true };
+      return withWrapperChecks(
+        def,
+        capturable
+          ? { ...inner, defaultValue: first }
+          : { ...inner, droppedDefault: true },
+      );
     }
     case "union": {
       const discriminated = discriminatedUnionFrom(
@@ -529,13 +659,13 @@ const walkNode = (
     // typecheck against the required input type).
     case "nonoptional": {
       const inner = walk(def.innerType, flags, depth, nextSeen);
-      return { ...inner, optional: false };
+      return withWrapperChecks(def, { ...inner, optional: false });
     }
     default:
       // Wrappers we don't know by name but that carry an inner schema
       // (readonly, catch, ...) unwrap transparently.
       return def.innerType !== undefined
-        ? walk(def.innerType, flags, depth, nextSeen)
+        ? withWrapperChecks(def, walk(def.innerType, flags, depth, nextSeen))
         : fallback(
             flags,
             `unsupported zod type "${type}"; defaulted to string`,

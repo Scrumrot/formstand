@@ -5,6 +5,7 @@ import {
   emitInitialValues,
   pathDepthOption,
   todoFieldPaths,
+  unmodeledCheckPaths,
 } from "./codegen";
 import type { FieldSpec } from "./ir";
 import type { GeneratedTestPlan } from "./testCases";
@@ -112,7 +113,14 @@ export const emitComponentSpec = (
   // still typechecks against FormValues through the cast) and the case is
   // written out but skipped, naming the paths to replace by hand.
   const degraded = todoFieldPaths(ir);
-  const roundTripSkip = submitSkip || degraded.length > 0;
+  // A check the walker does not model (a regex, a multipleOf, a refine, a
+  // date bound, a string format outside the three the IR carries) makes
+  // the same case fail for the same reason: the sample is built blind to
+  // the check and the REAL schema rejects it. The case is still written
+  // out, skipped, with the paths and check names in the comment.
+  const unmodeled = unmodeledCheckPaths(ir);
+  const roundTripSkip =
+    submitSkip || degraded.length > 0 || unmodeled.length > 0;
   const blankInvalidPaths = [...plan.requiredPaths, ...plan.arrayMinPaths];
   const hasBlankInvalid = blankInvalidPaths.length > 0;
 
@@ -183,6 +191,17 @@ export const emitComponentSpec = (
           "  // Each stands in as a text field (see its TODO in the component), so",
           "  // validValues carries a string the real validator rejects. Replace",
           "  // the placeholder value(s) with a legal one, then delete the .skip.",
+        ]
+      : []),
+    ...(unmodeled.length > 0
+      ? [
+          "  // Check(s) the generator does not model: " +
+            unmodeled
+              .map((site) => `${q(site.path)} (${site.checks.join(", ")})`)
+              .join(", ") +
+            ".",
+          "  // validValues was built without them, so the real schema may reject",
+          "  // it. Adjust the value(s) to satisfy each check, then delete the .skip.",
         ]
       : []),
     `  ${itLine(roundTripSkip)}("filled with valid values, submit resolves the parsed payload", async () => {`,

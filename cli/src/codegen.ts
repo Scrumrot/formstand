@@ -427,6 +427,28 @@ export const todoFieldPaths = (ir: FieldSpec): readonly TodoSite[] =>
     todo: spec.todo ?? "",
   }));
 
+// Every node whose checks the walker did not model, with the check names
+// (see SharedSpecProps.unmodeledChecks). The generated spec skips its
+// round trip over them (its sample is built blind to the check and the
+// REAL schema rejects it), and the CLI mirrors each on stderr. An
+// object-level refine on the root has no path of its own; it is named
+// "(root)" so the skip comment can still point at it.
+export type UnmodeledCheckSite = Readonly<{
+  path: string;
+  checks: readonly string[];
+}>;
+
+export const unmodeledCheckPaths = (
+  ir: FieldSpec,
+): readonly UnmodeledCheckSite[] => [
+  ...(ir.unmodeledChecks !== undefined
+    ? [{ path: "(root)", checks: ir.unmodeledChecks }]
+    : []),
+  ...matchingSpecs(ir, (spec) => spec.unmodeledChecks !== undefined).map(
+    ({ path, spec }) => ({ path, checks: spec.unmodeledChecks ?? [] }),
+  ),
+];
+
 // The unaddressable field paths in an IR, for the CLI to surface as stderr
 // warnings alongside the in-file TODO comments.
 export const unaddressableFieldPaths = (ir: FieldSpec): readonly string[] => {

@@ -43,6 +43,7 @@ import {
   todoFieldPaths,
   truncatedFieldPaths,
   unaddressableFieldPaths,
+  unmodeledCheckPaths,
 } from "./codegen";
 import { NESTING_LIMIT_TODO } from "./depth";
 import { collectTestPlan } from "./testCases";
@@ -1088,6 +1089,8 @@ const warnDegradedBindings = (
   layout: Layout,
   walkerBudget: number,
   pathBudget: number,
+  // A component spec (vitest/jest) is being written alongside the component.
+  specRequested: boolean,
 ): void => {
   unaddressableFieldPaths(ir).forEach((fieldPath) => {
     stderr(
@@ -1130,6 +1133,19 @@ const warnDegradedBindings = (
     .forEach((site) => {
       stderr(`warning: field "${site.path}": ${site.todo}`);
     });
+  // Checks the walker does not model (a regex, a multipleOf, a refine, a
+  // date bound): the control and schema entry are still right, but the
+  // generated spec cannot trust its sample against them, so its round trip
+  // is emitted skipped (see testsEmit). Mirrored here so the skip is
+  // visible without opening the spec, and only when a spec is being
+  // written: without --tests nothing degrades, the component is complete.
+  if (specRequested) {
+    unmodeledCheckPaths(ir).forEach((site) => {
+      stderr(
+        `warning: field "${site.path}" has checks the generator does not model (${site.checks.join(", ")}); the generated spec skips its round trip`,
+      );
+    });
+  }
 };
 
 const runZodMode = async (
@@ -1165,6 +1181,7 @@ const runZodMode = async (
     options.layout,
     walkerBudgetOf(options),
     pathDepthOf(options),
+    options.tests.some((runner) => runner !== "playwright"),
   );
   const formName = options.name ?? deriveFormName(pick.exportName);
   const fromDir =
@@ -1274,6 +1291,7 @@ const runGeneratedSchemaMode = (
     options.layout,
     walkerBudgetOf(options),
     pathDepthOf(options),
+    options.tests.some((runner) => runner !== "playwright"),
   );
   const schemaName = `${camelCase(baseName)}Schema`;
   const formName = options.name ?? deriveFormName(baseName);
