@@ -49,39 +49,53 @@ export const ThemeModeProvider = ({ mode, children }: ThemeModeProviderProps) =>
   <ThemeModeContext.Provider value={mode}>{children}</ThemeModeContext.Provider>
 );
 
-// The App-level state hook: owns the mode, mirrors it onto <html> and
-// localStorage.
+// The App-level state hook: owns the mode and mirrors it onto <html>.
+// localStorage is written ONLY when the user toggles: the key is shared
+// with the docs site, where "auto" (follow the OS) is a valid stored
+// choice, and a write on every mount used to overwrite a visitor's "auto"
+// with whatever the OS resolved to the moment the playground opened.
 export const useThemeModeState = () => {
   const [mode, setMode] = useState<ThemeMode>(initialThemeMode);
   useEffect(() => {
     document.documentElement.dataset["theme"] = mode;
-    try {
-      localStorage.setItem(STORAGE_KEY, mode);
-    } catch {
-      // Private-mode storage failures just lose persistence.
-    }
   }, [mode]);
   const toggle = () =>
-    setMode((current) => (current === "dark" ? "light" : "dark"));
+    setMode((current) => {
+      const next = current === "dark" ? "light" : "dark";
+      try {
+        localStorage.setItem(STORAGE_KEY, next);
+      } catch {
+        // Private-mode storage failures just lose persistence.
+      }
+      return next;
+    });
   return { mode, toggle };
+};
+
+const starsKey = (repo: string): string => `fs-stars:${repo}`;
+
+// The per-session cache read, done once as the initial state so the effect
+// below never sets state synchronously on mount (which React's hooks lint
+// flags: it forces a second render for a value already known at the first).
+const cachedStars = (repo: string): number | null => {
+  try {
+    const cached = sessionStorage.getItem(starsKey(repo));
+    return cached !== null && Number.isFinite(Number(cached))
+      ? Number(cached)
+      : null;
+  } catch {
+    return null;
+  }
 };
 
 // The repo's star count for the GitHub link. Best-effort decoration:
 // cached per session, silent on any failure, and skipped entirely under
 // vitest so CI never talks to the GitHub API.
 export const useGitHubStars = (repo: string): number | null => {
-  const [stars, setStars] = useState<number | null>(null);
+  const [stars, setStars] = useState<number | null>(() => cachedStars(repo));
   useEffect(() => {
     if (import.meta.env?.["VITEST"] !== undefined) return;
-    try {
-      const cached = sessionStorage.getItem(`fs-stars:${repo}`);
-      if (cached !== null && Number.isFinite(Number(cached))) {
-        setStars(Number(cached));
-        return;
-      }
-    } catch {
-      // fall through to the fetch
-    }
+    if (cachedStars(repo) !== null) return;
     const controller = new AbortController();
     fetch(`https://api.github.com/repos/${repo}`, {
       signal: controller.signal,
@@ -94,7 +108,7 @@ export const useGitHubStars = (repo: string): number | null => {
         if (typeof count === "number") {
           setStars(count);
           try {
-            sessionStorage.setItem(`fs-stars:${repo}`, String(count));
+            sessionStorage.setItem(starsKey(repo), String(count));
           } catch {
             // decoration only
           }
