@@ -155,6 +155,19 @@ export const ImportModal = ({
           }}
         />
 
+        {/* The zod dialect is EVALUATED (parseZod.ts runs the paste as a
+            function with the bundled `z` in scope); the TypeScript dialect
+            is only parsed. Say so where the paste happens. */}
+        {lang === "zod" ? (
+          <p
+            className="import-notice"
+            style={{ margin: "8px 0 0", fontSize: 12, color: "var(--text-muted)" }}
+          >
+            Zod schemas are executed in this page to build the form. Paste
+            only code you trust.
+          </p>
+        ) : null}
+
         <div className="import-actions">
           <input
             ref={fileInputRef}

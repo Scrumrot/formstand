@@ -65,7 +65,9 @@ const evaluateSchema = (
   const body =
     binding !== null ? `${cleaned}\nreturn ${binding};` : `return (\n${cleaned}\n);`;
   try {
-    // eslint-disable-next-line no-new-func -- REPL trust model; see file header.
+    // REPL trust model; see the file header. (No lint directive: the root
+    // config does not enable no-new-func, and an unused disable is itself
+    // reported.)
     const run = new Function("z", body) as (zod: typeof z) => unknown;
     return { ok: true, schema: run(z) };
   } catch (error) {

@@ -279,10 +279,15 @@ type GeneratedOutputProps = Readonly<{
   error?: string;
 }>;
 
+// Module-level so the "no output" fallback is one stable reference: an
+// inline `?? []` minted a fresh array per render and defeated the useMemo
+// below (its deps changed every time).
+const NO_FILES: readonly ModuleFile[] = [];
+
 const GeneratedOutput = ({ files: generated, formName, error }: GeneratedOutputProps) => {
   const [selected, setSelected] = useState<string | null>(null);
   const [copied, setCopied] = useState<"file" | null>(null);
-  const files = generated ?? [];
+  const files = generated ?? NO_FILES;
   const demoFiles = useMemo(
     () => files.map((file) => ({ path: file.path, source: file.content })),
     [files],
@@ -566,7 +571,10 @@ export const SchemaBuilder = () => {
             value={pasteSource}
             onChange={(e) => setPasteSource(e.target.value)}
           />
-          <span className="subtitle-text" style={{ color: "#8b94a7", fontSize: 12 }}>
+          <span
+            className="subtitle-text"
+            style={{ color: "var(--text-muted)", fontSize: 12 }}
+          >
             {pasteLang === "ts" ? (
               <>
                 Supports string / number / boolean / Date, arrays, nested
@@ -576,9 +584,13 @@ export const SchemaBuilder = () => {
               </>
             ) : (
               <>
-                Evaluated in your browser with the bundled zod, then walked by
-                the real <code>fromZod</code>, the same IR{" "}
-                <code>npx formstand-gen schema.ts</code> builds.
+                {/* The REPL trust model (parseZod.ts) is fine, but it has
+                    to be visible: pasted code RUNS here. */}
+                Pasted code is executed in this page (as a function with the
+                bundled <code>z</code> in scope; see parseZod.ts), then walked
+                by the real <code>fromZod</code>, the same IR{" "}
+                <code>npx formstand-gen schema.ts</code> builds. Paste only
+                code you trust.
               </>
             )}
           </span>
