@@ -54,7 +54,7 @@ the CLI from two UI targets to six, and make the docs match.
 - Schema builder paste-zod mode: paste a `z.object(...)` and it is evaluated
   in the browser against the bundled zod, complementing paste-a-TS-type.
 
-**Since then (0.14 through 0.15.2, and formstand-cli 0.13.0)**
+**Since then (0.14 onward, formstand-cli 0.13.0 onward; the CHANGELOG has the full list)**
 
 - `formstand/devtools` (0.14.0): an in-page panel with per-field rows, both
   error channels shown separately, a live `diff()`, and snapshot/restore.
@@ -77,7 +77,7 @@ the CLI from two UI targets to six, and make the docs match.
   flag questions one at a time and ends by printing the composed command, so
   the run is reproducible without it. Both roadmap constraints held: strictly
   opt-in (the flag runs alone, never a TTY sniff, prompts on stderr so
-  stdout output stays pipeable), and zero new dependencies — numbered
+  stdout output stays pipeable), and zero new dependencies: numbered
   readline lists over a hand-rolled buffer, no prompts library.
 - JSON Schema and OpenAPI inputs (formstand-cli 0.13.0): the third front-end
   into the IR. A `.json` input reads as a 2020-12 schema or an OpenAPI 3.x
@@ -89,16 +89,21 @@ the CLI from two UI targets to six, and make the docs match.
   wherever they appear (no dialect flag), date formats become date fields,
   and the rest degrades to the loud TODO fallback. YAML stays out to keep
   the zero-dependency stance; the error names the conversion.
+- `--path-depth N` (formstand-cli 0.22.0, 2026-09-23): the typed-path budget
+  as a per-run value threaded through both layouts, the warnings, the
+  override validator, and the generated tests; the emitted form sets
+  `createForm`'s `pathDepth` to the same number so the library's union
+  matches.
 
 ## Now
 
-- **StackBlitz links — shipped 2026-09-18.** Every self-contained playground
+- **StackBlitz links, shipped 2026-09-18.** Every self-contained playground
   demo has an "Open in StackBlitz" button (the docs examples page reuses the
   same seed builder in its details blocks): a fresh Vite + React project with
   the demo's harness-stripped source plus formstand from npm. Kit demos stay
   gated, honestly: they import sibling adapters that are not part of their
   displayed file set.
-- **Brand collateral — shipped 2026-09-18.** OG images for the docs and the
+- **Brand collateral, shipped 2026-09-18.** OG images for the docs and the
   playground (1200x630, rendered from scripts/generate-og-images.mjs so the
   template regenerates them), og/twitter meta wiring on both sites, a
   self-contained banner.svg served from docs/public, and the README header
@@ -112,7 +117,7 @@ the CLI from two UI targets to six, and make the docs match.
 
 - **A devtools playground tab.** The panel shipped in 0.14.0; a playground
   tab would let people try it without installing.
-- **Generated tests — shipped 2026-09-18 (v1).** `--tests
+- **Generated tests, shipped 2026-09-18 (v1).** `--tests
   vitest|jest|playwright` emits a spec beside the component from the same
   schema walk, with store-level cases on `formstand/testing`, label-driven
   render cases through the config's `renderWrapper`, and a Playwright spec
@@ -132,10 +137,6 @@ the CLI from two UI targets to six, and make the docs match.
   the CLI carries two dependencies on purpose. Deliberately out for now;
   the error message names the one-line conversion. Revisit if the mode
   gets real use.
-- **`--path-depth` flag — shipped 2026-09-23.** The typed-path budget as a
-  per-run value threaded through both layouts, the warnings, the override
-  validator, and the generated tests; the emitted form sets `createForm`'s
-  `pathDepth` to the same number so the library's union matches.
 - **Visual regression snapshots** for the playground, on top of the Playwright
   e2e job (baseline images plus pixel diff, vs today's render-integrity
   assertions and three screenshots).
