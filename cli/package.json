@@ -57,9 +57,9 @@
     "typescript": "^5.7.0"
   },
   "devDependencies": {
-    "@types/node": "^26.1.0",
+    "@types/node": "^26.6.5",
     "tsup": "^8.3.0",
-    "vitest": "^4.1.11",
+    "vitest": "^5.0.5",
     "zod": "^4.2.0"
   },
   "overrides": {
