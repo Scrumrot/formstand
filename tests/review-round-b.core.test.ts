@@ -143,3 +143,67 @@ describe("error keys named after Object.prototype members", () => {
     expect(field.isValidating).toBe(false);
   });
 });
+
+// A promise settled by hand, so a test controls exactly when an async
+// refine resolves relative to the writes it races.
+const deferred = <T,>() => {
+  const slot: { resolve: (value: T) => void } = { resolve: () => {} };
+  const promise = new Promise<T>((resolve) => {
+    slot.resolve = resolve;
+  });
+  return { promise, resolve: (value: T) => slot.resolve(value) };
+};
+
+describe("an async field verdict survives an unrelated field's change", () => {
+  const build = () => {
+    const gate = deferred<boolean>();
+    const schema = z.object({
+      username: z.string().refine(() => gate.promise, "taken"),
+      email: z.string(),
+    });
+    const form = createForm(schema, {
+      initialValues: { username: "", email: "" },
+    });
+    return { gate, form };
+  };
+
+  it("commits the username verdict when email changed in flight", async () => {
+    const { gate, form } = build();
+    form.setValue("username", "taken");
+    const pending = form.validateFieldAsync("username");
+    expect(form.getState().isValidating["username"]).toBe(true);
+    form.setValue("email", "someone@example.com");
+    gate.resolve(false);
+    const result = await pending;
+    expect(result.kind).toBe("invalid");
+    expect(form.getState().errors["username"]).toEqual(["taken"]);
+    expect(form.getState().isValidating).toEqual({});
+  });
+
+  it("still discards the verdict when the field itself changed in flight", async () => {
+    const { gate, form } = build();
+    form.setValue("username", "taken");
+    const pending = form.validateFieldAsync("username");
+    form.setValue("username", "free");
+    gate.resolve(false);
+    const result = await pending;
+    expect(result.kind).toBe("invalid");
+    expect(form.getState().errors["username"]).toBeUndefined();
+    expect(form.getState().isValidating).toEqual({});
+  });
+
+  it("keeps the whole-values compare for a full-form scope (cross-field refine)", async () => {
+    const gate = deferred<boolean>();
+    const schema = z
+      .object({ a: z.string(), b: z.string() })
+      .refine(() => gate.promise, { message: "pair", path: ["a"] });
+    const form = createForm(schema, { initialValues: { a: "", b: "" } });
+    const pending = form.validateFieldAsync("a");
+    // The refine reads b too, so b changing in flight stales a's verdict.
+    form.setValue("b", "changed");
+    gate.resolve(false);
+    await pending;
+    expect(form.getState().errors["a"]).toBeUndefined();
+    expect(form.getState().isValidating).toEqual({});
+  });
+});

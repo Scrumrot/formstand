@@ -782,18 +782,42 @@ export const createForm = <
       : { kind: "skip" };
   };
 
-  const scopedFieldErrorsAsync = async (
+  const parseScopeAsync = async (
     path: string,
-    values: Values,
-  ): Promise<ErrorMap> => {
-    const scope = fieldScopeFor(path, values);
-    return scope.kind === "skip"
+    scope: FieldScope,
+  ): Promise<ErrorMap> =>
+    scope.kind === "skip"
       ? emptyErrors
       : scopeSettledResult(
           await validateAsync(scope.schema, scope.value),
           path,
           scope.viaSubschema,
         );
+
+  // Whether the value an async pass judged is no longer the live one. A
+  // subschema scope parsed ONLY its slot, so only that slot's identity
+  // decides: comparing the whole values reference (the old rule) discarded
+  // a "username taken" verdict, and cleared its in-flight flag, the moment
+  // the user moved on and typed into email while the check was in flight.
+  // A full-form scope exists precisely because an ancestor refine may read
+  // any field, so the whole reference still decides there. A skip scope
+  // parsed nothing against an absent slot; it goes stale only if something
+  // has since created that slot.
+  const scopeStale = (
+    scope: FieldScope,
+    path: string,
+    valuesAtStart: Values,
+    live: Values,
+  ): boolean => {
+    if (live === valuesAtStart) return false;
+    switch (scope.kind) {
+      case "skip":
+        return slotAtPath(live, path).exists;
+      case "parse":
+        return scope.viaSubschema
+          ? !Object.is(getAtPath(live, path), scope.value)
+          : true;
+    }
   };
 
   const fieldResult = (scoped: ErrorMap): SettledFieldValidationResult => {
@@ -1010,16 +1034,17 @@ export const createForm = <
     }
     const pass = claimPass(path);
     const valuesAtStart = store.getState().values;
+    const scope = fieldScopeFor(path, valuesAtStart);
     store.setState((state) => ({
       ...state,
       isValidating: { ...state.isValidating, [path]: true },
     }));
 
-    const scoped = await scopedFieldErrorsAsync(path, valuesAtStart);
+    const scoped = await parseScopeAsync(path, scope);
 
     const live = store.getState();
     const stillOwns = sequences.get(path) === pass;
-    if (!stillOwns || live.values !== valuesAtStart) {
+    if (!stillOwns || scopeStale(scope, path, valuesAtStart, live.values)) {
       if (stillOwns) {
         store.setState((state) => ({
           ...state,
