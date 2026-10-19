@@ -119,6 +119,10 @@ drafts.dispose();
 
 `apply: "edit"` loads the draft as *edits*, meaning dirty against the original initial values, instead of rebasing (`"restore"` is the older spelling and still works as an alias). `apply: "manual"` never auto-applies, so you call the returned `load()` yourself; a manual `load()` applies with **adopt** semantics (the loaded draft reads clean, a rebase rather than an edit); pick `apply: "edit"` when the draft should read dirty against the original initials. The handle method is named `load`, not restore, for exactly that reason: what it does by default is a rebase, and `form.restore(snapshot)` means something else entirely (putting back a whole `FormState`). Storage defaults to `localStorage` and is structural, so `sessionStorage` or any `{ getItem, setItem, removeItem }` works. Every storage touch is guarded, so private-mode failures just skip persistence, corrupt drafts return `false` from `load()` instead of throwing, and (same caveat as the recipe) drafts round-trip through JSON, so they are for JSON-safe values: a `Date` comes back as a string. In SSR apps, call it inside an effect, or reach for `usePersistForm(form, options)`, the React wrapper that owns the mount/dispose effect (StrictMode safe) and returns a reference-stable handle you can call `clear()` on after submit. See [SSR & Next.js](./ssr).
 
+::: warning A loaded draft is adopted, not validated
+Applying a draft goes through `adoptValues` (or `setValues` under `apply: "edit"`), and like every imperative write that is validation-silent: the draft becomes the values with `errors` left at `{}`, so a stored `name: ""` under `z.string().min(1)` loads clean and `useIsValid` reads `true` until something validates. `validateOnMount: true` does not cover it, because that pass runs inside `createForm`, before `persistForm` applies the draft, and `adopt` then clears what it found. When UI is gated on `useIsValid` or on field errors, call `form.validate()` once the draft is in: right after `persistForm(...)` returns, after a manual `load()`, or in an effect declared after `usePersistForm` (effects run in declaration order). Submit always re-validates, so an invalid draft cannot get through on its own. Treat the draft as input the schema has not seen yet, not as data the form already judged; see [Security notes](./validation#security-notes).
+:::
+
 ### Drafts that outlive the schema
 
 A stored draft can be older than the schema reading it. `persistForm` will not apply a draft whose shape conflicts with the form's: a path holding a string where the form expects an object, or an array of strings where it expects rows. No ordinary edit produces that, only a changed schema, and applying it would rebase the form onto values it cannot validate while `adopt` cleared the errors, so it would read clean while holding them.
@@ -161,7 +165,7 @@ All return an unsubscribe function. `watchValue` compares by `Object.is`; `watch
 const unsubscribe = form.watchValues((values) => scheduleAutosave(values));
 ```
 
-For whole-values subscription **in render**, meaning form values driving derived rendering such as a map re-rendering from live coordinates, use the hook instead. `useFormValues(form)` returns the current values object typed as `z.input<TSchema>`, re-rendering exactly when a value changes (values are replaced immutably, so it is one reference comparison) and never on touched or error churn.
+For whole-values subscription **in render**, meaning form values driving derived rendering such as a map re-rendering from live coordinates, use the hook instead. `useFormValues(form)` returns the current values object typed as `z.input<TSchema>`, re-rendering exactly when a value changes (values are replaced immutably, so it is one reference comparison) and never on touched or error churn. "When a value changes" means **every keystroke anywhere in the form**: the hook has no way to tell which path moved, so keep it in the component that genuinely needs the whole object and out of per-field or per-row components, which should read their own slice through `useField` or a narrow `useFormSelector` instead.
 
 ## Flag hooks
 
@@ -183,7 +187,7 @@ The error map is empty until validation runs, so a never-validated form reads as
 `useForm` is per component instance, so calling it twice gives two independent forms. To share one form down a deep tree without prop drilling, create a typed context per form shape:
 
 ```tsx
-import { createFormContext, useField, useForm } from "formstand";
+import { createFormContext, textInputProps, useField, useForm } from "formstand";
 
 const { Provider, useFormContext } = createFormContext<typeof schema>();
 
@@ -211,7 +215,7 @@ The factory pattern, one `createFormContext` call per form shape, carries the sc
 For a form that is a genuine module-level singleton, one instance for the app's lifetime such as settings or a global compose box, skip the provider entirely: bake the form into the hooks once and export them as a domain API.
 
 ```tsx
-import { createForm, createFormHooks } from "formstand";
+import { createForm, createFormHooks, textInputProps } from "formstand";
 
 const form = createForm(invoiceSchema, { initialValues, mode: "onBlur" });
 
