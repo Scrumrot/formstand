@@ -62,8 +62,9 @@ exists and `--force` isn't set, nothing is written.
 | `--columns 1\|2\|3` | field columns inside each section, default `1` |
 | `--live` | no submit scaffold; adds an `onValuesChange` prop and defaults the mode to `"onChange"` |
 | `--form-prop` | the page owns the form: adds a `form` prop and exports a `use{Name}Form()` hook |
-| `--name <MyForm>` | component name, default derived from the schema or type |
-| `--out <file>` | write here instead of stdout; names the folder under `--layout module` |
+| `--no-live`, `--no-form-prop` | turn the mode off for one run when the config file sets `live: true` / `formProp: true` (an explicit flag wins over the config) |
+| `--name <MyForm>` | component name, default derived from the schema or type; must start with an uppercase letter |
+| `--out <file>` | write here instead of stdout (a `.tsx` file, never a directory); names the folder under `--layout module` |
 | `--schema-out <file>` | type and `.json` modes: where the generated schema goes |
 | `--max-depth <n>` | nesting budget before a level degrades to a string plus a TODO |
 | `--path-depth <n>` | typed-path budget in segments (default `9`); emitted as the form's `pathDepth` so the library matches |
@@ -71,7 +72,7 @@ exists and `--force` isn't set, nothing is written.
 | `--template <file>` | a custom template for a kit formstand doesn't ship; `--layout single` only |
 | `--tests <list>` | emit generated specs beside the component: a comma list of `vitest`, `jest`, `playwright` (vitest and jest are the same component spec with different globals; pick one). Requires `--out` |
 | `--watch` | regenerate whenever the input changes; requires `--out` |
-| `--force` | overwrite existing output files |
+| `--force` | overwrite existing output files; under `--layout module` also removes the previous run's generated files the new run no longer writes (never a file without the generator header) |
 | `--wizard` | ask the flag questions interactively, one at a time; runs alone |
 | `--help` | usage |
 

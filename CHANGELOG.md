@@ -2,8 +2,79 @@
 
 ## formstand-cli Unreleased
 
+### Added
+
+- `--no-live` and `--no-form-prop`: an explicit flag turns the mode off for
+  one run when the config file sets `live: true` / `formProp: true`. Before,
+  nothing could override a configured mode (`--no-live` was an unknown
+  flag).
+- JSON Schema mode carries `pattern` and `multipleOf` into the generated
+  validator, as `.regex(new RegExp("..."))` and `.multipleOf(n)`. A pattern
+  JavaScript's `RegExp` refuses degrades to a TODO instead of a module that
+  throws on load. Both, and any `format` outside email/uri/uuid/date, are
+  recorded as unmodeled checks, so the generated spec skips its blind round
+  trip over them and `--tests` warns on stderr; they were dropped silently
+  before. The IR gains `StringChecks.regex` and `NumberChecks.multipleOf`.
+- Type mode walks intersections (`A & B`, the merged member set, later wins
+  on a collision, a TODO where two members disagree on a key) and
+  discriminated unions of object types sharing a string-literal key, to
+  the same IR union the zod and JSON Schema walks produce. A union of
+  numeric literals names the string-only enum as its reason instead of
+  "unsupported union type".
+
 ### Fixed
 
+- Type mode had no recursion guard: `type Tree = { value: string; left?:
+  Tree; right?: Tree }` expanded to the depth budget (6142 IR nodes, a
+  188 KB file, 518 module files). The walk tracks the declared types on the
+  current path and cuts a repeat with a "recursive type" TODO, the way the
+  zod walker treats its getter idiom. A member typed as the global
+  `Function` (no call signature of its own) walked Function.prototype to
+  the budget; it now degrades like a method.
+- `--type someConst` (a value, not a type) generated an "any" TODO form; it
+  is now an error naming the symbol kind. An index signature beside named
+  members (`{ a: string; [k: string]: string }`) was dropped without a
+  trace; the members bind and a TODO sits on the section, mirrored on
+  stderr and above the generated schema.
+- OpenAPI 3.0 idioms in JSON Schema mode: `{ $ref, nullable: true }` was
+  not nullable (the ref walk returned before the flag applied);
+  `{ allOf: [{ $ref }], nullable: true }` lost the outer keywords in the
+  merge; `allOf: [{ $ref: StringEnum }]` (the 3.0 way to annotate a ref)
+  was "allOf with non-object branches"; `enum: ["a", "b", null]` with
+  `nullable: true` (3.0) or `type: ["string", "null"]` (3.1) was a
+  "non-string enum" TODO; an `allOf` branch that is itself an `allOf`, and
+  `$ref` chains, degraded; `#/$defs/My%20Type` was not percent-decoded.
+  All six now walk to the expected IR, and a self-referring `allOf` branch
+  is named in its TODO.
+- Draft-04 `exclusiveMinimum: true` / `exclusiveMaximum: true` beside
+  `minimum` / `maximum` silently read as an inclusive bound; the flag now
+  makes the bound exclusive.
+- An empty enum list (`enum: []` in a document, `z.enum([])` in a schema,
+  which zod constructs and then rejects every value for) emitted a select
+  with no option; it degrades to a TODO in both walkers.
+- `--out some/dir/` (a trailing separator, or an existing directory) in the
+  single-file layout wrote a file literally named after the folder, or
+  refused to "overwrite" it. It is refused with an error that says to name
+  a `.tsx` file or use `--layout module`.
+- `--name profileForm` passed validation and the generated spec rendered
+  `<profileForm />`, which JSX reads as a DOM tag; the name must now start
+  with an uppercase letter.
+- `--force` over a module folder left the previous run's files in place (a
+  removed section's `sections/GoneSection.tsx` survived and still
+  compiled). Files that carry the generator header on their first line and
+  are not in the new set are removed, with a `removed <path>` line on
+  stderr; a file without the header is yours and is never touched.
+- `--schema constructor` (or `toString`, `__proto__`) resolved a prototype
+  member of the component store and generated a degraded form named after
+  it; lookups and pointer segments use own keys only, so it reports "no
+  schema named".
+- A string-literal export name (`export { inner as "my schema" }`) emitted
+  `import { my schema } from ...`; it is refused with the rule, for an
+  explicit `--export` and for the sole-export fallback.
+- The generated spec's blank-submit case picked its control among the
+  blank-invalid fields only, so a required "Age" beside an optional "Age"
+  in another section made `getByLabelText` throw. Uniqueness is now judged
+  against every label the blank render shows, for the label fills too.
 - **The plain backend's error lines are described to their controls.** The
   in-file `AutocompleteField`, `TextareaField`, `PlaceholderField` and
   `EnumSelectField`, the union variant leaves, and the module layout's field
