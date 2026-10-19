@@ -240,10 +240,16 @@ const buildPlan = (root: ObjectSpec, naming: Naming, budget: number): Plan => {
   // collides with the identically named import from ../hooks, a duplicate
   // declaration plus a self-recursive call. Seeding pushes it to
   // ContactField2/useContactField2.
-  const used = new Set<string>([`${naming.prefix}Field`]);
+  // Claimed names are compared LOWERCASED: every claimed name becomes a
+  // file (fields/EmailField.tsx, sections/AddressSection.tsx), and Windows
+  // and macOS file systems are case-insensitive, so `email` and `eMail`
+  // (EmailField / EMailField) would be ONE file there, the second write
+  // clobbering the first. identifierSuffix only sees the lowercase keys;
+  // the returned name keeps the field's own casing plus the suffix.
+  const used = new Set<string>([`${naming.prefix}Field`.toLowerCase()]);
   const claim = (base: string): string => {
-    const name = `${base}${identifierSuffix(base, used)}`;
-    used.add(name);
+    const name = `${base}${identifierSuffix(base.toLowerCase(), used)}`;
+    used.add(name.toLowerCase());
     return name;
   };
 
