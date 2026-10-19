@@ -91,7 +91,7 @@ const input = useMaskedInput(phone, { parse: parsePhone, format: formatPhone });
 <input type="tel" inputMode="tel" {...input} />
 ```
 
-The form always holds the PARSED value (the ten digits, the number of cents), never the display text, so the schema validates real data. `"empty"` writes the field's `emptyValue`, the same schema-aware blank every clearing binding uses.
+The form always holds the PARSED value (the ten digits, the number of cents), never the display text, so the schema validates real data. `"empty"` follows the text binding's clearing rule: it writes the field's `emptyValue` when the field is clearable (optional, nullable, or defaulted) or holds a non-string value such as a masked number or date, and `""` for a required string, so the field reads clean against a `""` initial and reports the author's `min(1)` message rather than zod's "expected string, received undefined".
 
 ## Optimistic update with rollback
 
