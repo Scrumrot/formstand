@@ -84,17 +84,26 @@ describe("optional object seeding", () => {
     expect(optionalObjectSchema.safeParse(values).success).toBe(true);
   });
 
-  it("plain, mui, and module output typecheck with the empty seeds", async () => {
+  // One case per layout: each typecheck builds a real ts.createProgram
+  // against the library source (about 2.5 s each alone), and the three
+  // together overran the 30 s test budget whenever the suite's other
+  // typecheck files ran alongside, so the combined case timed out under
+  // load while passing in isolation.
+  it("plain output typechecks with the empty seeds", async () => {
     const plainDir = freshTmpDir("optional-object-plain");
     const plainOut = path.join(plainDir, "OptionalForm.tsx");
     expect(await main([fixture, "--out", plainOut])).toBe(0);
     expect(typecheckDiagnostics([plainOut])).toEqual([]);
+  });
 
+  it("mui output typechecks with the empty seeds", async () => {
     const muiDir = freshTmpDir("optional-object-mui");
     const muiOut = path.join(muiDir, "OptionalForm.tsx");
     expect(await main([fixture, "--ui", "mui", "--out", muiOut])).toBe(0);
     expect(typecheckDiagnostics([muiOut], muiStubPaths)).toEqual([]);
+  });
 
+  it("module output seeds the absent sections and typechecks", async () => {
     const moduleDir = freshTmpDir("optional-object-module");
     expect(await main([fixture, "--layout", "module", "--out", moduleDir])).toBe(0);
     const hooks = fs.readFileSync(path.join(moduleDir, "hooks.ts"), "utf8");

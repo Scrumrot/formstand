@@ -106,7 +106,11 @@ describe("textarea override: emission", () => {
     );
   });
 
-  it("single-file mui and module mantine textarea output typechecks", () => {
+  // One case per layout: each typecheck builds a real ts.createProgram
+  // against the library source, and the two together overran the 30 s test
+  // budget when the suite's other typecheck files ran alongside (timed out
+  // under load, passed in isolation).
+  it("single-file mui textarea output typechecks", () => {
     const ir = irWith({ "profile.bio": { component: "textarea" } });
     const dir = freshTmpDir("textarea-typecheck");
     const schemaFile = path.join(dir, "profileSchema.ts");
@@ -122,7 +126,10 @@ describe("textarea override: emission", () => {
       "utf8",
     );
     expect(typecheckDiagnostics([schemaFile, out], muiStubPaths)).toEqual([]);
+  });
 
+  it("module mantine textarea output typechecks", () => {
+    const ir = irWith({ "profile.bio": { component: "textarea" } });
     const moduleDir = freshTmpDir("textarea-module");
     const files = emitModuleForm({
       ir,
