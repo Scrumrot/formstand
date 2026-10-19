@@ -1,10 +1,12 @@
 import {
+  focusFirstError,
   textInputProps,
   useField,
   useForm,
   useFormSelector,
 } from "formstand";
 import { useDemoForm } from "../demo/DemoShell";
+import { fieldA11y } from "../demo/fieldA11y";
 import { z } from "zod";
 
 const TAKEN = new Set(["admin", "root", "tim"]);
@@ -30,14 +32,20 @@ export const AsyncForm = () => {
   useDemoForm(form);
   const username = useField(form, "username", { debounceMs: 300 });
   const isSubmitting = useFormSelector(form, (s) => s.isSubmitting);
+  const a11y = fieldA11y(username, "username");
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        void form.submit((data) => {
-          window.alert(`signed up: ${JSON.stringify(data)}`);
-        });
+        void form.submit(
+          (data) => {
+            window.alert(`signed up: ${JSON.stringify(data)}`);
+          },
+          (errors) => {
+            focusFirstError(errors);
+          },
+        );
       }}
     >
       <p className="subtitle">
@@ -48,8 +56,14 @@ export const AsyncForm = () => {
 
       <div className="field">
         <label htmlFor="username">Username</label>
-        <input id="username" {...textInputProps(username)} autoComplete="off" />
-        <span className="error">
+        <input
+          {...textInputProps(username)}
+          {...a11y.control}
+          autoComplete="off"
+        />
+        {/* The live region carries the pending state too, so a screen
+            reader hears "checking..." and then the verdict. */}
+        <span {...a11y.message}>
           {username.isValidating ? (
             <span className="pending">checking...</span>
           ) : (

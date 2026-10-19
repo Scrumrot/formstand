@@ -1,5 +1,12 @@
-import { type Form, useField, useFieldArray, useForm } from "formstand";
+import {
+  type Form,
+  focusFirstError,
+  useField,
+  useFieldArray,
+  useForm,
+} from "formstand";
 import { useDemoForm } from "../demo/DemoShell";
+import { fieldA11y } from "../demo/fieldA11y";
 import { z } from "zod";
 
 const schema = z.object({
@@ -18,7 +25,6 @@ type UserRowProps = Readonly<{
   // Typed as Form<Schema> (not the schema-less FieldFormApi) so useField
   // infers each field's value type straight from the path.
   form: Form<Schema>;
-  id: string;
   index: number;
   onRemove: () => void;
   onUp: () => void;
@@ -37,17 +43,22 @@ const UserRow = ({
   canMoveDown,
 }: UserRowProps) => {
   const email = useField(form, `users.${index}.email`);
+  // The path doubles as the control id: unique per row, and what
+  // focusFirstError's name walk lands on after a failed submit.
+  const a11y = fieldA11y(email, email.path);
   return (
     <div className="array-item">
       <div>
         <input
+          {...a11y.control}
+          name={email.path}
           value={email.value ?? ""}
           onChange={(e) => email.setValue(e.target.value)}
           onBlur={email.onBlur}
           placeholder="email"
           aria-label="email"
         />
-        <div className="error" style={{ marginTop: 4 }}>
+        <div {...a11y.message} style={{ marginTop: 4 }}>
           {email.error?.[0] ?? " "}
         </div>
       </div>
@@ -78,16 +89,20 @@ export const ArrayForm = () => {
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        void form.submit((data) => {
-          window.alert(`submit ok: ${JSON.stringify(data)}`);
-        });
+        void form.submit(
+          (data) => {
+            window.alert(`submit ok: ${JSON.stringify(data)}`);
+          },
+          (errors) => {
+            focusFirstError(errors);
+          },
+        );
       }}
     >
       {users.fields.map((field, index) => (
         <UserRow
           key={field.id}
           form={form}
-          id={field.id}
           index={index}
           onRemove={() => users.remove(index)}
           onUp={() => users.move(index, index - 1)}

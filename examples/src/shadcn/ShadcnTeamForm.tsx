@@ -90,16 +90,29 @@ const MemberRow = memo(({ form, index, move, remove }: MemberRowProps) => {
 
   return (
     <div className="grid grid-cols-[1fr_1.3fr_auto_auto_auto] items-start gap-2">
+      {/* Placeholder text is not a name: it vanishes once typed over, so
+          each cell carries an aria-label for the row it sits in. */}
       <div className="grid gap-1">
-        <Input placeholder="Name" {...textInputProps(name)} />
+        <Input
+          placeholder="Name"
+          aria-label={`Member ${index + 1} name`}
+          {...textInputProps(name)}
+        />
         <FieldError field={name} />
       </div>
       <div className="grid gap-1">
-        <Input placeholder="email@team.dev" {...textInputProps(email)} />
+        <Input
+          placeholder="email@team.dev"
+          aria-label={`Member ${index + 1} email`}
+          {...textInputProps(email)}
+        />
         <FieldError field={email} />
       </div>
       <Select {...shadcnSelectProps(role)}>
-        <SelectTrigger className="w-32">
+        <SelectTrigger
+          className="w-32"
+          aria-label={`Member ${index + 1} role`}
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

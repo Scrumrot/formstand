@@ -1,11 +1,13 @@
 import { useState } from "react";
 import {
+  focusFirstError,
   textInputProps,
   useField,
   useForm,
   useFormSelector,
 } from "formstand";
 import { useDemoForm } from "../demo/DemoShell";
+import { fieldA11y } from "../demo/fieldA11y";
 import { z } from "zod";
 
 const schema = z.object({
@@ -45,20 +47,27 @@ export const OptimisticForm = () => {
   const displayName = useField(form, "displayName");
   const bio = useField(form, "bio");
   const isSubmitting = useFormSelector(form, (s) => s.isSubmitting);
+  const displayNameA11y = fieldA11y(displayName, "display-name");
+  const bioA11y = fieldA11y(bio, "bio");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setServerError(null);
-    void form.submit(async (data) => {
-      try {
-        const saved = await fakeServer(data);
-        setServerProfile(saved);
-        form.adoptValues(saved);
-      } catch (err) {
-        form.adoptValues(serverProfile);
-        setServerError(err instanceof Error ? err.message : "unknown error");
-      }
-    });
+    void form.submit(
+      async (data) => {
+        try {
+          const saved = await fakeServer(data);
+          setServerProfile(saved);
+          form.adoptValues(saved);
+        } catch (err) {
+          form.adoptValues(serverProfile);
+          setServerError(err instanceof Error ? err.message : "unknown error");
+        }
+      },
+      (errors) => {
+        focusFirstError(errors);
+      },
+    );
   };
 
   return (
@@ -70,21 +79,26 @@ export const OptimisticForm = () => {
 
       <div className="field">
         <label htmlFor="display-name">Display name</label>
-        <input id="display-name" {...textInputProps(displayName)} />
-        <span className="error">{displayName.error?.[0] ?? " "}</span>
+        <input {...textInputProps(displayName)} {...displayNameA11y.control} />
+        <span {...displayNameA11y.message}>
+          {displayName.error?.[0] ?? " "}
+        </span>
       </div>
 
       <div className="field">
         <label htmlFor="bio">Bio</label>
-        <textarea id="bio" rows={3} {...textInputProps(bio)} />
-        <span className="error">{bio.error?.[0] ?? " "}</span>
+        <textarea rows={3} {...textInputProps(bio)} {...bioA11y.control} />
+        <span {...bioA11y.message}>{bio.error?.[0] ?? " "}</span>
       </div>
 
       {serverError !== null ? (
         // Inside a .field wrapper: the playground scopes .error styling
-        // under .field, so a bare error div renders unstyled.
+        // under .field, so a bare error div renders unstyled. role="alert"
+        // because the rejection belongs to no one control.
         <div className="field" style={{ marginBottom: 12 }}>
-          <span className="error">Server error: {serverError}</span>
+          <span className="error" role="alert">
+            Server error: {serverError}
+          </span>
         </div>
       ) : null}
 
@@ -92,7 +106,9 @@ export const OptimisticForm = () => {
         {isSubmitting ? "Saving..." : "Save"}
       </button>
 
-      <div style={{ marginTop: 16, fontSize: 12, color: "#8b94a7" }}>
+      <div
+        style={{ marginTop: 16, fontSize: 12, color: "var(--text-muted)" }}
+      >
         Last known server state:{" "}
         <code>{JSON.stringify(serverProfile)}</code>
       </div>

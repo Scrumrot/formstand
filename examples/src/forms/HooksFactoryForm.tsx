@@ -1,11 +1,13 @@
 import {
   createForm,
   createFormHooks,
+  focusFirstError,
   numberInputProps,
   textInputProps,
 } from "formstand";
 import { z } from "zod";
 import { useDemoForm } from "../demo/DemoShell";
+import { fieldA11y } from "../demo/fieldA11y";
 
 const lineItemSchema = z.object({
   description: z.string().min(1, "required"),
@@ -49,6 +51,11 @@ const LineItemRow = ({
   const description = useInvoiceField(`lineItems.${index}.description`);
   const quantity = useInvoiceField(`lineItems.${index}.quantity`);
   const unitPrice = useInvoiceField(`lineItems.${index}.unitPrice`);
+  // Row controls have no <label>, so the path is the id and the error line
+  // is wired to it; the aria-label stays the accessible name.
+  const descriptionA11y = fieldA11y(description, description.path);
+  const quantityA11y = fieldA11y(quantity, quantity.path);
+  const unitPriceA11y = fieldA11y(unitPrice, unitPrice.path);
 
   return (
     <div className="array-item" style={{ gridTemplateColumns: "2fr 1fr 1fr auto" }}>
@@ -57,9 +64,10 @@ const LineItemRow = ({
           placeholder="description"
           aria-label="description"
           {...textInputProps(description)}
+          {...descriptionA11y.control}
           style={{ width: "100%" }}
         />
-        <div className="error" style={{ marginTop: 4 }}>
+        <div {...descriptionA11y.message} style={{ marginTop: 4 }}>
           {description.error?.[0] ?? " "}
         </div>
       </div>
@@ -68,9 +76,10 @@ const LineItemRow = ({
           placeholder="qty"
           aria-label="quantity"
           {...numberInputProps(quantity)}
+          {...quantityA11y.control}
           style={{ width: "100%" }}
         />
-        <div className="error" style={{ marginTop: 4 }}>
+        <div {...quantityA11y.message} style={{ marginTop: 4 }}>
           {quantity.error?.[0] ?? " "}
         </div>
       </div>
@@ -79,10 +88,11 @@ const LineItemRow = ({
           placeholder="price"
           aria-label="unit price"
           {...numberInputProps(unitPrice)}
+          {...unitPriceA11y.control}
           step="0.01"
           style={{ width: "100%" }}
         />
-        <div className="error" style={{ marginTop: 4 }}>
+        <div {...unitPriceA11y.message} style={{ marginTop: 4 }}>
           {unitPrice.error?.[0] ?? " "}
         </div>
       </div>
@@ -113,17 +123,23 @@ export const HooksFactoryForm = () => {
   const lineItems = useInvoiceFieldArray("lineItems");
   const isDirty = useInvoiceIsDirty();
   const isSubmitting = useInvoiceIsSubmitting();
+  const customerA11y = fieldA11y(customer, "customer");
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        void invoiceForm.submit((data) => {
-          window.alert(`invoice: ${JSON.stringify(data, null, 2)}`);
-        });
+        void invoiceForm.submit(
+          (data) => {
+            window.alert(`invoice: ${JSON.stringify(data, null, 2)}`);
+          },
+          (errors) => {
+            focusFirstError(errors);
+          },
+        );
       }}
     >
-      <p style={{ color: "#8b94a7", fontSize: 13, marginTop: 0 }}>
+      <p style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 0 }}>
         <code>createFormHooks(form, "invoice")</code>: the form is a module
         singleton and every hook is pre-wired to it: no provider, no{" "}
         <code>form</code> prop anywhere below. Edits survive switching tabs
@@ -132,8 +148,8 @@ export const HooksFactoryForm = () => {
 
       <div className="field">
         <label htmlFor="customer">Customer</label>
-        <input id="customer" {...textInputProps(customer)} />
-        <span className="error">{customer.error?.[0] ?? " "}</span>
+        <input {...textInputProps(customer)} {...customerA11y.control} />
+        <span {...customerA11y.message}>{customer.error?.[0] ?? " "}</span>
       </div>
 
       {lineItems.fields.map((field, index) => (
@@ -145,7 +161,7 @@ export const HooksFactoryForm = () => {
       ))}
 
       {lineItems.error ? (
-        <div className="error" style={{ marginBottom: 8 }}>
+        <div className="error" role="alert" style={{ marginBottom: 8 }}>
           {lineItems.error[0]}
         </div>
       ) : null}

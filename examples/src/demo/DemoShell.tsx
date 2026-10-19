@@ -172,9 +172,12 @@ export const DemoShell = ({
             <p className="demo-blurb">{blurb}</p>
           </div>
           <div className="demo-actions">
+            {/* Toggle buttons: aria-pressed carries the open/closed state
+                the .active class only paints. */}
             <button
               className={`secondary ${panel === "state" ? "active" : ""}`}
               type="button"
+              aria-pressed={panel === "state"}
               disabled={form === null}
               title={
                 form === null
@@ -188,6 +191,7 @@ export const DemoShell = ({
             <button
               className={`secondary ${panel === "code" ? "active" : ""}`}
               type="button"
+              aria-pressed={panel === "code"}
               onClick={() => toggle("code")}
             >
               View code

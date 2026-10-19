@@ -1,10 +1,12 @@
 import {
+  focusFirstError,
   textInputProps,
   useField,
   useForm,
   useFormSelector,
 } from "formstand";
 import { useDemoForm } from "../demo/DemoShell";
+import { fieldA11y } from "../demo/fieldA11y";
 import { z } from "zod";
 
 const REGIONS = {
@@ -31,6 +33,9 @@ export const DependentFieldsForm = () => {
   const region = useField(form, "region");
   const city = useField(form, "city");
   const currentCountry = useFormSelector(form, (s) => s.values.country);
+  const countryA11y = fieldA11y(country, "country");
+  const regionA11y = fieldA11y(region, "region");
+  const cityA11y = fieldA11y(city, "city");
 
   const onCountryChange = (next: Country) => {
     country.setValue(next);
@@ -44,9 +49,14 @@ export const DependentFieldsForm = () => {
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        void form.submit((data) => {
-          window.alert(`address: ${JSON.stringify(data)}`);
-        });
+        void form.submit(
+          (data) => {
+            window.alert(`address: ${JSON.stringify(data)}`);
+          },
+          (errors) => {
+            focusFirstError(errors);
+          },
+        );
       }}
     >
       <p className="subtitle">
@@ -56,7 +66,9 @@ export const DependentFieldsForm = () => {
 
       <div className="field">
         <label htmlFor="country">Country</label>
-        <select id="country"
+        <select
+          {...countryA11y.control}
+          name={country.path}
           value={country.value}
           onChange={(e) => onCountryChange(e.target.value as Country)}
           onBlur={country.onBlur}
@@ -65,12 +77,14 @@ export const DependentFieldsForm = () => {
           <option value="uk">United Kingdom</option>
           <option value="ca">Canada</option>
         </select>
-        <span className="error">{country.error?.[0] ?? " "}</span>
+        <span {...countryA11y.message}>{country.error?.[0] ?? " "}</span>
       </div>
 
       <div className="field">
         <label htmlFor="region">Region</label>
-        <select id="region"
+        <select
+          {...regionA11y.control}
+          name={region.path}
           value={region.value}
           onChange={(e) => region.setValue(e.target.value)}
           onBlur={region.onBlur}
@@ -82,13 +96,13 @@ export const DependentFieldsForm = () => {
             </option>
           ))}
         </select>
-        <span className="error">{region.error?.[0] ?? " "}</span>
+        <span {...regionA11y.message}>{region.error?.[0] ?? " "}</span>
       </div>
 
       <div className="field">
         <label htmlFor="city">City</label>
-        <input id="city" {...textInputProps(city)} />
-        <span className="error">{city.error?.[0] ?? " "}</span>
+        <input {...textInputProps(city)} {...cityA11y.control} />
+        <span {...cityA11y.message}>{city.error?.[0] ?? " "}</span>
       </div>
 
       <button className="primary" type="submit">

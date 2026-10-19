@@ -6,6 +6,7 @@ import {
   useFormError,
 } from "formstand";
 import { useDemoForm } from "../demo/DemoShell";
+import { fieldA11y } from "../demo/fieldA11y";
 import { z } from "zod";
 
 // The React 19 form-actions bridge: <form action={...}> + useActionState
@@ -65,6 +66,8 @@ export const ActionsForm = () => {
     },
   );
   const rootError = useFormError(form);
+  const handleA11y = fieldA11y(handle, "handle");
+  const emailA11y = fieldA11y(email, "email");
 
   return (
     <form action={saveAction}>
@@ -76,21 +79,24 @@ export const ActionsForm = () => {
 
       <div className="field">
         <label htmlFor="handle">Handle</label>
-        <input id="handle" {...textInputProps(handle)} />
-        <span className="error">{handle.firstError ?? " "}</span>
+        <input {...textInputProps(handle)} {...handleA11y.control} />
+        <span {...handleA11y.message}>{handle.firstError ?? " "}</span>
       </div>
 
       <div className="field">
         <label htmlFor="email">Email</label>
-        <input id="email" {...textInputProps(email)} />
-        <span className="error">{email.firstError ?? " "}</span>
+        <input {...textInputProps(email)} {...emailA11y.control} />
+        <span {...emailA11y.message}>{email.firstError ?? " "}</span>
       </div>
 
       {rootError !== undefined ? (
         // Inside a .field wrapper: the playground scopes .error styling
-        // under .field, so a bare error div renders unstyled.
+        // under .field, so a bare error div renders unstyled. role="alert"
+        // because the save failure belongs to no one control.
         <div className="field" style={{ marginBottom: 12 }}>
-          <span className="error">{rootError[0]}</span>
+          <span className="error" role="alert">
+            {rootError[0]}
+          </span>
         </div>
       ) : null}
 

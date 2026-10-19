@@ -11,6 +11,7 @@ import {
   textInputProps,
 } from "formstand";
 import { useDemoForm } from "../demo/DemoShell";
+import { fieldA11y } from "../demo/fieldA11y";
 import { z } from "zod";
 
 const schema = z
@@ -35,11 +36,14 @@ const DisplayNameField = () => {
 const TaglineField = () => {
   const form = useFormContext();
   const tagline = useField(form, "tagline");
+  // The custom-input half of the demo wires its own a11y where TextField
+  // above gets it for free.
+  const a11y = fieldA11y(tagline, "tagline");
   return (
     <div className="field">
-      <label htmlFor="tagline-custom-input-via-textinputprops">Tagline (custom input via textInputProps)</label>
-      <input id="tagline-custom-input-via-textinputprops" {...textInputProps(tagline)} />
-      <span className="error">{tagline.error?.[0] ?? " "}</span>
+      <label htmlFor="tagline">Tagline (custom input via textInputProps)</label>
+      <input {...textInputProps(tagline)} {...a11y.control} />
+      <span {...a11y.message}>{tagline.error?.[0] ?? " "}</span>
     </div>
   );
 };
@@ -47,8 +51,12 @@ const TaglineField = () => {
 const RootError = () => {
   const form = useFormContext();
   const rootError = useFormError(form);
+  // role="alert": the schema-level refine belongs to no control, so there
+  // is nothing to describe; announcing it on appearance is the right move.
   return rootError !== undefined ? (
-    <p className="error">{rootError[0]}</p>
+    <p className="error" role="alert">
+      {rootError[0]}
+    </p>
   ) : null;
 };
 

@@ -1,5 +1,6 @@
 import {
   type Form,
+  focusFirstError,
   numberInputProps,
   textInputProps,
   useField,
@@ -8,6 +9,7 @@ import {
   useFormSelectorShallow,
 } from "formstand";
 import { useDemoForm } from "../demo/DemoShell";
+import { fieldA11y } from "../demo/fieldA11y";
 import { z } from "zod";
 
 const lineItemSchema = z.object({
@@ -46,6 +48,11 @@ const LineItemRow = ({ form, index, onRemove }: LineItemRowProps) => {
   const qty = quantity.value ?? 0;
   const price = unitPrice.value ?? 0;
   const subtotal = qty * price;
+  // Row controls have no <label>, so the path is the id and the error line
+  // is wired to it; the aria-label stays the accessible name.
+  const descriptionA11y = fieldA11y(description, description.path);
+  const quantityA11y = fieldA11y(quantity, quantity.path);
+  const unitPriceA11y = fieldA11y(unitPrice, unitPrice.path);
 
   return (
     <div
@@ -63,9 +70,10 @@ const LineItemRow = ({ form, index, onRemove }: LineItemRowProps) => {
           placeholder="description"
           aria-label="description"
           {...textInputProps(description)}
+          {...descriptionA11y.control}
           style={{ width: "100%" }}
         />
-        <div className="error" style={{ marginTop: 4 }}>
+        <div {...descriptionA11y.message} style={{ marginTop: 4 }}>
           {description.error?.[0] ?? " "}
         </div>
       </div>
@@ -74,9 +82,10 @@ const LineItemRow = ({ form, index, onRemove }: LineItemRowProps) => {
           placeholder="qty"
           aria-label="quantity"
           {...numberInputProps(quantity)}
+          {...quantityA11y.control}
           style={{ width: "100%" }}
         />
-        <div className="error" style={{ marginTop: 4 }}>
+        <div {...quantityA11y.message} style={{ marginTop: 4 }}>
           {quantity.error?.[0] ?? " "}
         </div>
       </div>
@@ -85,14 +94,15 @@ const LineItemRow = ({ form, index, onRemove }: LineItemRowProps) => {
           placeholder="price"
           aria-label="unit price"
           {...numberInputProps(unitPrice)}
+          {...unitPriceA11y.control}
           step="0.01"
           style={{ width: "100%" }}
         />
-        <div className="error" style={{ marginTop: 4 }}>
+        <div {...unitPriceA11y.message} style={{ marginTop: 4 }}>
           {unitPrice.error?.[0] ?? " "}
         </div>
       </div>
-      <div style={{ paddingTop: 10, color: "#8b94a7", fontSize: 13 }}>
+      <div style={{ paddingTop: 10, color: "var(--text-muted)", fontSize: 13 }}>
         ${subtotal.toFixed(2)}
       </div>
       <button className="secondary" type="button" onClick={onRemove}>
@@ -126,20 +136,26 @@ export const InvoiceForm = () => {
   useDemoForm(form);
   const customer = useField(form, "customer");
   const lineItems = useFieldArray(form, "lineItems");
+  const customerA11y = fieldA11y(customer, "customer");
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        void form.submit((data) => {
-          window.alert(`invoice: ${JSON.stringify(data, null, 2)}`);
-        });
+        void form.submit(
+          (data) => {
+            window.alert(`invoice: ${JSON.stringify(data, null, 2)}`);
+          },
+          (errors) => {
+            focusFirstError(errors);
+          },
+        );
       }}
     >
       <div className="field">
         <label htmlFor="customer">Customer</label>
-        <input id="customer" {...textInputProps(customer)} />
-        <span className="error">{customer.error?.[0] ?? " "}</span>
+        <input {...textInputProps(customer)} {...customerA11y.control} />
+        <span {...customerA11y.message}>{customer.error?.[0] ?? " "}</span>
       </div>
 
       <div style={{ marginBottom: 12 }}>
@@ -156,7 +172,7 @@ export const InvoiceForm = () => {
       ))}
 
       {lineItems.error ? (
-        <div className="error" style={{ marginBottom: 8 }}>
+        <div className="error" role="alert" style={{ marginBottom: 8 }}>
           {lineItems.error[0]}
         </div>
       ) : null}

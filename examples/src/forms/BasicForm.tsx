@@ -1,5 +1,12 @@
-import { useField, useForm, useFormSelector, type ValidationMode } from "formstand";
+import {
+  focusFirstError,
+  useField,
+  useForm,
+  useFormSelector,
+  type ValidationMode,
+} from "formstand";
 import { useDemoForm } from "../demo/DemoShell";
+import { fieldA11y } from "../demo/fieldA11y";
 import { z } from "zod";
 
 const schema = z.object({
@@ -16,14 +23,25 @@ export const BasicForm = () => {
   const name = useField(form, "name");
   const email = useField(form, "email");
   const isSubmitting = useFormSelector(form, (s) => s.isSubmitting);
+  // Raw inputs bound by hand carry none of the bound components' a11y
+  // wiring, so each one gets the shared id / aria-describedby pair.
+  const nameA11y = fieldA11y(name, "name");
+  const emailA11y = fieldA11y(email, "email");
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        void form.submit((data) => {
-          window.alert(`submit ok: ${JSON.stringify(data)}`);
-        });
+        // The invalid handler moves focus to the first errored control (by
+        // its name attribute), the same thing the MUI demos do.
+        void form.submit(
+          (data) => {
+            window.alert(`submit ok: ${JSON.stringify(data)}`);
+          },
+          (errors) => {
+            focusFirstError(errors);
+          },
+        );
       }}
     >
       <div className="field">
@@ -42,23 +60,25 @@ export const BasicForm = () => {
       <div className="field">
         <label htmlFor="name">Name</label>
         <input
-          id="name"
+          {...nameA11y.control}
+          name={name.path}
           value={name.value ?? ""}
           onChange={(e) => name.setValue(e.target.value)}
           onBlur={name.onBlur}
         />
-        <span className="error">{name.error?.[0] ?? " "}</span>
+        <span {...nameA11y.message}>{name.error?.[0] ?? " "}</span>
       </div>
 
       <div className="field">
         <label htmlFor="email">Email</label>
         <input
-          id="email"
+          {...emailA11y.control}
+          name={email.path}
           value={email.value ?? ""}
           onChange={(e) => email.setValue(e.target.value)}
           onBlur={email.onBlur}
         />
-        <span className="error">{email.error?.[0] ?? " "}</span>
+        <span {...emailA11y.message}>{email.error?.[0] ?? " "}</span>
       </div>
 
       <div className="row">

@@ -1,5 +1,6 @@
 import {
   type Form,
+  focusFirstError,
   numberInputProps,
   textInputProps,
   useField,
@@ -7,6 +8,7 @@ import {
   useForm,
 } from "formstand";
 import { useDemoForm } from "../demo/DemoShell";
+import { fieldA11y } from "../demo/fieldA11y";
 import { z } from "zod";
 
 const trackSchema = z.object({
@@ -53,6 +55,10 @@ const TrackRow = ({
     form,
     `albums.${albumIndex}.tracks.${trackIndex}.durationMin`,
   );
+  // Row controls have no <label>: the path is the id, the error line is
+  // wired to it, and the aria-label stays the accessible name.
+  const titleA11y = fieldA11y(title, title.path);
+  const durationA11y = fieldA11y(durationMin, durationMin.path);
   return (
     <div
       className="array-item"
@@ -69,9 +75,10 @@ const TrackRow = ({
           placeholder="track title"
           aria-label="track title"
           {...textInputProps(title)}
+          {...titleA11y.control}
           style={{ width: "100%" }}
         />
-        <div className="error" style={{ marginTop: 2 }}>
+        <div {...titleA11y.message} style={{ marginTop: 2 }}>
           {title.error?.[0] ?? " "}
         </div>
       </div>
@@ -80,9 +87,10 @@ const TrackRow = ({
           placeholder="min"
           aria-label="duration in minutes"
           {...numberInputProps(durationMin)}
+          {...durationA11y.control}
           style={{ width: "100%" }}
         />
-        <div className="error" style={{ marginTop: 2 }}>
+        <div {...durationA11y.message} style={{ marginTop: 2 }}>
           {durationMin.error?.[0] ?? " "}
         </div>
       </div>
@@ -125,11 +133,12 @@ const AlbumRow = ({
 }: AlbumRowProps) => {
   const albumTitle = useField(form, `albums.${index}.title`);
   const tracks = useFieldArray(form, `albums.${index}.tracks`);
+  const albumTitleA11y = fieldA11y(albumTitle, albumTitle.path);
 
   return (
     <div
       style={{
-        border: "1px solid #1f2530",
+        border: "1px solid var(--border)",
         borderRadius: 8,
         padding: 16,
         marginBottom: 16,
@@ -140,6 +149,7 @@ const AlbumRow = ({
           placeholder="album title"
           aria-label="album title"
           {...textInputProps(albumTitle)}
+          {...albumTitleA11y.control}
           style={{ flex: 1 }}
         />
         <button className="secondary" type="button" onClick={onUp} disabled={!canUp}>
@@ -157,11 +167,11 @@ const AlbumRow = ({
           remove album
         </button>
       </div>
-      <div className="error" style={{ marginBottom: 8 }}>
+      <div {...albumTitleA11y.message} style={{ marginBottom: 8 }}>
         {albumTitle.error?.[0] ?? " "}
       </div>
 
-      <div style={{ paddingLeft: 12, borderLeft: "2px solid #1f2530" }}>
+      <div style={{ paddingLeft: 12, borderLeft: "2px solid var(--border)" }}>
         {tracks.fields.map((field, trackIndex) => (
           <TrackRow
             key={field.id}
@@ -177,7 +187,7 @@ const AlbumRow = ({
         ))}
 
         {tracks.error ? (
-          <div className="error" style={{ marginBottom: 6 }}>
+          <div className="error" role="alert" style={{ marginBottom: 6 }}>
             {tracks.error[0]}
           </div>
         ) : null}
@@ -216,9 +226,14 @@ export const NestedArraysForm = () => {
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        void form.submit((data) => {
-          window.alert(`saved: ${JSON.stringify(data, null, 2)}`);
-        });
+        void form.submit(
+          (data) => {
+            window.alert(`saved: ${JSON.stringify(data, null, 2)}`);
+          },
+          (errors) => {
+            focusFirstError(errors);
+          },
+        );
       }}
     >
       <p className="subtitle">
@@ -241,7 +256,7 @@ export const NestedArraysForm = () => {
       ))}
 
       {albums.error ? (
-        <div className="error" style={{ marginBottom: 8 }}>
+        <div className="error" role="alert" style={{ marginBottom: 8 }}>
           {albums.error[0]}
         </div>
       ) : null}

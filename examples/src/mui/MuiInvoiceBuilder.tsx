@@ -101,17 +101,30 @@ const ItemRow = ({
 
   return (
     <TableRow>
+      {/* The column headers are the visible labels, but a placeholder is
+          not an accessible name, so each cell's control carries the header
+          text (plus the row) as its aria-label: TextField forwards it to
+          the <input> through slotProps.htmlInput, Select through
+          inputProps (MUI's documented route for a label-less select). The
+          number cells merge onto the adapter's own slotProps so its
+          inputMode survives. */}
       <TableCell sx={{ minWidth: 180 }}>
         <TextField
           variant="standard"
           fullWidth
           placeholder="Description"
           {...muiTextFieldProps(description)}
+          slotProps={{
+            htmlInput: { "aria-label": `Line ${index + 1} description` },
+          }}
         />
       </TableCell>
       <TableCell sx={{ minWidth: 130 }}>
         <FormControl variant="standard" fullWidth error={categoryProps.error}>
-          <Select {...categoryProps}>
+          <Select
+            {...categoryProps}
+            inputProps={{ "aria-label": `Line ${index + 1} category` }}
+          >
             {CATEGORIES.map((c) => (
               <MenuItem key={c.value} value={c.value}>
                 {c.label}
@@ -121,10 +134,26 @@ const ItemRow = ({
         </FormControl>
       </TableCell>
       <TableCell sx={{ width: 90 }}>
-        <TextField variant="standard" fullWidth {...quantityProps} />
+        <TextField
+          variant="standard"
+          fullWidth
+          {...quantityProps}
+          slotProps={{
+            ...quantityProps.slotProps,
+            htmlInput: { "aria-label": `Line ${index + 1} quantity` },
+          }}
+        />
       </TableCell>
       <TableCell sx={{ width: 110 }}>
-        <TextField variant="standard" fullWidth {...unitPriceProps} />
+        <TextField
+          variant="standard"
+          fullWidth
+          {...unitPriceProps}
+          slotProps={{
+            ...unitPriceProps.slotProps,
+            htmlInput: { "aria-label": `Line ${index + 1} unit price` },
+          }}
+        />
       </TableCell>
       <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
         {usd.format(rowTotal)}

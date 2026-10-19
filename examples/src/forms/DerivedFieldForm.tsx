@@ -1,11 +1,13 @@
 import { useEffect } from "react";
 import {
+  focusFirstError,
   textInputProps,
   useField,
   useForm,
   useFormSelector,
 } from "formstand";
 import { useDemoForm } from "../demo/DemoShell";
+import { fieldA11y } from "../demo/fieldA11y";
 import { z } from "zod";
 
 const schema = z.object({
@@ -23,6 +25,8 @@ export const DerivedFieldForm = () => {
   const firstName = useField(form, "firstName");
   const lastName = useField(form, "lastName");
   const displayName = useFormSelector(form, (s) => s.values.displayName);
+  const firstA11y = fieldA11y(firstName, "first-name");
+  const lastA11y = fieldA11y(lastName, "last-name");
 
   useEffect(() => {
     const unsubFirst = form.watchValue("firstName", (next) => {
@@ -43,9 +47,14 @@ export const DerivedFieldForm = () => {
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        void form.submit((data) => {
-          window.alert(`hello, ${data.displayName}`);
-        });
+        void form.submit(
+          (data) => {
+            window.alert(`hello, ${data.displayName}`);
+          },
+          (errors) => {
+            focusFirstError(errors);
+          },
+        );
       }}
     >
       <p className="subtitle">
@@ -56,14 +65,14 @@ export const DerivedFieldForm = () => {
 
       <div className="field">
         <label htmlFor="first-name">First name</label>
-        <input id="first-name" {...textInputProps(firstName)} />
-        <span className="error">{firstName.error?.[0] ?? " "}</span>
+        <input {...textInputProps(firstName)} {...firstA11y.control} />
+        <span {...firstA11y.message}>{firstName.error?.[0] ?? " "}</span>
       </div>
 
       <div className="field">
         <label htmlFor="last-name">Last name</label>
-        <input id="last-name" {...textInputProps(lastName)} />
-        <span className="error">{lastName.error?.[0] ?? " "}</span>
+        <input {...textInputProps(lastName)} {...lastA11y.control} />
+        <span {...lastA11y.message}>{lastName.error?.[0] ?? " "}</span>
       </div>
 
       <div className="field">

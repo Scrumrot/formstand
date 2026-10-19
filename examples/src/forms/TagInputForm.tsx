@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useState } from "react";
-import { useField, useForm } from "formstand";
+import { focusFirstError, useField, useForm } from "formstand";
 import { useDemoForm } from "../demo/DemoShell";
+import { fieldA11y } from "../demo/fieldA11y";
 import { z } from "zod";
 
 const schema = z.object({
@@ -43,14 +44,23 @@ export const TagInputForm = () => {
   };
 
   const items = (tags.value as readonly string[] | undefined) ?? [];
+  const titleA11y = fieldA11y(title, "title");
+  // The array-level message describes the draft input: it is the one
+  // control a user interacts with for the tags field.
+  const tagsA11y = fieldA11y(tags, "tags");
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        void form.submit((data) => {
-          window.alert(`saved ${JSON.stringify(data)}`);
-        });
+        void form.submit(
+          (data) => {
+            window.alert(`saved ${JSON.stringify(data)}`);
+          },
+          (errors) => {
+            focusFirstError(errors);
+          },
+        );
       }}
     >
       <p className="subtitle">
@@ -60,12 +70,14 @@ export const TagInputForm = () => {
 
       <div className="field">
         <label htmlFor="title">Title</label>
-        <input id="title"
+        <input
+          {...titleA11y.control}
+          name={title.path}
           value={title.value as string}
           onChange={(e) => title.setValue(e.target.value)}
           onBlur={title.onBlur}
         />
-        <span className="error">{title.error?.[0] ?? " "}</span>
+        <span {...titleA11y.message}>{title.error?.[0] ?? " "}</span>
       </div>
 
       <div className="field">
@@ -114,7 +126,9 @@ export const TagInputForm = () => {
               </button>
             </span>
           ))}
-          <input id="tags"
+          <input
+            {...tagsA11y.control}
+            name={tags.path}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onKey}
@@ -134,7 +148,7 @@ export const TagInputForm = () => {
             }}
           />
         </div>
-        <span className="error">{tags.error?.[0] ?? " "}</span>
+        <span {...tagsA11y.message}>{tags.error?.[0] ?? " "}</span>
       </div>
 
       <button className="primary" type="submit">

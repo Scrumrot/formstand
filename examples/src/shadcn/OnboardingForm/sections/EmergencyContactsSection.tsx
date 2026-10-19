@@ -35,16 +35,32 @@ const ContactRow = ({
   const phone = useOnboardingField(`emergencyContacts.${index}.phone`);
   return (
     <div className="grid grid-cols-[1fr_1fr_1fr_auto] items-start gap-2">
+      {/* Placeholder text is not a name: it vanishes once typed over, so
+          each cell carries an aria-label (the plain module's row does the
+          same). */}
       <div className="grid gap-1">
-        <Input placeholder="Name" {...textInputProps(name)} />
+        <Input
+          placeholder="Name"
+          aria-label="Contact name"
+          {...textInputProps(name)}
+        />
         <FieldError field={name} />
       </div>
       <div className="grid gap-1">
-        <Input placeholder="Relationship" {...textInputProps(relationship)} />
+        <Input
+          placeholder="Relationship"
+          aria-label="Relationship"
+          {...textInputProps(relationship)}
+        />
         <FieldError field={relationship} />
       </div>
       <div className="grid gap-1">
-        <Input placeholder="Phone" type="tel" {...textInputProps(phone)} />
+        <Input
+          placeholder="Phone"
+          aria-label="Contact phone"
+          type="tel"
+          {...textInputProps(phone)}
+        />
         <FieldError field={phone} />
       </div>
       <Button

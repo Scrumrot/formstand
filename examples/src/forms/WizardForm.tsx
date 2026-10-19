@@ -1,6 +1,7 @@
 import {
   textInputProps,
   checkboxProps,
+  focusFirstError,
   useField,
   useFormSteps,
   useForm,
@@ -9,6 +10,7 @@ import {
 } from "formstand";
 import { useState } from "react";
 import { useDemoForm } from "../demo/DemoShell";
+import { fieldA11y } from "../demo/fieldA11y";
 import { z } from "zod";
 
 // The multi-step story: ONE form and one schema behind a wizard.
@@ -49,15 +51,20 @@ const Field = ({
   label: string;
   field: UseFieldReturn<string>;
   type?: string;
-}>) => (
-  <div className="field">
-    <label htmlFor={field.path}>{label}</label>
-    <input id={field.path} type={type ?? "text"} {...textInputProps(field)} />
-    <span className="error">
-      {field.touched ? (field.firstError ?? " ") : " "}
-    </span>
-  </div>
-);
+}>) => {
+  // The message shows only once touched (the wizard validates on next()),
+  // so the aria wiring follows the SHOWN message, not the raw error: a
+  // description pointing at a blank line would announce nothing useful.
+  const shown = field.touched ? field.error : undefined;
+  const a11y = fieldA11y({ error: shown }, field.path);
+  return (
+    <div className="field">
+      <label htmlFor={field.path}>{label}</label>
+      <input type={type ?? "text"} {...textInputProps(field)} {...a11y.control} />
+      <span {...a11y.message}>{shown?.[0] ?? " "}</span>
+    </div>
+  );
+};
 
 export const WizardForm = () => {
   const form = useForm(schema, {
@@ -78,12 +85,19 @@ export const WizardForm = () => {
   const agree = useField(form, "agree");
   const isSubmitting = useIsSubmitting(form);
   const [submitted, setSubmitted] = useState<string | null>(null);
+  const agreeShown = agree.touched ? agree.error : undefined;
+  const agreeA11y = fieldA11y({ error: agreeShown }, agree.path);
 
   return (
     <form
-      onSubmit={form.handleSubmit((data) => {
-        setSubmitted(`${data.email} shipping to ${data.city}`);
-      })}
+      onSubmit={form.handleSubmit(
+        (data) => {
+          setSubmitted(`${data.email} shipping to ${data.city}`);
+        },
+        (errors) => {
+          focusFirstError(errors);
+        },
+      )}
     >
       <p className="subtitle">
         One form, one schema, three steps. Next validates only the current
@@ -116,11 +130,10 @@ export const WizardForm = () => {
       {wizard.step === 2 && (
         <div className="field">
           <label>
-            <input {...checkboxProps(agree)} /> I agree to the terms
+            <input {...checkboxProps(agree)} {...agreeA11y.control} /> I agree
+            to the terms
           </label>
-          <span className="error">
-            {agree.touched ? (agree.firstError ?? " ") : " "}
-          </span>
+          <span {...agreeA11y.message}>{agreeShown?.[0] ?? " "}</span>
         </div>
       )}
 
@@ -146,7 +159,7 @@ export const WizardForm = () => {
       </div>
 
       {submitted !== null ? (
-        <p className="subtitle" style={{ marginTop: 12 }}>
+        <p className="subtitle" role="status" style={{ marginTop: 12 }}>
           Submitted: {submitted}
         </p>
       ) : null}

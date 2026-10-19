@@ -1,5 +1,12 @@
-import { useField, useForm, useFormSelector } from "formstand";
+import {
+  type UseFieldReturn,
+  focusFirstError,
+  useField,
+  useForm,
+  useFormSelector,
+} from "formstand";
 import { useDemoForm } from "../demo/DemoShell";
+import { fieldA11y } from "../demo/fieldA11y";
 import { z } from "zod";
 
 const schema = z.object({
@@ -10,6 +17,29 @@ const schema = z.object({
     zip: z.string().regex(/^\d{5}$/, "5-digit zip"),
   }),
 });
+
+// Four identical hand-bound inputs; one component keeps the a11y wiring
+// (id, name, aria-invalid, aria-describedby) in one place. The control id
+// is the path ("address.city"), which is also what focusFirstError walks.
+const Field = ({
+  label,
+  field,
+}: Readonly<{ label: string; field: UseFieldReturn<string> }>) => {
+  const a11y = fieldA11y(field, field.path);
+  return (
+    <div className="field">
+      <label htmlFor={field.path}>{label}</label>
+      <input
+        {...a11y.control}
+        name={field.path}
+        value={field.value ?? ""}
+        onChange={(e) => field.setValue(e.target.value)}
+        onBlur={field.onBlur}
+      />
+      <span {...a11y.message}>{field.error?.[0] ?? " "}</span>
+    </div>
+  );
+};
 
 export const NestedForm = () => {
   const form = useForm(schema, {
@@ -30,51 +60,21 @@ export const NestedForm = () => {
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        void form.submit(async (data) => {
-          await new Promise((r) => setTimeout(r, 600));
-          window.alert(`submit ok: ${JSON.stringify(data)}`);
-        });
+        void form.submit(
+          async (data) => {
+            await new Promise((r) => setTimeout(r, 600));
+            window.alert(`submit ok: ${JSON.stringify(data)}`);
+          },
+          (errors) => {
+            focusFirstError(errors);
+          },
+        );
       }}
     >
-      <div className="field">
-        <label htmlFor="name">Name</label>
-        <input id="name"
-          value={name.value ?? ""}
-          onChange={(e) => name.setValue(e.target.value)}
-          onBlur={name.onBlur}
-        />
-        <span className="error">{name.error?.[0] ?? " "}</span>
-      </div>
-
-      <div className="field">
-        <label htmlFor="street">Street</label>
-        <input id="street"
-          value={street.value ?? ""}
-          onChange={(e) => street.setValue(e.target.value)}
-          onBlur={street.onBlur}
-        />
-        <span className="error">{street.error?.[0] ?? " "}</span>
-      </div>
-
-      <div className="field">
-        <label htmlFor="city">City</label>
-        <input id="city"
-          value={city.value ?? ""}
-          onChange={(e) => city.setValue(e.target.value)}
-          onBlur={city.onBlur}
-        />
-        <span className="error">{city.error?.[0] ?? " "}</span>
-      </div>
-
-      <div className="field">
-        <label htmlFor="zip">Zip</label>
-        <input id="zip"
-          value={zip.value ?? ""}
-          onChange={(e) => zip.setValue(e.target.value)}
-          onBlur={zip.onBlur}
-        />
-        <span className="error">{zip.error?.[0] ?? " "}</span>
-      </div>
+      <Field label="Name" field={name} />
+      <Field label="Street" field={street} />
+      <Field label="City" field={city} />
+      <Field label="Zip" field={zip} />
 
       <button className="primary" type="submit" disabled={isSubmitting}>
         {isSubmitting ? "Submitting..." : "Submit"}
