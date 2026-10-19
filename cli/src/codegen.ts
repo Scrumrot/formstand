@@ -803,6 +803,11 @@ export type KindUsage = Readonly<{
   // TextField types its path by value and refuses a non-text leaf, so
   // plain renders its in-file PlaceholderField (see plainLeafUsage).
   placeholder: boolean;
+  // An enum leaf backed by a TS enum (FieldSpec.tsEnum). Counts under
+  // `enum` too for the kits (their selects are pinned to string); plain
+  // reads this flag for its in-file EnumSelectField, since the library's
+  // SelectField types each option against the enum type.
+  tsEnum: boolean;
 }>;
 
 const NO_USAGE: KindUsage = {
@@ -815,6 +820,7 @@ const NO_USAGE: KindUsage = {
   autocomplete: false,
   textarea: false,
   placeholder: false,
+  tsEnum: false,
 };
 
 const mergeUsage = (a: KindUsage, b: KindUsage): KindUsage => ({
@@ -827,13 +833,14 @@ const mergeUsage = (a: KindUsage, b: KindUsage): KindUsage => ({
   autocomplete: a.autocomplete || b.autocomplete,
   textarea: a.textarea || b.textarea,
   placeholder: a.placeholder || b.placeholder,
+  tsEnum: a.tsEnum || b.tsEnum,
 });
 
 // The usage one scalar leaf contributes, shared by collectUsage and
 // collectStaticUsage so the two walks cannot disagree on a kind. An
 // overridden leaf renders the override control, not its kind's default,
-// so it counts as autocomplete/textarea only. A degraded leaf counts under
-// its kind AND raises the placeholder flag (see KindUsage).
+// so it counts as autocomplete/textarea only. A degraded leaf and a
+// TS-enum leaf count under their kind AND raise their flag (see KindUsage).
 const defaultLeafUsage = (spec: FieldSpec): KindUsage =>
   isAutocompleteLeaf(spec)
     ? { ...NO_USAGE, autocomplete: true }
@@ -843,17 +850,21 @@ const defaultLeafUsage = (spec: FieldSpec): KindUsage =>
           ...NO_USAGE,
           [spec.kind]: true,
           placeholder: spec.todo !== undefined,
+          tsEnum: spec.kind === "enum" && spec.tsEnum === true,
         };
 
 // The plain backend's leaf rule: a degraded leaf renders PlaceholderField,
-// NOT its kind's library component, so it must not pull that component's
-// import in (a record-only schema must not import TextField).
+// a TS-enum leaf renders EnumSelectField, NEITHER renders its kind's
+// library component, so neither may pull that component's import in (a
+// record-only schema must not import TextField).
 export const plainLeafUsage = (spec: FieldSpec): KindUsage =>
   isAutocompleteLeaf(spec) || isTextareaLeaf(spec)
     ? defaultLeafUsage(spec)
     : spec.todo !== undefined
       ? { ...NO_USAGE, placeholder: true }
-      : { ...NO_USAGE, [spec.kind]: true };
+      : spec.kind === "enum" && spec.tsEnum === true
+        ? { ...NO_USAGE, tsEnum: true }
+        : { ...NO_USAGE, [spec.kind]: true };
 
 // Whether this leaf renders the autocomplete override control instead of its
 // kind's default (only ever true on string/enum leaves, applyFieldOverrides
@@ -2906,10 +2917,14 @@ const plainLeaf = (
         `${ind(level)}<CheckboxField form={form} ${attr} ${jsxAttr("label", label)} />`,
         ...desc,
       ];
+    // A TS-enum-backed enum renders the in-file EnumSelectField (see the
+    // preamble) with the same option list: formstand's SelectField would
+    // check each `value` literal against the enum TYPE, which this file
+    // cannot name. The options are still the enum's runtime values.
     case "enum":
       return [
         ...todo,
-        `${ind(level)}<SelectField`,
+        `${ind(level)}<${spec.tsEnum === true ? "EnumSelectField" : "SelectField"}`,
         `${ind(level + 1)}form={form}`,
         `${ind(level + 1)}${attr}`,
         `${ind(level + 1)}${jsxAttr("label", label)}`,
@@ -3118,9 +3133,59 @@ const PLAIN_PLACEHOLDER_BODY: readonly string[] = [
   "};",
 ];
 
+// The select for an enum backed by a TypeScript enum (z.enum(Color)).
+// formstand's SelectField types each option's `value` against the field's
+// own type, which here is the enum TYPE: a generated `"red"` literal is not
+// assignable to Color, and the enum identifier lives in the schema module,
+// which need not export it. Binding through the raw select builder keeps
+// the runtime contract (the enum's values are what the schema accepts) and
+// gives up only the per-option literal check, the least surprising of the
+// three options considered (importing the enum assumes an export; casting
+// the option list hides the same type behind a louder cast).
+const PLAIN_ENUM_SELECT_BODY: readonly string[] = [
+  "type EnumSelectFieldProps = Readonly<{",
+  "  form: FieldFormApi;",
+  "  path: string;",
+  "  label: string;",
+  "  placeholder: string;",
+  "  options: readonly Readonly<{ value: string; label: string }>[];",
+  "}>;",
+  "",
+  "// A z.enum backed by a TS enum: the field's type is the enum itself, which",
+  "// formstand's SelectField would check each option against. The raw select",
+  "// builder binds the enum's values as plain strings instead.",
+  "const EnumSelectField = ({",
+  "  form,",
+  "  path,",
+  "  label,",
+  "  placeholder,",
+  "  options,",
+  "}: EnumSelectFieldProps) => {",
+  "  const field = useField<string | null | undefined>(form, path);",
+  "  return (",
+  '    <div className="zf-field">',
+  '      <label className="zf-label">',
+  "        {label}",
+  "        <select {...selectProps(field)}>",
+  '          <option value="">{placeholder}</option>',
+  "          {options.map((option) => (",
+  "            <option key={option.value} value={option.value}>",
+  "              {option.label}",
+  "            </option>",
+  "          ))}",
+  "        </select>",
+  "      </label>",
+  "      {field.error?.[0] !== undefined ? (",
+  '        <p role="alert">{field.error?.[0]}</p>',
+  "      ) : null}",
+  "    </div>",
+  "  );",
+  "};",
+];
+
 // The plain backend's module-level in-file controls, each emitted once and
 // only when some static leaf renders it (computed with plainLeafUsage, so
-// a degraded leaf counts for its in-file control, not its kind).
+// a degraded or TS-enum leaf counts for its in-file control, not its kind).
 const plainPreamble = (staticUsage: KindUsage): readonly string[] => [
   ...(staticUsage.autocomplete
     ? [
@@ -3146,6 +3211,15 @@ const plainPreamble = (staticUsage: KindUsage): readonly string[] => [
         [
           "// ---- degraded leaves (see the TODOs) -----------------------------------------",
           ...PLAIN_PLACEHOLDER_BODY,
+        ].join("\n"),
+        "",
+      ]
+    : []),
+  ...(staticUsage.tsEnum
+    ? [
+        [
+          "// ---- TS-enum-backed selects --------------------------------------------------",
+          ...PLAIN_ENUM_SELECT_BODY,
         ].join("\n"),
         "",
       ]
@@ -3176,13 +3250,16 @@ const plainBackend = (
     // Leaf COMPONENTS are gated on static-leaf usage only: a union renders its
     // controls from hoisted hooks via the raw prop builders, never via these
     // components, so a union-only kind must not pull the component in. The
-    // plain rule keeps degraded leaves OUT of their kind (they render the
-    // in-file placeholder, not the library component).
+    // plain rule keeps degraded and TS-enum leaves OUT of their kind (they
+    // render the in-file placeholder/select, not the library component).
     const staticUsage = collectStaticUsage(root, budget, 0, plainLeafUsage);
-    // The in-file controls (overrides, the degraded placeholder) bind
-    // through useField + a raw builder on an erased form.
+    // The in-file controls (overrides, the degraded placeholder, the TS-enum
+    // select) bind through useField + a raw builder on an erased form.
     const inFileControls =
-      staticUsage.autocomplete || staticUsage.textarea || staticUsage.placeholder;
+      staticUsage.autocomplete ||
+      staticUsage.textarea ||
+      staticUsage.placeholder ||
+      staticUsage.tsEnum;
     // The prop builders the union controls call (discriminant select +
     // common/variant field kinds), imported only when a union renders.
     const builderImports = usage.union
@@ -3202,10 +3279,16 @@ const plainBackend = (
       ...(staticUsage.string ? ["TextField"] : []),
       ...builderImports,
       // The in-file AutocompleteField / TextareaField / PlaceholderField
-      // bind through textInputProps + useField; dedupe against the union
-      // builders above.
-      ...(inFileControls && !builderImports.includes("textInputProps")
+      // bind through textInputProps + useField, EnumSelectField through
+      // selectProps; dedupe against the union builders above.
+      ...((staticUsage.autocomplete ||
+        staticUsage.textarea ||
+        staticUsage.placeholder) &&
+      !builderImports.includes("textInputProps")
         ? ["textInputProps"]
+        : []),
+      ...(staticUsage.tsEnum && !builderImports.includes("selectProps")
+        ? ["selectProps"]
         : []),
       ...(arrays.length > 0 ? ["useFieldArray"] : []),
       ...(usage.union || inFileControls ? ["useField"] : []),

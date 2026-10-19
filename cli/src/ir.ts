@@ -126,7 +126,15 @@ export type FieldSpec =
   | (SharedSpecProps & Readonly<{ kind: "number"; checks?: NumberChecks }>)
   | (SharedSpecProps & Readonly<{ kind: "boolean" }>)
   | (SharedSpecProps & Readonly<{ kind: "date" }>)
-  | (SharedSpecProps & Readonly<{ kind: "enum"; options: readonly string[] }>)
+  // `tsEnum` marks a z.enum / z.nativeEnum fed a TypeScript enum object
+  // (entries whose keys differ from their values): the options are the
+  // enum's VALUES, which the runtime accepts, but z.input is the enum
+  // TYPE, so a `"red"` literal is not assignable to it. Emitters that
+  // type an option list against the field (the library's SelectField)
+  // must bind such a field through the raw select builder instead. Zod
+  // mode only: type mode and JSON Schema generate a fresh z.enum([...]).
+  | (SharedSpecProps &
+      Readonly<{ kind: "enum"; options: readonly string[]; tsEnum?: true }>)
   | (SharedSpecProps &
       Readonly<{ kind: "object"; fields: readonly NamedField[] }>)
   | (SharedSpecProps &

@@ -519,15 +519,20 @@ const walkNode = (
         ...flags,
       };
     case "enum": {
-      const options = stringValues(
+      const entries =
         typeof def.entries === "object" && def.entries !== null
-          ? Object.values(def.entries)
-          : null,
-      );
+          ? Object.entries(def.entries as Readonly<Record<string, unknown>>)
+          : [];
+      const options = stringValues(entries.map(([, value]) => value));
+      // A TypeScript enum object maps names to values (Red -> "red"); a
+      // z.enum([...]) list maps each value to itself. The distinction is
+      // what tells the emitters z.input is the enum TYPE (see ir.ts).
+      const tsEnum = entries.some(([key, value]) => key !== value);
       return options !== null
         ? {
             kind: "enum",
             options,
+            ...(tsEnum ? { tsEnum: true as const } : {}),
             ...unmodeledChecksOf(def, isHarmlessCheck),
             ...flags,
           }
