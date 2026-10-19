@@ -56,6 +56,7 @@ import type { FieldSpec } from "./ir";
 import {
   type EmitModuleOptions,
   type ModuleFile,
+  MODULE_FILE_HEADER,
   emitModuleForm,
   joinModuleFiles,
 } from "./moduleLayout";
@@ -140,6 +141,10 @@ Options:
                       scaffold is emitted as an exported use{Name}Form hook.
                       --layout single only: the module layout's form is a
                       singleton the page already owns by importing it
+  --no-live, --no-form-prop
+                      turn the mode off for this run when the config file
+                      sets live: true / formProp: true (an explicit flag
+                      always wins over the config)
   --tests <list>      emit generated specs beside the component: a comma
                       list of vitest, jest, playwright (vitest and jest are
                       the same component spec with different globals; pick
@@ -340,6 +345,13 @@ const parseRest = (
   if (head === "--force") return parseRest(rest, { ...acc, force: true });
   if (head === "--watch") return parseRest(rest, { ...acc, watch: true });
   if (head === "--live") return parseRest(rest, { ...acc, live: true });
+  // The negations exist for config files that set live/formProp to true:
+  // resolveOptions reads `parsed.live ?? config.live`, so only an explicit
+  // false can turn a configured mode off for one run.
+  if (head === "--no-live") return parseRest(rest, { ...acc, live: false });
+  if (head === "--no-form-prop") {
+    return parseRest(rest, { ...acc, formProp: false });
+  }
   if (head === "--tests") {
     const [value, ...after] = rest;
     if (value === undefined) {
@@ -459,6 +471,15 @@ const parseRest = (
       return {
         kind: "error",
         message: `--name must be a valid identifier (PascalCase recommended, e.g. ProfileForm), got "${value}"`,
+      };
+    }
+    // The name is also a JSX tag in the generated spec (`<profileForm />`),
+    // and JSX reads a lowercase-first tag as a DOM element, so the file
+    // parsed, typechecked, and rendered an unknown HTML tag at runtime.
+    if (head === "--name" && !/^[A-Z]/.test(value)) {
+      return {
+        kind: "error",
+        message: `--name must start with an uppercase letter (React treats a lowercase <${value} /> as a DOM tag), e.g. ${value.charAt(0).toUpperCase()}${value.slice(1)}, got "${value}"`,
       };
     }
     return parseRest(after, { ...acc, [key]: value });
@@ -909,9 +930,43 @@ const writeFile = (filePath: string, content: string): void => {
   fs.writeFileSync(filePath, content, "utf8");
 };
 
+const filesUnder = (dir: string): readonly string[] =>
+  fs.existsSync(dir)
+    ? fs
+        .readdirSync(dir, { withFileTypes: true })
+        .flatMap((entry) =>
+          entry.isDirectory()
+            ? filesUnder(path.join(dir, entry.name))
+            : [path.join(dir, entry.name)],
+        )
+    : [];
+
+// A file this generator wrote earlier: its first line is the header every
+// emitted file starts with. That line is the ONLY evidence consulted, a
+// file without it is the user's whatever its name, and is never touched.
+const isGeneratedFile = (file: string): boolean =>
+  fs.readFileSync(file, "utf8").split(/\r?\n/)[0] === MODULE_FILE_HEADER;
+
+// The generated files from a previous run that the new run does not write
+// (a removed section's sections/GoneSection.tsx). Left in place they still
+// compile and still import the module's hooks, so the stale section looked
+// like part of the regenerated module.
+const staleGeneratedFiles = (
+  outDir: string,
+  destinations: readonly string[],
+): readonly string[] => {
+  const keep = new Set(destinations.map((dest) => path.resolve(dest)));
+  return filesUnder(outDir).filter(
+    (file) => !keep.has(path.resolve(file)) && isGeneratedFile(file),
+  );
+};
+
 // Module layout: write the whole folder (all destinations pre-checked so a
 // refusal can never leave a half-written module), or stream it to stdout
-// with the multi-file headers when no --out is given.
+// with the multi-file headers when no --out is given. Under --force (and
+// the --watch reruns, which force) the folder is also pruned of the
+// previous run's generated files the new run no longer writes; a
+// now-empty folder goes with them.
 const emitModuleOutput = (
   files: readonly ModuleFile[],
   out: string | undefined,
@@ -924,12 +979,19 @@ const emitModuleOutput = (
   const outDir = path.resolve(out);
   const destinations = files.map((file) => path.join(outDir, file.path));
   assertWritable(destinations, force);
+  const stale = force ? staleGeneratedFiles(outDir, destinations) : [];
   files.forEach((file, i) => {
     const dest = destinations[i];
     if (dest !== undefined) {
       writeFile(dest, file.content);
       stderr(`wrote ${relToCwd(dest)}`);
     }
+  });
+  stale.forEach((file) => {
+    fs.rmSync(file);
+    stderr(`removed ${relToCwd(file)}`);
+    const dir = path.dirname(file);
+    if (dir !== outDir && fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
   });
 };
 
@@ -959,6 +1021,20 @@ const defaultExport = (
       ? mod
       : undefined;
 
+// A named export reaches the generated file as `import { <name> }`, so it
+// must be an identifier. ES2022 allows string-literal export names
+// (`export { inner as "my schema" }`), which emitted `import { my schema }`
+// and a file that did not parse. Aliasing (`import { "my schema" as x }`)
+// needs TS 5.6, newer than the floor the generated code promises, so the
+// rule is stated instead.
+const isIdentifierName = (name: string): boolean =>
+  /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) && !isReservedWord(name);
+
+const unimportableName = (exportName: string, input: string): SchemaPick => ({
+  kind: "not-found",
+  message: `export "${exportName}" in ${input} is not a valid identifier, so it cannot be imported by name; re-export the schema under an identifier (export const mySchema = ...) and pass --export mySchema`,
+});
+
 const pickSchemaExport = (
   mod: Readonly<Record<string, unknown>>,
   exportName: string | undefined,
@@ -982,14 +1058,17 @@ const pickSchemaExport = (
     }
     // "default" is not a legal local identifier: import it as a default
     // import under the module-derived fallback name.
-    return exportName === "default"
-      ? {
-          kind: "found",
-          exportName: fallbackName,
-          importKind: "default",
-          schema: value,
-        }
-      : { kind: "found", exportName, importKind: "named", schema: value };
+    if (exportName === "default") {
+      return {
+        kind: "found",
+        exportName: fallbackName,
+        importKind: "default",
+        schema: value,
+      };
+    }
+    return isIdentifierName(exportName)
+      ? { kind: "found", exportName, importKind: "named", schema: value }
+      : unimportableName(exportName, input);
   }
   const dflt = defaultExport(mod);
   if (dflt !== undefined) {
@@ -1005,12 +1084,14 @@ const pickSchemaExport = (
   );
   const sole = zodExports[0];
   if (zodExports.length === 1 && sole !== undefined) {
-    return {
-      kind: "found",
-      exportName: sole[0],
-      importKind: "named",
-      schema: sole[1],
-    };
+    return isIdentifierName(sole[0])
+      ? {
+          kind: "found",
+          exportName: sole[0],
+          importKind: "named",
+          schema: sole[1],
+        }
+      : unimportableName(sole[0], input);
   }
   if (zodExports.length === 0) {
     return {
@@ -1679,6 +1760,21 @@ export const main = async (
         if (options.formProp && options.layout === "module") {
           stderr(
             "error: --form-prop does not combine with --layout module, the module's form is a singleton the page already owns: import the exported instance (e.g. profileForm) and drive it directly (reset, adoptValues, handleSubmit)",
+          );
+          return 1;
+        }
+        // In the single layout --out is the component FILE. A trailing
+        // separator or an existing directory used to write a file literally
+        // named after the folder (or refuse to "overwrite" the folder).
+        if (
+          options.layout === "single" &&
+          options.out !== undefined &&
+          (/[\\/]$/.test(options.out) ||
+            (fs.existsSync(options.out) &&
+              fs.statSync(options.out).isDirectory()))
+        ) {
+          stderr(
+            `error: --out "${options.out}" names a directory; in the single-file layout name a .tsx file (e.g. src/ProfileForm.tsx), or use --layout module to write a folder`,
           );
           return 1;
         }
