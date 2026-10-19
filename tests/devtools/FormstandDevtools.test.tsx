@@ -103,4 +103,16 @@ describe("FormstandDevtools", () => {
     expect(container.innerHTML).toBe("");
     vi.unstubAllEnvs();
   });
+
+  it("renders nothing when NODE_ENV is not readable at all", () => {
+    // A CDN/ESM, Deno, or worker production build has no `process`; the
+    // panel exposes the whole form state, so an unknowable environment
+    // must read as shipped (fail closed), unlike the console warnings.
+    vi.stubGlobal("process", undefined);
+    const { container } = render(
+      <FormstandDevtools form={makeForm()} defaultOpen />,
+    );
+    vi.unstubAllGlobals();
+    expect(container.innerHTML).toBe("");
+  });
 });

@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createForm } from "../src/core/createForm";
+import { isDevBuild, isDevToolsBuild } from "../src/core/env";
 import { flattenIssues } from "../src/core/validation";
 
 // The October 2026 review's round B core findings, each pinned by the probe
@@ -364,5 +365,43 @@ describe("updateState values patches release server errors", () => {
     const before = form.getState().serverErrors;
     form.updateState((s) => ({ touched: { ...s.touched, name: true } }));
     expect(form.getState().serverErrors).toBe(before);
+  });
+});
+
+describe("state-exposing devtools gates fail closed without a readable NODE_ENV", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("isDevToolsBuild is false with no process, isDevBuild stays open", () => {
+    vi.stubGlobal("process", undefined);
+    expect(isDevToolsBuild()).toBe(false);
+    expect(isDevBuild()).toBe(true);
+  });
+
+  it("isDevToolsBuild needs a readable NODE_ENV other than production", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    expect(isDevToolsBuild()).toBe(false);
+    vi.stubEnv("NODE_ENV", "development");
+    expect(isDevToolsBuild()).toBe(true);
+    vi.stubEnv("NODE_ENV", undefined);
+    expect(isDevToolsBuild()).toBe(false);
+  });
+
+  it("the zustand devtools middleware stays disabled when process is undefined", () => {
+    const connect = vi.fn(() => ({
+      init: () => {},
+      send: () => {},
+      subscribe: () => () => {},
+    }));
+    vi.stubGlobal("__REDUX_DEVTOOLS_EXTENSION__", { connect });
+    const schema = z.object({ name: z.string() });
+    // Sanity: in this test runner NODE_ENV is readable, so opting in connects.
+    createForm(schema, { initialValues: { name: "" }, devtools: true });
+    expect(connect).toHaveBeenCalledTimes(1);
+    vi.stubGlobal("process", undefined);
+    createForm(schema, { initialValues: { name: "" }, devtools: true });
+    expect(connect).toHaveBeenCalledTimes(1);
   });
 });

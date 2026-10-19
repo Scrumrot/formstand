@@ -13,7 +13,7 @@ import {
 } from "./array";
 import { clearArrayOpsUnder, recordArrayOp } from "./arrayOpLog";
 import { isFieldDirty, isPlainObject, valuesEqual } from "./equality";
-import { isDevBuild } from "./env";
+import { isDevBuild, isDevToolsBuild } from "./env";
 import { entryAt, flagAt } from "./maps";
 import type {
   DefaultPathDepth,
@@ -583,9 +583,10 @@ export const createForm = <
             // opting in during development must NOT stream every keystroke to
             // an end user who happens to have the extension installed, where
             // a module-singleton form's unbounded time-travel history is a
-            // real memory + serialization cost. Guarded for environments
-            // without process (a bundler defines NODE_ENV in real dev).
-            enabled: isDevBuild(),
+            // real memory + serialization cost. Fail-closed gate: a runtime
+            // without a readable NODE_ENV (CDN/ESM, Deno, a worker) reads as
+            // production here, unlike the console-warning gate.
+            enabled: isDevToolsBuild(),
           }),
         );
 

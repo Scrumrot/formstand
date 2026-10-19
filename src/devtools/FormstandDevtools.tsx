@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from "react";
-import { isDevBuild } from "../core/env";
+import { isDevToolsBuild } from "../core/env";
 import type { z } from "zod";
 import type { Form } from "../core/createForm";
 import type { FieldPath } from "../core/fieldPath";
@@ -29,8 +29,10 @@ type FieldRow = Readonly<{
 // Non-production only, matching createForm's own devtools gate: the panel is
 // a debugging affordance, and shipping it to end users would leak the whole
 // form state into the page. Bundlers that define NODE_ENV drop the panel
-// entirely; the `typeof process` guard keeps it from throwing in runtimes
-// that define no process at all.
+// entirely. The gate fails CLOSED (isDevToolsBuild): a runtime with no
+// readable NODE_ENV at all (a CDN/ESM consumer, Deno, a worker) renders
+// nothing rather than assuming it is a dev build the way the console
+// warnings may.
 
 const preview = (value: unknown): string => {
   if (value === undefined) return "undefined";
@@ -255,8 +257,10 @@ const DevtoolsPanel = <TSchema extends z.ZodType>({
  * two error channels shown separately, the live diff against initial values,
  * and snapshot/restore time travel.
  *
- * Renders nothing in production builds.
+ * Renders nothing in production builds, and nothing wherever NODE_ENV is not
+ * readable (no `process` global, or one without NODE_ENV): the panel exposes
+ * the whole form state, so an unknowable environment is treated as shipped.
  */
 export const FormstandDevtools = <TSchema extends z.ZodType>(
   props: FormstandDevtoolsProps<TSchema>,
-) => (isDevBuild() ? <DevtoolsPanel {...props} /> : null);
+) => (isDevToolsBuild() ? <DevtoolsPanel {...props} /> : null);
