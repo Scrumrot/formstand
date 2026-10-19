@@ -438,11 +438,15 @@ export const droppedDefaultFieldPaths = (ir: FieldSpec): readonly string[] =>
 // TODOs are emitter decisions, not IR facts, so they never appear here.
 export type TodoSite = Readonly<{ path: string; todo: string }>;
 
-export const todoFieldPaths = (ir: FieldSpec): readonly TodoSite[] =>
-  matchingSpecs(ir, (spec) => spec.todo !== undefined).map(({ path, spec }) => ({
-    path,
-    todo: spec.todo ?? "",
-  }));
+// The root has no path of its own; like unmodeledCheckPaths it is named
+// "(root)" so a root-level TODO (an index signature beside the root type's
+// members) still reaches stderr and the spec's skip comment.
+export const todoFieldPaths = (ir: FieldSpec): readonly TodoSite[] => [
+  ...(ir.todo !== undefined ? [{ path: "(root)", todo: ir.todo }] : []),
+  ...matchingSpecs(ir, (spec) => spec.todo !== undefined).map(
+    ({ path, spec }) => ({ path, todo: spec.todo ?? "" }),
+  ),
+];
 
 // Every node whose checks the walker did not model, with the check names
 // (see SharedSpecProps.unmodeledChecks). The generated spec skips its
@@ -782,10 +786,14 @@ const zodExpr = (spec: FieldSpec, level: number): string => {
     : `${withDefault}.describe(${q(spec.description)})`;
 };
 
+// A TODO on the ROOT (a type with an index signature beside its members)
+// has no field line to sit above, so it goes above the export; nested
+// TODOs ride with their field in zodExpr.
 export const emitZodSchema = (ir: FieldSpec, schemaName = "schema"): string =>
   [
     `import { z } from "zod";`,
     "",
+    ...(ir.todo === undefined ? [] : [`// TODO: ${lineCommentText(ir.todo)}`]),
     `export const ${schemaName} = ${zodExpr(ir, 0)};`,
     "",
   ].join("\n");
