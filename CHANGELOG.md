@@ -159,7 +159,7 @@
   core and the hook), and the form-level `ArrayPathsOf<F>` are exported
   beside `PathsOf`.
 - **`PathsAccepting` and `SelectValueAt` are actually exported**, as the
-  entry below has claimed since 0.21; `BoundUseFields` and
+  bound-components entry below says they are; `BoundUseFields` and
   `BoundUseVariantField` join the other `Bound*` types.
 - **`FormstandDevtoolsProps` carries the form's depth.**
   `<FormstandDevtools form={createForm(s, { pathDepth: 12 })} />` was a
