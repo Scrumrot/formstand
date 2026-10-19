@@ -183,9 +183,9 @@ const projectFiles = (
         devDependencies: {
           "@types/react": "^19.0.0",
           "@types/react-dom": "^19.0.0",
-          "@vitejs/plugin-react": "^6.1.1",
+          "@vitejs/plugin-react": "^6.1.2",
           typescript: "^5.9.0",
-          vite: "^8.3.0",
+          vite: "^8.3.4",
         },
         stackblitz: { startCommand: "npm run dev" },
       },
