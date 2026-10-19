@@ -1668,7 +1668,7 @@ export const main = async (
         const options = resolveOptions(parsed.options, config);
         if (options.template !== undefined && options.layout === "module") {
           stderr(
-            "error: custom templates support --layout single only (module support is planned)",
+            "error: custom templates apply to the single-file layout only; drop --template or use --layout single",
           );
           return 1;
         }
