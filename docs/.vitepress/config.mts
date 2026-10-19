@@ -23,7 +23,7 @@ const legacyRedirect = `
 export default defineConfig({
   title: "formstand",
   description: "Zod-schema-first form state for React 19, backed by zustand",
-  // Deployed to GitHub Pages under /formstand/ — drop this (and the favicon
+  // Deployed to GitHub Pages under /formstand/. Drop this (and the favicon
   // prefix) if the site ever moves to a custom domain.
   base: "/formstand/",
   head: [

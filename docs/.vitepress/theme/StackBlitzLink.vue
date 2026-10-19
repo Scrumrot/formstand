@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // "Open in StackBlitz" for the docs' example listings, reusing the
-// playground's own seed builder and demo sources — one source of truth
-// for what a standalone project contains and which demos qualify. The
+// playground's own seed builder and demo sources, so there is one source
+// of truth for what a standalone project contains and which demos qualify. The
 // imports are pure data + a click-time DOM POST, so SSR renders nothing
 // stateful. A demo that is not self-contained renders nothing at all,
 // mirroring the playground button's gate.

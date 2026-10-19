@@ -1,10 +1,10 @@
 /*
  * formstand brand layer over the default VitePress theme.
  *
- * Identity: "a form on a music stand" — brass strokes (#d99a3d family) with
+ * Identity: "a form on a music stand": brass strokes (#d99a3d family) with
  * a sap-green check (#86c166) for anything that means "valid". Motion is
  * deliberate and small: one slow hero float, lift-on-hover cards, and
- * color/transform transitions — all disabled under prefers-reduced-motion.
+ * color/transform transitions, all disabled under prefers-reduced-motion.
  */
 
 /* ---- palette -------------------------------------------------------- */
@@ -55,7 +55,7 @@
   --vp-home-hero-image-filter: blur(48px);
 }
 
-/* The mark drifts like a stand being set down — slow enough to feel calm. */
+/* The mark drifts like a stand being set down, slow enough to feel calm. */
 .VPHero .image-src {
   animation: fs-hero-float 7s ease-in-out infinite;
 }
