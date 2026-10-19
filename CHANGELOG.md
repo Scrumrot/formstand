@@ -1,5 +1,41 @@
 # Changelog
 
+## Unreleased
+
+### Docs
+
+- Field arrays: the array-op revalidation sentence now matches the gate.
+  Ops run under the change trigger, so in the default `onBlur` mode (and
+  `onSubmit`) they stay silent until the first failed submit switches to
+  `reValidateMode`; `onTouched` needs the array path itself touched;
+  `onChange` and `all` revalidate at once. A "Render cost" note says the
+  hook re-renders its caller on every keystroke in any row and how to
+  keep rows cheap.
+- Persistence: a loaded draft is adopted without validation, so a draft
+  that fails the schema reads valid until something validates;
+  `validateOnMount` runs before `persistForm` applies the draft and does
+  not cover it, so call `form.validate()` after the load.
+- `useFormValues` re-renders on every keystroke anywhere in the form; keep
+  it out of per-row components.
+- A `"use server"` action must parse `data` with the schema on the server
+  on every path, not only the no-JS one.
+- Masked inputs: `"empty"` writes `emptyValue` for clearable and non-string
+  fields and `""` for a required string, as the 0.22.0 binding does.
+- Components: the `SelectField` props row names the real option type, and
+  the guide states the by-value `path` rule (`TextField` on a `z.number()`
+  is a compile error) that the API page already had.
+- CLI: the schema module and `formstand.config.ts` are executed through
+  jiti, so point the CLI only at files you would run with `node`; the
+  overview names all three inputs.
+- Snippets import every name they use (`Form`, `FormStateApi`,
+  `createForm`, `textInputProps`); the `onSubmit` snippet is in a tsx
+  fence; `fillFields` is documented as typed per key.
+- A "Security notes" section on validation.md collects server
+  re-validation, untrusted drafts, and the CLI executing modules, with
+  links to the sections that hold the detail.
+- Roadmap: `--path-depth` moves to the shipped list. The remaining em
+  dashes in the roadmap and the VitePress theme comments are reworded.
+
 ## 0.22.0 — 2026-10-19
 
 ### Fixed
