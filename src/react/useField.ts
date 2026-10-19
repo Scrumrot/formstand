@@ -12,6 +12,7 @@ import type {
   FieldValue,
   PathDepth,
 } from "../core/fieldPath";
+import { entryAt, flagAt } from "../core/maps";
 import { shouldValidateOn } from "../core/mode";
 import { getAtPath } from "../core/path";
 import type { FormState } from "../core/types";
@@ -190,10 +191,12 @@ export function useField<TValue = unknown>(
         path: p,
         value: value as TValue,
         initialValue: initialValue as TValue,
-        error: state.errors[p],
-        touched: state.touched[p] ?? false,
+        // Own-key reads: a field named "constructor" or "toString" would
+        // otherwise read Object.prototype's function as its error/flag.
+        error: entryAt(state.errors, p),
+        touched: flagAt(state.touched, p),
         dirty: isFieldDirty(value, initialValue),
-        isValidating: state.isValidating[p] ?? false,
+        isValidating: flagAt(state.isValidating, p),
       };
     }),
   );
@@ -290,7 +293,7 @@ export function useField<TValue = unknown>(
           state.mode,
           state.reValidateMode,
           state.submitCount > 0,
-          state.touched[path] ?? false,
+          flagAt(state.touched, path),
         )
       ) {
         triggerValidate();

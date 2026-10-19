@@ -15,6 +15,7 @@ import type {
   FieldValue,
   PathDepth,
 } from "../core/fieldPath";
+import { entryAt, flagAt } from "../core/maps";
 import { shouldValidateOn } from "../core/mode";
 import { getAtPath } from "../core/path";
 import type { FormState } from "../core/types";
@@ -403,7 +404,9 @@ export function useFieldArray<TItem = unknown>(
       const value = getAtPath(state.values, path);
       return {
         items: (Array.isArray(value) ? value : EMPTY_ITEMS) as readonly TItem[],
-        error: state.errors[path],
+        // Own-key read, like useField: an array named "constructor" must
+        // not read Object as its error list.
+        error: entryAt(state.errors, path),
       };
     }),
   );
@@ -438,7 +441,7 @@ export function useFieldArray<TItem = unknown>(
         state.mode,
         state.reValidateMode,
         state.submitCount > 0,
-        state.touched[path] ?? false,
+        flagAt(state.touched, path),
       )
     ) {
       form.validateField?.(path);

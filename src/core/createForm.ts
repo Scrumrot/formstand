@@ -14,6 +14,7 @@ import {
 import { clearArrayOpsUnder, recordArrayOp } from "./arrayOpLog";
 import { isFieldDirty, isPlainObject, valuesEqual } from "./equality";
 import { isDevBuild } from "./env";
+import { entryAt, flagAt } from "./maps";
 import type {
   DefaultPathDepth,
   FieldPath,
@@ -422,10 +423,15 @@ const stringArraysEqual = (
 // Preserve the previous array reference for entries whose messages didn't
 // change (and the previous map itself when nothing changed at all), so field
 // subscriptions comparing errors by identity don't re-fire on every pass.
+// Own-key reads (entryAt) throughout: a bare `prev[k]` for k =
+// "constructor" on an EMPTY map returned `Object`, which passed the
+// undefined check and crashed stringArraysEqual on `.every` inside
+// setState. Reachable from setError("constructor", ...), addErrors, and a
+// schema that simply declares a field by that name.
 const reuseErrorRefs = (next: ErrorMap, prev: ErrorMap): ErrorMap => {
   if (next === prev) return prev;
   const entries = Object.entries(next).map(([k, v]) => {
-    const old = prev[k];
+    const old = entryAt(prev, k);
     return [
       k,
       old !== undefined && stringArraysEqual(old, v) ? old : v,
@@ -433,7 +439,7 @@ const reuseErrorRefs = (next: ErrorMap, prev: ErrorMap): ErrorMap => {
   });
   const sameShape =
     entries.length === Object.keys(prev).length &&
-    entries.every(([k, v]) => prev[k] === v);
+    entries.every(([k, v]) => entryAt(prev, k) === v);
   return sameShape ? prev : Object.fromEntries(entries);
 };
 
@@ -889,10 +895,10 @@ export const createForm = <
     const value = getAtPath(state.values, path);
     return {
       value,
-      error: state.errors[path],
-      touched: state.touched[path] ?? false,
+      error: entryAt(state.errors, path),
+      touched: flagAt(state.touched, path),
       dirty: isFieldDirty(value, getAtPath(state.initialValues, path)),
-      isValidating: state.isValidating[path] ?? false,
+      isValidating: flagAt(state.isValidating, path),
     };
   };
 

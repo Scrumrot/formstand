@@ -92,3 +92,54 @@ describe("flattenIssues scales linearly", () => {
     expect(form.getState().isValidating).toEqual({});
   });
 });
+
+describe("error keys named after Object.prototype members", () => {
+  const keys = ["constructor", "toString", "hasOwnProperty", "__proto__"] as const;
+
+  it.each(keys)("setError(%j) lands as an own entry and never throws", (key) => {
+    const form = createForm(z.object({ name: z.string() }), {
+      initialValues: { name: "" },
+    });
+    expect(() => form.setError(key as never, "x")).not.toThrow();
+    expect(Object.hasOwn(form.getState().errors, key)).toBe(true);
+    expect(form.getState().errors[key]).toEqual(["x"]);
+    // A second identical write re-derives through reuseErrorRefs too.
+    expect(() => form.setError(key as never, "x")).not.toThrow();
+    expect(() => form.setError(key as never, [])).not.toThrow();
+    expect(Object.hasOwn(form.getState().errors, key)).toBe(false);
+  });
+
+  it.each(keys)("addErrors({ %j }) lands and clears as an own entry", (key) => {
+    const form = createForm(z.object({ name: z.string() }), {
+      initialValues: { name: "" },
+    });
+    expect(() => form.addErrors({ [key]: ["x"] })).not.toThrow();
+    expect(form.getState().errors[key]).toEqual(["x"]);
+    expect(() => form.addErrors({ [key]: [] })).not.toThrow();
+    expect(Object.hasOwn(form.getState().errors, key)).toBe(false);
+  });
+
+  it("validate() on a schema with a `constructor` field writes its error", () => {
+    const schema = z.object({ constructor: z.string().min(1) });
+    const form = createForm(schema, { initialValues: { constructor: "" } });
+    expect(() => form.validate()).not.toThrow();
+    expect(form.getState().errors["constructor"]).toEqual([
+      expect.any(String),
+    ]);
+    // A second pass with the same verdict goes through reuseErrorRefs.
+    expect(() => form.validate()).not.toThrow();
+    form.setValue("constructor", "ok");
+    expect(form.validate().kind).toBe("valid");
+    expect(Object.hasOwn(form.getState().errors, "constructor")).toBe(false);
+  });
+
+  it.each(keys)("getFieldState(%j) reads undefined/false, not prototype members", (key) => {
+    const form = createForm(z.object({ name: z.string() }), {
+      initialValues: { name: "" },
+    });
+    const field = form.getFieldState(key as never);
+    expect(field.error).toBeUndefined();
+    expect(field.touched).toBe(false);
+    expect(field.isValidating).toBe(false);
+  });
+});

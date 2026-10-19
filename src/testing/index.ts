@@ -6,6 +6,7 @@ import type {
   FieldValue,
   PathDepth,
 } from "../core/fieldPath";
+import { flagAt } from "../core/maps";
 import { shouldValidateOn } from "../core/mode";
 
 // formstand/testing: drive a form in tests the way the HOOKS drive it —
@@ -41,7 +42,7 @@ export const fillField = <
       state.mode,
       state.reValidateMode,
       state.submitCount > 0,
-      state.touched[path] ?? false,
+      flagAt(state.touched, path),
     )
   ) {
     form.validateField(path);
