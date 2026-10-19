@@ -43,7 +43,7 @@ Errors live in two channels that cannot clobber each other. Validation owns one,
 
 Wherever state can be derived, it is. Dirtiness is computed by comparing values against initial values rather than tracked as you write, so it cannot drift out of sync, and `diff()` hands you a PATCH-ready payload of exactly what changed.
 
-And the generator speaks the same schema. [`formstand-cli`](./cli/) turns a schema, or a TypeScript type, into a working component for plain HTML, Material UI, shadcn/ui, Chakra, Mantine, or Ant Design.
+And the generator speaks the same schema. [`formstand-cli`](./cli/) turns a zod schema, a TypeScript type, or a JSON Schema / OpenAPI document into a working component for plain HTML, Material UI, shadcn/ui, Chakra, Mantine, or Ant Design.
 
 When something is wrong, [the devtools panel](./devtools) shows you the form rather than the store: a row per field, the two error channels kept apart, the live diff against initial values, and snapshot/restore. It is a subpath of the same package and renders nothing in production.
 

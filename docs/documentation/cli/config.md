@@ -19,7 +19,7 @@ export default defineConfig({
 
 `defineConfig` is an identity function with types attached, so you get completion and typo checking in the config file itself. `ui` accepts the same spellings as `--ui`, including the pinned `"mui@5"` through `"mui@9"` and the explicit `"chakra@3"`, `"mantine@9"`, `"antd@6"`.
 
-The CLI looks for `formstand.config.{ts,mts,js,mjs}` in the working directory, or wherever `--config <file>` points. Pair it with `--watch` for a schema-first loop: edit the schema, the module regenerates with your house style already applied.
+The CLI looks for `formstand.config.{ts,mts,js,mjs}` in the working directory, or wherever `--config <file>` points. The config file is loaded through jiti the same way the schema module is, which means it is **executed** as code, imports included, so treat it (and anything `--config` points at) as a file you would run with `node`, not as data. Pair it with `--watch` for a schema-first loop: edit the schema, the module regenerates with your house style already applied.
 
 ## Per-field component overrides
 

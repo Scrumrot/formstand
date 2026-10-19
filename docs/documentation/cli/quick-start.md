@@ -11,7 +11,7 @@ Running one-shot without installing works too, but the runner must be told the p
 
 ## From a zod schema
 
-Point it at a file that exports a schema. The schema is loaded and introspected at runtime using **your** copy of zod, so the output reflects exactly what the schema says, including optionality, nullability, defaults, and enum options.
+Point it at a file that exports a schema. The schema is loaded and introspected at runtime using **your** copy of zod, so the output reflects exactly what the schema says, including optionality, nullability, defaults, and enum options. Loaded means **executed**: the module (and a `formstand.config.ts`, if present) runs through jiti as ordinary code, with everything it imports, so point the CLI only at files you would run with `node`.
 
 ```bash
 npx formstand-gen src/contactSchema.ts --out src/ContactForm.tsx
