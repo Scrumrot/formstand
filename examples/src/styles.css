@@ -25,6 +25,10 @@
   --text-label: #b0b8c7;
   --text-muted: #8b94a7;
   --accent-text: #f0e2c4;
+  /* The demo header's group eyebrow: brass on the dark card (8.7:1), but
+   * brass on a white card is 3.2:1, so the light theme swaps in the darker
+   * accent text token below. */
+  --eyebrow: var(--fs-accent);
   --error: #ff7878;
   --pending: #c89b3c;
   --shadow-card: 0 12px 32px rgba(0, 0, 0, 0.28);
@@ -42,8 +46,12 @@
   --text: #333945;
   --text-bright: #171c26;
   --text-label: #4e5666;
-  --text-muted: #6d7585;
+  /* 4.88:1 on --bg (the sidebar foot and nav counts sit on it); the
+   * previous #6d7585 measured 4.21:1, under the 4.5:1 AA floor. */
+  --text-muted: #636b7a;
   --accent-text: #7a5416;
+  /* 6.76:1 on the white card, 6.14:1 on --bg. */
+  --eyebrow: var(--accent-text);
   --error: #c03535;
   --pending: #8a6a1f;
   --shadow-card: 0 10px 28px rgba(90, 80, 60, 0.14);
@@ -265,7 +273,7 @@ body {
   font-size: 11px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--fs-accent);
+  color: var(--eyebrow);
 }
 .demo-title {
   margin: 0;

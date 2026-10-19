@@ -25,25 +25,23 @@ type RowProps = Readonly<{
   onRender: () => void;
 }>;
 
+// The grid cells are plain inputs inside a .field wrapper so they take the
+// playground's themed input styling (background, border, text) instead of
+// the dark literals they used to hard-code, which stayed dark in the light
+// theme. The wrapper's own margin is zeroed because the grid sets the gap.
 const Row = ({ form, path, onRender }: RowProps) => {
   const field = useField(form, path);
   onRender();
   return (
-    <input
-      value={(field.value as string) ?? ""}
-      onChange={(e) => field.setValue(e.target.value)}
-      placeholder={path}
-      aria-label={path}
-      style={{
-        background: "#0b0d12",
-        border: "1px solid #2a3140",
-        color: "#e6ebf5",
-        padding: "6px 10px",
-        borderRadius: 4,
-        fontSize: 13,
-        width: "100%",
-      }}
-    />
+    <div className="field" style={{ margin: 0 }}>
+      <input
+        value={(field.value as string) ?? ""}
+        onChange={(e) => field.setValue(e.target.value)}
+        placeholder={path}
+        aria-label={path}
+        style={{ padding: "6px 10px", fontSize: 13, width: "100%" }}
+      />
+    </div>
   );
 };
 
@@ -112,7 +110,7 @@ const Benchmark = ({ size, appendResult }: BenchmarkProps) => {
           gap: 4,
           maxHeight: 300,
           overflow: "auto",
-          border: "1px solid #1f2530",
+          border: "1px solid var(--border)",
           borderRadius: 6,
           padding: 8,
         }}
@@ -125,6 +123,13 @@ const Benchmark = ({ size, appendResult }: BenchmarkProps) => {
   );
 };
 
+// Theme tokens, not literals, so the table reads in both themes.
+const cellStyle = { padding: 6 } as const;
+const headStyle = {
+  padding: 6,
+  borderBottom: "1px solid var(--border)",
+} as const;
+
 export const PerfBenchmarkForm = () => {
   const [size, setSize] = useState<Size>(50);
   const [results, setResults] = useState<readonly RunResult[]>([]);
@@ -134,7 +139,7 @@ export const PerfBenchmarkForm = () => {
 
   return (
     <div>
-      <p style={{ color: "#8b94a7", fontSize: 14, marginTop: 0 }}>
+      <p style={{ color: "var(--text-muted)", fontSize: 14, marginTop: 0 }}>
         Synthetic benchmark: a flat form with N string fields rendered via{" "}
         <code>useField</code>. Run it and watch <code>field0</code> (top-left)
         tick to <code>iter-99</code>; the "renders / setValue" column counts
@@ -179,24 +184,18 @@ export const PerfBenchmarkForm = () => {
           }}
         >
           <thead>
-            <tr style={{ textAlign: "left", color: "#b0b8c7" }}>
-              <th style={{ padding: 6, borderBottom: "1px solid #1f2530" }}>
-                Size
-              </th>
-              <th style={{ padding: 6, borderBottom: "1px solid #1f2530" }}>
-                ms / setValue
-              </th>
-              <th style={{ padding: 6, borderBottom: "1px solid #1f2530" }}>
-                renders / setValue
-              </th>
+            <tr style={{ textAlign: "left", color: "var(--text-label)" }}>
+              <th style={headStyle}>Size</th>
+              <th style={headStyle}>ms / setValue</th>
+              <th style={headStyle}>renders / setValue</th>
             </tr>
           </thead>
           <tbody>
             {results.map((r, i) => (
               <tr key={i}>
-                <td style={{ padding: 6 }}>{r.size}</td>
-                <td style={{ padding: 6 }}>{r.ms.toFixed(3)}</td>
-                <td style={{ padding: 6 }}>{r.renderCount.toFixed(2)}</td>
+                <td style={cellStyle}>{r.size}</td>
+                <td style={cellStyle}>{r.ms.toFixed(3)}</td>
+                <td style={cellStyle}>{r.renderCount.toFixed(2)}</td>
               </tr>
             ))}
           </tbody>
