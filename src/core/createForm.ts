@@ -310,6 +310,19 @@ const omitKey = <V>(
 ): Readonly<Record<string, V>> =>
   Object.fromEntries(Object.entries(map).filter(([k]) => k !== key));
 
+// The many-keys sibling, one pass over the map. Folding omitKey per key
+// (reduce with omitKey) rebuilt the whole map once per key, quadratic in
+// the number of paths a plural pass carries.
+const omitKeys = <V>(
+  map: Readonly<Record<string, V>>,
+  keys: ReadonlySet<string>,
+): Readonly<Record<string, V>> => {
+  if (keys.size === 0) return map;
+  const entries = Object.entries(map);
+  const kept = entries.filter(([k]) => !keys.has(k));
+  return kept.length === entries.length ? map : Object.fromEntries(kept);
+};
+
 const inScopeOfAny = (key: string, paths: readonly string[]): boolean =>
   paths.some((p) => isPathOrChild(key, p));
 
@@ -936,10 +949,10 @@ export const createForm = <
     const valuesAtStart = store.getState().values;
     store.setState((state) => ({
       ...state,
-      isValidating: paths.reduce<Record<string, boolean>>(
-        (acc, p) => ({ ...acc, [p]: true }),
-        { ...state.isValidating },
-      ),
+      isValidating: {
+        ...state.isValidating,
+        ...Object.fromEntries(paths.map((p) => [p, true] as const)),
+      },
     }));
 
     const result = await validateAsync(schema, valuesAtStart);
@@ -951,14 +964,12 @@ export const createForm = <
     const stillCurrent = paths.filter(
       (p) => sequences.get(p) === passes.get(p),
     );
+    const stillCurrentKeys = new Set(stillCurrent);
     if (live.values !== valuesAtStart) {
       if (stillCurrent.length > 0) {
         store.setState((state) => ({
           ...state,
-          isValidating: stillCurrent.reduce(
-            (acc, p) => omitKey(acc, p),
-            state.isValidating,
-          ),
+          isValidating: omitKeys(state.isValidating, stillCurrentKeys),
         }));
       }
       return requested;
@@ -971,10 +982,7 @@ export const createForm = <
         pickScope(fullErrors, stillCurrent),
         stillCurrent,
       ),
-      isValidating: stillCurrent.reduce(
-        (acc, p) => omitKey(acc, p),
-        state.isValidating,
-      ),
+      isValidating: omitKeys(state.isValidating, stillCurrentKeys),
     }));
 
     return requested;
@@ -1353,20 +1361,31 @@ export const createForm = <
         ...errorChannels(state, { serverErrors: errors }),
       })),
     addErrors: (errors) =>
-      store.setState((state) => ({
-        ...state,
-        ...errorChannels(state, {
-          serverErrors: Object.entries(errors).reduce<ErrorMap>(
-            // Computed keys throughout, so a server field named
-            // "__proto__" lands as an own property like everywhere else.
-            (acc, [key, list]) =>
-              list === undefined || list.length === 0
-                ? omitKey(acc, key)
-                : { ...acc, [key]: list },
-            state.serverErrors,
-          ),
-        }),
-      })),
+      store.setState((state) => {
+        // Two passes over the incoming map, not a per-entry fold: the old
+        // reduce spread (or omitKey-rebuilt) the whole channel once per
+        // entry, quadratic in the number of server fields. Object.fromEntries
+        // and the spread define computed keys as own properties, so a
+        // server field named "__proto__" still lands like everywhere else.
+        const entries = Object.entries(errors);
+        const removed = new Set(
+          entries
+            .filter(([, list]) => list === undefined || list.length === 0)
+            .map(([key]) => key),
+        );
+        const added = Object.fromEntries(
+          entries.filter(([, list]) => list !== undefined && list.length > 0),
+        );
+        return {
+          ...state,
+          ...errorChannels(state, {
+            serverErrors: {
+              ...omitKeys(state.serverErrors, removed),
+              ...added,
+            },
+          }),
+        };
+      }),
     clearErrors: (path?: string) =>
       store.setState((state) => {
         // Clears both channels (schema errors return on the next validation
