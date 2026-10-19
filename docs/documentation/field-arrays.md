@@ -57,6 +57,10 @@ React keys must follow *items*, not indices, or removing row 0 makes every row r
 Array *ops* track duplicates exactly (see above). A whole-array write is the remaining ambiguity: after `setValue("tags", reordered)` the intent for `Object.is`-equal rows is unknowable, since `["a", "a"]` reordered is identical to itself, so duplicates match in order. If rows carry focus or animation state and you rewrite whole arrays, prefer objects (`{ id, label }`) over bare primitives. Exact op tracking is a `createForm` and `useForm` feature; a hand-rolled `FieldArrayFormApi` implementation reconciles by value only.
 :::
 
+### Render cost
+
+The hook subscribes to the array **reference**. Values are replaced immutably, so a keystroke in any row produces a new array and re-renders the component that called `useFieldArray`, even though the ids and the other rows did not change. Keep that component to the list: render each row from its own component that takes `form` and `index` and reads its fields through `useField`, as `UserRow` and `AlbumRow` do above, so a keystroke re-renders the row being typed in plus the thin list shell. For large arrays wrap the row component in `React.memo` and give it stable props: `form` and `index` already are, and the ops (`users.remove`, `users.move`, and the rest) are memoized on `(form, path)`, so pass `onRemove={users.remove}` and call `onRemove(index)` inside the row rather than the inline `() => users.remove(i)` above, which is a new function every render and defeats the memo.
+
 ## Nested arrays
 
 Field arrays nest without ceremony. Each level gets its own hook, and paths compose with template literals (adapted from the repo's `NestedArraysForm` example):
@@ -102,7 +106,7 @@ Constraints on the array itself (`z.array(...).min(1)`, `.max(n)`, a `.refine` o
 {tracks.firstError ? <p role="alert">{tracks.firstError}</p> : null}
 ```
 
-The hook's ops keep this error live: once the validation gate is open (after the first blur in the default `onBlur` mode, after a failed submit in `onSubmit` mode, or immediately in `onChange` mode), `push` past a `max(n)` raises the error and `push`-ing the missing row under a `min(1)` clears it, with no second submit needed. Custom `FieldArrayFormApi` implementations opt in by providing the optional `validateField(path)` member; without it, ops simply skip revalidation ([API notes](./api/utilities#the-structural-form-interfaces)).
+The hook's ops keep this error live under the **change** gate, the one `useField`'s `setValue` applies. An array op is a change, never a blur, so when the gate opens depends on the mode: in the default `onBlur` mode (and in `onSubmit`) ops stay silent until the first failed submit switches the form to `reValidateMode`, which is `onChange` by default; in `onTouched` they revalidate once the array path itself is touched (a blur inside a row marks that row's field, not the array, so use `form.setTouched("users")` or wait for the failed submit); in `onChange` and `all` they revalidate immediately. Once the gate is open, `push` past a `max(n)` raises the error and `push`-ing the missing row under a `min(1)` clears it, with no second submit needed. Custom `FieldArrayFormApi` implementations opt in by providing the optional `validateField(path)` member; without it, ops simply skip revalidation ([API notes](./api/utilities#the-structural-form-interfaces)).
 
 ## Metadata follows rows
 
