@@ -2,15 +2,25 @@ import { type ReactNode, useState } from "react";
 import { isDevToolsBuild } from "../core/env";
 import type { z } from "zod";
 import type { Form } from "../core/createForm";
-import type { FieldPath } from "../core/fieldPath";
+import type {
+  DefaultPathDepth,
+  FieldPath,
+  PathDepth,
+} from "../core/fieldPath";
 import { getAtPath } from "../core/path";
 import type { FormState } from "../core/types";
 import { useFormSelectorShallow } from "../react/useFormSelector";
 import { leafPaths, unmatchedErrorKeys } from "./paths";
 import { type DevtoolsPosition, anchorFor, styles } from "./styles";
 
-export type FormstandDevtoolsProps<TSchema extends z.ZodType> = Readonly<{
-  form: Form<TSchema>;
+// D (the form's typed-path depth budget) is carried so a `pathDepth: 12`
+// form is accepted: Form<S, 12> is deliberately not assignable to Form<S, 9>,
+// so the depth-less prop type rejected every widened form (TS2375).
+export type FormstandDevtoolsProps<
+  TSchema extends z.ZodType,
+  D extends PathDepth = DefaultPathDepth,
+> = Readonly<{
+  form: Form<TSchema, D>;
   position?: DevtoolsPosition;
   defaultOpen?: boolean;
   /** Shown on the toggle, for telling two mounted panels apart. */
@@ -61,7 +71,9 @@ const flags = (row: FieldRow): string =>
 // equality is stable — deriving anything fresh (an array from dirtyFields())
 // inside the selector would hand the store a new reference every pass and
 // loop it (React #185).
-const useDevtoolsState = <TSchema extends z.ZodType>(form: Form<TSchema>) =>
+const useDevtoolsState = <TSchema extends z.ZodType, D extends PathDepth>(
+  form: Form<TSchema, D>,
+) =>
   useFormSelectorShallow(form, (state) => ({
     values: state.values,
     errors: state.errors,
@@ -85,12 +97,12 @@ const Section = ({
   </div>
 );
 
-const DevtoolsPanel = <TSchema extends z.ZodType>({
+const DevtoolsPanel = <TSchema extends z.ZodType, D extends PathDepth>({
   form,
   position = "bottom-right",
   defaultOpen = false,
   label = "formstand",
-}: FormstandDevtoolsProps<TSchema>) => {
+}: FormstandDevtoolsProps<TSchema, D>) => {
   const state = useDevtoolsState(form);
   const [open, setOpen] = useState(defaultOpen);
   const [held, setHeld] = useState<FormState<z.input<TSchema>> | null>(null);
@@ -105,7 +117,7 @@ const DevtoolsPanel = <TSchema extends z.ZodType>({
     // getFieldState rather than re-deriving dirty here, so the panel reports
     // the library's own comparison rules (Dates by timestamp, deep for
     // containers) instead of offering a second opinion.
-    const field = form.getFieldState(path as FieldPath<z.input<TSchema>>);
+    const field = form.getFieldState(path as FieldPath<z.input<TSchema>, D>);
     return {
       path,
       value: field.value,
@@ -261,6 +273,9 @@ const DevtoolsPanel = <TSchema extends z.ZodType>({
  * readable (no `process` global, or one without NODE_ENV): the panel exposes
  * the whole form state, so an unknowable environment is treated as shipped.
  */
-export const FormstandDevtools = <TSchema extends z.ZodType>(
-  props: FormstandDevtoolsProps<TSchema>,
+export const FormstandDevtools = <
+  TSchema extends z.ZodType,
+  D extends PathDepth = DefaultPathDepth,
+>(
+  props: FormstandDevtoolsProps<TSchema, D>,
 ) => (isDevToolsBuild() ? <DevtoolsPanel {...props} /> : null);

@@ -3,11 +3,17 @@ import { renderHook } from "@testing-library/react";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { z } from "zod";
 import { createForm } from "../../src/core/createForm";
+import { FormstandDevtools } from "../../src/devtools";
+import type { FormstandDevtoolsProps } from "../../src/devtools";
 import type {
   ArrayFieldPath,
   ArrayItemOf,
   ArrayPathsOf,
+  BoundUseFields,
+  BoundUseVariantField,
   Form,
+  PathsAccepting,
+  SelectValueAt,
 } from "../../src/index";
 import { createFormHooks } from "../../src/react/createFormHooks";
 import type { FieldFormApi } from "../../src/react/useField";
@@ -72,6 +78,15 @@ export const ArrayPathPins = () => {
   return null;
 };
 
+// A pathDepth: 12 form used to be TS2375 against the depth-less prop type.
+export const DeepDevtools = () => {
+  const deep = createForm(arraySchema, {
+    initialValues: arrayInitial,
+    pathDepth: 12,
+  });
+  return <FormstandDevtools form={deep} />;
+};
+
 describe("array ops and useFieldArray take array paths only", () => {
   it("ArrayFieldPath / ArrayPathsOf keep exactly the variable-length array paths", () => {
     type Values = z.input<typeof arraySchema>;
@@ -117,6 +132,32 @@ describe("array ops and useFieldArray take array paths only", () => {
       useBound("name");
     };
     expect(typeof neverRuns).toBe("function");
+  });
+});
+
+describe("the exports the changelog promises", () => {
+  it("path filters, the array types, and the Bound* hooks are importable from the root", () => {
+    type F = Form<typeof arraySchema>;
+    expectTypeOf<PathsAccepting<F, string | null | undefined>>().toEqualTypeOf<
+      | "name"
+      | "pair.0"
+      | `rows.${number}.id`
+      | `rows.${number}.tags.${number}`
+      | `tags.${number}`
+      | `nullableTags.${number}`
+    >();
+    expectTypeOf<SelectValueAt<F, "name">>().toEqualTypeOf<string>();
+    expectTypeOf<BoundUseFields<typeof arraySchema>>().toBeFunction();
+    expectTypeOf<BoundUseVariantField<typeof arraySchema>>().toBeFunction();
+  });
+
+  it("FormstandDevtoolsProps carries the form's depth", () => {
+    expectTypeOf<
+      FormstandDevtoolsProps<typeof arraySchema, 12>["form"]
+    >().toEqualTypeOf<Form<typeof arraySchema, 12>>();
+    expectTypeOf<
+      FormstandDevtoolsProps<typeof arraySchema>["form"]
+    >().toEqualTypeOf<Form<typeof arraySchema>>();
   });
 });
 

@@ -86,8 +86,10 @@ export { createFormHooks } from "./react/createFormHooks";
 export type {
   BoundUseField,
   BoundUseFieldArray,
+  BoundUseFields,
   BoundUseFlag,
   BoundUseSelector,
+  BoundUseVariantField,
   FormHooks,
 } from "./react/createFormHooks";
 export type {
@@ -150,7 +152,9 @@ export type {
   // holding a value type (PathsAccepting), array paths (ArrayPathsOf),
   // and a select's legal option values (SelectValueAt).
   PathsOf,
+  PathsAccepting,
   ArrayPathsOf,
+  SelectValueAt,
 } from "./react/fields";
 export { focusFirstError, focusField } from "./react/focusError";
 export { useFieldArray } from "./react/useFieldArray";
