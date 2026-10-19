@@ -977,6 +977,22 @@ export const createForm = <
     }
     const passes = new Map(paths.map((p) => [p, claimPass(p)]));
     const valuesAtStart = store.getState().values;
+    // Same fast path as the sync plural (see validateFields): when every
+    // requested path extracts a subschema, parse just those slots. The
+    // async plural used to parse the whole form regardless, so a wizard
+    // step (useFormSteps routes through here) paid for every other step's
+    // fields, and an unrelated field's async refine ran on every advance.
+    // Extraction bailing still guards cross-field rules: one path whose
+    // scope does not extract sends the whole batch to the full parse.
+    const scopes = paths.map((path) => ({
+      path,
+      scope: fieldScopeFor(path, valuesAtStart),
+    }));
+    const allViaSubschema = scopes.every(
+      ({ scope }) =>
+        scope.kind === "skip" ||
+        (scope.kind === "parse" && scope.viaSubschema),
+    );
     store.setState((state) => ({
       ...state,
       isValidating: {
@@ -985,34 +1001,74 @@ export const createForm = <
       },
     }));
 
-    const result = await validateAsync(schema, valuesAtStart);
-    const fullErrors = result.kind === "invalid" ? result.errors : emptyErrors;
-    const requestedErrors = pickScope(fullErrors, paths);
+    // Whichever parse ran, each path's errors are read back per path: the
+    // slot parses (in parallel) by their own key, the full parse scoped to
+    // the path. One variant per parse shape, so the two cannot be mixed.
+    type BatchParse =
+      | Readonly<{ kind: "slots"; byPath: ReadonlyMap<string, ErrorMap> }>
+      | Readonly<{ kind: "full"; errors: ErrorMap }>;
+    const parsed: BatchParse = allViaSubschema
+      ? {
+          kind: "slots",
+          byPath: new Map(
+            await Promise.all(
+              scopes.map(
+                async ({ path, scope }) =>
+                  [path, await parseScopeAsync(path, scope)] as const,
+              ),
+            ),
+          ),
+        }
+      : {
+          kind: "full",
+          errors: await validateAsync(schema, valuesAtStart).then((result) =>
+            result.kind === "invalid" ? result.errors : emptyErrors,
+          ),
+        };
+    const errorsFor = (path: string): ErrorMap => {
+      switch (parsed.kind) {
+        case "slots":
+          return parsed.byPath.get(path) ?? emptyErrors;
+        case "full":
+          return pickScope(parsed.errors, [path]);
+      }
+    };
+    const requestedErrors: ErrorMap = Object.fromEntries(
+      paths.flatMap((path) => Object.entries(errorsFor(path))),
+    );
     const requested = settledFields(requestedErrors);
 
+    // Three tiers per path: still OWNED (this pass is the latest for it, so
+    // it clears the flag it set), and among those still FRESH (its scope's
+    // value is the live one, so its verdict lands). A full-form scope is
+    // fresh only while the whole values reference holds; a subschema scope
+    // only while its own slot does, so an unrelated field changing in
+    // flight no longer discards the batch.
     const live = store.getState();
-    const stillCurrent = paths.filter(
-      (p) => sequences.get(p) === passes.get(p),
+    const owned = scopes.filter(
+      ({ path }) => sequences.get(path) === passes.get(path),
     );
-    const stillCurrentKeys = new Set(stillCurrent);
-    if (live.values !== valuesAtStart) {
-      if (stillCurrent.length > 0) {
-        store.setState((state) => ({
-          ...state,
-          isValidating: omitKeys(state.isValidating, stillCurrentKeys),
-        }));
-      }
-      return requested;
-    }
+    const fresh = owned
+      .filter(
+        ({ path, scope }) =>
+          !scopeStale(scope, path, valuesAtStart, live.values),
+      )
+      .map(({ path }) => path);
+    const ownedKeys = new Set(owned.map(({ path }) => path));
+    if (owned.length === 0) return requested;
 
     store.setState((state) => ({
       ...state,
-      ...commitScopedErrors(
-        state,
-        pickScope(fullErrors, stillCurrent),
-        stillCurrent,
-      ),
-      isValidating: omitKeys(state.isValidating, stillCurrentKeys),
+      ...(fresh.length === 0
+        ? {}
+        : commitScopedErrors(
+            state,
+            Object.fromEntries(
+              fresh.flatMap((path) => Object.entries(errorsFor(path))),
+            ),
+            fresh,
+          )),
+      isValidating: omitKeys(state.isValidating, ownedKeys),
     }));
 
     return requested;

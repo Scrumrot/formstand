@@ -12,9 +12,11 @@ import { useFormSelectorShallow } from "./useFormSelector";
 // The multi-step (wizard) story: one form, one schema, one values object —
 // and a step index that gates progress on the CURRENT step's fields
 // validating clean. Everything else falls out of what the library already
-// does: next() runs validateFieldsAsync over the step's paths (the full
-// schema parses, so cross-field refines inside a step fire; the errors are
-// scoped to the step), a failed advance marks the errored fields touched
+// does: next() runs validateFieldsAsync over the step's paths (just those
+// slots when every path extracts a subschema; a refine on an ancestor
+// object sends the batch through the full parse, so cross-field rules
+// inside a step still fire; either way the errors are scoped to the
+// step), a failed advance marks the errored fields touched
 // exactly the way a failed submit does (so touched-gated error UIs show),
 // and going BACK never validates — leaving a half-filled step is normal.
 //

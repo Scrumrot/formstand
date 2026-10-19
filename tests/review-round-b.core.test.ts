@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createForm } from "../src/core/createForm";
 import { flattenIssues } from "../src/core/validation";
@@ -204,6 +204,98 @@ describe("an async field verdict survives an unrelated field's change", () => {
     gate.resolve(false);
     await pending;
     expect(form.getState().errors["a"]).toBeUndefined();
+    expect(form.getState().isValidating).toEqual({});
+  });
+});
+
+describe("validateFieldsAsync takes the subschema fast path", () => {
+  it("parses only the requested slots when every path extracts", async () => {
+    const spy = vi.fn(() => true);
+    const schema = z.object({
+      a: z.string(),
+      b: z.string().refine(spy),
+    });
+    const form = createForm(schema, { initialValues: { a: "", b: "" } });
+    // The sync plural never touched b; the async one parsed the whole form.
+    form.validateFields(["a"]);
+    expect(spy).not.toHaveBeenCalled();
+    const result = await form.validateFieldsAsync(["a"]);
+    expect(result.kind).toBe("valid");
+    expect(spy).not.toHaveBeenCalled();
+    expect(form.getState().isValidating).toEqual({});
+  });
+
+  it("falls back to the full parse when a path's scope does not extract", async () => {
+    const spy = vi.fn(() => true);
+    const schema = z
+      .object({ a: z.string(), b: z.string().refine(spy) })
+      .refine(() => true);
+    const form = createForm(schema, { initialValues: { a: "", b: "" } });
+    await form.validateFieldsAsync(["a"]);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports and commits the errors of the requested slots only", async () => {
+    const schema = z.object({
+      a: z.string().min(1, "a required"),
+      b: z.string().min(1, "b required"),
+      c: z.string().min(1, "c required"),
+    });
+    const form = createForm(schema, { initialValues: { a: "", b: "", c: "" } });
+    const result = await form.validateFieldsAsync(["a", "b"]);
+    expect(result).toEqual({
+      kind: "invalid",
+      errors: { a: ["a required"], b: ["b required"] },
+    });
+    expect(form.getState().errors).toEqual({
+      a: ["a required"],
+      b: ["b required"],
+    });
+    // A skip scope (no slot) parses nothing and reports valid.
+    const rows = createForm(
+      z.object({ items: z.array(z.string().min(1)) }),
+      { initialValues: { items: [] } },
+    );
+    expect(await rows.validateFieldsAsync(["items.3"])).toEqual({
+      kind: "valid",
+    });
+  });
+
+  it("judges each path by its own slot when an unrelated field changes", async () => {
+    const gate = deferred<boolean>();
+    const schema = z.object({
+      username: z.string().refine(() => gate.promise, "taken"),
+      email: z.string(),
+    });
+    const form = createForm(schema, {
+      initialValues: { username: "", email: "" },
+    });
+    form.setValue("username", "taken");
+    const pending = form.validateFieldsAsync(["username"]);
+    form.setValue("email", "someone@example.com");
+    gate.resolve(false);
+    const result = await pending;
+    expect(result.kind).toBe("invalid");
+    expect(form.getState().errors["username"]).toEqual(["taken"]);
+    expect(form.getState().isValidating).toEqual({});
+  });
+
+  it("a changed slot drops its own verdict but siblings still land", async () => {
+    const gate = deferred<boolean>();
+    const schema = z.object({
+      username: z.string().refine(() => gate.promise, "taken"),
+      email: z.string().min(1, "email required"),
+    });
+    const form = createForm(schema, {
+      initialValues: { username: "", email: "" },
+    });
+    form.setValue("username", "taken");
+    const pending = form.validateFieldsAsync(["username", "email"]);
+    form.setValue("username", "free");
+    gate.resolve(false);
+    await pending;
+    expect(form.getState().errors["username"]).toBeUndefined();
+    expect(form.getState().errors["email"]).toEqual(["email required"]);
     expect(form.getState().isValidating).toEqual({});
   });
 });
