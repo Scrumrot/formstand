@@ -26,6 +26,8 @@ import {
   collectOptionsProps,
   collectUsage,
   commentText,
+  DEGRADED_PIN,
+  degradedPin,
   isAutocompleteLeaf,
   isTextareaLeaf,
   describedLeafKinds,
@@ -2776,11 +2778,11 @@ const rowUnionPieces = (
         ]),
     ...collected.common.map(
       (binding) =>
-        `  const ${binding.varName} = ${naming.hook("Field")}(\`${template}.${templateEscape(binding.name)}\`);`,
+        `  const ${binding.varName} = ${naming.hook("Field")}(\`${template}.${templateEscape(binding.name)}\`)${degradedPin(binding.spec)};`,
     ),
     ...collected.variant.map(
       (binding) =>
-        `  const ${binding.varName} = ${naming.hook("VariantField")}(\`${template}\`, ${q(binding.name)});`,
+        `  const ${binding.varName} = ${naming.hook("VariantField")}(\`${template}\`, ${q(binding.name)})${degradedPin(binding.spec)};`,
     ),
     ...numberPropsBindings(ui, [...collected.common, ...collected.variant]),
   ];
@@ -2846,12 +2848,15 @@ const rowUnionPieces = (
         ];
       }
       // One real element needs no fragment; a lone TODO comment still does
-      // (`cond && ({/* ... */})` is an empty parenthesized expression).
+      // (`cond && ({/* ... */})` is an empty parenthesized expression). A
+      // degraded leaf is TWO nodes (its TODO comment above the control), so
+      // it takes the fragment as well.
       const first = flattened[0];
       const single =
         flattened.length === 1 &&
         first !== undefined &&
         first.kind === "leaf" &&
+        first.spec.todo === undefined &&
         bindingByName.has(first.name);
       return single
         ? [
@@ -2904,7 +2909,7 @@ const rowTuplePieces = (
             reserved.forEach((name) => usedVars.add(name));
             return {
               bindings: [
-                `  const ${varName} = ${naming.hook("Field")}(\`${template}.${i}\`);`,
+                `  const ${varName} = ${naming.hook("Field")}(\`${template}.${i}\`)${degradedPin(element)};`,
                 ...numberPropsBindings(ui, [{ varName, spec: element }]),
               ],
               body: leafControl(
@@ -3095,7 +3100,7 @@ const nestedArrayComponents = (
                 "      ",
               ),
               bindings: [
-                `  const ${varName} = ${naming.hook("Field")}(\`${entry.templateBase}.\${index}.${templateEscape(field.name)}\`);`,
+                `  const ${varName} = ${naming.hook("Field")}(\`${entry.templateBase}.\${index}.${templateEscape(field.name)}\`)${degradedPin(field.spec)};`,
                 ...numberPropsBindings(ui, [{ varName, spec: field.spec }]),
               ],
               spec: field.spec,
@@ -3187,7 +3192,7 @@ const nestedArrayComponents = (
         : scalarItem
           ? {
               bindings: [
-                `  const field = ${naming.hook("Field")}(\`${entry.templateBase}.\${index}\`);`,
+                `  const field = ${naming.hook("Field")}(\`${entry.templateBase}.\${index}\`)${degradedPin(entry.item)};`,
                 ...numberPropsBindings(ui, [
                   { varName: "field", spec: entry.item },
                 ]),
@@ -3701,8 +3706,8 @@ const tupleSectionFile = (
   const scalarElements = elements.filter((e) => e.scalar);
 
   const bindings = scalarElements.map(
-    ({ varName, index }) =>
-      `  const ${varName} = ${naming.hook("Field")}(${q(`${section.key}.${index}`)});`,
+    ({ varName, index, element }) =>
+      `  const ${varName} = ${naming.hook("Field")}(${q(`${section.key}.${index}`)})${degradedPin(element)};`,
   );
 
   const tupleCells = containerCellTags(ui, visual.columns, muiVersion);
@@ -3980,13 +3985,13 @@ const arraySectionFile = (
       ? [
           ...rowVars.map(
             ({ field, varName }) =>
-              `  const ${varName} = ${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}.${templateEscape(field.name)}\`);`,
+              `  const ${varName} = ${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}.${templateEscape(field.name)}\`)${degradedPin(field.spec)};`,
           ),
           ...itemExtraPieces.flatMap((piece) => piece.bindings),
         ]
       : scalarItem
         ? [
-            `  const field = ${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}\`);`,
+            `  const field = ${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}\`)${degradedPin(spec.item)};`,
           ]
         : (containerRow?.bindings ?? []);
 
@@ -4546,12 +4551,15 @@ const unionSectionFile = (
       }
       // One real element needs no fragment; a lone TODO comment still does
       // (`cond && ({/* ... */})` is an empty parenthesized expression),
-      // same rule as the single-file unionLines.
+      // same rule as the single-file unionLines. A degraded leaf is TWO
+      // nodes (its TODO comment above the control), so it takes the
+      // fragment as well.
       const first = flattened[0];
       const single =
         flattened.length === 1 &&
         first !== undefined &&
         first.kind === "leaf" &&
+        first.spec.todo === undefined &&
         bindingByName.has(first.name);
       return single
         ? [
@@ -4645,11 +4653,11 @@ const unionSectionFile = (
           ]),
       ...commonBindings.map(
         (binding) =>
-          `  const ${binding.varName} = ${naming.hook("Field")}(${q(`${path}.${binding.name}`)});`,
+          `  const ${binding.varName} = ${naming.hook("Field")}(${q(`${path}.${binding.name}`)})${degradedPin(binding.spec)};`,
       ),
       ...bindings.map(
         (binding) =>
-          `  const ${binding.varName} = ${naming.hook("VariantField")}(${q(path)}, ${q(binding.name)});`,
+          `  const ${binding.varName} = ${naming.hook("VariantField")}(${q(path)}, ${q(binding.name)})${degradedPin(binding.spec)};`,
       ),
       // Kit number bindings hoist their props hook here, unconditionally,
       // even for a hidden variant's field, since the variant blocks below
@@ -4692,26 +4700,53 @@ export const emitModuleForm = (
     hooksFile(naming, options.schemaImport, root, plan, scaffold, budget),
     ...(adapter === undefined ? [] : [adapter]),
     ...plan.fields.map((field) => fieldFile(ui, naming, field)),
-    ...plan.sections.map((section) =>
-      section.spec.kind === "object"
-        ? objectSectionFile(
-            ui,
-            visual,
-            naming,
-            section,
-            plan,
-            budget,
-            options.muiVersion,
-          )
-        : section.spec.kind === "array"
-          ? arraySectionFile(ui, visual, naming, section, budget, options.muiVersion)
-          : section.spec.kind === "tuple"
-            ? tupleSectionFile(ui, visual, naming, section, options.muiVersion)
-            : unionSectionFile(ui, visual, naming, section, budget),
-    ),
+    ...plan.sections
+      .map((section) =>
+        section.spec.kind === "object"
+          ? objectSectionFile(
+              ui,
+              visual,
+              naming,
+              section,
+              plan,
+              budget,
+              options.muiVersion,
+            )
+          : section.spec.kind === "array"
+            ? arraySectionFile(ui, visual, naming, section, budget, options.muiVersion)
+            : section.spec.kind === "tuple"
+              ? tupleSectionFile(ui, visual, naming, section, options.muiVersion)
+              : unionSectionFile(ui, visual, naming, section, budget),
+      )
+      .map(withDegradedPinImport),
     formFile(ui, naming, root, plan, scaffold, budget),
     indexFile(naming),
   ];
+};
+
+// A section file whose row or variant bindings carry a degradedPin cast
+// names the UseFieldReturn type, which none of the section builders import
+// otherwise (the field file imports it for its own pin). The four section
+// builders assemble their imports independently, and the pin can appear in
+// any of them at several depths (an object row, a tuple position, a union
+// variant, a nested array's row), so the import is added here, once, off
+// the emitted content rather than re-derived in each builder: the pin text
+// is the single source of truth for whether the type is named.
+const withDegradedPinImport = (file: ModuleFile): ModuleFile => {
+  if (!file.content.includes(DEGRADED_PIN)) return file;
+  const lines = file.content.split("\n");
+  const firstImport = lines.findIndex((line) => line.startsWith("import "));
+  const importLine = `import type { UseFieldReturn } from "formstand";`;
+  return firstImport === -1
+    ? file
+    : {
+        ...file,
+        content: [
+          ...lines.slice(0, firstImport),
+          importLine,
+          ...lines.slice(firstImport),
+        ].join("\n"),
+      };
 };
 
 // Re-exported for the CLI's stdout mode and tests.
