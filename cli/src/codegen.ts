@@ -796,6 +796,13 @@ export type KindUsage = Readonly<{
   // control. Counts here and NOT under string, so the plain TextField /
   // kit text components are not imported by a textarea-only schema.
   textarea: boolean;
+  // A walker-degraded leaf (todo set) is present. Its kind is the string
+  // stand-in, and it STILL counts under `string` for the kit backends,
+  // whose Bound text component is pinned to a text value and renders it;
+  // the plain backend reads this flag instead, because the library's
+  // TextField types its path by value and refuses a non-text leaf, so
+  // plain renders its in-file PlaceholderField (see plainLeafUsage).
+  placeholder: boolean;
 }>;
 
 const NO_USAGE: KindUsage = {
@@ -807,6 +814,7 @@ const NO_USAGE: KindUsage = {
   union: false,
   autocomplete: false,
   textarea: false,
+  placeholder: false,
 };
 
 const mergeUsage = (a: KindUsage, b: KindUsage): KindUsage => ({
@@ -818,7 +826,34 @@ const mergeUsage = (a: KindUsage, b: KindUsage): KindUsage => ({
   union: a.union || b.union,
   autocomplete: a.autocomplete || b.autocomplete,
   textarea: a.textarea || b.textarea,
+  placeholder: a.placeholder || b.placeholder,
 });
+
+// The usage one scalar leaf contributes, shared by collectUsage and
+// collectStaticUsage so the two walks cannot disagree on a kind. An
+// overridden leaf renders the override control, not its kind's default,
+// so it counts as autocomplete/textarea only. A degraded leaf counts under
+// its kind AND raises the placeholder flag (see KindUsage).
+const defaultLeafUsage = (spec: FieldSpec): KindUsage =>
+  isAutocompleteLeaf(spec)
+    ? { ...NO_USAGE, autocomplete: true }
+    : isTextareaLeaf(spec)
+      ? { ...NO_USAGE, textarea: true }
+      : {
+          ...NO_USAGE,
+          [spec.kind]: true,
+          placeholder: spec.todo !== undefined,
+        };
+
+// The plain backend's leaf rule: a degraded leaf renders PlaceholderField,
+// NOT its kind's library component, so it must not pull that component's
+// import in (a record-only schema must not import TextField).
+export const plainLeafUsage = (spec: FieldSpec): KindUsage =>
+  isAutocompleteLeaf(spec) || isTextareaLeaf(spec)
+    ? defaultLeafUsage(spec)
+    : spec.todo !== undefined
+      ? { ...NO_USAGE, placeholder: true }
+      : { ...NO_USAGE, [spec.kind]: true };
 
 // Whether this leaf renders the autocomplete override control instead of its
 // kind's default (only ever true on string/enum leaves, applyFieldOverrides
@@ -887,13 +922,7 @@ export const collectUsage = (
     case "union":
       return unionKindUsage(spec, budget);
     default:
-      // An overridden leaf renders the override control, not its kind's
-      // default, count it as autocomplete only.
-      return isAutocompleteLeaf(spec)
-        ? { ...NO_USAGE, autocomplete: true }
-        : isTextareaLeaf(spec)
-          ? { ...NO_USAGE, textarea: true }
-          : { ...NO_USAGE, [spec.kind]: true };
+      return defaultLeafUsage(spec);
   }
 };
 
@@ -1340,6 +1369,22 @@ const collectUnions = (
     { used: new Set(seed), entries: [] },
   ).entries;
 
+// The cast that pins a degraded leaf's hoisted binding to the text control's
+// value type. A union variant field that degraded to a string stand-in (a
+// z.record, a z.bigint) is bound with useField/useVariantField, which infer
+// the REAL value type from the path; the raw text builders every backend
+// spreads it into (textInputProps, muiTextFieldProps, ...) accept
+// UseFieldReturn<string | null | undefined> only, so the hoisted const
+// shipped a type error. The TODO at the control names the leaf; the cast
+// only keeps the file compiling until the control is replaced. Shared with
+// the module layout (see moduleLayout's degradedPin) so the wording cannot
+// drift.
+export const DEGRADED_PIN =
+  " as unknown as UseFieldReturn<string | null | undefined>";
+
+export const degradedPin = (spec: FieldSpec): string =>
+  spec.todo !== undefined ? DEGRADED_PIN : "";
+
 // The discriminant + variant hook declarations for the component body.
 // `numberPropsHook` (kit backends) additionally hoists the number-props
 // hook call for every number binding, common and variant-only alike, and
@@ -1379,11 +1424,11 @@ const unionHooks = (
         ]),
     ...entry.commonBindings.map(
       (binding) =>
-        `${ind(level)}const ${binding.varName} = useField(form, ${q(`${entry.path}.${binding.name}`)});`,
+        `${ind(level)}const ${binding.varName} = useField(form, ${q(`${entry.path}.${binding.name}`)})${degradedPin(binding.spec)};`,
     ),
     ...entry.bindings.map(
       (binding) =>
-        `${ind(level)}const ${binding.varName} = useVariantField(form, ${q(entry.path)}, ${q(binding.name)});`,
+        `${ind(level)}const ${binding.varName} = useVariantField(form, ${q(entry.path)}, ${q(binding.name)})${degradedPin(binding.spec)};`,
     ),
     ...(numberPropsHook === undefined
       ? []
@@ -1427,40 +1472,42 @@ export const collectUnionUsage = (
 // kit Bound* components); the prop-builder and useField/useVariantField
 // imports stay on total usage / collectUnionUsage, since union rendering does
 // call them. Fixes leaf components imported-but-unused for a union-only kind.
+//
+// `leafUsage` is the per-leaf rule (defaultLeafUsage unless a backend
+// renders some kinds through its own in-file controls, see plainLeafUsage).
 export const collectStaticUsage = (
   spec: FieldSpec,
   budget: number,
   count = 0,
+  leafUsage: (leaf: FieldSpec) => KindUsage = defaultLeafUsage,
 ): KindUsage => {
   if (overDepthBudget(spec, count, budget)) return NO_USAGE;
   switch (spec.kind) {
     case "object":
       return spec.fields.reduce(
         (acc, field) =>
-          mergeUsage(acc, collectStaticUsage(field.spec, budget, count + 1)),
+          mergeUsage(
+            acc,
+            collectStaticUsage(field.spec, budget, count + 1, leafUsage),
+          ),
         NO_USAGE,
       );
     case "array":
-      return collectStaticUsage(spec.item, count + 1);
+      return collectStaticUsage(spec.item, budget, count + 1, leafUsage);
     // Only the SCALAR elements render a static leaf; non-scalar elements are
     // TODOs, so they contribute no leaf-component import.
     case "tuple":
       return spec.elements
         .filter(isScalarSpec)
         .reduce(
-          (acc, el) => mergeUsage(acc, collectStaticUsage(el, count + 1)),
+          (acc, el) =>
+            mergeUsage(acc, collectStaticUsage(el, budget, count + 1, leafUsage)),
           NO_USAGE,
         );
     case "union":
       return NO_USAGE;
     default:
-      // Same override rule as collectUsage: an autocomplete leaf pulls in
-      // the Bound autocomplete component, not its kind's default.
-      return isAutocompleteLeaf(spec)
-        ? { ...NO_USAGE, autocomplete: true }
-        : isTextareaLeaf(spec)
-          ? { ...NO_USAGE, textarea: true }
-          : { ...NO_USAGE, [spec.kind]: true };
+      return leafUsage(spec);
   }
 };
 
@@ -1537,6 +1584,39 @@ export const collectOptionsProps = (
       return spec.override?.optionsPropName !== undefined
         ? [{ name: spec.override.optionsPropName, path: segments.join(".") }]
         : [];
+  }
+};
+
+// Whether any union in the tree (static or inside array rows) binds a
+// DEGRADED scalar field: the one source of a degradedPin cast in a
+// single-file component, which references the UseFieldReturn type. The
+// kit backends import it whenever a leaf exists; plain imports it only on
+// this predicate, so union-free and healthy output stays byte-identical.
+export const hasDegradedUnionBinding = (
+  spec: FieldSpec,
+  budget: number,
+  count = 0,
+): boolean => {
+  if (overDepthBudget(spec, count, budget)) return false;
+  switch (spec.kind) {
+    case "object":
+      return spec.fields.some((field) =>
+        hasDegradedUnionBinding(field.spec, budget, count + 1),
+      );
+    case "array":
+      return hasDegradedUnionBinding(spec.item, budget, count + 1);
+    case "tuple":
+      return spec.elements.some((element) =>
+        hasDegradedUnionBinding(element, budget, count + 1),
+      );
+    case "union":
+      return spec.variants.some((variant) =>
+        variant.fields.some(
+          (field) => isScalarSpec(field.spec) && field.spec.todo !== undefined,
+        ),
+      );
+    default:
+      return false;
   }
 };
 
@@ -2303,11 +2383,11 @@ const emitUnionComponent = (
         ]),
     ...u.commonBindings.map(
       (binding) =>
-        `  const ${binding.varName} = useField(form, \`${t}.${templateEscape(binding.name)}\`);`,
+        `  const ${binding.varName} = useField(form, \`${t}.${templateEscape(binding.name)}\`)${degradedPin(binding.spec)};`,
     ),
     ...u.bindings.map(
       (binding) =>
-        `  const ${binding.varName} = useVariantField(form, \`${t}\`, ${q(binding.name)});`,
+        `  const ${binding.varName} = useVariantField(form, \`${t}\`, ${q(binding.name)})${degradedPin(binding.spec)};`,
     ),
     ...numberVars.map(
       (binding) =>
@@ -2788,6 +2868,19 @@ const plainLeaf = (
       ...desc,
     ];
   }
+  // A walker-degraded leaf is a string stand-in whose REAL value (a record,
+  // a bigint, an unknown coerce input) is not text. formstand's TextField
+  // types its path by value, so `<TextField path="meta" />` is a compile
+  // error there; the in-file PlaceholderField (see the preamble) binds the
+  // path through an erased form, pinned to the text value type, so the
+  // file compiles while the TODO above it is still open.
+  if (spec.todo !== undefined) {
+    return [
+      ...todo,
+      `${ind(level)}<PlaceholderField form={form} ${attr} ${jsxAttr("label", label)} />`,
+      ...desc,
+    ];
+  }
   switch (spec.kind) {
     case "string":
       return [
@@ -2992,6 +3085,73 @@ const PLAIN_TEXTAREA_BODY: readonly string[] = [
   "};",
 ];
 
+// The stand-in control for a walker-degraded leaf (a z.record, a z.bigint,
+// a z.coerce input, an unsupported kind). Its value is not text, so
+// formstand's TextField, whose path is typed by value, refuses the path;
+// this binds the path through an erased FieldFormApi with the hook pinned
+// to the text control's value type, the same pin the module layout's field
+// file casts to. The TODO at each use site names what to replace it with.
+const PLAIN_PLACEHOLDER_BODY: readonly string[] = [
+  "type PlaceholderFieldProps = Readonly<{",
+  "  form: FieldFormApi;",
+  "  path: string;",
+  "  label: string;",
+  "}>;",
+  "",
+  "// A leaf the generator could not model (see the TODO at each use): its",
+  "// schema value is not text, so this binds it AS text through an erased",
+  "// form, which keeps the file compiling. Replace the control, then delete",
+  "// this component.",
+  "const PlaceholderField = ({ form, path, label }: PlaceholderFieldProps) => {",
+  "  const field = useField<string | null | undefined>(form, path);",
+  "  return (",
+  '    <div className="zf-field">',
+  '      <label className="zf-label">',
+  "        {label}",
+  "        <input {...textInputProps(field)} />",
+  "      </label>",
+  "      {field.error?.[0] !== undefined ? (",
+  '        <p role="alert">{field.error?.[0]}</p>',
+  "      ) : null}",
+  "    </div>",
+  "  );",
+  "};",
+];
+
+// The plain backend's module-level in-file controls, each emitted once and
+// only when some static leaf renders it (computed with plainLeafUsage, so
+// a degraded leaf counts for its in-file control, not its kind).
+const plainPreamble = (staticUsage: KindUsage): readonly string[] => [
+  ...(staticUsage.autocomplete
+    ? [
+        [
+          "// ---- autocomplete override (config fields) ---------------------------------",
+          ...PLAIN_AUTOCOMPLETE_PROPS_TYPE,
+          ...plainAutocompleteBody("AutocompleteField"),
+        ].join("\n"),
+        "",
+      ]
+    : []),
+  ...(staticUsage.textarea
+    ? [
+        [
+          "// ---- textarea override (config fields) -------------------------------------",
+          ...PLAIN_TEXTAREA_BODY,
+        ].join("\n"),
+        "",
+      ]
+    : []),
+  ...(staticUsage.placeholder
+    ? [
+        [
+          "// ---- degraded leaves (see the TODOs) -----------------------------------------",
+          ...PLAIN_PLACEHOLDER_BODY,
+        ].join("\n"),
+        "",
+      ]
+    : []),
+];
+
 const plainBackend = (
   visual: VisualOptions,
   scaffold: ScaffoldOptions,
@@ -3015,8 +3175,14 @@ const plainBackend = (
     const unionUsage = collectUnionUsage(root, budget);
     // Leaf COMPONENTS are gated on static-leaf usage only: a union renders its
     // controls from hoisted hooks via the raw prop builders, never via these
-    // components, so a union-only kind must not pull the component in.
-    const staticUsage = collectStaticUsage(root, budget);
+    // components, so a union-only kind must not pull the component in. The
+    // plain rule keeps degraded leaves OUT of their kind (they render the
+    // in-file placeholder, not the library component).
+    const staticUsage = collectStaticUsage(root, budget, 0, plainLeafUsage);
+    // The in-file controls (overrides, the degraded placeholder) bind
+    // through useField + a raw builder on an erased form.
+    const inFileControls =
+      staticUsage.autocomplete || staticUsage.textarea || staticUsage.placeholder;
     // The prop builders the union controls call (discriminant select +
     // common/variant field kinds), imported only when a union renders.
     const builderImports = usage.union
@@ -3035,16 +3201,14 @@ const plainBackend = (
       ...(staticUsage.enum ? ["SelectField"] : []),
       ...(staticUsage.string ? ["TextField"] : []),
       ...builderImports,
-      // The in-file AutocompleteField (autocomplete override) binds through
-      // textInputProps + useField; dedupe against the union builders above.
-      ...((staticUsage.autocomplete || staticUsage.textarea) &&
-      !builderImports.includes("textInputProps")
+      // The in-file AutocompleteField / TextareaField / PlaceholderField
+      // bind through textInputProps + useField; dedupe against the union
+      // builders above.
+      ...(inFileControls && !builderImports.includes("textInputProps")
         ? ["textInputProps"]
         : []),
       ...(arrays.length > 0 ? ["useFieldArray"] : []),
-      ...(usage.union || staticUsage.autocomplete || staticUsage.textarea
-        ? ["useField"]
-        : []),
+      ...(usage.union || inFileControls ? ["useField"] : []),
       ...(hasVariantFieldUsage(root, budget) ? ["useVariantField"] : []),
       "useForm",
       ...(scaffold.live ? [] : ["useIsSubmitting"]),
@@ -3054,35 +3218,20 @@ const plainBackend = (
       `import { z } from "zod";`,
       "import {",
       ...formstandImports.map((name) => `  ${name},`),
-      // FieldFormApi types the in-file AutocompleteField's and
-      // TextareaField's form props.
-      ...(staticUsage.autocomplete || staticUsage.textarea
-        ? ["  type FieldFormApi,"]
+      // FieldFormApi types the in-file controls' form props.
+      ...(inFileControls ? ["  type FieldFormApi,"] : []),
+      // UseFieldReturn is named only by the degradedPin cast on a hoisted
+      // union binding.
+      ...(hasDegradedUnionBinding(root, budget)
+        ? ["  type UseFieldReturn,"]
         : []),
       `} from "formstand";`,
     ];
   },
-  preamble: (_usage, staticUsage) => [
-    ...(staticUsage.autocomplete
-      ? [
-          [
-            "// ---- autocomplete override (config fields) ---------------------------------",
-            ...PLAIN_AUTOCOMPLETE_PROPS_TYPE,
-            ...plainAutocompleteBody("AutocompleteField"),
-          ].join("\n"),
-          "",
-        ]
-      : []),
-    ...(staticUsage.textarea
-      ? [
-          [
-            "// ---- textarea override (config fields) -------------------------------------",
-            ...PLAIN_TEXTAREA_BODY,
-          ].join("\n"),
-          "",
-        ]
-      : []),
-  ],
+  preamble: (_usage, _staticUsage, root, budget) => {
+    const staticUsage = collectStaticUsage(root, budget, 0, plainLeafUsage);
+    return plainPreamble(staticUsage);
+  },
   leaf: plainLeaf,
   variantLeaf: plainVariantLeaf,
   objectSection: (label, level, body) =>
