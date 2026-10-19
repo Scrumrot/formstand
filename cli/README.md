@@ -87,8 +87,9 @@ remove buttons, zod descriptions rendered as helper text, and a wired submit.
 
 Supported schema surface: `string`, `number`/`int`, `boolean`, `date`, `enum`, unions of
 string literals, `object`, `array`, and `tuple`, with `.optional()`, `.nullable()`,
-`.default()`, and `.pipe()` unwrapped. Anything outside it degrades **loudly**, to a text
-field with a `// TODO` naming what was skipped, so the file still compiles. See
+`.default()`, and `.pipe()` unwrapped. Anything outside it (`z.coerce.*` included, its input
+type is `unknown`) degrades **loudly**, to a text field bound through a pinned `useField` with
+a `// TODO` naming what was skipped, so the file still compiles. See
 [how unsupported shapes degrade](https://scrumrot.github.io/formstand/documentation/cli/reference#how-unsupported-shapes-degrade).
 
 ## UI kits

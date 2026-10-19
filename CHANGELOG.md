@@ -45,6 +45,54 @@
 - Generated probe-case titles were duplicated when two sections shared a
   field label; a repeated label now carries its path in the title
   (`Email (billing.email) rejects ...`).
+- Plain single-file output did not compile for any degraded leaf (a
+  `z.record`, `z.bigint`, `z.lazy`, `z.any`, a non-string literal or enum,
+  `z.map`): the stand-in was bound as `<TextField path="meta" />`, and the
+  library's bound components now type `path` by value, so a non-text leaf is
+  a compile error. The stand-in now renders an in-file `PlaceholderField`
+  bound through `useField` pinned to the text control's value type, the TODO
+  kept above it. Degraded leaves inside union variants are pinned at their
+  hoisted binding in every single-file backend (the kits failed there too).
+- `z.coerce.number()` / `.date()` / `.boolean()` emitted a typed control
+  whose path the input type (`unknown`) refuses, in both layouts. Coerced
+  schemas now degrade to a TODO stand-in naming the reason.
+- The module layout bound a degraded leaf inside an array row (an object
+  row, a tuple row, a union row) and in a union section without the field
+  file's pin, so those files did not compile. Every row and variant binding
+  now carries the same cast, and the section file imports the type. A
+  variant whose only field is degraded also gets the fragment its TODO
+  comment needs (two JSX nodes under `&& (...)` did not parse).
+- `z.enum(Color)` / `z.nativeEnum(Color)` over a TypeScript enum did not
+  compile in the plain single-file layout: `SelectField` checks each option
+  literal against the field's type, which is the enum itself. The walker
+  marks such enums and plain renders them through an in-file
+  `EnumSelectField` on the raw `selectProps` builder, options unchanged.
+- The generated spec's "filled with valid values" round trip ran live over
+  checks the walker never modeled (`.regex()`, `.startsWith()`,
+  `.multipleOf()`, a `.refine()`, `z.date().min()`, formats such as
+  `z.ipv4()`), and failed on its own sample. The walker now records the
+  unmodeled check kinds per path, the case is emitted as `it.skip` with the
+  paths and reasons in a comment (as it already was for degraded leaves),
+  and `--tests` mirrors each on stderr. The emitted schema is unchanged.
+  The method-form `.email()` / `.url()` / `.uuid()` are now modeled like
+  `z.email()` (blank-invalid, a format probe, the format in the schema).
+- Security: schema text could break out of a `//` comment into generated
+  TypeScript. A JSON Schema `$ref` or `type` string carrying a line
+  terminator (`\n`, `\r`, U+2028, U+2029) reached `// TODO: ...` lines in
+  the emitted schema and module field files, so the text after the
+  terminator became code (a `$ref` of `"#/x\n  injected: z.string(), //"`
+  minted a real property). Every comment and every stderr warning built
+  from schema text now collapses line terminators to a space, so a hostile
+  document can neither add code nor forge a `wrote ...` line.
+- An enum option or union tag containing `"` or `\` broke the generated
+  spec's valid-values literal (interpolated raw where everything else was
+  JSON-quoted).
+- Module layout file names that differed only in case (`email` / `eMail`
+  to `EmailField.tsx` / `EMailField.tsx`) were one file on Windows and
+  macOS, the second overwriting the first. Component names are now deduped
+  case-insensitively (`EMailField2`).
+- The `--template` with `--layout module` error no longer promises module
+  support; it says templates apply to the single-file layout only.
 
 ### Changed
 
