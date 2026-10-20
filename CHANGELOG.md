@@ -1,6 +1,69 @@
 # Changelog
 
-## formstand-cli Unreleased
+## Unreleased
+
+### Docs
+
+- Field arrays: the array-op revalidation sentence now matches the gate.
+  Ops run under the change trigger, so in the default `onBlur` mode (and
+  `onSubmit`) they stay silent until the first failed submit switches to
+  `reValidateMode`; `onTouched` needs the array path itself touched;
+  `onChange` and `all` revalidate at once. A "Render cost" note says the
+  hook re-renders its caller on every keystroke in any row and how to
+  keep rows cheap.
+- Persistence: a loaded draft is adopted without validation, so a draft
+  that fails the schema reads valid until something validates;
+  `validateOnMount` runs before `persistForm` applies the draft and does
+  not cover it, so call `form.validate()` after the load.
+- `useFormValues` re-renders on every keystroke anywhere in the form; keep
+  it out of per-row components.
+- A `"use server"` action must parse `data` with the schema on the server
+  on every path, not only the no-JS one.
+- Masked inputs: `"empty"` writes `emptyValue` for clearable and non-string
+  fields and `""` for a required string, as the 0.22.0 binding does.
+- Components: the `SelectField` props row names the real option type, and
+  the guide states the by-value `path` rule (`TextField` on a `z.number()`
+  is a compile error) that the API page already had.
+- CLI: the schema module and `formstand.config.ts` are executed through
+  jiti, so point the CLI only at files you would run with `node`; the
+  overview names all three inputs.
+- Snippets import every name they use (`Form`, `FormStateApi`,
+  `createForm`, `textInputProps`); the `onSubmit` snippet is in a tsx
+  fence; `fillFields` is documented as typed per key.
+- A "Security notes" section on validation.md collects server
+  re-validation, untrusted drafts, and the CLI executing modules, with
+  links to the sections that hold the detail.
+- Roadmap: `--path-depth` moves to the shipped list. The remaining em
+  dashes in the roadmap and the VitePress theme comments are reworded.
+- Playground: every demo is a lazy chunk. The main bundle drops from
+  2.95 MB (779 kB gzip) to 381 kB (116 kB gzip) and the main stylesheet
+  from 601 kB to 34 kB; each tab's component, kit and stylesheet load on
+  first visit, and the View code panel fetches source text on demand
+  behind a static file tree. Mantine's sheet loads as its `@layer` variant
+  so the shell's unlayered rules keep winning regardless of load order.
+- Playground: the Conditional demo is a `z.discriminatedUnion` bound with
+  `useField` for the discriminant and `useVariantField` for the branch
+  fields, and the payload carries only the active branch (the flat version
+  submitted the hidden card number alongside the bank fields).
+- Playground: the hand-rolled demos wire each error line to its input
+  (`aria-describedby`, `aria-invalid`, `aria-live`) through one shared
+  helper and focus the first errored control after a failed submit; the
+  View state / View code toggles expose `aria-pressed`; the MUI Invoice,
+  shadcn Team and shadcn Onboarding contact rows label their
+  placeholder-only cells.
+- Playground: the Autosave status reads "Draft restored" after a restore
+  instead of "Unsaved changes"; the Schema builder's Zod paste tab says
+  that pasted code runs in the page and its View code list includes
+  `ImportModal.tsx` and `parseZod.ts`; the Perf demo's inputs follow the
+  theme; the light theme's eyebrow (6.76:1) and muted text (4.88:1) clear
+  the AA floor; the theme preference is written only when the user
+  toggles, so a docs visitor's "auto" survives opening the playground.
+- Playground: the generated kitchen sink's input schema carries human
+  messages on every check, so an empty submit no longer shows zod's raw
+  messages, and the regenerated plain output carries the CLI's new aria
+  wiring. `examples/src` is now linted with the library's rule set.
+
+## formstand-cli 0.24.0 — 2026-10-20
 
 ### Added
 
@@ -88,69 +151,6 @@
   the autocomplete datalist id already used, unique per array row with no
   `useId`); `aria-invalid` keeps coming from the prop builders. The kit
   backends were already wired through their own components.
-
-## Unreleased
-
-### Docs
-
-- Field arrays: the array-op revalidation sentence now matches the gate.
-  Ops run under the change trigger, so in the default `onBlur` mode (and
-  `onSubmit`) they stay silent until the first failed submit switches to
-  `reValidateMode`; `onTouched` needs the array path itself touched;
-  `onChange` and `all` revalidate at once. A "Render cost" note says the
-  hook re-renders its caller on every keystroke in any row and how to
-  keep rows cheap.
-- Persistence: a loaded draft is adopted without validation, so a draft
-  that fails the schema reads valid until something validates;
-  `validateOnMount` runs before `persistForm` applies the draft and does
-  not cover it, so call `form.validate()` after the load.
-- `useFormValues` re-renders on every keystroke anywhere in the form; keep
-  it out of per-row components.
-- A `"use server"` action must parse `data` with the schema on the server
-  on every path, not only the no-JS one.
-- Masked inputs: `"empty"` writes `emptyValue` for clearable and non-string
-  fields and `""` for a required string, as the 0.22.0 binding does.
-- Components: the `SelectField` props row names the real option type, and
-  the guide states the by-value `path` rule (`TextField` on a `z.number()`
-  is a compile error) that the API page already had.
-- CLI: the schema module and `formstand.config.ts` are executed through
-  jiti, so point the CLI only at files you would run with `node`; the
-  overview names all three inputs.
-- Snippets import every name they use (`Form`, `FormStateApi`,
-  `createForm`, `textInputProps`); the `onSubmit` snippet is in a tsx
-  fence; `fillFields` is documented as typed per key.
-- A "Security notes" section on validation.md collects server
-  re-validation, untrusted drafts, and the CLI executing modules, with
-  links to the sections that hold the detail.
-- Roadmap: `--path-depth` moves to the shipped list. The remaining em
-  dashes in the roadmap and the VitePress theme comments are reworded.
-- Playground: every demo is a lazy chunk. The main bundle drops from
-  2.95 MB (779 kB gzip) to 381 kB (116 kB gzip) and the main stylesheet
-  from 601 kB to 34 kB; each tab's component, kit and stylesheet load on
-  first visit, and the View code panel fetches source text on demand
-  behind a static file tree. Mantine's sheet loads as its `@layer` variant
-  so the shell's unlayered rules keep winning regardless of load order.
-- Playground: the Conditional demo is a `z.discriminatedUnion` bound with
-  `useField` for the discriminant and `useVariantField` for the branch
-  fields, and the payload carries only the active branch (the flat version
-  submitted the hidden card number alongside the bank fields).
-- Playground: the hand-rolled demos wire each error line to its input
-  (`aria-describedby`, `aria-invalid`, `aria-live`) through one shared
-  helper and focus the first errored control after a failed submit; the
-  View state / View code toggles expose `aria-pressed`; the MUI Invoice,
-  shadcn Team and shadcn Onboarding contact rows label their
-  placeholder-only cells.
-- Playground: the Autosave status reads "Draft restored" after a restore
-  instead of "Unsaved changes"; the Schema builder's Zod paste tab says
-  that pasted code runs in the page and its View code list includes
-  `ImportModal.tsx` and `parseZod.ts`; the Perf demo's inputs follow the
-  theme; the light theme's eyebrow (6.76:1) and muted text (4.88:1) clear
-  the AA floor; the theme preference is written only when the user
-  toggles, so a docs visitor's "auto" survives opening the playground.
-- Playground: the generated kitchen sink's input schema carries human
-  messages on every check, so an empty submit no longer shows zod's raw
-  messages, and the regenerated plain output carries the CLI's new aria
-  wiring. `examples/src` is now linted with the library's rule set.
 
 ## 0.22.0 — 2026-10-19
 
