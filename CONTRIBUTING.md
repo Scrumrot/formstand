@@ -13,13 +13,13 @@ npm ci --prefix examples   # required by the root test suite
 npm ci --prefix cli        # only needed when working on the CLI
 ```
 
-**Node 22.15 or newer** for the root test suite (`.nvmrc` says `22`; CI runs
-the current 22.x). The jsdom environment pulls undici, which binds Node's
-zstd decompressor at import, and that API arrived in Node 22.15. On an older
-22.x every jsdom test file fails to start its worker with
-`Cannot read properties of undefined (reading 'bind')` before a single test
-runs. The published packages themselves keep their `>=18` engines range;
-this is a development requirement only.
+**Node 22.22.2 or newer** for the root test suite (`.nvmrc` says `22`; CI
+runs the current 22.x). jsdom 30.1 declares that floor in its `engines`, and
+the undici it pulls binds Node's zstd decompressor at import, an API that
+arrived in Node 22.15. On an older 22.x every jsdom test file fails to start
+its worker with `Cannot read properties of undefined (reading 'bind')` before
+a single test runs. The published packages themselves keep their `>=18`
+engines range; this is a development requirement only.
 
 ## Commands
 
