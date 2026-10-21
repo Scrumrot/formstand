@@ -55,18 +55,17 @@ export default defineConfig({
       // without measuring anything cli's suite doesn't.
       exclude: ["cli/**"],
       reporter: ["text", "html", "json-summary"],
-      // Set ~2-3 points below measured levels (2026-07: statements 84.8,
-      // branches 76.27, functions 76.59, lines 85) so coverage drift
-      // fails CI without making every ordinary change a threshold fight.
-      // Library-only under vitest 5 (2026-10) measures statements 97.4,
-      // branches 91.6, functions 98.7, lines 98.3; the thresholds were left
-      // alone so the dependency bump does not double as a policy change.
-      // Raising them is a deliberate follow-up.
+      // Set ~2-3 points below measured levels so coverage drift fails CI
+      // without making every ordinary change a threshold fight. Library-only
+      // under vitest 5 measures (2026-10-20) statements 97.41, branches
+      // 91.57, functions 98.72, lines 98.3. The previous floors (82/74/74/82)
+      // dated from 2026-07, when the glob also folded in examples/src; they
+      // would have let a third of the branch coverage vanish unnoticed.
       thresholds: {
-        statements: 82,
-        branches: 74,
-        functions: 74,
-        lines: 82,
+        statements: 95,
+        branches: 89,
+        functions: 96,
+        lines: 96,
       },
     },
   },
