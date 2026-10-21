@@ -218,7 +218,7 @@ const sources = {
       load: loaderFor("../generated/flightSearchSchema.ts"),
     },
   ],
-  cliCommand: single("CliCommandBuilder.tsx", "../forms/CliCommandBuilder.tsx"),
+  cliCommand: withA11y("CliCommandBuilder.tsx", "../forms/CliCommandBuilder.tsx"),
   // Explicit order (not the module glob): the component leads so the code
   // panel opens on the useForm call, then the schema, the emitter bridge,
   // the import modal and the two parsers it calls, then the zip writer.

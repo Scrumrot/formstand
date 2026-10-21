@@ -39,6 +39,7 @@ const OPENABLE: readonly DemoSourceKey[] = [
   "derived",
   "tag",
   "perf",
+  "cliCommand",
 ];
 
 const loadedSets = async () =>

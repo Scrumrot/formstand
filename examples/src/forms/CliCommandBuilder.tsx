@@ -9,6 +9,7 @@ import {
 } from "formstand";
 import { z } from "zod";
 import { useDemoForm } from "../demo/DemoShell";
+import { fieldA11y } from "./fieldA11y";
 
 // A formstand form that builds a formstand-gen command: the options are a
 // zod schema (cross-field rule included: type mode needs a type name),
@@ -141,6 +142,10 @@ export const CliCommandBuilder = () => {
   const formProp = useField(form, "formProp");
   const force = useField(form, "force");
   const [copied, setCopied] = useState(false);
+  // Only the two inputs that can carry an error need the wiring; the
+  // selects have no rule that can fail.
+  const inputA11y = fieldA11y(input, "input-file");
+  const typeNameA11y = fieldA11y(typeName, "type-name-type");
 
   // The whole point: the command is computed from values, never stored.
   const command = useFormSelector(form, (state) => buildCommand(state.values));
@@ -165,8 +170,12 @@ export const CliCommandBuilder = () => {
         </div>
         <div className="field" style={{ flex: 2 }}>
           <label htmlFor="input-file">Input file</label>
-          <input id="input-file" placeholder="src/schema.ts" {...textInputProps(input)} />
-          <span className="error">{input.error?.[0] ?? " "}</span>
+          <input
+            placeholder="src/schema.ts"
+            {...textInputProps(input)}
+            {...inputA11y.control}
+          />
+          <span {...inputA11y.message}>{input.error?.[0] ?? " "}</span>
         </div>
       </div>
 
@@ -181,8 +190,12 @@ export const CliCommandBuilder = () => {
         {mode.value === "type" ? (
           <div className="field" style={{ flex: 2 }}>
             <label htmlFor="type-name-type">Type name (--type)</label>
-            <input id="type-name-type" placeholder="Profile" {...textInputProps(typeName)} />
-            <span className="error">{typeName.error?.[0] ?? " "}</span>
+            <input
+              placeholder="Profile"
+              {...textInputProps(typeName)}
+              {...typeNameA11y.control}
+            />
+            <span {...typeNameA11y.message}>{typeName.error?.[0] ?? " "}</span>
           </div>
         ) : (
           <div className="field" style={{ flex: 2 }}>

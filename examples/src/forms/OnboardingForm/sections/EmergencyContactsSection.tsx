@@ -1,4 +1,5 @@
 import { textInputProps } from "formstand";
+import { fieldA11y } from "../../fieldA11y";
 import {
   useOnboardingField,
   useOnboardingFieldArray,
@@ -27,12 +28,22 @@ const ContactRow = ({
     `emergencyContacts.${index}.relationship`,
   );
   const phone = useOnboardingField(`emergencyContacts.${index}.phone`);
+  // The row path is the id: unique per row, and what the error line
+  // derives its own id from, as the bound components do.
+  const nameA11y = fieldA11y(name, name.path);
+  const relationshipA11y = fieldA11y(relationship, relationship.path);
+  const phoneA11y = fieldA11y(phone, phone.path);
 
   return (
     <div className="array-item" style={{ gridTemplateColumns: "1fr 1fr 1fr auto" }}>
       <div>
-        <input placeholder="Name" aria-label="Contact name" {...textInputProps(name)} />
-        <div className="error" style={{ marginTop: 4 }}>
+        <input
+          placeholder="Name"
+          aria-label="Contact name"
+          {...textInputProps(name)}
+          {...nameA11y.control}
+        />
+        <div {...nameA11y.message} style={{ marginTop: 4 }}>
           {name.error?.[0] ?? " "}
         </div>
       </div>
@@ -41,8 +52,9 @@ const ContactRow = ({
           placeholder="Relationship"
           aria-label="Relationship"
           {...textInputProps(relationship)}
+          {...relationshipA11y.control}
         />
-        <div className="error" style={{ marginTop: 4 }}>
+        <div {...relationshipA11y.message} style={{ marginTop: 4 }}>
           {relationship.error?.[0] ?? " "}
         </div>
       </div>
@@ -52,8 +64,9 @@ const ContactRow = ({
           aria-label="Contact phone"
           type="tel"
           {...textInputProps(phone)}
+          {...phoneA11y.control}
         />
-        <div className="error" style={{ marginTop: 4 }}>
+        <div {...phoneA11y.message} style={{ marginTop: 4 }}>
           {phone.error?.[0] ?? " "}
         </div>
       </div>
@@ -84,7 +97,7 @@ export const EmergencyContactsSection = ({
         />
       ))}
       {contacts.error ? (
-        <div className="error" style={{ marginBottom: 8 }}>
+        <div className="error" role="alert" style={{ marginBottom: 8 }}>
           {contacts.error[0]}
         </div>
       ) : null}

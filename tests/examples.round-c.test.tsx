@@ -13,6 +13,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AutosaveForm } from "../examples/src/forms/AutosaveForm";
 import { BasicForm } from "../examples/src/forms/BasicForm";
 import { ConditionalForm } from "../examples/src/forms/ConditionalForm";
+import { CliCommandBuilder } from "../examples/src/forms/CliCommandBuilder";
+import { OnboardingForm } from "../examples/src/forms/OnboardingForm/OnboardingForm";
+import { onboardingForm } from "../examples/src/forms/OnboardingForm/hooks";
 import { DemoShell } from "../examples/src/demo/DemoShell";
 
 afterEach(() => {
@@ -150,5 +153,60 @@ describe("DemoShell: panel toggles expose their pressed state", () => {
     });
     fireEvent.click(code);
     expect(code.getAttribute("aria-pressed")).toBe("false");
+  });
+});
+
+// The two demos round C left on bare error spans: the Onboarding module's
+// per-field files (a createFormHooks singleton, hence the reset) and the
+// CLI command builder (onChange mode, no submit button).
+describe("module and builder demos: error wiring", () => {
+  afterEach(() => {
+    onboardingForm.reset();
+  });
+
+  it("OnboardingForm describes a required field after a failed submit", async () => {
+    renderStrict(<OnboardingForm />);
+    const firstName = screen.getByLabelText("First name");
+    expect(firstName.getAttribute("aria-describedby")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Complete onboarding" }));
+
+    await waitFor(() => {
+      expect(firstName.getAttribute("aria-invalid")).toBe("true");
+    });
+    const message = describedBy(firstName);
+    expect(message?.textContent).toBe("required");
+    expect(message?.getAttribute("aria-live")).toBe("polite");
+    expect(describedBy(screen.getByLabelText("Personal email"))?.textContent).toBe(
+      "valid email required",
+    );
+  });
+
+  it("OnboardingForm describes an emergency contact row field by its path", async () => {
+    renderStrict(<OnboardingForm />);
+    // The initial values seed one empty contact row.
+    const contactName = screen.getByLabelText("Contact name");
+    expect(contactName.id).toBe("emergencyContacts.0.name");
+
+    fireEvent.click(screen.getByRole("button", { name: "Complete onboarding" }));
+
+    await waitFor(() => {
+      expect(describedBy(contactName)?.textContent).toBe("required");
+    });
+  });
+
+  it("CliCommandBuilder describes the input file once it is cleared", async () => {
+    renderStrict(<CliCommandBuilder />);
+    const input = screen.getByLabelText("Input file");
+    expect(input.getAttribute("aria-describedby")).toBeNull();
+
+    fireEvent.change(input, { target: { value: "" } });
+
+    await waitFor(() => {
+      expect(input.getAttribute("aria-invalid")).toBe("true");
+    });
+    expect(describedBy(input)?.textContent).toBe(
+      "point it at a schema or types file",
+    );
   });
 });
