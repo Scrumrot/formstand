@@ -254,10 +254,17 @@ type StoreIdEntries = { byPath: Map<string, SharedIdEntry>; seq: number };
 const MAX_ID_PATHS = 4096;
 const sharedIdEntries = new WeakMap<object, StoreIdEntries>();
 
-const sharedIdEntry = (store: object, path: string): SharedIdEntry => {
-  const existingStore = sharedIdEntries.get(store);
-  const forStore = existingStore ?? { byPath: new Map(), seq: 1 };
-  if (existingStore === undefined) sharedIdEntries.set(store, forStore);
+const storeIdEntries = (store: object): StoreIdEntries => {
+  const existing = sharedIdEntries.get(store);
+  const forStore = existing ?? { byPath: new Map(), seq: 1 };
+  if (existing === undefined) sharedIdEntries.set(store, forStore);
+  return forStore;
+};
+
+const sharedIdEntry = (
+  forStore: StoreIdEntries,
+  path: string,
+): SharedIdEntry => {
   const existing = forStore.byPath.get(path);
   if (existing !== undefined) {
     // Re-insert to refresh recency, so eviction takes the longest-unused
@@ -305,12 +312,70 @@ const walkOps = (
   return walked.items === items ? walked : reconcileIds(walked, items);
 };
 
+// A row's DESCENDANT arrays have id entries of their own, keyed by path
+// ("teams.0.members"), so when the outer array reorders, the entry at
+// "teams.2.members" would otherwise meet team A's members with team C's
+// history: value reconciliation finds nothing it knows, the same-index
+// fallback hands the first rows the OTHER team's ids, the rest remint, and
+// React remounts inputs a user may be typing in. Move the entries with their
+// rows instead. The outer walk already decided which row went where (the
+// id that was at index j is now at index i, or is gone), so the re-seat
+// follows the ids, not the op: it is the same for an exact op mapping and
+// for a whole-array write that reconciled by value. A vacated slot's
+// entries are dropped so a later row at that index starts clean rather
+// than inheriting a dead row's ids. Entries at an index the previous state
+// never had (a hook mounted on a not-yet-existing slot) are left where
+// they are. Only an outer hook runs this (it derives before its rows' inner
+// hooks, parent before child); inner-only trees keep today's value
+// fallback.
+const reseatDescendants = (
+  forStore: StoreIdEntries,
+  path: string,
+  prev: IdState,
+  next: IdState,
+): void => {
+  if (prev.ids.length === 0) return;
+  const newIndexById = new Map(next.ids.map((id, i) => [id, i] as const));
+  // old index -> new index; undefined marks a removed row. Decided before
+  // the entry map is scanned: a keystroke in any row re-derives the outer
+  // ids (new array reference, same rows) and must not pay for the scan.
+  const moves = prev.ids.map((id) => newIndexById.get(id));
+  if (moves.every((to, from) => to === from)) return;
+  const prefix = `${path}.`;
+  const descendants = [...forStore.byPath.keys()].filter((key) =>
+    key.startsWith(prefix),
+  );
+  const relocations = descendants.flatMap((key) => {
+    const rest = key.slice(prefix.length);
+    const dot = rest.indexOf(".");
+    const segment = dot === -1 ? rest : rest.slice(0, dot);
+    const from = Number(segment);
+    if (!/^\d+$/.test(segment) || from >= prev.ids.length) return [];
+    const entry = forStore.byPath.get(key);
+    if (entry === undefined) return [];
+    const to = moves[from];
+    const target =
+      to === undefined
+        ? undefined
+        : `${prefix}${to}${dot === -1 ? "" : rest.slice(dot)}`;
+    return [{ key, target, entry }];
+  });
+  // Clear every moving source first, then seat the survivors: a swap's two
+  // entries trade keys, so interleaving the two passes would overwrite one
+  // of them before it was read.
+  relocations.forEach(({ key }) => forStore.byPath.delete(key));
+  relocations.forEach(({ target, entry }) => {
+    if (target !== undefined) forStore.byPath.set(target, entry);
+  });
+};
+
 const deriveIds = (
   store: object,
   path: string,
   items: readonly unknown[],
 ): IdState => {
-  const entry = sharedIdEntry(store, path);
+  const forStore = storeIdEntries(store);
+  const entry = sharedIdEntry(forStore, path);
   if (entry.state.items === items) return entry.state;
   const ops = arrayOpsFor(store, path);
   // The walk consumes every record, so the log is spent bookkeeping
@@ -320,6 +385,7 @@ const deriveIds = (
   // by value — sound ids, possibly reminted where reuse was possible.)
   if (ops.length > 0) clearArrayOps(store, path);
   const next = walkOps(entry.state, items, ops);
+  reseatDescendants(forStore, path, entry.state, next);
   entry.state = next;
   return next;
 };
