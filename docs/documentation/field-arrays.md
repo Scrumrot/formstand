@@ -96,7 +96,7 @@ const AlbumRow = ({ form, index }: { form: Form<typeof schema>; index: number })
 };
 ```
 
-Both directions work: `form.arrayPush("albums.0.tracks", track)` mutates the inner array, and reordering the outer `albums` array correctly re-keys metadata for all nested paths. Note that inner ids belong to the *path* (`albums.0.tracks`), not to a particular album, so after an outer reorder the path hosts a different album's tracks and ids reconcile by value against them. Pass a `key` from the outer `fields` so each album's whole row subtree, inner hook included, moves with its album instead of being re-derived at a new index.
+Both directions work: `form.arrayPush("albums.0.tracks", track)` mutates the inner array, and reordering the outer `albums` array re-keys metadata for all nested paths. Inner ids are stored per *path* (`albums.0.tracks`), and the outer hook moves those stores with their rows: when it derives the new `albums` ids it notes which row went where and re-seats every descendant path's ids to match, so after a `move`, `swap`, `remove`, or a whole-array write the tracks of each album keep the ids they had. A slot vacated by `remove` drops its inner ids so a later row there starts fresh. The re-seat runs in the outer hook, so a tree that mounts only inner hooks and reorders the outer array imperatively still reconciles inner ids by value. Pass a `key` from the outer `fields` so each album's whole row subtree, inner hook included, moves with its album instead of being re-derived at a new index.
 
 ## Array-level errors
 

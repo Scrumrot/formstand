@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Fixed
+
+- Nested `useFieldArray` row ids survive an outer reorder. Inner ids are
+  stored per path (`teams.0.members`), so an outer `move`, `swap`, `remove`,
+  `insert`, or whole-array write left the entry at `teams.2.members` meeting
+  team A's members with team C's history: the same-index fallback handed the
+  first rows the other team's ids, the rest reminted, and React remounted
+  inputs a user may have been typing in. The outer hook now re-seats every
+  descendant path's id entry to follow its row (by id, so an exact op
+  mapping and a by-value reconciliation re-seat the same way), and drops the
+  entries of a removed row's slot. Inner-only trees that reorder the outer
+  array imperatively keep the value fallback.
+
 ### Docs
 
 - Field arrays: the array-op revalidation sentence now matches the gate.
