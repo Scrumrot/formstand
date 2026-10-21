@@ -71,6 +71,12 @@
   theme; the light theme's eyebrow (6.76:1) and muted text (4.88:1) clear
   the AA floor; the theme preference is written only when the user
   toggles, so a docs visitor's "auto" survives opening the playground.
+- Playground: the Onboarding module's field files, its emergency-contact
+  rows, and the CLI command builder wire each error line to its control
+  through the shared `fieldA11y` helper, like the other hand-rolled
+  demos since 0.22.0; the contacts array's own error line is a live
+  region. The command builder's file set ships the helper, so it opens
+  in StackBlitz.
 - Playground: the generated kitchen sink's input schema carries human
   messages on every check, so an empty submit no longer shows zod's raw
   messages, and the regenerated plain output carries the CLI's new aria
