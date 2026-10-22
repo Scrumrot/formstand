@@ -73,6 +73,14 @@ jobs:
       - name: Check the bundle holds a single React
         run: node scripts/check-single-react.mjs
 
+      # Gzip budgets over the library's three entries and the playground's
+      # main chunk and stylesheet, a few percent above measured: the
+      # lazy-chunk work cut the main bundle from 2.95 MB to 381 kB with
+      # nothing guarding it, and no test can see a bundle regrow. Runs here,
+      # after both builds, because it reads both artifact sets.
+      - name: Check bundle sizes against their budgets
+        run: node scripts/check-bundle-size.mjs
+
       # Real-browser e2e over the BUILT bundle — the deployed-artifact class
       # of bug (dual React, blank renders, broken mobile shell) that jsdom
       # can't see. Screenshots upload for eyeballing either way.

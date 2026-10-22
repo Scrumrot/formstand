@@ -9,6 +9,12 @@
   page whose purpose is showing the form state; `false` hides it in
   development. Unset keeps the gate, which is what an app wants.
 
+### Internal
+
+- CI budgets the gzip size of the library's three entries and the
+  playground's main chunk and stylesheet (`scripts/check-bundle-size.mjs`),
+  a few percent above measured, so a bundle cannot regrow unnoticed.
+
 ### Docs
 
 - Recipes: "Several async checks at once" shows the form-level

@@ -115,6 +115,13 @@ the CLI from two UI targets to six, and make the docs match.
   override validator, and the generated tests; the emitted form sets
   `createForm`'s `pathDepth` to the same number so the library's union
   matches.
+- After the roadmap rewrite (2026-10-22, unreleased): the playground's
+  Devtools tab, with `FormstandDevtools` gaining an `enabled` override for a
+  page whose purpose is showing the state; the "Several async checks at
+  once" recipe with the Async demo as its working example (a second async
+  field, a form-level `useIsValidating` line, a gated submit); and gzip
+  bundle budgets in CI over the library's three entries and the
+  playground's main chunk and stylesheet (`scripts/check-bundle-size.mjs`).
 - The October review (formstand 0.22.0 and 0.22.1, formstand-cli 0.23.0 and
   0.24.0): two read-only review passes over both packages, the docs and the
   playground, then fix rounds in order. Library: quadratic `flattenIssues`,
@@ -132,23 +139,6 @@ the CLI from two UI targets to six, and make the docs match.
 
 ## Now
 
-- **A devtools playground tab.** The panel shipped in 0.14.0 and has had no
-  try-before-install path since. A tab that mounts `FormstandDevtools`
-  against one of the existing demos lets people see both error channels,
-  the live `diff()` and snapshot/restore without installing, and doubles as
-  the panel's integration test in the browser.
-- **Field-level async coordination.** The one ergonomics gap left standing
-  from both reviews: a form with several independent async validators in
-  flight (username, email, coupon) has every piece it needs (`isValidating`
-  per path, settled result types, ownership tokens that drop stale
-  verdicts) but no documented way to say "wait for all of these before
-  enabling submit". A recipe first; a helper only if the recipe is awkward.
-- **A CI bundle size budget.** The lazy-chunk work cut the playground's main
-  bundle from 2.95 MB to 381 kB with nothing guarding it, and the library's
-  three entries have no size check either. A size-limit step over
-  `dist/index.js`, `dist/devtools/index.js`, `dist/testing/index.js` and the
-  playground's main chunk, with budgets a few percent above measured, like
-  the coverage thresholds.
 - **Standard Schema interop, as a decision.** formstand is zod-first by
   design: the typed paths, the introspection (`emptyValue`, `clearable`,
   container creation), the field-scoped fast path and the CLI's `fromZod`
@@ -299,7 +289,7 @@ stays: six call sites.
 ## How releases happen
 
 Features land on `main` behind green CI (typecheck, lint, coverage-gated
-tests, both builds, and the single-React, generated-demo-freshness,
+tests, both builds, and the single-React, bundle-size, generated-demo-freshness,
 doc-link, and built-bundle e2e guards), docs and playground deploy on every
 push, and npm releases are cut from tags via trusted publishing with
 provenance. "Docs and examples" work ships continuously; package versions move
