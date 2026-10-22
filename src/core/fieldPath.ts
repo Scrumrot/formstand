@@ -42,6 +42,13 @@ type IsRecord<T> = T extends LeafType
 
 type IsArray<T> = T extends readonly unknown[] ? true : false;
 
+// A number key spelled as a path segment, the way the runtime walk reads
+// it: a literal 0 is "0", the wide `number` of z.record(z.number(), ...)
+// is `${number}`. Before this the record arm enumerated `keyof T & string`
+// only, so a number-keyed record offered NO paths under it and nothing
+// inside could be bound.
+type PathKey<K extends number> = number extends K ? `${number}` : `${K}`;
+
 // A tuple has a LITERAL length; a plain array's length is `number`. The
 // distinction matters because a tuple must resolve positionally: the
 // generic array arm's `infer U` unions every element, so a heterogeneous
@@ -155,22 +162,40 @@ type FieldPathRec<T, D extends number> = [D] extends [0]
                   : never)
         : never
       : IsRecord<T> extends true
-        ? {
-            [K in keyof T & string]:
-              // A literal dotted key is NOT path-addressable: the runtime
-              // walk splits on ".", so offering "a.b" for a key named
-              // "a.b" would bind a path that reads nothing (FieldValue
-              // already resolved it to never — the offer was the lie).
-              K extends `${string}.${string}`
-                ? never
-                :
-                    | K
-                    | (IsRecord<NonNullable<T[K]>> extends true
-                        ? `${K}.${FieldPathRec<NonNullable<T[K]>, Prev[D]>}`
-                        : IsArray<NonNullable<T[K]>> extends true
-                          ? `${K}.${FieldPathRec<NonNullable<T[K]>, Prev[D]>}`
-                          : never);
-          }[keyof T & string]
+        ?
+            | {
+                [K in keyof T & string]:
+                  // A literal dotted key is NOT path-addressable: the runtime
+                  // walk splits on ".", so offering "a.b" for a key named
+                  // "a.b" would bind a path that reads nothing (FieldValue
+                  // already resolved it to never — the offer was the lie).
+                  K extends `${string}.${string}`
+                    ? never
+                    :
+                        | K
+                        | (IsRecord<NonNullable<T[K]>> extends true
+                            ? `${K}.${FieldPathRec<NonNullable<T[K]>, Prev[D]>}`
+                            : IsArray<NonNullable<T[K]>> extends true
+                              ? `${K}.${FieldPathRec<NonNullable<T[K]>, Prev[D]>}`
+                              : never);
+              }[keyof T & string]
+            // Number keys, as a SECOND block rather than a renamed mapped
+            // type over `keyof T`: a mapped type with an `as` clause is
+            // homomorphic and keeps each property's `?`, which put
+            // `undefined` into the path union for every optional key. The
+            // intersection with number is not homomorphic (nor is the
+            // string block above). For a plain object this block is
+            // `{}[never]`, i.e. never; for Record<number, V> it is the
+            // `${number}` path and its descendants.
+            | {
+                [K in keyof T & number]:
+                  | PathKey<K>
+                  | (IsRecord<NonNullable<T[K]>> extends true
+                      ? `${PathKey<K>}.${FieldPathRec<NonNullable<T[K]>, Prev[D]>}`
+                      : IsArray<NonNullable<T[K]>> extends true
+                        ? `${PathKey<K>}.${FieldPathRec<NonNullable<T[K]>, Prev[D]>}`
+                        : never);
+              }[keyof T & number]
         : never;
 
 // Tuples must resolve POSITIONALLY before the generic array arm runs: a
@@ -187,7 +212,16 @@ type StepValue<T, K extends string> = T extends readonly (infer U)[]
   : T extends object
     ? K extends keyof T
       ? T[K]
-      : never
+      : // A numeric-string segment into a number-keyed record: "5" (or the
+        // `${number}` hole FieldPath offers) reads T[number]. The `infer N
+        // extends number` turns the string back into the key type the
+        // record declares; a record keyed by a literal number resolves
+        // the same way through `N extends keyof T`.
+        K extends `${infer N extends number}`
+        ? N extends keyof T
+          ? T[N]
+          : never
+        : never
     : never;
 
 // Mirrors FieldPath's NonNullable stepping: when a traversed level is

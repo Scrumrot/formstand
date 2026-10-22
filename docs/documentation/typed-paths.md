@@ -112,7 +112,9 @@ const schema = z.object({ age: z.number() });
 
 ## How path segments are interpreted
 
-At runtime, the **existing container** decides what a segment means: arrays take numeric segments as indices, and plain objects take any segment as a string key, so a `z.record` keyed `"0"` reads and writes the record key instead of silently becoming an array. Only when the container doesn't exist yet does the segment type pick what gets created (numeric creates an array, anything else an object).
+At runtime, the **existing container** decides what a segment means: arrays take numeric segments as indices, and plain objects take any segment as a string key, so a `z.record` keyed `"0"` reads and writes the record key instead of silently becoming an array. When the container doesn't exist yet, the **schema** decides what gets created: a write into an absent optional `z.record` creates an object even for a numeric key, and a write into an absent `z.array` creates an array. Only where the schema has no answer (a union at that level, or the bare `setAtPath` utility with no schema) does the segment type pick (numeric creates an array, anything else an object).
+
+A `z.record(z.number(), ...)` is addressable too: its keys are offered as `` `${number}` `` paths (`"byId.5"`), the spelling the runtime walk reads, and `FieldValue` resolves them to the record's value type.
 
 Three limitations:
 
