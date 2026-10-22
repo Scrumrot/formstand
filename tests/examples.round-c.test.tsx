@@ -16,6 +16,7 @@ import { ConditionalForm } from "../examples/src/forms/ConditionalForm";
 import { CliCommandBuilder } from "../examples/src/forms/CliCommandBuilder";
 import { OnboardingForm } from "../examples/src/forms/OnboardingForm/OnboardingForm";
 import { onboardingForm } from "../examples/src/forms/OnboardingForm/hooks";
+import { SchemaBuilder } from "../examples/src/forms/SchemaBuilder/SchemaBuilder";
 import { DemoShell } from "../examples/src/demo/DemoShell";
 
 afterEach(() => {
@@ -208,5 +209,62 @@ describe("module and builder demos: error wiring", () => {
     expect(describedBy(input)?.textContent).toBe(
       "point it at a schema or types file",
     );
+  });
+});
+
+// The Schema builder validates onChange and has no submit button, like the
+// CLI command builder; its field rows are addressed by path so both row
+// levels (top-level fields and section fields) get unique ids.
+describe("Schema builder: error wiring", () => {
+  it("describes the component name once it is cleared", async () => {
+    renderStrict(<SchemaBuilder />);
+    const input = screen.getByLabelText("Component name");
+    expect(input.getAttribute("aria-describedby")).toBeNull();
+
+    fireEvent.change(input, { target: { value: "" } });
+
+    await waitFor(() => {
+      expect(input.getAttribute("aria-invalid")).toBe("true");
+    });
+    const message = describedBy(input);
+    expect(message?.textContent).toBe("name the component");
+    expect(message?.getAttribute("aria-live")).toBe("polite");
+  });
+
+  it("describes a field row's name by its path", async () => {
+    renderStrict(<SchemaBuilder />);
+    // The worked example seeds two top-level fields and two sections.
+    const names = screen.getAllByLabelText("field name");
+    const first = names[0] as HTMLElement;
+    expect(first.id).toBe("rootFields.0.name");
+    expect(names.map((input) => input.id)).toContain("sections.0.fields.0.name");
+
+    fireEvent.change(first, { target: { value: "" } });
+
+    await waitFor(() => {
+      expect(describedBy(first)?.textContent).toBe("needs a name");
+    });
+  });
+
+  it("announces a section left without fields", async () => {
+    renderStrict(<SchemaBuilder />);
+    expect(screen.getAllByRole("alert").map((alert) => alert.textContent)).toEqual([
+      " ",
+      " ",
+    ]);
+
+    // Row remove buttons in DOM order: two top-level rows, then the address
+    // section's three. Removing index 2 three times empties that section.
+    const removeAt = (index: number) =>
+      fireEvent.click(screen.getAllByRole("button", { name: "✕" })[index] as HTMLElement);
+    removeAt(2);
+    removeAt(2);
+    removeAt(2);
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("alert")[0]?.textContent).toBe(
+        "a section needs at least one field",
+      );
+    });
   });
 });

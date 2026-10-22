@@ -201,7 +201,7 @@ export const ImportModal = ({
         </div>
 
         {error !== null ? (
-          <p className="error" style={{ marginTop: 10 }}>
+          <p className="error" role="alert" style={{ marginTop: 10 }}>
             {error}
           </p>
         ) : null}

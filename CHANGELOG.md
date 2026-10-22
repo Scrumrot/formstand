@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Docs
+
+- Playground: the Schema builder's component name, field and section
+  names, and enum options describe their error lines through the shared
+  `fieldA11y` helper, like the other hand-rolled demos; a section's
+  "needs at least one field" line and the import dialog's parse error
+  are announced, and the "fix the highlighted fields" line is a status
+  region. The row ids are the field paths, so both row levels stay
+  unique.
+
 ## 0.22.1 — 2026-10-22
 
 ### Fixed

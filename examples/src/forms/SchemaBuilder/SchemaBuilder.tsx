@@ -13,6 +13,7 @@ import {
 import { CodeView } from "../../demo/CodeView";
 import { useDemoForm } from "../../demo/DemoShell";
 import { FileTree } from "../../demo/FileTree";
+import { fieldA11y } from "../fieldA11y";
 import {
   FIELD_KINDS,
   blankField,
@@ -93,42 +94,58 @@ const FieldRowInputs = ({
   options,
   onRemove,
   ...move
-}: FieldRowInputsProps) => (
-  <div className="row builder-field-row" style={{ alignItems: "flex-start" }}>
-    <div className="field" style={{ flex: 2 }}>
-      <input placeholder="fieldName" aria-label="field name" {...textInputProps(name)} />
-      <span className="error">{name.error?.[0] ?? " "}</span>
-    </div>
-    <div className="field" style={{ flex: 2 }}>
-      <select aria-label="field kind" {...selectProps(kind)}>
-        {FIELD_KINDS.map((value) => (
-          <option key={value} value={value}>
-            {KIND_LABELS[value]}
-          </option>
-        ))}
-      </select>
-      <span className="error"> </span>
-    </div>
-    {kind.value === "enum" ? (
-      <div className="field" style={{ flex: 3 }}>
+}: FieldRowInputsProps) => {
+  // Ids are the field paths (rootFields.0.name, sections.1.fields.0.name):
+  // unique across both row levels without threading an index down.
+  const nameA11y = fieldA11y(name, name.path);
+  const optionsA11y = fieldA11y(options, options.path);
+  return (
+    <div className="row builder-field-row" style={{ alignItems: "flex-start" }}>
+      <div className="field" style={{ flex: 2 }}>
         <input
-          placeholder="red, green, blue"
-          aria-label="enum options, comma separated"
-          {...textInputProps(options)}
+          placeholder="fieldName"
+          aria-label="field name"
+          {...textInputProps(name)}
+          {...nameA11y.control}
         />
-        <span className="error">{options.error?.[0] ?? " "}</span>
+        <span {...nameA11y.message}>{name.error?.[0] ?? " "}</span>
       </div>
-    ) : null}
-    <label className="row builder-optional" style={{ gap: 6 }}>
-      <input {...checkboxProps(optional)} />
-      optional
-    </label>
-    <MoveButtons {...move} />
-    <button className="secondary" type="button" onClick={onRemove}>
-      ✕
-    </button>
-  </div>
-);
+      <div className="field" style={{ flex: 2 }}>
+        <select aria-label="field kind" {...selectProps(kind)}>
+          {FIELD_KINDS.map((value) => (
+            <option key={value} value={value}>
+              {KIND_LABELS[value]}
+            </option>
+          ))}
+        </select>
+        {/* The kind select has no rule; this keeps the row's error line
+            height so the inputs stay aligned. */}
+        <span className="error" aria-hidden="true">
+          {" "}
+        </span>
+      </div>
+      {kind.value === "enum" ? (
+        <div className="field" style={{ flex: 3 }}>
+          <input
+            placeholder="red, green, blue"
+            aria-label="enum options, comma separated"
+            {...textInputProps(options)}
+            {...optionsA11y.control}
+          />
+          <span {...optionsA11y.message}>{options.error?.[0] ?? " "}</span>
+        </div>
+      ) : null}
+      <label className="row builder-optional" style={{ gap: 6 }}>
+        <input {...checkboxProps(optional)} />
+        optional
+      </label>
+      <MoveButtons {...move} />
+      <button className="secondary" type="button" onClick={onRemove}>
+        ✕
+      </button>
+    </div>
+  );
+};
 
 type RootFieldRowProps = MoveProps &
   Readonly<{
@@ -202,12 +219,18 @@ const SectionEditor = ({ form, index, onRemove, ...move }: SectionEditorProps) =
   const name = useField(form, `sections.${index}.name`);
   const kind = useField(form, `sections.${index}.kind`);
   const rows = useFieldArray(form, `sections.${index}.fields`);
+  const nameA11y = fieldA11y(name, name.path);
   return (
     <div className="builder-section">
       <div className="row" style={{ alignItems: "flex-start" }}>
         <div className="field" style={{ flex: 2 }}>
-          <input placeholder="sectionName" aria-label="section name" {...textInputProps(name)} />
-          <span className="error">{name.error?.[0] ?? " "}</span>
+          <input
+            placeholder="sectionName"
+            aria-label="section name"
+            {...textInputProps(name)}
+            {...nameA11y.control}
+          />
+          <span {...nameA11y.message}>{name.error?.[0] ?? " "}</span>
         </div>
         <div className="field" style={{ flex: 2 }}>
           <select aria-label="section kind" {...selectProps(kind)}>
@@ -233,7 +256,10 @@ const SectionEditor = ({ form, index, onRemove, ...move }: SectionEditorProps) =
           isLast={fieldIndex === rows.fields.length - 1}
         />
       ))}
-      <span className="error">{rows.error?.[0] ?? " "}</span>
+      {/* The array's own rule has no control to describe; announce it. */}
+      <span className="error" role="alert">
+        {rows.error?.[0] ?? " "}
+      </span>
       <button
         className="secondary"
         type="button"
@@ -327,7 +353,7 @@ const GeneratedOutput = ({ files: generated, formName, error }: GeneratedOutputP
         ) : null}
       </div>
       {generated === null || current === undefined ? (
-        <p className="error" style={{ marginTop: 8 }}>
+        <p className="error" role="status" style={{ marginTop: 8 }}>
           {error ?? "Nothing to generate yet."}
         </p>
       ) : (
@@ -400,6 +426,7 @@ export const SchemaBuilder = () => {
   });
   useDemoForm(form);
   const formName = useField(form, "formName");
+  const formNameA11y = fieldA11y(formName, "component-name");
   const ui = useField(form, "ui");
   const layout = useField(form, "layout");
   const sectionStyle = useField(form, "sectionStyle");
@@ -494,8 +521,12 @@ export const SchemaBuilder = () => {
         {mode === "build" ? (
           <div className="field" style={{ flex: 2 }}>
             <label htmlFor="component-name">Component name</label>
-            <input id="component-name" placeholder="ContactForm" {...textInputProps(formName)} />
-            <span className="error">{formName.error?.[0] ?? " "}</span>
+            <input
+              placeholder="ContactForm"
+              {...textInputProps(formName)}
+              {...formNameA11y.control}
+            />
+            <span {...formNameA11y.message}>{formName.error?.[0] ?? " "}</span>
           </div>
         ) : null}
         <div className="field" style={{ flex: 1 }}>
