@@ -40,6 +40,14 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # The core and the hooks compile with lib ES2022 only, against a
+      # declaration of exactly the host globals they use (console, timers,
+      # an optional process.env, an optional localStorage). This is what
+      # the docs' React Native statement rests on: a DOM API creeping into
+      # the core fails here, not in a user's Hermes bundle.
+      - name: Typecheck without the DOM lib
+        run: npm run typecheck:nodom
+
       - name: Lint
         run: npm run lint
 

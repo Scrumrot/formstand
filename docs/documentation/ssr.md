@@ -118,3 +118,25 @@ Two honest notes. This is a *client-side* integration: React's no-JS progressive
 
 - **`focusField` / `focusFirstError` are DOM calls.** Safe to import anywhere (they touch the DOM only when called), but call them from event handlers or effects.
 - **The generated modules are client modules.** `formstand-gen --layout module` output uses `createFormHooks`, so add `"use client"` at the top of the module's files when dropping one into an App Router project, and treat it per the singleton rules above.
+
+## React Native and other DOM-free runtimes
+
+The library is split along one line, and the split is checked in CI rather than promised.
+
+**DOM-free: the core and the hooks.** `createForm` and everything in `src/core` (paths, validation, the store, `persistForm`'s logic, `diff`, snapshots), plus `useForm`, `useField`, `useFields`, `useFieldArray`, `useVariantField`, `useFormSteps`, `useFormAction`, `useFormActionState`, `usePersistForm`, the flag and selector hooks, `createFormContext` and `createFormHooks`. CI compiles exactly this set with `lib: ["ES2022"]` and no DOM types, against a declaration of the only host globals it uses: `console` for the dev warnings, `setTimeout`/`clearTimeout` for the debouncer, an optional `process.env` for the build gates, and an optional `localStorage` for `persistForm`'s default storage. React Native (Hermes), Node, Deno and workers all provide those. The release smoke test also imports the built package under plain Node with no DOM.
+
+**DOM-only: the browser surface.** The bound components (`TextField` and friends), the prop builders (`textInputProps`, `numberInputProps`, `selectProps`, `checkboxProps`, `dateInputProps`), `useMaskedInput`, `useNumberInput`, `focusField` and `focusFirstError`, and the `formstand/devtools` panel. They are typed against DOM events and elements and are not meant for native views.
+
+So a React Native form binds `useField` results to `TextInput` by hand, the way the hand-rolled playground demos do with `<input>`:
+
+```tsx
+const name = useField(form, "name");
+<TextInput
+  value={name.value ?? ""}
+  onChangeText={name.setValue}
+  onBlur={name.onBlur}
+  accessibilityInvalid={name.error !== undefined}
+/>
+```
+
+Two caveats, stated plainly. `persistForm` wants a **synchronous** storage (`getItem` returning a string or null); React Native's AsyncStorage is asynchronous, so either pass a synchronous adapter (MMKV-style libraries fit the contract) or persist by hand with `watchValues` and restore through `initialValues`. And the statement above is a typecheck and a Node import, not a shipped Expo app: nothing in the core reads the DOM, but the library's own test suite runs under jsdom, so native-specific behaviour (keyboard handling, `TextInput` quirks) is yours to test.

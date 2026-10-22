@@ -58,6 +58,12 @@ discriminated unions for variants.
 - Add or update tests for any behavior change.
 - All gates must be green: typecheck, lint, tests (with coverage thresholds),
   build, and docs build, the same steps CI runs.
+- The core and hooks stay DOM-free. `npm run typecheck:nodom` compiles
+  `src/core` and the hooks with `lib: ["ES2022"]` against
+  `scripts/nodom/host-globals.d.ts`, which declares the only host globals
+  they may use. A new DOM call belongs in the DOM-only files (the bound
+  components, prop builders, `focusField`, `useMaskedInput`, the devtools
+  panel), not in the core.
 - Bundle sizes are budgeted. After `npm run build` and `npm run build` in
   `examples/`, `node scripts/check-bundle-size.mjs` compares the gzip size
   of the library's three entries and the playground's main chunk and

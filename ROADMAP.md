@@ -125,7 +125,10 @@ the CLI from two UI targets to six, and make the docs match.
   the Standard Schema decision (zod only through 1.0) stated on the docs'
   first page; and "Adding a UI kit", the contributor's checklist for a
   seventh `--ui` backend, from `parseUiTarget` to the matrix job, with the
-  antd backend as the reference at every step.
+  antd backend as the reference at every step; and the React Native
+  statement in the SSR guide, backed by a CI typecheck of the core and the
+  hooks with no DOM lib against a declaration of the only host globals they
+  use (`scripts/nodom/host-globals.d.ts`), rather than by an Expo project.
 - The October review (formstand 0.22.0 and 0.22.1, formstand-cli 0.23.0 and
   0.24.0): two read-only review passes over both packages, the docs and the
   playground, then fix rounds in order. Library: quadratic `flattenIssues`,
@@ -219,13 +222,6 @@ people who ask for formstand.
   [security notes](./docs/documentation/validation.md) now require. An
   `examples/next` app, built in CI, is also the hydration regression test
   the SSR page currently asks readers to run by hand.
-- **React Native and non-DOM, as a compatibility statement.** The core
-  compiles without the DOM lib on purpose (the path types avoid naming
-  `File` and `Blob`), and nothing in `createForm` or the hooks touches the
-  DOM, but the docs never say what works on native. The honest statement is
-  probably "core and hooks yes, bound components, `focusField` and
-  `persistForm`'s default storage no", verified against an Expo project
-  before it is written.
 - **The CLI as an agent tool surface.** The generators-for-ai plan calls for
   machine-readable generator manifests, `--json` output and MCP tools so an
   agent can author a schema and let deterministic tooling emit the form.

@@ -11,12 +11,21 @@
 
 ### Internal
 
+- CI typechecks the core and the hooks with `lib: ["ES2022"]` and no DOM
+  types (`npm run typecheck:nodom`), against a declaration of the only
+  host globals they use; a DOM call reaching the core fails there.
 - CI budgets the gzip size of the library's three entries and the
   playground's main chunk and stylesheet (`scripts/check-bundle-size.mjs`),
   a few percent above measured, so a bundle cannot regrow unnoticed.
 
 ### Docs
 
+- SSR guide: a "React Native and other DOM-free runtimes" section states
+  the split the CI check enforces (core and hooks DOM-free; the bound
+  components, prop builders, masked and number inputs, focus helpers and
+  the devtools panel are DOM-only), shows a `TextInput` binding, and
+  names the two caveats: `persistForm` wants a synchronous storage, and
+  the statement is a typecheck plus a Node import, not a shipped Expo app.
 - CLI: "Adding a UI kit", the contributor's checklist for a new `--ui`
   backend: the `UiTarget` parser and its refusal rules, the adapter
   helpers and `Backend` record in codegen.ts, the module layout's kit

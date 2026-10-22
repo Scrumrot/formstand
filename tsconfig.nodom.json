@@ -1,0 +1,27 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": [],
+    "noEmit": true
+  },
+  "include": [
+    "scripts/nodom/host-globals.d.ts",
+    "src/core/**/*.ts",
+    "src/react/useField.ts",
+    "src/react/useFields.ts",
+    "src/react/useFieldArray.ts",
+    "src/react/useForm.ts",
+    "src/react/useFormAction.ts",
+    "src/react/useFormSteps.ts",
+    "src/react/usePersistForm.ts",
+    "src/react/useVariantField.ts",
+    "src/react/createFormHooks.ts",
+    "src/react/FormContext.tsx",
+    "src/react/useFormFlags.ts",
+    "src/react/useFormSelector.ts",
+    "src/react/useFormValues.ts",
+    "src/react/useFormError.ts"
+  ],
+  "exclude": ["dist", "node_modules"]
+}
