@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `FormstandDevtools` takes `enabled`, an override for the build gate in
+  either direction: `true` mounts the panel in a production build, for a
+  page whose purpose is showing the form state; `false` hides it in
+  development. Unset keeps the gate, which is what an app wants.
+
+### Docs
+
+- Playground: a Devtools tab mounts `formstand/devtools` next to a form
+  built to fill every panel section (a root `refine`, an array rule, a
+  server error button), so the panel can be tried without installing. The
+  devtools guide links it and documents `enabled`.
+
 ## 0.23.0 — 2026-10-22
 
 ### Added

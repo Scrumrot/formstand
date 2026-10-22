@@ -169,6 +169,7 @@ const sources = {
   derived: withA11y("DerivedFieldForm.tsx", "../forms/DerivedFieldForm.tsx"),
   tag: withA11y("TagInputForm.tsx", "../forms/TagInputForm.tsx"),
   perf: single("PerfBenchmarkForm.tsx", "../forms/PerfBenchmarkForm.tsx"),
+  devtools: single("DevtoolsDemo.tsx", "../forms/DevtoolsDemo.tsx"),
   muiCheckout: single("MuiCheckoutWizard.tsx", "../mui/MuiCheckoutWizard.tsx"),
   muiJob: single("MuiJobApplication.tsx", "../mui/MuiJobApplication.tsx"),
   muiInvoice: single("MuiInvoiceBuilder.tsx", "../mui/MuiInvoiceBuilder.tsx"),

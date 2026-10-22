@@ -24,6 +24,7 @@ Every feature has a working, interactive demo in the **[live playground](https:/
 | Derived | Computed values via selectors, consistent by construction and never stored | [DerivedFieldForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/DerivedFieldForm.tsx) |
 | Tags | A tag input over an array of primitives | [TagInputForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/TagInputForm.tsx) |
 | Perf | A 200-row stress test showing per-field re-render isolation | [PerfBenchmarkForm.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/PerfBenchmarkForm.tsx) |
+| Devtools | [`formstand/devtools`](./devtools) mounted next to a form built to fill every panel section: a root `refine`, an array rule, a server error button, the live diff, snapshot and restore | [DevtoolsDemo.tsx](https://github.com/Scrumrot/formstand/blob/main/examples/src/forms/DevtoolsDemo.tsx) |
 
 ## Material UI
 
@@ -172,6 +173,11 @@ One folder per form: `schema.ts` (zod + select options), `types.ts`, `hooks.ts` 
 ::: details Perf: PerfBenchmarkForm.tsx
 <StackBlitzLink demo="perf" title="Perf" />
 <<< ../../examples/src/forms/PerfBenchmarkForm.tsx
+:::
+
+::: details Devtools: DevtoolsDemo.tsx
+<StackBlitzLink demo="devtools" title="Devtools" />
+<<< ../../examples/src/forms/DevtoolsDemo.tsx
 :::
 
 ::: details State dump panel: StateDump.tsx

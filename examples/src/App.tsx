@@ -93,6 +93,7 @@ const DEMOS: Readonly<Record<TabKey, Demo>> = {
   derived: demo("Derived", "none", pick(() => import("./forms/DerivedFieldForm"), "DerivedFieldForm")),
   tag: demo("Tags", "none", pick(() => import("./forms/TagInputForm"), "TagInputForm")),
   perf: demo("Perf", "none", pick(() => import("./forms/PerfBenchmarkForm"), "PerfBenchmarkForm")),
+  devtools: demo("Devtools", "none", pick(() => import("./forms/DevtoolsDemo"), "DevtoolsDemo")),
   muiCheckout: demo("MUI: Checkout", "mui", pick(() => import("./mui/MuiCheckoutWizard"), "MuiCheckoutWizard")),
   muiJob: demo("MUI: Job form", "mui", pick(() => import("./mui/MuiJobApplication"), "MuiJobApplication")),
   muiInvoice: demo("MUI: Invoice", "mui", pick(() => import("./mui/MuiInvoiceBuilder"), "MuiInvoiceBuilder")),
@@ -216,6 +217,7 @@ const GROUP_OF: Readonly<Record<TabKey, GroupTitle>> = {
   tag: "Patterns",
   onboarding: "Patterns",
   perf: "Patterns",
+  devtools: "Patterns",
   muiCheckout: "Material UI",
   muiJob: "Material UI",
   muiInvoice: "Material UI",
@@ -277,6 +279,8 @@ const BLURBS: Readonly<Record<TabKey, string>> = {
     "Computed values via selectors: consistent by construction, never stored.",
   tag: "A tag input over an array of primitives.",
   perf: "A 200-row stress test showing per-field re-render isolation.",
+  devtools:
+    "formstand/devtools mounted next to a form: per-field rows, both error channels, the root refine error no input shows, the live diff, snapshot and restore. Opted in with `enabled` because this build is production.",
   muiCheckout:
     "A Stepper wizard gating each step with validateFields, a billing-same-as-shipping Switch that copies values, and a review step reading everything via useFormValues.",
   muiJob:

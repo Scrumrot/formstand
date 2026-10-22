@@ -14,6 +14,12 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
+      // Subpath first: a bare string alias rewrites the PREFIX, so the more
+      // specific entry must win before "formstand" swallows it (the root
+      // vitest config has the same ordering rule).
+      "formstand/devtools": fileURLToPath(
+        new URL("../src/devtools/index.ts", import.meta.url),
+      ),
       "formstand": fileURLToPath(new URL("../src/index.ts", import.meta.url)),
     },
     // The formstand alias points OUTSIDE this package (../src), so its bare
