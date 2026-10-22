@@ -11,6 +11,12 @@
 
 ### Docs
 
+- Recipes: "Several async checks at once" shows the form-level
+  `useIsValidating(form)` line, the submit gated on it, why `form.submit`
+  cannot race a debounced check, and when to settle a batch with
+  `validateFieldsAsync`; the validation guide's race section links it.
+  The playground's Async demo gains a second async field with a different
+  latency, the form-level line, and the gated submit.
 - Playground: a Devtools tab mounts `formstand/devtools` next to a form
   built to fill every panel section (a root `refine`, an array rule, a
   server error button), so the panel can be tried without installing. The

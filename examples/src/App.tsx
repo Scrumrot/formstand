@@ -259,7 +259,7 @@ const BLURBS: Readonly<Record<TabKey, string>> = {
   array:
     "useFieldArray basics: push, remove, and reorder with stable row ids. Ops revalidate the array path: after a submit, remove the last row and the min(1) message appears live; add one back and it clears, no resubmit.",
   async:
-    "An async refine username check with debounce, isValidating spinners, and race handling.",
+    "Two async refines with different latencies: per-field debounce and spinners, race handling, one form-level useIsValidating line, and a submit gated on it.",
   wizard:
     "Multi-step with useFormSteps: next() gates on the current step, goTo lands on the first invalid step.",
   conditional:

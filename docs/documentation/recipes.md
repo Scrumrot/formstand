@@ -53,6 +53,28 @@ useEffect(() => {
 
 `form.dirtyFields()` tells you what changed since the restored draft, and `form.diff()` is the matching PATCH payload.
 
+## Several async checks at once
+
+Two or more fields with their own async refines (a username lookup, an email domain check, a coupon code) each run through `useField`'s `debounceMs` on their own, and the [race guards](./validation#race-handling) keep every verdict on its own path. What the form still needs is one answer to "is anything checking?" and a submit that cannot land between a keystroke and its verdict:
+
+```tsx
+const username = useField(form, "username", { debounceMs: 300 });
+const email = useField(form, "email", { debounceMs: 300 });
+const isValidating = useIsValidating(form); // any field's pass, or a whole-form pass
+const isSubmitting = useIsSubmitting(form);
+
+<p role="status">{isValidating ? "checking..." : " "}</p>
+<button type="submit" disabled={isSubmitting || isValidating}>Sign up</button>
+```
+
+Three facts make this hold together:
+
+- `useIsValidating(form)` is `true` while any field-level pass or a whole-form pass is in flight; `useIsValidating(form, "shipping")` scopes it to a subtree. Each field keeps its own `isValidating` for a per-input spinner, so the two indicators can disagree for a moment: the username settles, the form stays busy until the email does.
+- `form.submit` runs its own async parse of the whole form, so it never relies on a verdict a debounced check has not produced yet. A debounce timer that has not fired is invisible to the flags; the submit's parse covers that field anyway, and a `submit()` that starts while another is in flight returns `{ kind: "skipped" }` instead of racing it.
+- To settle a set of fields before an action that is not a submit (enabling a wizard's next step, pricing a quote), call `await form.validateFieldsAsync(["username", "email"])`. Fields that extract a subschema are parsed in parallel, and the batch answers `{ kind: "valid" | "invalid" }`; `useFormSteps` does exactly this on `next()`.
+
+The playground's Async tab is this recipe with two checks of different latency.
+
 ## Multi-step wizard
 
 `useFormSteps` is this recipe as a hook: per-step gating, touched-marking on a refused advance, land-on-first-invalid jumps, live per-step status. See [Multi-step forms](./multi-step). The hand-rolled core, when you want to own the navigation state yourself:
