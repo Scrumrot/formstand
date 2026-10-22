@@ -121,7 +121,11 @@ the CLI from two UI targets to six, and make the docs match.
   once" recipe with the Async demo as its working example (a second async
   field, a form-level `useIsValidating` line, a gated submit); and gzip
   bundle budgets in CI over the library's three entries and the
-  playground's main chunk and stylesheet (`scripts/check-bundle-size.mjs`).
+  playground's main chunk and stylesheet (`scripts/check-bundle-size.mjs`);
+  the Standard Schema decision (zod only through 1.0) stated on the docs'
+  first page; and "Adding a UI kit", the contributor's checklist for a
+  seventh `--ui` backend, from `parseUiTarget` to the matrix job, with the
+  antd backend as the reference at every step.
 - The October review (formstand 0.22.0 and 0.22.1, formstand-cli 0.23.0 and
   0.24.0): two read-only review passes over both packages, the docs and the
   playground, then fix rounds in order. Library: quadratic `flattenIssues`,
@@ -230,12 +234,6 @@ people who ask for formstand.
   repo as a thin manifest plus an MCP server over the existing
   `formstand-cli/codegen` API, or only in generators-for-ai with
   formstand-cli as its forms generator. The two should not both grow it.
-- **A UI kit adapter contribution guide.** Six kits exist and the adapter
-  seam (`Backend.gridChild`, `spanCellFor`, `defineTemplate`, the matrix
-  entry) has been stable since 0.12. Discussions are enabled on the repo;
-  a guide that walks one kit from stub to matrix entry is the natural first
-  thing to point an outside contributor at, and it documents the seam for
-  us too.
 - **A browser-extension devtools.** The in-page panel proves the display; an
   extension would add store discovery, a page bridge, and cross-context
   messaging to reach forms without a component in the tree. Only worth it once

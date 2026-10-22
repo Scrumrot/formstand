@@ -108,7 +108,9 @@ Providers are never emitted, and antd's own `Form`/`Form.Item` is never used, si
 formstand owns the state. Each backend is typechecked against every supported major's
 real declarations before release by the version matrix in `cli/matrix/`. Per-kit binding
 notes are on the
-[UI kits page](https://scrumrot.github.io/formstand/documentation/cli/ui-kits).
+[UI kits page](https://scrumrot.github.io/formstand/documentation/cli/ui-kits), and
+[Adding a UI kit](https://scrumrot.github.io/formstand/documentation/cli/adding-a-kit)
+is the contributor's checklist for a seventh backend.
 
 ## Beyond the basics
 

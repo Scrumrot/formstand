@@ -17,6 +17,13 @@
 
 ### Docs
 
+- CLI: "Adding a UI kit", the contributor's checklist for a new `--ui`
+  backend: the `UiTarget` parser and its refusal rules, the adapter
+  helpers and `Backend` record in codegen.ts, the module layout's kit
+  arms, the structural stub the typecheck tests map in, the playground
+  tab and regeneration script, the matrix alias and probe, and the docs
+  rows, with the antd backend named as the reference at each step. Linked
+  from the UI kits page, the CLI index and the CLI README.
 - The introduction states that formstand is zod only, by decision: the
   typed paths, the introspection, the field-scoped fast path and the
   generator read zod's own schema tree, so a Standard Schema adapter

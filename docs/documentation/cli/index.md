@@ -51,5 +51,6 @@ You get a `ContactForm` with a MUI `TextField` per string, a number binding for 
 | [Layouts and modes](./layouts) | single file vs feature module, section chrome, `--live`, `--form-prop` |
 | [Config and overrides](./config) | project defaults, and swapping a field's control by path |
 | [Custom templates](./templates) | targeting a design system formstand doesn't ship |
+| [Adding a UI kit](./adding-a-kit) | the contributor's checklist for a new `--ui` backend, from the parser to the version matrix |
 | [Programmatic API](./programmatic) | the same generator as a library, browser-safe |
 | [Command reference](./reference) | every flag, the supported schema surface, and how unsupported shapes degrade |

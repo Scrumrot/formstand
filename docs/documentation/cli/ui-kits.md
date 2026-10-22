@@ -60,4 +60,4 @@ cd .. && npm run matrix
 
 It is deliberately not part of `npm test`, since it needs its own `node_modules`. The job list lives in the [`cli/matrix`](https://github.com/Scrumrot/formstand/tree/main/cli/matrix) folder (`run.mjs` drives it; `package.json` pins the kit majors it installs).
 
-Need a kit that isn't on this list? Write a [custom template](./templates).
+Need a kit that isn't on this list? Write a [custom template](./templates) for your own repo, or, to add a backend to formstand-cli itself, follow [Adding a UI kit](./adding-a-kit).

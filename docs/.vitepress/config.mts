@@ -162,6 +162,7 @@ export default defineConfig({
             { text: "Layouts & modes", link: "/documentation/cli/layouts" },
             { text: "Config & overrides", link: "/documentation/cli/config" },
             { text: "Custom templates", link: "/documentation/cli/templates" },
+            { text: "Adding a UI kit", link: "/documentation/cli/adding-a-kit" },
             { text: "Programmatic API", link: "/documentation/cli/programmatic" },
             { text: "Command reference", link: "/documentation/cli/reference" },
           ],
