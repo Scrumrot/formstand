@@ -89,66 +89,179 @@ the CLI from two UI targets to six, and make the docs match.
   wherever they appear (no dialect flag), date formats become date fields,
   and the rest degrades to the loud TODO fallback. YAML stays out to keep
   the zero-dependency stance; the error names the conversion.
+- Generated tests (formstand-cli, 2026-09-18, enriched 2026-09-22): `--tests
+  vitest|jest|playwright` emits a spec beside the component from the same
+  schema walk, with store-level cases on `formstand/testing`, label-driven
+  render cases through the config's `renderWrapper`, and a Playwright spec
+  gated on a configured base URL (design and decisions:
+  [cli/design/generated-tests.md](./cli/design/generated-tests.md)). The IR
+  carries string/array length bounds and number bounds from both the zod
+  and JSON Schema front-ends, the emitted schema round-trips them, and the
+  spec gains bound and array-minimum cases. Assertions stay
+  presence-shaped (the IR carries no authored messages).
+- StackBlitz links (2026-09-18): every self-contained playground demo has an
+  "Open in StackBlitz" button (the docs examples page reuses the same seed
+  builder in its details blocks): a fresh Vite + React project with the
+  demo's harness-stripped source plus formstand from npm. Kit demos stay
+  gated, honestly: they import sibling adapters that are not part of their
+  displayed file set.
+- Brand collateral (2026-09-18): OG images for the docs and the playground
+  (1200x630, rendered from `scripts/generate-og-images.mjs` so the template
+  regenerates them), og/twitter meta wiring on both sites, a self-contained
+  banner.svg served from docs/public, and the README header rebuilt around
+  it (banner + centered badges).
 - `--path-depth N` (formstand-cli 0.22.0, 2026-09-23): the typed-path budget
   as a per-run value threaded through both layouts, the warnings, the
   override validator, and the generated tests; the emitted form sets
   `createForm`'s `pathDepth` to the same number so the library's union
   matches.
+- The October review (formstand 0.22.0 and 0.22.1, formstand-cli 0.23.0 and
+  0.24.0): two read-only review passes over both packages, the docs and the
+  playground, then fix rounds in order. Library: quadratic `flattenIssues`,
+  prototype-named error keys, async verdicts dropped by unrelated edits,
+  fail-closed devtools gates, array ops and `useFieldArray` restricted to
+  array paths, nested row ids re-seated across outer reorders, the schema
+  deciding what container an absent slot gets, number-keyed record paths,
+  and `useFieldArray` parity with `useField`. CLI: degraded leaves compile
+  under by-value path typing, line-comment injection closed, specs skip
+  unmodeled checks, `fromType` recursion guard, OpenAPI 3.0 nullable and
+  `$ref`/`allOf` fidelity. Playground: every demo a lazy chunk (main bundle
+  2.95 MB to 381 kB), accessibility wiring on every hand-rolled demo through
+  one shared helper, coverage thresholds raised to within three points of
+  measured.
 
 ## Now
 
-- **StackBlitz links, shipped 2026-09-18.** Every self-contained playground
-  demo has an "Open in StackBlitz" button (the docs examples page reuses the
-  same seed builder in its details blocks): a fresh Vite + React project with
-  the demo's harness-stripped source plus formstand from npm. Kit demos stay
-  gated, honestly: they import sibling adapters that are not part of their
-  displayed file set.
-- **Brand collateral, shipped 2026-09-18.** OG images for the docs and the
-  playground (1200x630, rendered from scripts/generate-og-images.mjs so the
-  template regenerates them), og/twitter meta wiring on both sites, a
-  self-contained banner.svg served from docs/public, and the README header
-  rebuilt around it (banner + centered badges). The identity travels now.
-- **VitePress 2 migration.** Done and parked: the `chore/vitepress-2` branch
-  builds and renders the full site on 2.0.0-alpha.18 (the historic blank-theme
-  failure no longer reproduces there; no root cause beyond "fixed in alpha").
-  Merge when v2 ships a stable release.
+- **A devtools playground tab.** The panel shipped in 0.14.0 and has had no
+  try-before-install path since. A tab that mounts `FormstandDevtools`
+  against one of the existing demos lets people see both error channels,
+  the live `diff()` and snapshot/restore without installing, and doubles as
+  the panel's integration test in the browser.
+- **Field-level async coordination.** The one ergonomics gap left standing
+  from both reviews: a form with several independent async validators in
+  flight (username, email, coupon) has every piece it needs (`isValidating`
+  per path, settled result types, ownership tokens that drop stale
+  verdicts) but no documented way to say "wait for all of these before
+  enabling submit". A recipe first; a helper only if the recipe is awkward.
+- **A CI bundle size budget.** The lazy-chunk work cut the playground's main
+  bundle from 2.95 MB to 381 kB with nothing guarding it, and the library's
+  three entries have no size check either. A size-limit step over
+  `dist/index.js`, `dist/devtools/index.js`, `dist/testing/index.js` and the
+  playground's main chunk, with budgets a few percent above measured, like
+  the coverage thresholds.
+- **Standard Schema interop, as a decision.** formstand is zod-first by
+  design: the typed paths, the introspection (`emptyValue`, `clearable`,
+  container creation), the field-scoped fast path and the CLI's `fromZod`
+  all read zod's own schema tree. Valibot and ArkType users will ask. The
+  answer shapes the 1.0 type surface either way, so the roadmap states it
+  before 1.0 rather than after: accept Standard Schema for validation only
+  (losing introspection and typed paths on those forms), or stay zod-only
+  and say so on the first page of the docs. Leaning zod-only; the
+  introspection is most of what makes the library worth using.
+- **VitePress 2 migration, and the vite 5 alerts under VitePress 1.** The
+  `chore/vitepress-2` branch built and rendered the full site on
+  2.0.0-alpha.18; upstream is at alpha.20 with no beta, and the branch is now
+  far enough behind main that it will be rebuilt rather than rebased. New
+  since October 22: GitHub reports three Dependabot alerts (one high, two
+  medium) on vite 5.4 under VitePress 1, all in launch-editor, the dev
+  server's open-in-editor hook. Vite 5 has no patched release and VitePress
+  1 pins `^5.4`. The exposure is `docs:dev` on a maintainer's machine, never
+  the deployed site or any user, so the decision is to wait for a VitePress
+  2 beta and rebuild the migration then. An npm `overrides` entry forcing
+  vite 6 under VitePress 1 is the fallback if the alerts outlive the wait.
+
+## Toward 1.0
+
+Where this stands: 0.18.0 (2026-09-17) was declared the last release with
+breaking changes before 1.0, with 1.0 to follow one dogfood cycle of the
+aviation twin app. Since then 0.19 through 0.22 each carried `### Changed`
+entries (array ops take array paths only, bound components type their
+`path` by value, `persistForm`'s apply mode respelled). They were corrections
+the reviews demanded rather than redesigns, but they mean the soak has not
+started. 1.0 is cut when all of the following hold, in this order:
+
+- **One full release cycle with no `### Changed` or `### Breaking` entry in
+  either package.** `### Added` and `### Fixed` are fine. The cycle starts
+  with the next minor (0.23.0, which carries the `useFieldArray` parity
+  additions) and the twin app upgraded to it.
+- **A public API freeze list, written down.** Which exports are the contract
+  and which are internal: `createForm` and the `Form` surface, the hooks and
+  their return shapes, the bound components and prop builders, the
+  `FieldFormApi`/`FieldArrayFormApi` structural contracts (including the
+  rule that new members on them are optional and probed before use),
+  `formstand/testing`, `formstand/devtools`, the CLI flags, the
+  `formstand.config.ts` shape, and the `formstand-cli/codegen` IR and
+  emitters. Everything else is internal and may move in a minor. The list
+  lives in the docs, not only here.
+- **Error message ownership and localization, documented.** Today zod's raw
+  messages reach the UI unless the schema carries human text (the generated
+  kitchen-sink demo had to add them). The docs need one page that says where
+  messages belong (the schema), how to customize them for a whole app (zod's
+  error map hooks), how a translated app keys messages (stable codes in the
+  schema, text looked up at render), and what the CLI emits by default. This
+  is a 1.0-grade question because the answer decides whether `ErrorMap`
+  carries strings or something richer.
+- **A deprecation policy** (see "How releases happen" below). Needed before
+  1.0 so the `zf-` prefix question, or any 1.x removal, has a known path.
+- **The stability statement.** 1.0.0 is the soaked minor plus a version
+  number and a statement of what semver means for this project; both
+  packages go to 1.0 together.
 
 ## Later / parking lot
 
-- **A devtools playground tab.** The panel shipped in 0.14.0; a playground
-  tab would let people try it without installing.
-- **Generated tests, shipped 2026-09-18 (v1).** `--tests
-  vitest|jest|playwright` emits a spec beside the component from the same
-  schema walk, with store-level cases on `formstand/testing`, label-driven
-  render cases through the config's `renderWrapper`, and a Playwright spec
-  gated on a configured base URL (design + decisions:
-  cli/design/generated-tests.md). The check-metadata enrichment landed
-  2026-09-22: the IR carries string/array length bounds and number bounds
-  from both the zod and JSON Schema front-ends, the emitted schema
-  round-trips them, and the spec gains bound and array-minimum cases.
-  Assertions stay presence-shaped (the IR carries no authored messages).
-
+- **A starter template.** The CLI can emit a form, but there is no `npm
+  create` path and no template repository. A copyable Vite + React starter
+  (and a Next.js variant) with one generated form, the docs' recommended
+  setup and the CLI config in place is the cheapest adoption lever for a
+  library at its current size. Decide between a `create-formstand` package
+  and a template repo; the template repo costs nothing to maintain.
+- **A Next.js app example with server actions end to end.** The Actions demo
+  and the [SSR guide](./docs/documentation/ssr.md) cover the pieces, but
+  nothing shows a real route with `"use server"` re-validation, which the
+  [security notes](./docs/documentation/validation.md) now require. An
+  `examples/next` app, built in CI, is also the hydration regression test
+  the SSR page currently asks readers to run by hand.
+- **React Native and non-DOM, as a compatibility statement.** The core
+  compiles without the DOM lib on purpose (the path types avoid naming
+  `File` and `Blob`), and nothing in `createForm` or the hooks touches the
+  DOM, but the docs never say what works on native. The honest statement is
+  probably "core and hooks yes, bound components, `focusField` and
+  `persistForm`'s default storage no", verified against an Expo project
+  before it is written.
+- **The CLI as an agent tool surface.** The generators-for-ai plan calls for
+  machine-readable generator manifests, `--json` output and MCP tools so an
+  agent can author a schema and let deterministic tooling emit the form.
+  formstand-cli has `--watch`, `--wizard` and `--help`, but no manifest, no
+  `--json` and no MCP entry point. Decide where that work lands: in this
+  repo as a thin manifest plus an MCP server over the existing
+  `formstand-cli/codegen` API, or only in generators-for-ai with
+  formstand-cli as its forms generator. The two should not both grow it.
+- **A UI kit adapter contribution guide.** Six kits exist and the adapter
+  seam (`Backend.gridChild`, `spanCellFor`, `defineTemplate`, the matrix
+  entry) has been stable since 0.12. Discussions are enabled on the repo;
+  a guide that walks one kit from stub to matrix entry is the natural first
+  thing to point an outside contributor at, and it documents the seam for
+  us too.
 - **A browser-extension devtools.** The in-page panel proves the display; an
   extension would add store discovery, a page bridge, and cross-context
   messaging to reach forms without a component in the tree. Only worth it once
-  the panel's shape has settled.
+  the panel's shape has settled and the playground tab above exists.
 - **YAML input for the JSON Schema mode.** OpenAPI documents travel as YAML
   at least as often as JSON, but reading them means a yaml dependency, and
   the CLI carries two dependencies on purpose. Deliberately out for now;
   the error message names the one-line conversion. Revisit if the mode
   gets real use.
 - **Visual regression snapshots** for the playground, on top of the Playwright
-  e2e job (baseline images plus pixel diff, vs today's render-integrity
-  assertions and three screenshots).
-- **Field-level async coordination**: a documented pattern, or a helper, for
-  forms with several independent async validators in flight. The pieces exist;
-  the ergonomics could be sharper.
+  e2e job (baseline images plus pixel diff). Parked, not planned: the e2e
+  job has grown real render-integrity assertions since this was written,
+  and a pixel baseline across six UI kits is more maintenance than signal
+  until the kits' own release cadence stops moving the pixels for us.
 - **The `zf-` CSS prefix.** `zf-field` / `zf-error` / `zf-label` predate the
   rename from "zustand forms" to formstand by a month. Considered on
   2026-07-31 and deliberately left alone: it is a documented public CSS API,
   and generated files in users' repos have it baked in. If it ever moves it
-  needs a deprecation window, and `fs-` is a poor replacement because it reads
-  as "filesystem" to JS developers.
+  needs the deprecation policy below, and `fs-` is a poor replacement because
+  it reads as "filesystem" to JS developers.
 
 ## Internal debt
 
@@ -190,3 +303,13 @@ doc-link, and built-bundle e2e guards), docs and playground deploy on every
 push, and npm releases are cut from tags via trusted publishing with
 provenance. "Docs and examples" work ships continuously; package versions move
 when `src/` or `cli/src` does.
+
+**Deprecation policy (from 1.0).** Nothing on the public API list is removed
+in the release that deprecates it. A deprecation ships in a minor with a
+`@deprecated` tag naming the replacement, a CHANGELOG entry under
+`### Changed`, and a one-time dev-mode console warning where the surface is
+runtime (a CSS class or an emitted file layout gets a docs note instead).
+The removal lands no earlier than the next major, and the CHANGELOG entry
+for the major lists every removal with the minor that announced it. The CLI
+follows the same rule for flags and config keys, with the extra step that a
+removed flag keeps parsing for one major and prints the replacement.

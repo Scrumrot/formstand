@@ -37,6 +37,17 @@
 
 ### Docs
 
+- Roadmap: rewritten for the October state. The shipped "Now" items
+  (StackBlitz links, brand collateral, generated tests) and the October
+  review rounds move to the shipped history; a "Toward 1.0" section
+  states the release criteria (a cycle with no `Changed` entries, a
+  written public API list, error message ownership, a deprecation
+  policy); Now holds the devtools playground tab, async coordination, a
+  CI bundle size budget, the Standard Schema decision and the VitePress 2
+  wait with the vite 5 alerts recorded; Later gains a starter template, a
+  Next.js server-actions example, a React Native compatibility statement,
+  the CLI as an agent tool surface and a UI kit adapter guide. The
+  deprecation policy is written into "How releases happen".
 - Playground: the Schema builder's component name, field and section
   names, and enum options describe their error lines through the shared
   `fieldA11y` helper, like the other hand-rolled demos; a section's
