@@ -34,6 +34,7 @@ import {
   type SettledFieldsValidationResult,
   type SettledValidationResult,
   type ValidationResult,
+  containerKindAt,
   fieldSchemaAtPath,
   isAsyncRequiredError,
   isPathOrChild,
@@ -551,6 +552,10 @@ export const createForm = <
   type Values = z.input<TSchema>;
 
   const initialMode: ValidationMode = options.mode ?? "onBlur";
+  // Every value write shares one schema-derived answer for "what container
+  // does an absent slot get" (see setAtPath): built once per form, called
+  // only when a write has to create a container.
+  const kindAt = containerKindAt(schema);
   const initialReValidateMode: ValidationMode =
     options.reValidateMode ?? "onChange";
 
@@ -1153,7 +1158,7 @@ export const createForm = <
     }
     const arr: readonly unknown[] = Array.isArray(current) ? current : [];
     const next = nextArray(arr);
-    const written = setAtPath(store.getState().values, path, next);
+    const written = setAtPath(store.getState().values, path, next, kindAt);
     // The op rebuilds every ancestor's array (spine copy) and re-seats its
     // rows' descendant arrays under new indices — those paths' records no
     // longer describe the arrays now living there. The op's OWN path keeps
@@ -1404,7 +1409,7 @@ export const createForm = <
       clearArrayOpsUnder(store, path);
       store.setState((state) => ({
         ...state,
-        values: setAtPath(state.values, path, value),
+        values: setAtPath(state.values, path, value, kindAt),
         ...errorChannels(state, {
           serverErrors: releaseSpine(state.serverErrors, path),
         }),
@@ -1632,7 +1637,7 @@ export const createForm = <
       store.setState((state) => ({
         ...state,
         values: initialSlot.exists
-          ? setAtPath(state.values, path, initialSlot.value)
+          ? setAtPath(state.values, path, initialSlot.value, kindAt)
           : state.values,
         // A runtime "" path scopes the whole form (the imperative surface is
         // string-typed even though FieldPath excludes ""). Server entries

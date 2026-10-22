@@ -2,6 +2,14 @@ import { isPlainObject } from "./equality";
 
 export type PathSegment = string | number;
 
+// What setAtPath creates at an ABSENT slot. The segment type alone cannot
+// tell a z.record keyed by numeric strings from an array (both read
+// "lookup.0"), so a caller that knows the schema hands in a resolver; it
+// answers for the dotted prefix being created and returns null where it
+// has no opinion, which falls back to the segment-type rule.
+export type ContainerKind = "array" | "record";
+export type ContainerKindAt = (prefix: string) => ContainerKind | null;
+
 // Segment keys containing "." are not addressable (paths are split on dots);
 // use nested objects or index-free keys instead.
 
@@ -136,10 +144,14 @@ const writeIntoArray = (
   index: number,
   rest: readonly PathSegment[],
   value: unknown,
+  kindAt: ContainerKindAt | undefined,
+  prefix: readonly PathSegment[],
 ): readonly unknown[] => {
   const length = Math.max(arr.length, index + 1);
   return Array.from({ length }, (_, i) =>
-    i === index ? writeSegments(arr[i], rest, value) : arr[i],
+    i === index
+      ? writeSegments(arr[i], rest, value, kindAt, [...prefix, index])
+      : arr[i],
   );
 };
 
@@ -157,6 +169,8 @@ const writeSegments = (
   obj: unknown,
   segments: readonly PathSegment[],
   value: unknown,
+  kindAt: ContainerKindAt | undefined,
+  prefix: readonly PathSegment[],
 ): unknown => {
   const [head, ...rest] = segments;
   if (head === undefined) return value;
@@ -169,7 +183,7 @@ const writeSegments = (
       return obj;
     }
     if (refusesHugeIndex(head)) return obj;
-    return writeIntoArray(obj, head, rest, value);
+    return writeIntoArray(obj, head, rest, value, kindAt, prefix);
   }
 
   // Records take any segment as a string key (mirroring readSegment), so a
@@ -187,16 +201,38 @@ const writeSegments = (
       return obj;
     }
     const key = String(head);
-    return { ...obj, [key]: writeSegments(obj[key], rest, value) };
+    return {
+      ...obj,
+      [key]: writeSegments(obj[key], rest, value, kindAt, [...prefix, key]),
+    };
   }
 
-  // Absent (or non-container) value: create a container from the segment type.
-  if (typeof head === "number") {
+  // Absent (or non-container) value: create a container. The schema's
+  // answer for this slot wins when the caller supplied one (a z.record
+  // keyed "0" must not become an array, and a z.array must not become a
+  // record); otherwise the segment type decides, as the docs state.
+  const kind =
+    kindAt?.(prefix.map(String).join(".")) ??
+    (typeof head === "number" ? "array" : "record");
+  if (kind === "array") {
+    if (typeof head !== "number") {
+      console.warn(
+        `[formstand] cannot write string key "${head}" into an array; value left unchanged.`,
+      );
+      return obj;
+    }
     if (refusesHugeIndex(head)) return obj;
-    return writeIntoArray([], head, rest, value);
+    return writeIntoArray([], head, rest, value, kindAt, prefix);
   }
-  return { [head]: writeSegments(undefined, rest, value) };
+  const key = String(head);
+  return { [key]: writeSegments(undefined, rest, value, kindAt, [...prefix, key]) };
 };
 
-export const setAtPath = <T>(obj: T, path: string, value: unknown): T =>
-  writeSegments(obj, parsePath(path), value) as T;
+// `containerKindAt` is optional so the bare utility keeps its segment-type
+// rule; createForm passes the schema-derived resolver from validation.ts.
+export const setAtPath = <T>(
+  obj: T,
+  path: string,
+  value: unknown,
+  containerKindAt?: ContainerKindAt,
+): T => writeSegments(obj, parsePath(path), value, containerKindAt, []) as T;

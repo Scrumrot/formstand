@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { type PathSegment, parsePath } from "./path";
+import {
+  type ContainerKind,
+  type ContainerKindAt,
+  type PathSegment,
+  parsePath,
+} from "./path";
 import type { ErrorMap } from "./types";
 
 export type SettledValidationResult<TOutput> =
@@ -303,6 +308,12 @@ export const fieldSchemaForIntrospection = (
     if (s instanceof z.ZodTuple && typeof segment === "number") {
       return (s.def.items[segment] as z.ZodType | undefined) ?? null;
     }
+    // Every record key shares one value schema, and the walk reads keys
+    // as strings, so a numeric segment is a key here too (z.record(
+    // z.number(), ...) parses "5" as a key at runtime).
+    if (s instanceof z.ZodRecord) {
+      return s.valueType as z.ZodType;
+    }
     if (s instanceof z.ZodDiscriminatedUnion || s instanceof z.ZodUnion) {
       const options = s.def.options as readonly z.ZodType[];
       return options.reduce<z.ZodType | null>(
@@ -317,6 +328,32 @@ export const fieldSchemaForIntrospection = (
     schema,
   );
 };
+
+// setAtPath's absent-slot resolver, from the schema: the container the
+// schema declares at `prefix` (wrappers looked through, like the
+// introspection walk above), or null where it declares a leaf, a union,
+// or nothing, which leaves setAtPath on its segment-type rule. A write of
+// "lookup.0" into an absent optional z.record used to create an array
+// here, which the record schema then rejected ("expected record,
+// received array"); the schema knew the answer all along.
+export const containerKindAt =
+  (schema: z.ZodType): ContainerKindAt =>
+  (prefix: string): ContainerKind | null => {
+    const sub = fieldSchemaForIntrospection(schema, prefix);
+    if (sub === null) return null;
+    const unwrapAll = (s: z.ZodType): z.ZodType => {
+      const inner = unwrapForWalk(s);
+      return inner === null ? s : unwrapAll(inner);
+    };
+    const inner = unwrapAll(sub);
+    if (inner instanceof z.ZodArray || inner instanceof z.ZodTuple) {
+      return "array";
+    }
+    if (inner instanceof z.ZodObject || inner instanceof z.ZodRecord) {
+      return "record";
+    }
+    return null;
+  };
 
 export const fieldSchemaAtPath = (
   schema: z.ZodType,
