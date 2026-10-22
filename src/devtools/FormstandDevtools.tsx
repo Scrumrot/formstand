@@ -25,6 +25,14 @@ export type FormstandDevtoolsProps<
   defaultOpen?: boolean;
   /** Shown on the toggle, for telling two mounted panels apart. */
   label?: string;
+  /**
+   * Overrides the build gate. Unset, the panel renders only where NODE_ENV
+   * is readable and not "production", which is what an app wants. `true`
+   * mounts it regardless, for the one place where showing the form state
+   * IS the page's purpose (a demo, an internal tool shipped in production
+   * mode); `false` hides it in development without unmounting the form.
+   */
+  enabled?: boolean;
 }>;
 
 type FieldRow = Readonly<{
@@ -276,6 +284,8 @@ const DevtoolsPanel = <TSchema extends z.ZodType, D extends PathDepth>({
 export const FormstandDevtools = <
   TSchema extends z.ZodType,
   D extends PathDepth = DefaultPathDepth,
->(
-  props: FormstandDevtoolsProps<TSchema, D>,
-) => (isDevToolsBuild() ? <DevtoolsPanel {...props} /> : null);
+>({
+  enabled,
+  ...props
+}: FormstandDevtoolsProps<TSchema, D>) =>
+  (enabled ?? isDevToolsBuild()) ? <DevtoolsPanel {...props} /> : null;

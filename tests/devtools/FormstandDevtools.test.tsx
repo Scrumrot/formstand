@@ -104,6 +104,20 @@ describe("FormstandDevtools", () => {
     vi.unstubAllEnvs();
   });
 
+  it("`enabled` overrides the gate in both directions", () => {
+    // A demo or internal tool built in production mode opts in explicitly;
+    // a developer can also silence the panel without unmounting it.
+    vi.stubEnv("NODE_ENV", "production");
+    render(<FormstandDevtools form={makeForm()} defaultOpen enabled />);
+    expect(screen.getByText("address.city")).toBeTruthy();
+    cleanup();
+    vi.unstubAllEnvs();
+    const { container } = render(
+      <FormstandDevtools form={makeForm()} defaultOpen enabled={false} />,
+    );
+    expect(container.innerHTML).toBe("");
+  });
+
   it("renders nothing when NODE_ENV is not readable at all", () => {
     // A CDN/ESM, Deno, or worker production build has no `process`; the
     // panel exposes the whole form state, so an unknowable environment

@@ -16,7 +16,9 @@ const Page = () => {
 };
 ```
 
-It ships in the `formstand` package as a subpath, so there is nothing extra to install and no version to keep in step with the library. **It renders nothing in production builds**, on the same `NODE_ENV` gate the store's devtools option uses, so leaving it mounted will not leak your form state into a shipped page. That gate fails closed: the panel (and the store's Redux DevTools connection) is enabled only when `process.env.NODE_ENV` is readable and is not `"production"`. A runtime with no `process` at all, such as a CDN/ESM import, Deno, or a worker, is treated as production, unlike the library's console warnings, which fail open because a warning costs nothing. In such a runtime, define `NODE_ENV` through your bundler to see the panel during development.
+It ships in the `formstand` package as a subpath, so there is nothing extra to install and no version to keep in step with the library. **It renders nothing in production builds**, on the same `NODE_ENV` gate the store's devtools option uses, so leaving it mounted will not leak your form state into a shipped page. That gate fails closed: the panel (and the store's Redux DevTools connection) is enabled only when `process.env.NODE_ENV` is readable and is not `"production"`. A runtime with no `process` at all, such as a CDN/ESM import, Deno, or a worker, is treated as production, unlike the library's console warnings, which fail open because a warning costs nothing. In such a runtime, define `NODE_ENV` through your bundler to see the panel during development. The gate is the default, not a lock: the `enabled` prop below overrides it in either direction, for the rare page where exposing the state is the point.
+
+You can try the panel without installing anything: the playground's [Devtools tab](https://scrumrot.github.io/formstand/examples/#devtools) mounts it next to a form built to exercise every section (a root `refine`, an array rule, a server error button).
 
 ## What it shows
 
@@ -38,6 +40,7 @@ It ships in the `formstand` package as a subpath, so there is nothing extra to i
 | `position` | `"bottom-right" \| "bottom-left" \| "top-right" \| "top-left"` | `"bottom-right"` | which corner the panel anchors to |
 | `defaultOpen` | `boolean` | `false` | start expanded instead of as a toggle button |
 | `label` | `string` | `"formstand"` | shown on the toggle, for telling two mounted panels apart |
+| `enabled` | `boolean` | the build gate | overrides the gate: `true` mounts the panel even in a production build, for a page whose purpose is showing the form state (the [playground's Devtools tab](https://scrumrot.github.io/formstand/examples/#devtools) is one); `false` hides it in development. Leave it unset in an app |
 
 Mount one per form. The toggle shows an error count when the form has any, so a collapsed panel still tells you something is wrong.
 
