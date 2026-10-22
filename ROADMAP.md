@@ -137,6 +137,14 @@ the CLI from two UI targets to six, and make the docs match.
   nothing to version or keep in step, CI installs and builds it against the
   published packages on every push, and the suite renders its form against
   the source. A Next.js variant is the `examples/next` item below.
+- The CLI's agent surface (formstand-cli, unreleased): `--json` prints one
+  document describing the run (every produced file with its text and
+  whether it was written, the warnings as notes, the error on failure) and
+  `--manifest` prints the generator as data derived from the parser's own
+  constants. Decided as the split the roadmap asked for: the generator
+  describes itself and its runs here, where the flags live; the MCP server
+  that wraps generators as tools belongs to generators-for-ai, which
+  already treats formstand-cli as its forms generator.
 - The October review (formstand 0.22.0 and 0.22.1, formstand-cli 0.23.0 and
   0.24.0): two read-only review passes over both packages, the docs and the
   playground, then fix rounds in order. Library: quadratic `flattenIssues`,
@@ -224,14 +232,6 @@ people who ask for formstand.
   [security notes](./docs/documentation/validation.md) now require. An
   `examples/next` app, built in CI, is also the hydration regression test
   the SSR page currently asks readers to run by hand.
-- **The CLI as an agent tool surface.** The generators-for-ai plan calls for
-  machine-readable generator manifests, `--json` output and MCP tools so an
-  agent can author a schema and let deterministic tooling emit the form.
-  formstand-cli has `--watch`, `--wizard` and `--help`, but no manifest, no
-  `--json` and no MCP entry point. Decide where that work lands: in this
-  repo as a thin manifest plus an MCP server over the existing
-  `formstand-cli/codegen` API, or only in generators-for-ai with
-  formstand-cli as its forms generator. The two should not both grow it.
 - **A browser-extension devtools.** The in-page panel proves the display; an
   extension would add store discovery, a page bridge, and cross-context
   messaging to reach forms without a component in the tree. Only worth it once

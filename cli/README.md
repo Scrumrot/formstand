@@ -71,7 +71,9 @@ exists and `--force` isn't set, nothing is written.
 | `--config <file>` | config file, default `formstand.config.{ts,mts,js,mjs}` |
 | `--template <file>` | a custom template for a kit formstand doesn't ship; `--layout single` only |
 | `--tests <list>` | emit generated specs beside the component: a comma list of `vitest`, `jest`, `playwright` (vitest and jest are the same component spec with different globals; pick one). Requires `--out` |
-| `--watch` | regenerate whenever the input changes; requires `--out` |
+| `--watch` | regenerate whenever the input changes; requires `--out`; not with `--json` |
+| `--json` | machine-readable run: one JSON document on stdout (`{ ok, files: [{ path, content, written }], notes, error? }`), nothing on stderr; for agents and scripts |
+| `--manifest` | print a JSON description of the generator (inputs, flags, kits, layouts, output shape) and exit; runs alone |
 | `--force` | overwrite existing output files; under `--layout module` also names, on stderr, the previous run's generated files the new run no longer writes (nothing is deleted) |
 | `--wizard` | ask the flag questions interactively, one at a time; runs alone |
 | `--help` | usage |

@@ -27,12 +27,40 @@ formstand-gen <input file> [flags]
 | `--config FILE` | config file, default `formstand.config.{ts,mts,js,mjs}` in the working directory. See [Config](./config) |
 | `--template FILE` | a custom template module for a kit formstand doesn't ship. `--layout single` only, and it overrides `--ui`. See [Templates](./templates) |
 | `--tests vitest\|jest\|playwright` | emit generated specs beside the component, as a comma list. `vitest` and `jest` are the same component spec with different globals, so pick one; `playwright` adds a browser spec and needs `tests.playwright.baseURL` in the [config](./config). Store-level cases import `formstand/testing` (formstand 0.20 or newer); render cases use the config's `tests.renderWrapper`. Requires `--out` |
-| `--watch` | regenerate whenever the input changes; requires `--out` |
+| `--watch` | regenerate whenever the input changes; requires `--out`; not with `--json` |
+| `--json` | machine-readable run: exactly one JSON document on stdout and nothing on stderr. See [Machine-readable output](#machine-readable-output) |
+| `--manifest` | print a JSON description of the generator (inputs, flags, kits, layouts, output shape) and exit; runs alone |
 | `--force` | allow overwriting existing files. Under `--layout module` it also names the previous run's generated files the new run no longer writes (recognized by the generator header on their first line) with a `warning: stale: <path>` line on stderr. Nothing is deleted: a generated file is yours to edit, so removing a stale one is left to you |
 | `--wizard` | ask the flag questions interactively, one at a time. Runs alone; see below |
 | `--help`, `-h` | usage |
 
 Without `--out`, code goes to stdout while notes and warnings go to stderr, so redirection stays clean. Writes are all-or-nothing: if any destination exists and `--force` isn't set, nothing is written.
+
+## Machine-readable output
+
+Two flags exist for agents and scripts that drive `formstand-gen` rather than read it.
+
+`--json` runs the same generation and prints **one** JSON document on stdout, with nothing on stderr:
+
+```json
+{
+  "ok": true,
+  "files": [
+    { "path": "src/ProfileForm.tsx", "content": "...", "written": true }
+  ],
+  "notes": ["warning: field \"meta\": unsupported zod type \"record\"; defaulted to string"],
+  "error": "only present when ok is false"
+}
+```
+
+`files` lists every file the run produced, with its full text. Under `--out` the files are written to disk as usual and `written` is `true` with the path relative to the working directory; without `--out` nothing is written, `written` is `false`, and `path` is the name `--out` would have used (`ProfileForm.tsx`, or `fields/EmailField.tsx` inside a module). `notes` holds every line that would have gone to stderr except the `wrote ...` lines, which `written: true` already states. A failed run keeps its exit code and puts the `error: ...` text in `error`. `--json` does not combine with `--watch` (a watch never ends) and leaves `--help` as text.
+
+`--manifest` prints the generator as data and exits: `name`, `package`, `version`, the three `inputs` (zod module, TypeScript type, JSON Schema or OpenAPI document), every flag with whether it takes a value, the `ui` kits with the MUI majors, `layouts`, `sections`, `columns`, the test runners, and the shape of a `--json` document. The choice lists derive from the parser's own constants, so they cannot drift from what the flags accept.
+
+```bash
+npx formstand-gen --manifest | jq '.ui[].kit'
+npx formstand-gen src/profileSchema.ts --ui mantine --json | jq -r '.files[0].content'
+```
 
 ## The wizard
 

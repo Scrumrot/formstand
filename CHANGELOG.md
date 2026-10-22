@@ -1,5 +1,23 @@
 # Changelog
 
+## formstand-cli Unreleased
+
+### Added
+
+- `--json`: a machine-readable run. The same generation, then exactly one
+  JSON document on stdout and nothing on stderr: `{ ok, files: [{ path,
+  content, written }], notes, error? }`. Files are written under `--out`
+  as before (`written: true`, path relative to the working directory) and
+  only described without it (`written: false`, the path `--out` would
+  have used); warnings become `notes`; a failed run keeps its exit code
+  and carries the error text. Not with `--watch`; `--help` stays text.
+- `--manifest`: the generator described as data (inputs, every flag and
+  whether it takes a value, the kits with the MUI majors, layouts, section
+  styles, columns, test runners, the `--json` document shape), derived
+  from the parser's own constants. Runs alone. Together these are the
+  agent-facing surface of formstand-cli; the MCP server that would wrap
+  them belongs to generators-for-ai.
+
 ## Unreleased
 
 ### Added

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 // Core module; importing it never touches stdin, the interface only opens
 // inside the --wizard branch.
+import { createRequire } from "node:module";
 import { createInterface } from "node:readline/promises";
 import { pathToFileURL } from "node:url";
 import { createJiti } from "jiti";
@@ -167,6 +168,14 @@ Options:
   --watch             regenerate whenever the input file changes (requires
                       --out)
   --force             overwrite existing output files
+  --json              machine-readable run: ONE JSON document on stdout
+                      ({ ok, files: [{ path, content, written }], notes,
+                      error? }) and nothing else; files are still written
+                      when --out is given, and described either way. For
+                      agents and scripts. Not with --watch.
+  --manifest          print a JSON description of this generator (inputs,
+                      flags, kits, layouts, output shape) and exit. Runs
+                      alone.
   --wizard            ask the questions the flags answer, one at a time, and
                       end by printing the composed command so the run is
                       reproducible without the wizard. Runs ALONE (no other
@@ -186,6 +195,8 @@ Examples:
   formstand-gen src/profileSchema.ts --ui mui --sections panel --columns 2
   formstand-gen src/profileSchema.ts --ui mui@5 --out src/ProfileForm.tsx
   formstand-gen src/profileSchema.ts --template ./mantine.template.ts --out src/ProfileForm.tsx
+  formstand-gen src/profileSchema.ts --json
+  formstand-gen --manifest
 `;
 
 const LAYOUT_VALUES: readonly Layout[] = ["single", "module"];
@@ -236,6 +247,8 @@ type CliOptions = Readonly<{
   pathDepth?: number;
   watch: boolean;
   force: boolean;
+  // --json: one JSON document on stdout describing the run (see runJson).
+  json: boolean;
   // --tests: which spec files to emit beside the component (vitest OR
   // jest for the component spec, plus playwright). Empty = none.
   tests: readonly ("vitest" | "jest" | "playwright")[];
@@ -272,6 +285,7 @@ export type ParsedCliOptions = Readonly<{
   pathDepth?: number;
   watch: boolean;
   force: boolean;
+  json: boolean;
   tests?: readonly ("vitest" | "jest" | "playwright")[];
 }>;
 
@@ -304,6 +318,7 @@ type PartialOptions = Readonly<{
   pathDepth?: number;
   watch: boolean;
   force: boolean;
+  json: boolean;
 }>;
 
 const VALUE_FLAGS: Readonly<
@@ -343,6 +358,7 @@ const parseRest = (
   }
   if (head === "--help" || head === "-h") return { kind: "help" };
   if (head === "--force") return parseRest(rest, { ...acc, force: true });
+  if (head === "--json") return parseRest(rest, { ...acc, json: true });
   if (head === "--watch") return parseRest(rest, { ...acc, watch: true });
   if (head === "--live") return parseRest(rest, { ...acc, live: true });
   // The negations exist for config files that set live/formProp to true:
@@ -497,7 +513,7 @@ const parseRest = (
 };
 
 export const parseArgs = (argv: readonly string[]): ParseResult =>
-  parseRest(argv, { watch: false, force: false });
+  parseRest(argv, { watch: false, force: false, json: false });
 
 const CONFIG_BASENAMES = [
   "formstand.config.ts",
@@ -928,6 +944,18 @@ const assertWritable = (paths: readonly string[], force: boolean): void => {
 const writeFile = (filePath: string, content: string): void => {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content, "utf8");
+  output.sink?.file(relToCwd(filePath), content, true);
+};
+
+// A file the run produced but did not write (no --out): the terminal gets
+// the text as before; a --json run records it under the name --out would
+// have used, so an agent reading the document knows where it belongs.
+const emitUnwritten = (suggestedPath: string, content: string): void => {
+  if (output.sink === null) {
+    stdout(content);
+    return;
+  }
+  output.sink.file(suggestedPath, content, false);
 };
 
 const filesUnder = (dir: string): readonly string[] =>
@@ -976,7 +1004,11 @@ const emitModuleOutput = (
   force: boolean,
 ): void => {
   if (out === undefined) {
-    stdout(joinModuleFiles(files));
+    if (output.sink === null) {
+      stdout(joinModuleFiles(files));
+    } else {
+      files.forEach((file) => emitUnwritten(file.path, file.content));
+    }
     return;
   }
   const outDir = path.resolve(out);
@@ -1142,9 +1174,154 @@ const stdout = (text: string): void => {
   process.stdout.write(text);
 };
 
+// Every stderr line of a run goes through here, so a --json run can fold
+// them into its document instead of the terminal.
 const stderr = (text: string): void => {
+  if (output.sink !== null) {
+    output.sink.line(text);
+    return;
+  }
   process.stderr.write(`${text}\n`);
 };
+
+// What a --json run records: the files it produced (written to disk under
+// --out, or only described without it) and every line that would have gone
+// to stderr. One sanctioned mutable ref at the process edge (like the
+// watch debouncer and the wizard's readline): a run is one process, and
+// threading a sink through three mode runners and both layouts would touch
+// every emit site for a flag most runs never pass. Null means a normal run.
+type JsonFile = Readonly<{ path: string; content: string; written: boolean }>;
+type OutputSink = Readonly<{
+  file: (relPath: string, content: string, written: boolean) => void;
+  line: (text: string) => void;
+}>;
+const output: { sink: OutputSink | null } = { sink: null };
+
+type JsonRun = Readonly<{
+  ok: boolean;
+  files: readonly JsonFile[];
+  notes: readonly string[];
+  error?: string;
+}>;
+
+// The --json run: the same main() with a collecting sink installed, then
+// ONE document on stdout. Errors keep their exit code and land in `error`
+// (the "error: ..." lines); "wrote <path>" lines are implied by
+// written: true and dropped; everything else (warnings, notes) is `notes`.
+// --watch never returns, so it is refused up front; --help keeps printing
+// text, a document describing the help would help nobody.
+const runJson = async (
+  argv: readonly string[],
+  wizardIo?: WizardIo,
+): Promise<number> => {
+  const rest = argv.filter((arg) => arg !== "--json");
+  if (rest.includes("--watch")) {
+    stdout(
+      `${JSON.stringify({ ok: false, files: [], notes: [], error: "--json runs once and describes the run; drop --watch" } satisfies JsonRun)}\n`,
+    );
+    return 1;
+  }
+  const files: JsonFile[] = [];
+  const lines: string[] = [];
+  output.sink = {
+    file: (relPath, content, written) => {
+      files.push({ path: relPath.replace(/\\/g, "/"), content, written });
+    },
+    line: (text) => {
+      lines.push(text);
+    },
+  };
+  const code = await (async (): Promise<number> => {
+    try {
+      return await main(rest, wizardIo);
+    } finally {
+      output.sink = null;
+    }
+  })();
+  const errors = lines
+    .filter((line) => line.startsWith("error: "))
+    .map((line) => line.slice("error: ".length));
+  const notes = lines.filter(
+    (line) => !line.startsWith("error: ") && !line.startsWith("wrote "),
+  );
+  const run: JsonRun = {
+    ok: code === 0,
+    files,
+    notes,
+    ...(code === 0 ? {} : { error: errors.join("; ") || `exit code ${String(code)}` }),
+  };
+  stdout(`${JSON.stringify(run)}\n`);
+  return code;
+};
+
+// The generator described as data, for an agent or a tool that drives it
+// without reading HELP: what it reads, which flags exist and which take a
+// value, the kits/layouts/section styles it emits, and the shape a --json
+// run prints. The choice lists derive from the same constants the parser
+// uses, so a new kit or layout shows up here without a second listing.
+const cliVersion = (): string => {
+  const requireHere = createRequire(import.meta.url);
+  const pkg = requireHere("../package.json") as Readonly<{ version?: unknown }>;
+  return typeof pkg.version === "string" ? pkg.version : "unknown";
+};
+
+type ManifestFlag = Readonly<{ flag: string; value?: string; description: string }>;
+
+const MANIFEST_FLAGS: readonly ManifestFlag[] = [
+  { flag: "--export", value: "name", description: "which export of a zod module holds the schema" },
+  { flag: "--type", value: "TypeName", description: "generate from a TypeScript type or interface in the input module" },
+  { flag: "--schema", value: "name or #/pointer", description: ".json input: which schema in the document to generate from" },
+  { flag: "--ui", value: "kit", description: "which UI kit the output binds to (see ui)" },
+  { flag: "--layout", value: "single | module", description: "one component file, or a feature-module folder" },
+  { flag: "--sections", value: "flat | panel | collapsible", description: "chrome around nested object sections" },
+  { flag: "--columns", value: "1 | 2 | 3", description: "field columns inside each section" },
+  { flag: "--live", description: "no submit scaffold; an onValuesChange prop and onChange mode" },
+  { flag: "--form-prop", description: "the page owns the form: a form prop and a use{Name}Form hook" },
+  { flag: "--no-live", description: "turn a configured live mode off for this run" },
+  { flag: "--no-form-prop", description: "turn a configured form-prop mode off for this run" },
+  { flag: "--name", value: "ComponentName", description: "component name; default derived from the schema or type" },
+  { flag: "--out", value: "file or folder", description: "write here instead of stdout; a folder under --layout module" },
+  { flag: "--schema-out", value: "file", description: "type and .json modes: where the generated zod schema goes" },
+  { flag: "--max-depth", value: "n", description: "nesting budget before a level degrades to a string plus a TODO" },
+  { flag: "--path-depth", value: "n", description: "typed-path budget in segments; emitted as the form's pathDepth" },
+  { flag: "--config", value: "file", description: "config file; default formstand.config.{ts,mts,js,mjs}" },
+  { flag: "--template", value: "file", description: "custom template module for a kit formstand does not ship; single layout only" },
+  { flag: "--tests", value: "vitest | jest | playwright, comma list", description: "emit generated specs beside the component; requires --out" },
+  { flag: "--watch", description: "regenerate on input changes; requires --out; not with --json" },
+  { flag: "--force", description: "overwrite existing output files" },
+  { flag: "--json", description: "one JSON document on stdout describing the run" },
+  { flag: "--manifest", description: "print this document and exit; runs alone" },
+  { flag: "--wizard", description: "interactive questions; runs alone" },
+  { flag: "--help", description: "usage text" },
+];
+
+const manifest = (): string =>
+  `${JSON.stringify(
+    {
+      name: "formstand-gen",
+      package: "formstand-cli",
+      version: cliVersion(),
+      inputs: [
+        { kind: "zod", description: "a TypeScript module exporting a zod schema (picked with --export, or the default/sole export)" },
+        { kind: "type", description: "a TypeScript module with a type or interface, picked with --type; the zod schema is generated beside the component" },
+        { kind: "json-schema", description: "a .json file holding a JSON Schema (2020-12) or an OpenAPI 3.x document, picked with --schema" },
+      ],
+      flags: MANIFEST_FLAGS,
+      ui: UI_KITS.map((kit) =>
+        kit === "mui" ? { kit, versions: MUI_VERSIONS, default: DEFAULT_MUI_VERSION } : { kit },
+      ),
+      layouts: LAYOUT_VALUES,
+      sections: SECTIONS_VALUES,
+      columns: Object.values(COLUMNS_BY_TEXT),
+      tests: ["vitest", "jest", "playwright"],
+      output: {
+        json: "with --json, stdout holds exactly one document: { ok: boolean, files: [{ path, content, written }], notes: string[], error?: string }; `written` is true when --out placed the file on disk, false when the path is the name --out would have used; exit code 0 on ok",
+        stdout: "without --json or --out, the component text (or every module file, separated by `// --- file:` lines) goes to stdout and notes go to stderr",
+      },
+    },
+    null,
+    2,
+  )}\n`;
 
 // A warning is ONE line. Field paths and TODO texts come from the schema
 // document (a JSON Schema key or $ref can hold a newline), and a line
@@ -1354,7 +1531,7 @@ const runZodMode = async (
     });
     return 0;
   }
-  stdout(code);
+  emitUnwritten(`${formName}.tsx`, code);
   return 0;
 };
 
@@ -1499,7 +1676,7 @@ const runGeneratedSchemaMode = (
     assertWritable([schemaOutAbs], options.force);
     writeFile(schemaOutAbs, schemaSource);
     stderr(`wrote ${relToCwd(schemaOutAbs)}`);
-    stdout(code);
+    emitUnwritten(`${formName}.tsx`, code);
     return 0;
   }
   const schemaImport: SchemaImport = {
@@ -1519,14 +1696,19 @@ const runGeneratedSchemaMode = (
     },
     template,
   );
-  stdout(
-    [
-      `// --- file: ${schemaName}.ts`,
-      schemaSource,
-      `// --- file: ${formName}.tsx`,
-      code,
-    ].join("\n"),
-  );
+  if (output.sink === null) {
+    stdout(
+      [
+        `// --- file: ${schemaName}.ts`,
+        schemaSource,
+        `// --- file: ${formName}.tsx`,
+        code,
+      ].join("\n"),
+    );
+    return 0;
+  }
+  emitUnwritten(`${schemaName}.ts`, schemaSource);
+  emitUnwritten(`${formName}.tsx`, code);
   return 0;
 };
 
@@ -1713,6 +1895,25 @@ export const main = async (
   // interview is drivable without a TTY or a child process.
   wizardIo?: WizardIo,
 ): Promise<number> => {
+  if (argv.includes("--manifest")) {
+    if (argv.length !== 1) {
+      stderr("error: --manifest runs alone, it describes the generator and exits");
+      return 1;
+    }
+    stdout(manifest());
+    return 0;
+  }
+  // The JSON run wraps the ordinary one (it installs the sink, re-enters
+  // main without the flag, then prints the document), so it is dispatched
+  // before anything below writes to the terminal. --help stays text.
+  if (
+    argv.includes("--json") &&
+    output.sink === null &&
+    !argv.includes("--help") &&
+    !argv.includes("-h")
+  ) {
+    return runJson(argv, wizardIo);
+  }
   if (argv.includes("--wizard")) {
     // The wizard runs ALONE: it asks everything the other flags say, and a
     // half-flags half-questions run would have two sources of truth.
