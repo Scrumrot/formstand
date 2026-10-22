@@ -178,8 +178,12 @@ the CLI from two UI targets to six, and make the docs match.
   server's open-in-editor hook. Vite 5 has no patched release and VitePress
   1 pins `^5.4`. The exposure is `docs:dev` on a maintainer's machine, never
   the deployed site or any user, so the decision is to wait for a VitePress
-  2 beta and rebuild the migration then. An npm `overrides` entry forcing
-  vite 6 under VitePress 1 is the fallback if the alerts outlive the wait.
+  2 beta and rebuild the migration then. The fallback is applied (2026-10-22):
+  the root `overrides` pin vite 6.4 and esbuild 0.25 under VitePress 1
+  (its own Vue plugin accepts vite 6), which clears the three alerts and the
+  root audit; the docs build, the link check, three painted pages from the
+  preview server and the dev server were checked under it. The override
+  goes when VitePress 2 lands.
 
 ## Toward 1.0
 

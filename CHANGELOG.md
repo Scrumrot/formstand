@@ -29,6 +29,11 @@
 
 ### Internal
 
+- The root `overrides` pin vite 6.4 and esbuild 0.25 under VitePress 1, in
+  place of the esbuild-only pin. Vite 5 has no release for the three
+  launch-editor advisories and VitePress 1 pins `^5.4`; its Vue plugin
+  accepts vite 6, and the docs build, link check, painted pages and dev
+  server all pass under it. Clears the root audit. Goes with VitePress 2.
 - CI typechecks the core and the hooks with `lib: ["ES2022"]` and no DOM
   types (`npm run typecheck:nodom`), against a declaration of the only
   host globals they use; a DOM call reaching the core fails there.
