@@ -17,6 +17,9 @@ declare function clearTimeout(handle: unknown): void;
 declare const process:
   | Readonly<{ env?: Readonly<Record<string, string | undefined>> }>
   | undefined;
+// `var`, not `const`: only a var declaration lands on globalThis, which is
+// how persist.ts reads it (globalThis.localStorage), guarded.
+// eslint-disable-next-line no-var -- see above
 declare var localStorage:
   | Readonly<{
       getItem: (key: string) => string | null;
