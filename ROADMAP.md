@@ -200,23 +200,23 @@ started. 1.0 is cut when all of the following hold, in this order:
   with 0.23.0 (2026-10-22: the `useFieldArray` parity additions and the
   schema-decided container rule) and counts once the twin app has
   upgraded to it.
-- **A public API freeze list, written down.** Which exports are the contract
-  and which are internal: `createForm` and the `Form` surface, the hooks and
-  their return shapes, the bound components and prop builders, the
-  `FieldFormApi`/`FieldArrayFormApi` structural contracts (including the
-  rule that new members on them are optional and probed before use),
-  `formstand/testing`, `formstand/devtools`, the CLI flags, the
-  `formstand.config.ts` shape, and the `formstand-cli/codegen` IR and
-  emitters. Everything else is internal and may move in a minor. The list
-  lives in the docs, not only here.
-- **Error message ownership and localization, documented.** Today zod's raw
-  messages reach the UI unless the schema carries human text (the generated
-  kitchen-sink demo had to add them). The docs need one page that says where
-  messages belong (the schema), how to customize them for a whole app (zod's
-  error map hooks), how a translated app keys messages (stable codes in the
-  schema, text looked up at render), and what the CLI emits by default. This
-  is a 1.0-grade question because the answer decides whether `ErrorMap`
-  carries strings or something richer.
+- **A public API freeze list, written down.** Done (2026-10-22):
+  [Public API and stability](./docs/documentation/api/stability.md) lists
+  every export of the three library entries from the built declarations,
+  the CLI's flags, config shape, templates and programmatic API, the
+  generated code's stable parts (module file layout, generated-file
+  header), the structural form contracts and their optional-member rule,
+  what is internal and may move in a minor, and the deprecation policy.
+  It is the page the 1.0 statement will point at.
+- **Error message ownership and localization, documented.** Done
+  (2026-10-22): [Messages and localization](./docs/documentation/messages.md)
+  states the decision (`ErrorMap` stays strings; the schema is the single
+  place validation text lives), per-check `error` text, zod's locales and
+  `customError` for a whole app, stable keys translated at render, and
+  that the generator's emitted checks carry no messages. Decided against a
+  richer error object: it would move translation into the library and give
+  every consumer a second thing to map, and the string the schema already
+  carries serves as the key.
 - **A deprecation policy** (see "How releases happen" below). Needed before
   1.0 so the `zf-` prefix question, or any 1.x removal, has a known path.
 - **The stability statement.** 1.0.0 is the soaked minor plus a version

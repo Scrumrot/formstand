@@ -43,6 +43,17 @@
 
 ### Docs
 
+- "Public API and stability": which exports of `formstand`,
+  `formstand/testing`, `formstand/devtools`, `formstand-cli` and
+  `formstand-cli/codegen` are the contract (listed from the built
+  declarations), what is internal and may move in a minor, the optional
+  member rule of the structural form contracts, the stable parts of
+  generated code, how semver is applied, and the deprecation policy. The
+  roadmap's 1.0 criteria point at it.
+- "Messages and localization": messages are strings the schema owns;
+  per-check `error` text, zod's locales and `customError` for a whole app,
+  stable keys translated at render, and the fact that the generator's
+  emitted checks carry no messages. The errors guide links it.
 - A Next.js example at `examples/next`: an app router page whose client
   form submits through `useFormActionState` to a `"use server"` action
   that re-parses the payload with the same zod schema before doing

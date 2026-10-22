@@ -149,6 +149,10 @@ form.updateState((state) => ({
 
 A plain-JavaScript caller that sneaks an `errors` patch through gets a console warning and the patch is ignored. The same invariant holds at the `restore(snapshot)` boundary: the merged map is re-derived from the snapshot's channels, never trusted as stored.
 
+## The words themselves
+
+This page is about where a message lands. For where its text comes from, how to change it for a whole app, how a translated app keys its messages, and what the generator emits by default, see [Messages and localization](./messages).
+
 ## Next
 
 - [Validation](./validation): the passes that write the schema channel.

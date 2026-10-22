@@ -142,6 +142,7 @@ export default defineConfig({
           items: [
             { text: "Validation", link: "/documentation/validation" },
             { text: "Errors: schema & server", link: "/documentation/errors" },
+            { text: "Messages & localization", link: "/documentation/messages" },
             { text: "Bound components", link: "/documentation/components" },
             { text: "Field arrays", link: "/documentation/field-arrays" },
             { text: "Multi-step forms", link: "/documentation/multi-step" },
@@ -175,6 +176,7 @@ export default defineConfig({
             { text: "Hooks", link: "/documentation/api/hooks" },
             { text: "Components & bindings", link: "/documentation/api/components" },
             { text: "Utilities & types", link: "/documentation/api/utilities" },
+            { text: "Public API & stability", link: "/documentation/api/stability" },
           ],
         },
         {
