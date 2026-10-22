@@ -8,7 +8,7 @@ This page covers installing formstand, building your first form, the mental mode
 npm install formstand zustand zod react
 ```
 
-formstand declares `zod`, `zustand`, and `react` as peer dependencies. The supported ranges are `zod ^4.2`, `zustand ^5.0`, and `react ^19.0`.
+formstand declares `zod`, `zustand`, and `react` as peer dependencies. The supported ranges are `zod ^4.2`, `zustand ^5.0`, and `react ^19.0`. zod is not swappable for another schema library: the library reads the schema tree itself for paths, introspection and field-scoped validation, not only for `parse` (the [introduction](./#what-makes-it-different) says why).
 
 ## Quickstart
 

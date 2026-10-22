@@ -139,15 +139,6 @@ the CLI from two UI targets to six, and make the docs match.
 
 ## Now
 
-- **Standard Schema interop, as a decision.** formstand is zod-first by
-  design: the typed paths, the introspection (`emptyValue`, `clearable`,
-  container creation), the field-scoped fast path and the CLI's `fromZod`
-  all read zod's own schema tree. Valibot and ArkType users will ask. The
-  answer shapes the 1.0 type surface either way, so the roadmap states it
-  before 1.0 rather than after: accept Standard Schema for validation only
-  (losing introspection and typed paths on those forms), or stay zod-only
-  and say so on the first page of the docs. Leaning zod-only; the
-  introspection is most of what makes the library worth using.
 - **VitePress 2 migration, and the vite 5 alerts under VitePress 1.** The
   `chore/vitepress-2` branch built and rendered the full site on
   2.0.0-alpha.18; upstream is at alpha.20 with no beta, and the branch is now
@@ -197,6 +188,18 @@ started. 1.0 is cut when all of the following hold, in this order:
 - **The stability statement.** 1.0.0 is the soaked minor plus a version
   number and a statement of what semver means for this project; both
   packages go to 1.0 together.
+
+Decided on the way (2026-10-22): **formstand stays zod only through 1.0.**
+A Standard Schema adapter would cover validation for Valibot and ArkType
+users, but the typed paths, the introspection (`emptyValue`, `clearable`,
+container creation), the field-scoped fast path and the generator all read
+zod's own schema tree, so such forms would keep validation and lose the
+rest, and two tiers of forms with different guarantees is the worse
+library. The docs' introduction says so on the first page. What would
+reopen it: a Standard Schema revision that exposes the schema tree
+(object shape, array element, optional and nullable wrappers) in a
+library-neutral way, or a second schema library overtaking zod among the
+people who ask for formstand.
 
 ## Later / parking lot
 

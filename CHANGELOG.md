@@ -17,6 +17,12 @@
 
 ### Docs
 
+- The introduction states that formstand is zod only, by decision: the
+  typed paths, the introspection, the field-scoped fast path and the
+  generator read zod's own schema tree, so a Standard Schema adapter
+  would keep validation and lose the rest. Getting started repeats it
+  next to the peer ranges, and the roadmap records the decision and what
+  would reopen it.
 - Recipes: "Several async checks at once" shows the form-level
   `useIsValidating(form)` line, the submit gated on it, why `form.submit`
   cannot race a debounced check, and when to settle a batch with

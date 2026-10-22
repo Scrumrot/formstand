@@ -39,6 +39,8 @@ export const SignupForm = () => {
 
 The schema is not a plugin here. There is no resolver layer to configure, because formstand reads the zod schema directly. That is what lets it infer paths, validate one field's subschema per keystroke, and know that a nullable field clears to `null` while an optional one clears to `undefined`.
 
+That is also why formstand is zod only, by decision rather than by omission. A [Standard Schema](https://standardschema.dev) adapter could run validation against Valibot or ArkType, but every other thing on this page reads zod's own schema tree: the typed paths, the `emptyValue` and `clearable` introspection, the field-scoped fast path, what container an absent slot gets, and the generator. A form bound to a schema the library cannot read would keep validation and lose the rest, and two tiers of forms with different guarantees is a worse library than one that says what it needs. If you validate with something other than zod today, formstand is not the right fit yet; the roadmap records the decision and what would reopen it.
+
 Errors live in two channels that cannot clobber each other. Validation owns one, your app owns the other, so a background revalidation pass physically cannot wipe the "username taken" message your server just returned. [Errors](./errors) covers the full contract.
 
 Wherever state can be derived, it is. Dirtiness is computed by comparing values against initial values rather than tracked as you write, so it cannot drift out of sync, and `diff()` hands you a PATCH-ready payload of exactly what changed.
