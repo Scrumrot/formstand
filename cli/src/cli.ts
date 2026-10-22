@@ -1897,7 +1897,16 @@ export const main = async (
 ): Promise<number> => {
   if (argv.includes("--manifest")) {
     if (argv.length !== 1) {
-      stderr("error: --manifest runs alone, it describes the generator and exits");
+      // A --json caller asked for a document, so the refusal is one too.
+      const message =
+        "--manifest runs alone, it describes the generator and exits";
+      if (argv.includes("--json")) {
+        stdout(
+          `${JSON.stringify({ ok: false, files: [], notes: [], error: message } satisfies JsonRun)}\n`,
+        );
+        return 1;
+      }
+      stderr(`error: ${message}`);
       return 1;
     }
     stdout(manifest());
@@ -1906,13 +1915,17 @@ export const main = async (
   // The JSON run wraps the ordinary one (it installs the sink, re-enters
   // main without the flag, then prints the document), so it is dispatched
   // before anything below writes to the terminal. --help stays text.
-  if (
-    argv.includes("--json") &&
-    output.sink === null &&
-    !argv.includes("--help") &&
-    !argv.includes("-h")
-  ) {
-    return runJson(argv, wizardIo);
+  if (argv.includes("--json") && !argv.includes("--help") && !argv.includes("-h")) {
+    if (output.sink === null) return runJson(argv, wizardIo);
+    // The sink is one per process. runJson re-enters main WITHOUT the flag,
+    // so a --json argv while the sink is live is a second, concurrent
+    // caller (a test's Promise.all, an in-process server): running it
+    // plainly would pour its files into the first run's document. Refuse
+    // with a document of its own instead.
+    stdout(
+      `${JSON.stringify({ ok: false, files: [], notes: [], error: "another --json run is in progress in this process; run them one at a time" } satisfies JsonRun)}\n`,
+    );
+    return 1;
   }
   if (argv.includes("--wizard")) {
     // The wizard runs ALONE: it asks everything the other flags say, and a

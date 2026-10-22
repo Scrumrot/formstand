@@ -85,6 +85,62 @@ describe("containerKindAt", () => {
   });
 });
 
+describe("containerKindAt stands aside at unions", () => {
+  // A reviewer's reproduction: two variants declare the same key as an
+  // object and as an array. Following the first member made the array
+  // variant's write create a record, which its own schema then rejected.
+  const union = z.discriminatedUnion("kind", [
+    z.object({
+      kind: z.literal("one"),
+      details: z.object({ note: z.string() }).optional(),
+    }),
+    z.object({
+      kind: z.literal("many"),
+      details: z.array(z.string()).optional(),
+    }),
+  ]);
+
+  it("has no opinion on a key that lives under a union", () => {
+    const kindAt = containerKindAt(union);
+    expect(kindAt("details")).toBeNull();
+    expect(kindAt("details.0")).toBeNull();
+  });
+
+  it("the segment rule decides, so both variants validate after a write", () => {
+    // FieldPath offers no paths INTO a union, so these writes use the
+    // runtime-typed surface, the way a server-error mapper or a
+    // hand-rolled FieldFormApi would.
+    const write = (
+      form: Readonly<{ setValue: (path: never, value: never) => void }>,
+      path: string,
+      value: unknown,
+    ): void => form.setValue(path as never, value as never);
+    const many = createForm(union, { initialValues: { kind: "many" } });
+    write(many, "details.0", "x");
+    expect(many.getState().values.details).toEqual(["x"]);
+    expect(many.validate().kind).toBe("valid");
+
+    const one = createForm(union, { initialValues: { kind: "one" } });
+    write(one, "details.note", "hi");
+    expect(one.getState().values.details).toEqual({ note: "hi" });
+    expect(one.validate().kind).toBe("valid");
+  });
+
+  it("a union BELOW the created level does not matter", () => {
+    // The union sits under the record's values; creating the record itself
+    // is still the schema's call.
+    const nested = z.object({
+      byId: z
+        .record(z.string(), z.union([z.string(), z.number()]))
+        .optional(),
+    });
+    const form = createForm(nested, { initialValues: {} });
+    form.setValue("byId.0", "x");
+    expect(form.getState().values.byId).toEqual({ "0": "x" });
+    expect(form.validate().kind).toBe("valid");
+  });
+});
+
 describe("setAtPath with a resolver", () => {
   beforeEach(() => {
     vi.spyOn(console, "warn").mockImplementation(() => {});

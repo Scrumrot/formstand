@@ -336,15 +336,46 @@ export const fieldSchemaForIntrospection = (
 // "lookup.0" into an absent optional z.record used to create an array
 // here, which the record schema then rejected ("expected record,
 // received array"); the schema knew the answer all along.
+//
+// This walk is NOT fieldSchemaForIntrospection's: that one reads a union's
+// key from the first member that declares it, which is the right guess for
+// emptyValue/clearable (members rarely disagree on a shared key's wrapper)
+// and the wrong one here, where two variants can declare the same key as
+// an object and as an array (a reviewer's reproduction: `details` as
+// `z.object` in one variant and `z.array` in another made every write
+// create the first variant's record, and the array variant then failed
+// validation). A union anywhere on the path, or at its end, means the
+// schema has no single answer, so the segment-type rule decides, which is
+// also what the typed-paths guide says.
 export const containerKindAt =
   (schema: z.ZodType): ContainerKindAt =>
   (prefix: string): ContainerKind | null => {
-    const sub = fieldSchemaForIntrospection(schema, prefix);
-    if (sub === null) return null;
     const unwrapAll = (s: z.ZodType): z.ZodType => {
       const inner = unwrapForWalk(s);
       return inner === null ? s : unwrapAll(inner);
     };
+    const step = (s: z.ZodType, segment: PathSegment): z.ZodType | null => {
+      const inner = unwrapAll(s);
+      if (inner instanceof z.ZodObject && typeof segment === "string") {
+        const shape: Readonly<Record<string, z.ZodType | undefined>> = inner.shape;
+        return Object.hasOwn(shape, segment) ? (shape[segment] ?? null) : null;
+      }
+      if (inner instanceof z.ZodArray && typeof segment === "number") {
+        return inner.element as z.ZodType;
+      }
+      if (inner instanceof z.ZodTuple && typeof segment === "number") {
+        return (inner.def.items[segment] as z.ZodType | undefined) ?? null;
+      }
+      if (inner instanceof z.ZodRecord) {
+        return inner.valueType as z.ZodType;
+      }
+      return null;
+    };
+    const sub = parsePath(prefix).reduce<z.ZodType | null>(
+      (current, segment) => (current === null ? null : step(current, segment)),
+      schema,
+    );
+    if (sub === null) return null;
     const inner = unwrapAll(sub);
     if (inner instanceof z.ZodArray || inner instanceof z.ZodTuple) {
       return "array";

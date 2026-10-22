@@ -16,7 +16,10 @@
   styles, columns, test runners, the `--json` document shape), derived
   from the parser's own constants. Runs alone. Together these are the
   agent-facing surface of formstand-cli; the MCP server that would wrap
-  them belongs to generators-for-ai.
+  them belongs to generators-for-ai. One `--json` run per process at a
+  time: a second run started while one is in flight (an in-process caller)
+  refuses with its own document instead of pouring its files into the
+  first; `--manifest --json` refuses as a document too.
 
 ## Unreleased
 
@@ -26,6 +29,16 @@
   either direction: `true` mounts the panel in a production build, for a
   page whose purpose is showing the form state; `false` hides it in
   development. Unset keeps the gate, which is what an app wants.
+
+### Fixed
+
+- The container rule for absent slots (0.23.0) stood on the introspection
+  walk, which reads a union's key from the first member that declares it,
+  so a `z.discriminatedUnion` whose variants declare the same key as an
+  object and as an array made every write create the first variant's
+  record, and the array variant then failed its own validation. The rule
+  now has no opinion wherever a union sits on the path, and the segment
+  type decides there, as the typed-paths guide already said.
 
 ### Internal
 

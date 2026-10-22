@@ -150,6 +150,36 @@ describe("formstand-gen --json", () => {
   });
 });
 
+describe("formstand-gen --json, one run per process at a time", () => {
+  it("a concurrent second run refuses with its own document and leaves the first intact", async () => {
+    // A reviewer's reproduction: the sink is a process-level ref, so a second
+    // run that slipped past the guard poured its files into the first
+    // document and printed nothing itself.
+    const { stdout } = await capture(async () => {
+      const [a, b] = await Promise.all([
+        main([zodFixture, "--json"]),
+        main([typeFixture, "--type", "Profile", "--json"]),
+      ]);
+      return a === 0 && b === 1 ? 0 : a === 1 && b === 0 ? 0 : 2;
+    });
+    const docs = stdout.trim().split("\n").map((line) => JSON.parse(line) as JsonRun);
+    expect(docs).toHaveLength(2);
+    const [okRun, refused] = [docs.find((d) => d.ok), docs.find((d) => !d.ok)];
+    expect(okRun?.files.map((file) => file.path)).toEqual(["ProfileForm.tsx"]);
+    expect(refused?.error).toContain("another --json run is in progress");
+    expect(refused?.files).toEqual([]);
+  });
+
+  it("--manifest --json refuses as a document", async () => {
+    const { code, stdout, stderr } = await capture(() => main(["--manifest", "--json"]));
+    expect(code).toBe(1);
+    expect(stderr).toBe("");
+    const run = parseRun(stdout);
+    expect(run.ok).toBe(false);
+    expect(run.error).toContain("--manifest runs alone");
+  });
+});
+
 describe("formstand-gen --manifest", () => {
   it("prints the generator as data, with the parser's own choice lists", async () => {
     const { code, stdout, stderr } = await capture(() => main(["--manifest"]));
