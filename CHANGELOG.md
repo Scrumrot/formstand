@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+### Added
+
+- `useFieldArray` parity with `useField`: the return carries the array
+  path's own `touched`, `dirty` and `isValidating` flags, `setTouched`,
+  `onBlur` (marks the array touched and validates it under the blur
+  gate) and `validate` (array-scoped, the same `{ kind }` result), plus
+  the whole-array writes `replace(items)`, `update(index, item)`,
+  `prepend(item)` and `clear()`, revalidating under the change gate like
+  the index ops. `replace` and `clear` go through `form.setValue`, so ids
+  follow surviving row references (and a fresh row at the same index
+  keeps that index's id); `update` writes one row in place and the row
+  keeps its id. `FieldArrayFormApi` gains optional `setTouched` and
+  `setValue` members for hand-rolled forms (absent members make the
+  corresponding functions no-ops, like `setError`).
+- `setAtPath` takes an optional container resolver, and `containerKindAt(
+  schema)` builds one from a zod schema.
+
+### Fixed
+
+- A numeric-string key written into an absent optional `z.record` created
+  an array (`setValue("lookup.0", "x")` on `lookup: undefined` yielded
+  `lookup: ["x"]`, which the record schema then rejected). `createForm`
+  now hands every value write the schema's answer for the slot being
+  created, so a record stays a record and an array an array; only where
+  the schema has no answer (a union, or the bare utility) does the
+  segment type still decide. The field-schema introspection walk also
+  descends into records, so a record child's `emptyValue` and `clearable`
+  come from its value schema instead of the heuristic.
+- A number-keyed record (`z.record(z.number(), z.string())`) offered no
+  typed paths under it, so nothing inside could be bound. Its keys are
+  now offered as `` `${number}` `` paths and `FieldValue` resolves them to
+  the value type.
+
 ### Docs
 
 - Playground: the Schema builder's component name, field and section
