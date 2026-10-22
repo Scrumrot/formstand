@@ -4,7 +4,7 @@ A living plan for **formstand** (the library) and **formstand-cli** (the
 generator), ordered by intent, not promise. Items move between horizons as
 reality votes. Shipped work graduates to the [CHANGELOG](./CHANGELOG.md).
 
-_Last updated: 2026-10-22 (formstand 0.22.1, formstand-cli 0.24.0)._
+_Last updated: 2026-10-22 (formstand 0.23.0, formstand-cli 0.24.0)._
 
 ## Shipped since 0.9 (2026-07-10 to 2026-07-31)
 
@@ -181,9 +181,10 @@ the reviews demanded rather than redesigns, but they mean the soak has not
 started. 1.0 is cut when all of the following hold, in this order:
 
 - **One full release cycle with no `### Changed` or `### Breaking` entry in
-  either package.** `### Added` and `### Fixed` are fine. The cycle starts
-  with the next minor (0.23.0, which carries the `useFieldArray` parity
-  additions) and the twin app upgraded to it.
+  either package.** `### Added` and `### Fixed` are fine. The cycle started
+  with 0.23.0 (2026-10-22: the `useFieldArray` parity additions and the
+  schema-decided container rule) and counts once the twin app has
+  upgraded to it.
 - **A public API freeze list, written down.** Which exports are the contract
   and which are internal: `createForm` and the `Form` surface, the hooks and
   their return shapes, the bound components and prop builders, the
