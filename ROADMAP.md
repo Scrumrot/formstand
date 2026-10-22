@@ -145,6 +145,13 @@ the CLI from two UI targets to six, and make the docs match.
   describes itself and its runs here, where the flags live; the MCP server
   that wraps generators as tools belongs to generators-for-ai, which
   already treats formstand-cli as its forms generator.
+- The Next.js example (2026-10-22): `examples/next`, an app router page
+  whose client form submits through `useFormActionState` to a `"use
+  server"` action that re-parses the payload with the same schema, with
+  the rejection path end to end. CI installs the published formstand and
+  runs `next build` on every push; the suite renders the form and runs the
+  action in-process against the source. The SSR guide and the examples
+  page point at it.
 - The October review (formstand 0.22.0 and 0.22.1, formstand-cli 0.23.0 and
   0.24.0): two read-only review passes over both packages, the docs and the
   playground, then fix rounds in order. Library: quadratic `flattenIssues`,
@@ -226,12 +233,6 @@ people who ask for formstand.
 
 ## Later / parking lot
 
-- **A Next.js app example with server actions end to end.** The Actions demo
-  and the [SSR guide](./docs/documentation/ssr.md) cover the pieces, but
-  nothing shows a real route with `"use server"` re-validation, which the
-  [security notes](./docs/documentation/validation.md) now require. An
-  `examples/next` app, built in CI, is also the hydration regression test
-  the SSR page currently asks readers to run by hand.
 - **A browser-extension devtools.** The in-page panel proves the display; an
   extension would add store discovery, a page bridge, and cross-context
   messaging to reach forms without a component in the tree. Only worth it once

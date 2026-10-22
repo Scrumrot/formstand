@@ -38,6 +38,13 @@
 
 ### Docs
 
+- A Next.js example at `examples/next`: an app router page whose client
+  form submits through `useFormActionState` to a `"use server"` action
+  that re-parses the payload with the same zod schema before doing
+  anything, with the rejection path shown end to end. CI builds it with
+  `next build` against the published package; the suite renders the form
+  and runs the action in-process against the source. The SSR guide's form
+  actions section and the examples page link it.
 - A starter template at `templates/vite-react`: Vite, React 19, zod,
   zustand, formstand's bound components on one schema, and formstand-cli
   as a dev dependency with an `npm run generate` script. Getting started

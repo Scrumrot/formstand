@@ -18,6 +18,12 @@ export default tseslint.config(
       // does anyone trying it from a checkout); its source IS linted.
       "templates/*/dist/**",
       "templates/*/node_modules/**",
+      // The Next.js example's build dir, dependency tree and generated env
+      // declaration; its app/ source IS linted (base config: layout and
+      // page must default-export for the app router).
+      "examples/next/.next/**",
+      "examples/next/node_modules/**",
+      "examples/next/next-env.d.ts",
       "coverage/**",
       "docs/.vitepress/cache/**",
       "docs/.vitepress/dist/**",

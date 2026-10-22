@@ -52,6 +52,14 @@ Four demos bind formstand to [shadcn/ui](https://ui.shadcn.com/) components. sha
 
 The playground bundles its own copies of the shadcn components (they're copy-in code by design); in your app, `npx shadcn add button input label checkbox select …` scaffolds them and the adapter works unchanged.
 
+## Next.js
+
+[`examples/next`](https://github.com/Scrumrot/formstand/tree/main/examples/next) is a Next.js app router page, not a playground tab: a client form on `useFormActionState` submitting through a `"use server"` action that re-parses the payload with the same zod schema, with the rejection path shown end to end. It is the [SSR and Next.js guide](./ssr#react-19-form-actions) as a running app. CI builds it against the published formstand on every push.
+
+```bash
+cd examples/next && npm install && npm run dev
+```
+
 ## Browse the source inline
 
 Every block below embeds the demo's source file at build time, so it cannot drift from what the playground runs. One transformation applies: the two lines of playground harness (the `useDemoForm` registration that powers the **View state** panel, and its import) are stripped, the same way the playground's own code panel strips them, so a listing copied into your project compiles as-is. Everything shown is plain formstand.

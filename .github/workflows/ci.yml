@@ -97,6 +97,15 @@ jobs:
         run: npm install --no-audit --no-fund && npm run build
         working-directory: templates/vite-react
 
+      # The Next.js example (a server action re-parsing with the schema)
+      # installs the PUBLISHED formstand and runs `next build`: the SSR
+      # guide's rules, checked by the framework that enforces them. The
+      # suite renders its client form and runs its action in-process
+      # against the source (tests/examples.next.test.tsx).
+      - name: Build the Next.js example against the published packages
+        run: npm install --no-audit --no-fund && npm run build
+        working-directory: examples/next
+
       # Real-browser e2e over the BUILT bundle — the deployed-artifact class
       # of bug (dual React, blank renders, broken mobile shell) that jsdom
       # can't see. Screenshots upload for eyeballing either way.

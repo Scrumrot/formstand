@@ -102,6 +102,8 @@ A submission that fails validation returns the **previous** state unchanged: the
 
 One rule that holds on every path: a `"use server"` function must parse `data` with the same schema on the server, every time it runs. The bridge validates in the browser before calling the action, but a server action is a network endpoint, and any client can invoke it with arbitrary arguments; the `data` it receives is typed as `z.output<typeof schema>` only because the client promised so. The bridge shapes the hydrated experience (errors in the store, touched fields, pending state); it is not a guard the server can rely on.
 
+The repo carries this as a running app: [`examples/next`](https://github.com/Scrumrot/formstand/tree/main/examples/next) is an app router page whose client form submits through `useFormActionState` to a `"use server"` action that parses the payload with the same schema before doing anything, with the rejection path shown end to end. CI builds it with `next build` against the published formstand on every push, and the suite renders the form and runs the action in-process against the source.
+
 Two honest notes. This is a *client-side* integration: React's no-JS progressive enhancement only works when the server action itself is passed to the form, which by definition skips any client wrapper. For that path the server parse above is the only validation there is, and the bridge is the hydrated experience on top of it. And React 19's post-action reset only clears **uncontrolled** fields; formstand inputs are controlled, so the form's values survive the action untouched.
 
 ## Hydration checklist

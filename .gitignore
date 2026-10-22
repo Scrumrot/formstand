@@ -27,3 +27,9 @@ tests/.generated/
 # The starter template is copied with degit and installed fresh; a lockfile
 # would pin a copy to the formstand version of the day it was committed.
 templates/*/package-lock.json
+
+# The Next.js example installs fresh in CI like the template; its build dir
+# and the next-env.d.ts that `next build` regenerates are artifacts.
+examples/next/package-lock.json
+examples/next/.next
+examples/next/next-env.d.ts
