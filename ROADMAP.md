@@ -129,6 +129,14 @@ the CLI from two UI targets to six, and make the docs match.
   statement in the SSR guide, backed by a CI typecheck of the core and the
   hooks with no DOM lib against a declaration of the only host globals they
   use (`scripts/nodom/host-globals.d.ts`), rather than by an Expo project.
+- The starter template (2026-10-22): `templates/vite-react`, a copyable Vite
+  + React app with one schema-driven form on the bound components and
+  formstand-cli wired in (`npm run generate`), reached with one `npx degit`
+  line from getting started and the README. Decided as a folder in this
+  repo rather than a `create-formstand` package or a template repository:
+  nothing to version or keep in step, CI installs and builds it against the
+  published packages on every push, and the suite renders its form against
+  the source. A Next.js variant is the `examples/next` item below.
 - The October review (formstand 0.22.0 and 0.22.1, formstand-cli 0.23.0 and
   0.24.0): two read-only review passes over both packages, the docs and the
   playground, then fix rounds in order. Library: quadratic `flattenIssues`,
@@ -210,12 +218,6 @@ people who ask for formstand.
 
 ## Later / parking lot
 
-- **A starter template.** The CLI can emit a form, but there is no `npm
-  create` path and no template repository. A copyable Vite + React starter
-  (and a Next.js variant) with one generated form, the docs' recommended
-  setup and the CLI config in place is the cheapest adoption lever for a
-  library at its current size. Decide between a `create-formstand` package
-  and a template repo; the template repo costs nothing to maintain.
 - **A Next.js app example with server actions end to end.** The Actions demo
   and the [SSR guide](./docs/documentation/ssr.md) cover the pieces, but
   nothing shows a real route with `"use server"` re-validation, which the

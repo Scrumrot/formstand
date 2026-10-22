@@ -10,6 +10,17 @@ npm install formstand zustand zod react
 
 formstand declares `zod`, `zustand`, and `react` as peer dependencies. The supported ranges are `zod ^4.2`, `zustand ^5.0`, and `react ^19.0`. zod is not swappable for another schema library: the library reads the schema tree itself for paths, introspection and field-scoped validation, not only for `parse` (the [introduction](./#what-makes-it-different) says why).
 
+### Start from the template
+
+A copyable Vite + React starter with one schema-driven form lives in the repo under `templates/vite-react`: formstand, zod, zustand, the bound components wired up, and formstand-cli as a dev dependency so `npm run generate` writes the same form from the schema.
+
+```bash
+npx degit Scrumrot/formstand/templates/vite-react my-form-app
+cd my-form-app && npm install && npm run dev
+```
+
+It is a folder, not a package: nothing to keep in step, and CI builds it against the published formstand on every push. The [template's README](https://github.com/Scrumrot/formstand/tree/main/templates/vite-react) lists what is in it.
+
 ## Quickstart
 
 Define a zod schema, hand it to `useForm`, and wire fields by path:

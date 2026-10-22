@@ -30,6 +30,12 @@ npm install formstand zustand zod react
 
 Peer-dep ranges: `zod ^4.2`, `zustand ^5.0`, `react ^19.0`.
 
+Or start from the Vite + React template, one schema-driven form with the CLI wired in:
+
+```bash
+npx degit Scrumrot/formstand/templates/vite-react my-form-app
+```
+
 ## Quickstart
 
 ```tsx

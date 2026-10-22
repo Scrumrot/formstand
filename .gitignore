@@ -23,3 +23,7 @@ tests/.generated/
 # Claude Code local state: per-user settings and agent worktrees
 .claude/settings.local.json
 .claude/worktrees/
+
+# The starter template is copied with degit and installed fresh; a lockfile
+# would pin a copy to the formstand version of the day it was committed.
+templates/*/package-lock.json

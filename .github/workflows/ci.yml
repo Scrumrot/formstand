@@ -89,6 +89,14 @@ jobs:
       - name: Check bundle sizes against their budgets
         run: node scripts/check-bundle-size.mjs
 
+      # The starter template installs the PUBLISHED formstand and
+      # formstand-cli and builds: a user's first `npm run dev` is this step.
+      # The suite renders the template against the source separately
+      # (tests/template.vite-react.test.tsx), which covers the next release.
+      - name: Build the starter template against the published packages
+        run: npm install --no-audit --no-fund && npm run build
+        working-directory: templates/vite-react
+
       # Real-browser e2e over the BUILT bundle — the deployed-artifact class
       # of bug (dual React, blank renders, broken mobile shell) that jsdom
       # can't see. Screenshots upload for eyeballing either way.

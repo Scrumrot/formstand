@@ -20,6 +20,12 @@
 
 ### Docs
 
+- A starter template at `templates/vite-react`: Vite, React 19, zod,
+  zustand, formstand's bound components on one schema, and formstand-cli
+  as a dev dependency with an `npm run generate` script. Getting started
+  and the README point at it with one `npx degit` line. CI installs and
+  builds it against the published packages; the suite renders its form
+  against the source.
 - SSR guide: a "React Native and other DOM-free runtimes" section states
   the split the CI check enforces (core and hooks DOM-free; the bound
   components, prop builders, masked and number inputs, focus helpers and

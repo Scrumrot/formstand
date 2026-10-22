@@ -14,6 +14,10 @@ export default tseslint.config(
       "examples/e2e/**",
       "examples/node_modules/**",
       "examples/src/generated/**",
+      // The starter template installs and builds in place (CI does, and so
+      // does anyone trying it from a checkout); its source IS linted.
+      "templates/*/dist/**",
+      "templates/*/node_modules/**",
       "coverage/**",
       "docs/.vitepress/cache/**",
       "docs/.vitepress/dist/**",
