@@ -9,6 +9,7 @@ import {
   clearArrayOps,
 } from "../core/arrayOpLog";
 import type { Form } from "../core/createForm";
+import { isFieldDirty } from "../core/equality";
 import type {
   ArrayFieldPath,
   ArrayItemOf,
@@ -57,6 +58,12 @@ export type FieldArrayFormApi = Readonly<{
   // setError/clearError no-ops.
   setError?(path: string, errors: string | readonly string[]): void;
   clearErrors?(path?: string): void;
+  // OPTIONAL, same contract: `setTouched` backs the hook's touched/onBlur
+  // half of its useField parity, `setValue` backs the whole-array writes
+  // (replace/update/clear). Absent members make those returned functions
+  // no-ops, like setError/clearError above.
+  setTouched?(path: string, touched?: boolean): void;
+  setValue?(path: string, value: unknown): void;
 }>;
 
 export type FieldArrayEntry<TItem> = Readonly<{
@@ -79,11 +86,38 @@ export type UseFieldArrayReturn<TItem> = Readonly<{
   // optional members).
   setError: (errors: string | readonly string[]) => void;
   clearError: () => void;
+  // The array's own flags, read at ITS path like useField reads a leaf's:
+  // `touched` is the array path's flag (set by onBlur/setTouched, not by
+  // a row's blur), `dirty` compares the whole array against its initial
+  // value, `isValidating` is the array path's in-flight flag. A "touched
+  // array" UI used to drop to selectors for these.
+  touched: boolean;
+  dirty: boolean;
+  isValidating: boolean;
+  setTouched: (touched?: boolean) => void;
+  // Marks the array touched and validates it under the blur gate, the
+  // same gate useField.onBlur applies; for a list whose "control" is the
+  // add row or the group as a whole.
+  onBlur: () => void;
+  // Array-scoped validation, the same result shape as useField.validate.
+  // On a hand-rolled FieldArrayFormApi without validateField it reports
+  // valid without running anything (the member is optional, see above).
+  validate: () => FieldValidationResult;
   push: (item: TItem) => void;
   remove: (index: number) => void;
   insert: (index: number, item: TItem) => void;
   move: (from: number, to: number) => void;
   swap: (a: number, b: number) => void;
+  // The whole-array writes. `replace` and `clear` go through the form's
+  // setValue, so ids come from reconciliation: a row REFERENCE that
+  // survives keeps its id, a fresh row at the same index keeps that
+  // index's id. `update` writes one row in place (the row keeps its id,
+  // an edit at the same index), `prepend` is insert(0, item). All four
+  // revalidate under the change gate like the index ops.
+  replace: (items: readonly TItem[]) => void;
+  update: (index: number, item: TItem) => void;
+  prepend: (item: TItem) => void;
+  clear: () => void;
 }>;
 
 type IdState = Readonly<{
@@ -478,6 +512,9 @@ export function useFieldArray<TItem = unknown>(
         // Own-key read, like useField: an array named "constructor" must
         // not read Object as its error list.
         error: entryAt(state.errors, path),
+        touched: flagAt(state.touched, path),
+        dirty: isFieldDirty(value, getAtPath(state.initialValues, path)),
+        isValidating: flagAt(state.isValidating, path),
       };
     }),
   );
@@ -579,6 +616,64 @@ export function useFieldArray<TItem = unknown>(
 
   const clearError = useCallback(() => form.clearErrors?.(path), [form, path]);
 
+  const setTouched = useCallback(
+    (touched?: boolean) => form.setTouched?.(path, touched),
+    [form, path],
+  );
+
+  // useField.onBlur without the debounce: array-level rules are cheap
+  // (length, uniqueness) and the hook takes no debounceMs option.
+  const onBlur = useCallback(() => {
+    form.setTouched?.(path, true);
+    const state = form.store.getState();
+    if (
+      shouldValidateOn(
+        "blur",
+        state.mode,
+        state.reValidateMode,
+        state.submitCount > 0,
+        true,
+      )
+    ) {
+      form.validateField?.(path);
+    }
+  }, [form, path]);
+
+  const validate = useCallback(
+    (): FieldValidationResult =>
+      form.validateField?.(path) ?? { kind: "valid" },
+    [form, path],
+  );
+
+  const replace = useCallback(
+    (next: readonly TItem[]) => {
+      form.setValue?.(path, next);
+      revalidate();
+    },
+    [form, path, revalidate],
+  );
+
+  const update = useCallback(
+    (index: number, item: TItem) => {
+      form.setValue?.(`${path}.${index}`, item);
+      revalidate();
+    },
+    [form, path, revalidate],
+  );
+
+  const prepend = useCallback(
+    (item: TItem) => {
+      form.arrayInsert(path, 0, item);
+      revalidate();
+    },
+    [form, path, revalidate],
+  );
+
+  const clear = useCallback(() => {
+    form.setValue?.(path, []);
+    revalidate();
+  }, [form, path, revalidate]);
+
   return useMemo(
     () => ({
       path,
@@ -589,12 +684,44 @@ export function useFieldArray<TItem = unknown>(
       firstError: error?.[0],
       setError,
       clearError,
+      touched: slice.touched,
+      dirty: slice.dirty,
+      isValidating: slice.isValidating,
+      setTouched,
+      onBlur,
+      validate,
       push,
       remove,
       insert,
       move,
       swap,
+      replace,
+      update,
+      prepend,
+      clear,
     }),
-    [path, fields, items, error, setError, clearError, push, remove, insert, move, swap],
+    [
+      path,
+      fields,
+      items,
+      error,
+      setError,
+      clearError,
+      slice.touched,
+      slice.dirty,
+      slice.isValidating,
+      setTouched,
+      onBlur,
+      validate,
+      push,
+      remove,
+      insert,
+      move,
+      swap,
+      replace,
+      update,
+      prepend,
+      clear,
+    ],
   );
 }

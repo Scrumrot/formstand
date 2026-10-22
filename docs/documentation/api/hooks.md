@@ -60,4 +60,9 @@ The pre-0.2 names `useFormState` and `useFormStateShallow` were renamed to `useF
 | `error` | `readonly string[] \| undefined`, the array-level error |
 | `firstError` | `string \| undefined`, the first array-level message; same shorthand as `useField` |
 | `setError(errors)` / `clearError()` | the array-level **server channel** at this path: `setError` takes a `string` or `readonly string[]` like `form.setError`; `clearError()` is `clearErrors(path)`. Both no-op on a hand-rolled `FieldArrayFormApi` that omits the optional members |
-| `push(item)` / `remove(index)` / `insert(index, item)` / `move(from, to)` / `swap(a, b)` | wrappers over the form's array ops |
+| `touched` / `dirty` / `isValidating` | `boolean`, the array path's own flags: the touched flag at the array path, the whole array compared against its initial value, the in-flight flag at the array path |
+| `setTouched(touched?)` | writes the array path's touched flag (no-op on a `FieldArrayFormApi` without `setTouched`) |
+| `onBlur()` | marks the array touched and validates it under the blur gate, like `useField.onBlur` |
+| `validate()` | `FieldValidationResult`, array-scoped validation; reports valid without running on a `FieldArrayFormApi` without `validateField` |
+| `push(item)` / `remove(index)` / `insert(index, item)` / `move(from, to)` / `swap(a, b)` | wrappers over the form's array ops, revalidating the array path under the change gate |
+| `replace(items)` / `update(index, item)` / `prepend(item)` / `clear()` | whole-array writes: `replace` and `clear` through `form.setValue` (ids follow surviving row references, and a fresh row at the same index keeps that index's id), `update` writes one row in place (the row keeps its id), `prepend` is `insert(0, item)`. The `setValue`-backed three no-op on a `FieldArrayFormApi` without `setValue` |

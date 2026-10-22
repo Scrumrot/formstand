@@ -25,7 +25,7 @@ This page maps the react-hook-form API you know onto its formstand counterpart, 
 | `formState.isSubmitting` | `useIsSubmitting(form)` |
 | `formState.isSubmitted` / `submitCount` | `useSubmitCount(form)` (`> 0` ≙ `isSubmitted`) |
 | `formState.isValid` / `isValidating` | `useIsValid(form)` / `state.isValidatingForm` and per-field `state.isValidating[path]` |
-| `useFieldArray({ control, name })` | `useFieldArray(form, "items")`, with the item type inferred from the schema and the same stable-identity story: `fields[i].id` as the React key, plus `push`/`remove`/`insert`/`move`/`swap`. There is no `prepend` or `update`; use `insert(0, item)` and `setValue("items.2", item)`. See [Field arrays](./field-arrays) |
+| `useFieldArray({ control, name })` | `useFieldArray(form, "items")`, with the item type inferred from the schema and the same stable-identity story: `fields[i].id` as the React key, plus `push`/`remove`/`insert`/`move`/`swap`/`prepend`/`update`/`replace`, and `clear()` for `replace([])`. See [Field arrays](./field-arrays) |
 | `mode` / `reValidateMode` | same option names, but **the default differs**: react-hook-form defaults to `onSubmit`, formstand to `onBlur`, so omitting `mode` makes your fields start validating on blur. Plus one semantic difference; see below |
 | `<Controller render={...} />` / `useController` | no controller: `useField` plus a small adapter that maps `UseFieldReturn` onto your UI kit's props. The [MUI demos](./examples#material-ui) show the full pattern |
 
