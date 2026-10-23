@@ -1924,6 +1924,13 @@ const unionLines = (
   label: string,
   level: number,
   budget: number,
+  // The path the TODO comments print. entry.path is the hole-STRIPPED
+  // naming path ("pavements.lights" for a row union), which is right for
+  // variable names and wrong for a reader locating the field; a row union
+  // passes its holed template so the comment says what the module layout
+  // says ("pavements.${index}.lights"). Static unions have no holes, so
+  // the default is exact for them.
+  commentPath: string = entry.path,
 ): readonly string[] => {
   const discriminantSpec: FieldSpec = {
     kind: "enum",
@@ -1971,11 +1978,11 @@ const unionLines = (
             }
             case "depth":
               return [
-                depthTodoLine(`${entry.path}.${leaf.name}`, ind(lvl), budget),
+                depthTodoLine(`${commentPath}.${leaf.name}`, ind(lvl), budget),
               ];
             case "unsupported":
               return [
-                `${ind(lvl)}{/* TODO: nested ${leaf.specKind} ${commentText(q(`${entry.path}.${leaf.name}`))} inside a union variant, extract it by hand */}`,
+                `${ind(lvl)}{/* TODO: nested ${leaf.specKind} ${commentText(q(`${commentPath}.${leaf.name}`))} inside a union variant, extract it by hand */}`,
               ];
           }
         });
@@ -2446,7 +2453,7 @@ const emitUnionComponent = (
     ),
     "  return (",
     `${ind(2)}<>`,
-    ...unionLines(backend, u, args.label, 3, ctx.budget),
+    ...unionLines(backend, u, args.label, 3, ctx.budget, t),
     `${ind(2)}</>`,
     "  );",
     "};",

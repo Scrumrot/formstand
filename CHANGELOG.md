@@ -1,5 +1,15 @@
 # Changelog
 
+## formstand-cli Unreleased
+
+### Fixed
+
+- The single-file layout's TODO for an array inside a row union's variant
+  (the one shape that still degrades) printed the hole-stripped naming path
+  (`"pavements.lights"`), which names no field a reader can find. It prints
+  the row template (`"pavements.${index}.lights"`), as the module layout
+  already did.
+
 ## 0.24.0 — 2026-10-23
 
 ### Added

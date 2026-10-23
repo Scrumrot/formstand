@@ -97,6 +97,29 @@ describe("row containers, single-file layout", () => {
     expect(code).not.toContain("inside a union variant");
   });
 
+  it("an array inside a row union's variant names its TODO with the row hole", () => {
+    // The one shape that still degrades. The extracted union component
+    // names itself from the hole-stripped segments; the TODO used to print
+    // that same stripped path ("pavements.lights"), which names no field a
+    // reader can find. It prints the holed template, as the module layout does.
+    const schema = z.object({
+      pavements: z.array(
+        z.discriminatedUnion("kind", [
+          z.object({
+            kind: z.literal("asphalt"),
+            lights: z.array(z.object({ color: z.string() })),
+          }),
+          z.object({ kind: z.literal("grass"), length: z.number() }),
+        ]),
+      ),
+    });
+    const out = emitPlain(schema, "PavementsForm");
+    expect(out).toContain(
+      'nested array "pavements.${index}.lights" inside a union variant',
+    );
+    expect(out).not.toContain('"pavements.lights"');
+  });
+
   it("a tuple row-object field binds inline on the row path", () => {
     expect(code).toContain("path={`segments.${index}.span.0`}");
     expect(code).toContain("path={`segments.${index}.span.1`}");
