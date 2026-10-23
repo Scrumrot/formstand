@@ -290,6 +290,18 @@ have shared `commitScopedErrors` since 2026-07-16 (090dec0), and
 `useVariantField` derives through `FieldValue` since 774d98c. `FieldPathArg`
 stays: six call sites.
 
+TypeScript 7, checked on 2026-10-23 against 7.0.2 (the native compiler,
+now npm's `latest`): the root, the DOM-free, the CLI and the playground
+configs all typecheck with zero errors, the typed-path tests included, and
+its declaration output for `src/` is byte-identical to 5.9.3's across all
+37 files; the root typecheck takes 3 seconds instead of 17. Nothing in the
+library needs to change for it. The move waits on the toolchain, not on
+us: typescript-eslint 8.72 pins its TypeScript peer below 6.1, and tsup's
+declaration bundling and vitest's transform run on the JavaScript compiler
+API, which the native compiler does not provide. Re-check when
+typescript-eslint and tsup declare TS 7 support; until then 5.9 stays and
+the 7.0 run is a free second opinion worth repeating before 1.0.
+
 ## How releases happen
 
 Features land on `main` behind green CI (typecheck, lint, coverage-gated
