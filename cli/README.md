@@ -129,7 +129,8 @@ is the contributor's checklist for a seventh backend.
   `z.date()` fields need **>= 0.9**; a discriminated union as an array's row item needs
   **>= 0.16**, and unions or tuples nested deeper inside rows need **>= 0.17**; kit output
   from formstand-cli 0.18 reads `field.clearable`, so it needs **>= 0.18**; containers
-  inside union variants and `--tests` specs need **>= 0.20**. The
+  inside union variants and `--tests` specs need **>= 0.20**; arrays inside union
+  variants need **>= 0.25** (`useVariantFieldArray`). The
   [quick start](https://scrumrot.github.io/formstand/documentation/cli/quick-start#iterating-on-a-schema)
   keeps the authoritative list.
 - **zod v4** in your project. The CLI walks your schema structurally and does not ship

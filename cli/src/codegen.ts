@@ -1,4 +1,4 @@
-import { lowerFirst, pascalCase, singularize } from "./casing";
+import { camelCase, camelIdent, lowerFirst, pascalCase, singularize } from "./casing";
 import {
   FORMSTAND_PATH_DEPTH,
   NESTING_LIMIT_TODO,
@@ -1173,12 +1173,21 @@ export type UnionEntry = Readonly<{
 // variant sub-paths): a "leaf" binds through useVariantField with a
 // DOTTED name relative to the union path ("cardNumber", "size.w",
 // "span.0"); "depth" marks a spot whose full bound path would exceed the
-// FieldPath budget (render the depth TODO); "unsupported" is a shape the
-// variant path types cannot carry bindings for (an array or union inside
-// a variant needs hooks/rows of its own) or a dotted key. The emitters
-// switch on kind with no default arm, so a new kind fails to compile.
+// FieldPath budget (render the depth TODO); "array" is a z.array inside
+// the variant (directly, or inside a variant-only object), which renders
+// as an extracted Rows component on useVariantFieldArray (formstand 0.25);
+// "unsupported" is a shape the variant path types cannot carry bindings
+// for (a union inside a variant needs a discriminant hook of its own on a
+// variant path) or a dotted key. The emitters switch on kind with no
+// default arm, so a new kind fails to compile.
 export type VariantLeaf =
   | Readonly<{ kind: "leaf"; name: string; label: string; spec: FieldSpec }>
+  | Readonly<{
+      kind: "array";
+      name: string;
+      label: string;
+      spec: Extract<FieldSpec, Readonly<{ kind: "array" }>>;
+    }>
   | Readonly<{ kind: "depth"; name: string }>
   | Readonly<{ kind: "unsupported"; name: string; specKind: string }>;
 
@@ -1237,6 +1246,12 @@ export const variantLeavesOf = (
                   ],
             );
       case "array":
+        // The list hook binds at the array's own path, so the same budget
+        // rule as a scalar applies here; its rows judge their own depth
+        // inside the extracted Rows component.
+        return segments > budget
+          ? [{ kind: "depth", name }]
+          : [{ kind: "array", name, label, spec }];
       case "union":
         return [{ kind: "unsupported", name, specKind: spec.kind }];
       // Every remaining kind is a scalar (isScalarSpec's complement): a
@@ -1490,6 +1505,42 @@ const unionHooks = (
               `${ind(level)}const ${binding.varName}NumberProps = ${numberPropsHook}(${binding.varName});`,
           )),
   ]);
+
+// Whether any union in the tree has an array inside a variant-ONLY field
+// (directly or inside a variant-only object), the sole source of a
+// useVariantFieldArray call. Same walk as hasVariantFieldUsage; the leaf
+// collector decides, so the import gate and the emitters cannot disagree.
+// A common-key array (every variant declares it) stays a TODO (see
+// unionLines), so it does not count.
+export const hasVariantArrayUsage = (
+  spec: FieldSpec,
+  budget: number,
+  count = 0,
+): boolean => {
+  if (overDepthBudget(spec, count, budget)) return false;
+  switch (spec.kind) {
+    case "object":
+      return spec.fields.some((field) =>
+        hasVariantArrayUsage(field.spec, budget, count + 1),
+      );
+    case "array":
+      return hasVariantArrayUsage(spec.item, budget, count + 1);
+    case "union": {
+      const common = unionCommonFieldNames(spec);
+      return spec.variants.some((variant) =>
+        variant.fields.some(
+          (field) =>
+            !common.has(field.name) &&
+            variantLeavesOf(field, count, budget).some(
+              (leaf) => leaf.kind === "array",
+            ),
+        ),
+      );
+    }
+    default:
+      return false;
+  }
+};
 
 // The KindUsage of union CONTROLS only (discriminant select + variant field
 // kinds), ignoring non-union siblings, so the plain backend imports exactly
@@ -1931,7 +1982,75 @@ const unionLines = (
   // says ("pavements.${index}.lights"). Static unions have no holes, so
   // the default is exact for them.
   commentPath: string = entry.path,
+  // What an array inside a variant needs to become a Rows component: the
+  // union's path as a pre-escaped template, the index props in scope
+  // (["p0", "index"] inside a row union's component, [] for a static
+  // union), and the maps and context emitRowsComponent takes. Absent only
+  // where no component can be appended, in which case the array keeps its
+  // TODO.
+  rows?: Readonly<{
+    template: string;
+    holes: readonly string[];
+    arrays: ReadonlyMap<string, ArrayEntry>;
+    unions: ReadonlyMap<string, UnionEntry>;
+    ctx: NestedCtx;
+  }>,
 ): readonly string[] => {
+  // A key every variant declares is a plain FieldPath, outside the variant
+  // hook's domain (useVariantFieldArray refuses it, useFieldArray types it);
+  // the generator leaves that rare shape to the reader.
+  const isCommonKey = (name: string): boolean => {
+    const head = name.split(".")[0] ?? name;
+    return entry.variants.every((variant) =>
+      variant.fields.some((field) => field.name === head),
+    );
+  };
+  // The variants' arrays extract to Rows components on useVariantFieldArray
+  // (hooks cannot run inside the variant block's map), built ONCE here and
+  // referenced from the blocks below: the block renderer runs twice per
+  // variant (once to measure, once to render), and a component appended on
+  // each pass shipped a duplicate. One component per leaf name, as the
+  // scalar bindings dedupe by name. Inside a row union's component `index`
+  // is a prop; the Rows component maps its own `index`, so the enclosing
+  // one is renamed to the next p-hole, exactly as emitNestedRows does.
+  const arrayRows: ReadonlyMap<string, string> =
+    rows === undefined
+      ? new Map()
+      : entry.variants
+          .flatMap((variant) => variant.fields)
+          .filter((field) => !entry.commonBindingNames.has(field.name))
+          .flatMap((field) => variantLeavesOf(field, entry.baseSegments, budget))
+          .flatMap((leaf) =>
+            leaf.kind === "array" && !isCommonKey(leaf.name) ? [leaf] : [],
+          )
+          .reduce<ReadonlyMap<string, string>>((acc, leaf) => {
+            if (acc.has(leaf.name)) return acc;
+            const scope = rowsScope(rows.template, rows.holes);
+            const compName = emitRowsComponent(
+              backend,
+              {
+                listTemplate: `${scope.template}.${templateEscape(leaf.name)}`,
+                label: leaf.label,
+                item: leaf.spec.item,
+                holes: scope.holes,
+                itemTypeExpr: "",
+                // Options props are not threaded into union components, so
+                // a variant array's rows cannot receive them either.
+                itemOptionsProps: [],
+                variant: {
+                  unionTemplate: scope.template,
+                  rel: templateEscape(leaf.name),
+                },
+              },
+              rows.arrays,
+              rows.unions,
+              rows.ctx,
+            );
+            return new Map([
+              ...acc,
+              [leaf.name, `<${compName} form={form}${scope.refAttrs} />`],
+            ]);
+          }, new Map());
   const discriminantSpec: FieldSpec = {
     kind: "enum",
     options: entry.tags,
@@ -1980,6 +2099,16 @@ const unionLines = (
               return [
                 depthTodoLine(`${commentPath}.${leaf.name}`, ind(lvl), budget),
               ];
+            case "array": {
+              const ref = arrayRows.get(leaf.name);
+              return ref === undefined
+                ? [
+                    // A key every variant shares (or no component sink):
+                    // plain useFieldArray types it, left to the reader.
+                    `${ind(lvl)}{/* TODO: array ${commentText(q(`${commentPath}.${leaf.name}`))} is a key every variant shares, bind it with useFieldArray by hand */}`,
+                  ]
+                : [`${ind(lvl)}${ref}`];
+            }
             case "unsupported":
               return [
                 `${ind(lvl)}{/* TODO: nested ${leaf.specKind} ${commentText(q(`${commentPath}.${leaf.name}`))} inside a union variant, extract it by hand */}`,
@@ -2142,6 +2271,8 @@ const fieldLines = (
               holes: [...prefix.holes, nextHole],
               nameSuffix: "Union",
             },
+            arrays,
+            unions,
             ctx,
           );
           const refAttrs = [
@@ -2165,7 +2296,21 @@ const fieldLines = (
               const shell = inSection ? backend.unionCellShell : undefined;
               const body = (inner: number): readonly string[] => [
                 ...todoComment(spec, inner),
-                ...unionLines(backend, entry, field.label, inner, ctx.budget),
+                ...unionLines(
+                  backend,
+                  entry,
+                  field.label,
+                  inner,
+                  ctx.budget,
+                  entry.path,
+                  {
+                    template: templateEscape(entry.path),
+                    holes: [],
+                    arrays,
+                    unions,
+                    ctx,
+                  },
+                ),
               ];
               return shell === undefined
                 ? body(lvl)
@@ -2310,6 +2455,8 @@ const arraySectionLines = (
                     holes: ["index"],
                     nameSuffix: "Row",
                   },
+                  arrays,
+                  unions,
                   ctx,
                 )} form={form} index={index} />`,
               ]
@@ -2354,6 +2501,34 @@ const arraySectionLines = (
   return backend.arraySection(entry, level, rowBody);
 };
 
+// The index props a Rows component extracted from inside a union
+// component needs. A row union's component takes `index` as a prop (it is
+// per-row); the Rows component maps its own `index`, so the enclosing one
+// is renamed to the next p-hole in the template, the props and the
+// reference, exactly as emitNestedRows renames a row's index for a nested
+// list. A static union has no holes and passes through unchanged.
+const rowsScope = (
+  template: string,
+  holes: readonly string[],
+): Readonly<{ template: string; holes: readonly string[]; refAttrs: string }> => {
+  if (!holes.includes("index")) {
+    return {
+      template,
+      holes,
+      refAttrs: holes.map((hole) => ` ${hole}={${hole}}`).join(""),
+    };
+  }
+  const next = `p${holes.length - 1}`;
+  const renamed = holes.map((hole) => (hole === "index" ? next : hole));
+  return {
+    template: template.replaceAll("${index}", `\${${next}}`),
+    holes: renamed,
+    refAttrs: renamed
+      .map((hole) => (hole === next ? ` ${hole}={index}` : ` ${hole}={${hole}}`))
+      .join(""),
+  };
+};
+
 // A union bound INSIDE rows.map compiles to a child component, for the
 // same reason nested arrays extract: the bindings are hooks, and hooks
 // cannot run inside rows.map. One production serves every site, the union
@@ -2379,6 +2554,10 @@ const emitUnionComponent = (
     // "Row" for a union row item, "Union" for a union row-object field.
     nameSuffix: "Row" | "Union";
   }>,
+  // For an array inside one of the variants, which extracts a Rows
+  // component of its own (see unionLines).
+  arrays: ReadonlyMap<string, ArrayEntry>,
+  unions: ReadonlyMap<string, UnionEntry>,
   ctx: NestedCtx,
 ): string => {
   // Field segments (holes stripped) name the component and seed the binding
@@ -2453,7 +2632,13 @@ const emitUnionComponent = (
     ),
     "  return (",
     `${ind(2)}<>`,
-    ...unionLines(backend, u, args.label, 3, ctx.budget, t),
+    ...unionLines(backend, u, args.label, 3, ctx.budget, t, {
+      template: t,
+      holes: args.holes,
+      arrays,
+      unions,
+      ctx,
+    }),
     `${ind(2)}</>`,
     "  );",
     "};",
@@ -2513,6 +2698,226 @@ const emitNestedRows = (
   return [`${ind(level)}<${compName} ${refAttrs} />`];
 };
 
+// The leaves of a variant array's ROW, relative to the row: an object item
+// flattens through variantLeavesOf (nested objects to dotted names, deeper
+// arrays to "array" leaves, unions to "unsupported"), a scalar item is one
+// leaf named "", a tuple item its scalar positions, an array item one
+// "array" leaf, a union item unsupported. `baseSegments` is the row path's
+// segment count, so depth is judged on the full bound path. Shared by the
+// Row emitter and the import gate below, so they cannot disagree.
+export const variantRowLeaves = (
+  item: FieldSpec,
+  label: string,
+  baseSegments: number,
+  budget: number,
+): readonly VariantLeaf[] => {
+  switch (item.kind) {
+    case "object":
+      return item.fields.flatMap((field) =>
+        variantLeavesOf(field, baseSegments, budget),
+      );
+    case "array":
+      return [{ kind: "array", name: "", label, spec: item }];
+    case "tuple":
+      return item.elements.flatMap((element, i): readonly VariantLeaf[] =>
+        isScalarSpec(element)
+          ? [{ kind: "leaf", name: `${i}`, label: `${label} ${i + 1}`, spec: element }]
+          : [{ kind: "unsupported", name: `${i}`, specKind: element.kind }],
+      );
+    case "union":
+      return [{ kind: "unsupported", name: "", specKind: "union" }];
+    // Every remaining kind is a scalar (isScalarSpec's complement): a
+    // deliberate-subset default, the container kinds are the cases.
+    default:
+      return [{ kind: "leaf", name: "", label, spec: item }];
+  }
+};
+
+// Whether some variant array in the tree has a scalar leaf in its rows (at
+// any nesting), the sole source of a useVariantField call that
+// hasVariantFieldUsage does not already account for: a union whose only
+// variant-only content is an array of objects binds its row leaves with
+// useVariantField too. Same walk as hasVariantArrayUsage.
+export const variantArraysBindLeaves = (
+  spec: FieldSpec,
+  budget: number,
+  count = 0,
+): boolean => {
+  const rowsBind = (item: FieldSpec, segments: number): boolean => {
+    if (item.kind !== "object" && overDepthBudget(item, segments, budget)) {
+      return false;
+    }
+    const leaves = variantRowLeaves(item, "", segments, budget);
+    return leaves.some(
+      (leaf) =>
+        leaf.kind === "leaf" ||
+        (leaf.kind === "array" && rowsBind(leaf.spec.item, segments + 2)),
+    );
+  };
+  if (overDepthBudget(spec, count, budget)) return false;
+  switch (spec.kind) {
+    case "object":
+      return spec.fields.some((field) =>
+        variantArraysBindLeaves(field.spec, budget, count + 1),
+      );
+    case "array":
+      return variantArraysBindLeaves(spec.item, budget, count + 1);
+    case "union": {
+      const common = unionCommonFieldNames(spec);
+      return spec.variants.some((variant) =>
+        variant.fields.some(
+          (field) =>
+            !common.has(field.name) &&
+            variantLeavesOf(field, count, budget).some(
+              (leaf) =>
+                leaf.kind === "array" &&
+                rowsBind(leaf.spec.item, count + 1 + leaf.name.split(".").length + 1),
+            ),
+        ),
+      );
+    }
+    default:
+      return false;
+  }
+};
+
+// The Row component of a variant array. A plain array's rows render their
+// leaves through the Bound components, whose `path` prop is typed against
+// the form's FieldPath, which cannot offer a variant path; so a variant
+// array's row is a component of its own, like the module layout's Row,
+// and binds every leaf with useVariantField on the union template plus the
+// relative row path (`lights.${index}.color`), rendering through
+// backend.variantLeaf exactly as a union's variant fields do. A deeper
+// array extracts another variant Rows pair with this row's index renamed
+// to the next hole; a union, or a dotted key, keeps a TODO. Returns the
+// component's name; the caller builds the reference.
+const emitVariantRowComponent = (
+  backend: Backend,
+  args: Readonly<{
+    stem: string;
+    listTemplate: string;
+    label: string;
+    item: FieldSpec;
+    holes: readonly string[];
+    variant: Readonly<{ unionTemplate: string; rel: string }>;
+  }>,
+  arrays: ReadonlyMap<string, ArrayEntry>,
+  unions: ReadonlyMap<string, UnionEntry>,
+  ctx: NestedCtx,
+): string => {
+  const { stem, listTemplate, item, holes, variant } = args;
+  const rowName = `${stem}Row`;
+  ctx.used.add(rowName);
+  const nextHole = `p${holes.length}`;
+  const rowPath = `${listTemplate}.\${index}`;
+  const baseSegments = pathSegmentCount(rowPath);
+  const relOf = (name: string): string =>
+    name === ""
+      ? `${variant.rel}.\${index}`
+      : `${variant.rel}.\${index}.${templateEscape(name)}`;
+  const commentPath = (name: string): string =>
+    name === "" ? rowPath : `${rowPath}.${name}`;
+  // A non-object row past the budget degrades whole, as a plain row does;
+  // an object's fields judge themselves through variantLeavesOf.
+  const leaves: readonly VariantLeaf[] =
+    item.kind !== "object" && overDepthBudget(item, baseSegments, ctx.budget)
+      ? [{ kind: "depth", name: "" }]
+      : variantRowLeaves(item, args.label, baseSegments, ctx.budget);
+  // Binding vars, allocated against the component's own scope with the
+  // same rules as a union component's (number leaves reserve their
+  // hoisted NumberProps const).
+  const scope = new Set<string>(["form", "index", ...holes]);
+  const bound = leaves.flatMap(
+    (leaf): readonly Readonly<{ leaf: VariantLeaf; varName: string }>[] => {
+      if (leaf.kind !== "leaf") return [];
+      const camel = camelCase(leaf.name.split(".").join(" "));
+      const base = camel.length === 0 ? "value" : camelIdent(camel);
+      const { varName, reserved } = allocateBindingVar(
+        base,
+        leaf.spec.kind === "number",
+        scope,
+      );
+      reserved.forEach((name) => scope.add(name));
+      return [{ leaf, varName }];
+    },
+  );
+  const varOf = (leaf: VariantLeaf): string | undefined =>
+    bound.find((entry) => entry.leaf === leaf)?.varName;
+  const body = leaves.flatMap((leaf): readonly string[] => {
+    switch (leaf.kind) {
+      case "leaf": {
+        const varName = varOf(leaf);
+        return varName === undefined
+          ? []
+          : backend.variantLeaf(leaf.spec, varName, leaf.label, 3);
+      }
+      case "depth":
+        return [depthTodoLine(commentPath(leaf.name), ind(3), ctx.budget)];
+      case "array": {
+        const tail = leaf.name === "" ? "" : `.${templateEscape(leaf.name)}`;
+        const child = emitRowsComponent(
+          backend,
+          {
+            listTemplate: `${listTemplate}.\${${nextHole}}${tail}`,
+            label: leaf.label,
+            item: leaf.spec.item,
+            holes: [...holes, nextHole],
+            itemTypeExpr: "",
+            itemOptionsProps: [],
+            variant: {
+              unionTemplate: variant.unionTemplate,
+              rel: `${variant.rel}.\${${nextHole}}${tail}`,
+            },
+          },
+          arrays,
+          unions,
+          ctx,
+        );
+        return [
+          `${ind(3)}<${child} form={form}${holes.map((hole) => ` ${hole}={${hole}}`).join("")} ${nextHole}={index} />`,
+        ];
+      }
+      case "unsupported":
+        return [
+          `${ind(3)}{/* TODO: nested ${leaf.specKind} ${commentText(q(commentPath(leaf.name)))} inside a union variant's rows, bind it by hand */}`,
+        ];
+    }
+  });
+  const component = [
+    `const ${rowName} = ({`,
+    "  form,",
+    ...holes.map((hole) => `  ${hole},`),
+    "  index,",
+    `}: Readonly<{ ${[
+      `form: ${formType(`typeof ${ctx.schemaName}`, ctx.budget)}`,
+      ...holes.map((hole) => `${hole}: number`),
+      "index: number",
+    ].join("; ")} }>) => {`,
+    ...bound.map(
+      ({ leaf, varName }) =>
+        `  const ${varName} = useVariantField(form, \`${variant.unionTemplate}\`, \`${relOf(leaf.name)}\`)${leaf.kind === "leaf" ? degradedPin(leaf.spec) : ""};`,
+    ),
+    // Kit number bindings hoist their props hook here, like a union
+    // component's (React's rules of hooks).
+    ...(backend.numberPropsHook === undefined
+      ? []
+      : bound
+          .filter(({ leaf }) => leaf.kind === "leaf" && leaf.spec.kind === "number")
+          .map(
+            ({ varName }) =>
+              `  const ${varName}NumberProps = ${backend.numberPropsHook ?? ""}(${varName});`,
+          )),
+    "  return (",
+    `${ind(2)}<>`,
+    ...body,
+    `${ind(2)}</>`,
+    "  );",
+    "};",
+  ];
+  ctx.components.push(component);
+  return rowName;
+};
+
 // The extracted Rows component behind every array that must render inside
 // rows.map: nested arrays under object rows, and container row items
 // (array-of-arrays), at any depth. It takes `form` plus one number prop per
@@ -2522,6 +2927,16 @@ const emitNestedRows = (
 // scalars, unions, tuples, deeper arrays) is handled identically wherever
 // the array sits. Returns the component's name; the caller builds the
 // reference, since only it knows which enclosing vars fill the holes.
+//
+// An array INSIDE A UNION VARIANT (`variant` set) differs in two lines: the
+// list hook is useVariantFieldArray(form, unionTemplate, rel), since
+// FieldPath on the union cannot offer the list path, and the empty item is
+// typed from that hook (`Parameters<typeof rows.push>[0]`) inside the
+// component instead of from a value-type expression at module scope, since
+// the variant's value type has no name the file can spell without more
+// imports. Its rows are a Row component of their own (see
+// emitVariantRowComponent): the Bound components type `path` against the
+// form's FieldPath, which cannot offer a variant path.
 const emitRowsComponent = (
   backend: Backend,
   args: Readonly<{
@@ -2533,12 +2948,13 @@ const emitRowsComponent = (
     holes: readonly string[];
     itemTypeExpr: string;
     itemOptionsProps: readonly string[];
+    variant?: Readonly<{ unionTemplate: string; rel: string }> | undefined;
   }>,
   arrays: ReadonlyMap<string, ArrayEntry>,
   unions: ReadonlyMap<string, UnionEntry>,
   ctx: NestedCtx,
 ): string => {
-  const { listTemplate, item, itemTypeExpr, itemOptionsProps } = args;
+  const { listTemplate, item, itemTypeExpr, itemOptionsProps, variant } = args;
   // Field segments (holes stripped) name the component and hook. Braces are
   // excluded from the hole body for the same linear-scan reason as
   // pathSegmentCount above.
@@ -2555,6 +2971,7 @@ const emitRowsComponent = (
   // probing only the stem would redeclare the empty-item const.
   const free = (s: string): boolean =>
     !ctx.used.has(`${base}${s}`) &&
+    !ctx.used.has(`${base}${s}Row`) &&
     !ctx.used.has(`${base}${s}Rows`) &&
     !ctx.used.has(`${base}${s}Item`) &&
     !ctx.used.has(`empty${base}${s}Item`) &&
@@ -2569,18 +2986,32 @@ const emitRowsComponent = (
     ctx.used.add(name),
   );
 
+  const resolvedItemTypeExpr =
+    variant === undefined
+      ? itemTypeExpr
+      : `Parameters<typeof ${hookName}.push>[0]`;
   const childPrefix: PathPrefix = {
     dynamic: true,
     text: `${listTemplate}.\${index}.`,
     holes: args.holes,
-    valueTypeExpr: itemTypeExpr,
+    valueTypeExpr: resolvedItemTypeExpr,
   };
   // Same budget rule as arraySectionLines: a row binds one segment past the
   // (already-validated) list template, and an over-budget row's advice is
   // the depth TODO for every item kind.
   const rowPath = `${listTemplate}.\${index}`;
-  const rowBody =
-    item.kind === "object"
+  const rowBody: readonly string[] =
+    variant !== undefined
+      ? [
+          `${ind(5)}<${emitVariantRowComponent(
+            backend,
+            { stem, listTemplate, label: args.label, item, holes: args.holes, variant },
+            arrays,
+            unions,
+            ctx,
+          )} form={form}${args.holes.map((hole) => ` ${hole}={${hole}}`).join("")} index={index} />`,
+        ]
+      : item.kind === "object"
       ? fieldLines(backend, item.fields, childPrefix, 5, arrays, unions, ctx)
       : overDepthBudget(item, pathSegmentCount(rowPath), ctx.budget)
         ? [depthTodoLine(rowPath, ind(5), ctx.budget)]
@@ -2597,6 +3028,8 @@ const emitRowsComponent = (
                     holes: [...args.holes, "index"],
                     nameSuffix: "Row",
                   },
+                  arrays,
+                  unions,
                   ctx,
                 )} form={form} ${[
                   ...args.holes.map((hole) => `${hole}={${hole}}`),
@@ -2647,13 +3080,17 @@ const emitRowsComponent = (
     hookName,
     itemTypeName: `${stem}Item`,
     emptyItemName: emptyName,
-    itemTypeExpr,
+    itemTypeExpr: resolvedItemTypeExpr,
   };
-  const component = [
+  // The literal's inner lines follow the declaration's indent (module
+  // scope, or one level in under a variant).
+  const emptyItemLines = (indent: string): readonly string[] => [
     blankNeedsCast(item)
-      ? `const ${emptyName} = ${emitInitialValues(item, 0)} as unknown as ${itemTypeExpr};`
-      : `const ${emptyName}: ${itemTypeExpr} = ${emitInitialValues(item, 0)};`,
-    "",
+      ? `${indent}const ${emptyName} = ${emitInitialValues(item, indent.length / 2)} as unknown as ${resolvedItemTypeExpr};`
+      : `${indent}const ${emptyName}: ${resolvedItemTypeExpr} = ${emitInitialValues(item, indent.length / 2)};`,
+  ];
+  const component = [
+    ...(variant === undefined ? [...emptyItemLines(""), ""] : []),
     `const ${compName} = ({`,
     "  form,",
     ...args.holes.map((hole) => `  ${hole},`),
@@ -2663,7 +3100,12 @@ const emitRowsComponent = (
       ...args.holes.map((hole) => `${hole}: number`),
       ...itemOptionsProps.map((name) => `${name}: readonly string[]`),
     ].join("; ")} }>) => {`,
-    `  const ${hookName} = useFieldArray(form, \`${listTemplate}\`);`,
+    ...(variant === undefined
+      ? [`  const ${hookName} = useFieldArray(form, \`${listTemplate}\`);`]
+      : [
+          `  const ${hookName} = useVariantFieldArray(form, \`${variant.unionTemplate}\`, \`${variant.rel}\`);`,
+          ...emptyItemLines("  "),
+        ]),
     "  return (",
     ...backend.arraySection(synthEntry, 2, rowBody),
     "  );",
@@ -3374,7 +3816,10 @@ const plainBackend = (
         : []),
       ...(arrays.length > 0 ? ["useFieldArray"] : []),
       ...(usage.union || inFileControls ? ["useField"] : []),
-      ...(hasVariantFieldUsage(root, budget) ? ["useVariantField"] : []),
+      ...(hasVariantFieldUsage(root, budget) || variantArraysBindLeaves(root, budget)
+        ? ["useVariantField"]
+        : []),
+      ...(hasVariantArrayUsage(root, budget) ? ["useVariantFieldArray"] : []),
       "useForm",
       ...(scaffold.live ? [] : ["useIsSubmitting"]),
     ];
@@ -3893,7 +4338,10 @@ const kitFormstandImportLines = (
     ...(usage.number ? ["numberToInputText", "parseNumberText"] : []),
     ...(usage.date ? ["dateToInputText", "parseDateText"] : []),
     ...(hasLeaf ? ["useField"] : []),
-    ...(hasVariantFieldUsage(root, budget) ? ["useVariantField"] : []),
+    ...(hasVariantFieldUsage(root, budget) || variantArraysBindLeaves(root, budget)
+      ? ["useVariantField"]
+      : []),
+    ...(hasVariantArrayUsage(root, budget) ? ["useVariantFieldArray"] : []),
     ...(arrays.length > 0 ? ["useFieldArray"] : []),
     "useForm",
     ...(scaffold.live ? [] : ["useIsSubmitting"]),
@@ -7185,7 +7633,10 @@ const templateBackend = (
         // useField backs both the Bound wrappers and the union discriminant/
         // common-field hooks.
         ...(hasStaticLeaf || usage.union ? ["useField"] : []),
-        ...(hasVariantFieldUsage(root, budget) ? ["useVariantField"] : []),
+        ...(hasVariantFieldUsage(root, budget) || variantArraysBindLeaves(root, budget)
+          ? ["useVariantField"]
+          : []),
+        ...(hasVariantArrayUsage(root, budget) ? ["useVariantFieldArray"] : []),
         "useForm",
         ...(scaffold.live ? [] : ["useIsSubmitting"]),
       ];

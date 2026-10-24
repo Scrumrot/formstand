@@ -36,6 +36,7 @@ import {
   gridChakraProps,
   FORMSTAND_PATH_DEPTH,
   formType,
+  hasVariantArrayUsage,
   hasVariantFieldUsage,
   identifierSuffix,
   isScalarSpec,
@@ -58,6 +59,7 @@ import {
   spanCellFor,
   templateEscape,
   unionCommonFieldNames,
+  type VariantLeaf,
 } from "./codegen";
 import { type FieldSpec, type NamedField, labelFromName } from "./ir";
 import { DEFAULT_MUI_VERSION, type MuiVersion } from "./uiTarget";
@@ -2220,6 +2222,12 @@ const hooksFile = (
     (field) =>
       !isUnaddressable(field.name) && hasVariantFieldUsage(field.spec, budget),
   );
+  // An array inside a variant binds its list with the variant-array hook
+  // and its row leaves with the variant hook, so both join the API.
+  const hasVariantArrays = root.fields.some(
+    (field) =>
+      !isUnaddressable(field.name) && hasVariantArrayUsage(field.spec, budget),
+  );
   // A tuple section binds each scalar element with the plain field hook at
   // its positional path (coord.0) and imports it whenever at least one
   // element is scalar, this gate mirrors that import rule exactly. Tuples
@@ -2233,8 +2241,9 @@ const hooksFile = (
     plan.fields.length > 0 || hasArrays || hasUnions || hasTupleBindings;
   const hooks = [
     ...(hasFields ? [naming.hook("Field")] : []),
-    ...(hasVariantFields ? [naming.hook("VariantField")] : []),
+    ...(hasVariantFields || hasVariantArrays ? [naming.hook("VariantField")] : []),
     ...(hasArrays ? [naming.hook("FieldArray")] : []),
+    ...(hasVariantArrays ? [naming.hook("VariantFieldArray")] : []),
     ...(plan.sections.length > 0
       ? [naming.hook("IsDirty"), naming.hook("IsValid")]
       : []),
@@ -2478,6 +2487,16 @@ type NestedArrayEntry = Readonly<{
   // p1] two levels in, and so on. Every bound path interpolates these plus
   // the Row's own `index`.
   holes: readonly string[];
+  // Set for an array that lives INSIDE A UNION VARIANT (formstand 0.25):
+  // FieldPath on the union cannot offer its path, so the Rows hook is
+  // useXVariantFieldArray(unionTemplate, rel) instead of useXFieldArray,
+  // every row leaf binds with useXVariantField on the union template plus
+  // `${rel}.${index}.name`, the empty item is typed from the hook inside
+  // Rows (the variant's value type has no name this file can spell), and
+  // a union or tuple inside the rows degrades to a TODO (their bindings
+  // need plain typed hooks the union path cannot offer). `rel` is the
+  // list's path past the union template, holes included.
+  variant?: Readonly<{ unionTemplate: string; rel: string }> | undefined;
 }>;
 
 type RawNestedArray = Readonly<{
@@ -2676,7 +2695,95 @@ type RowContainerPieces = Readonly<{
   bindings: readonly string[];
   body: readonly string[];
   specs: readonly FieldSpec[];
+  // Rows pairs extracted for arrays inside the union's variants; the caller
+  // declares them before the component that references them and merges
+  // their imports. Absent means none.
+  children?: readonly NestedParts[] | undefined;
 }>;
+
+// The Rows pair for an array inside a union variant, from the union's
+// pre-escaped template and the collector's leaf. The reference renders at
+// the leaf's site inside the variant block. Inside a Row component the
+// union template interpolates `index` (the row's own), while the Rows
+// component maps an `index` of its own, so the enclosing one is renamed to
+// the next p-hole in the template, the props and the reference, exactly as
+// a nested list under a row renames it (childEntry). A static union has
+// no holes and passes through unchanged. `stems` is the file's component
+// stem registry.
+const variantRowsFor = (
+  template: string,
+  commentBase: string,
+  leaf: Extract<VariantLeaf, Readonly<{ kind: "array" }>>,
+  stems: Set<string>,
+): Readonly<{ entry: NestedArrayEntry; ref: string }> => {
+  const holeNames = [...template.matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map(
+    (match) => match[1] ?? "",
+  );
+  const renames = holeNames.includes("index");
+  const next = `p${holeNames.length - 1}`;
+  const scoped = renames ? template.replaceAll("${index}", `\${${next}}`) : template;
+  const holes = holeNames.map((hole) => (hole === "index" ? next : hole));
+  const baseStem = pascalCase(
+    `${commentBase.replace(/\$\{[^{}]+\}/g, " ")} ${leaf.name}`
+      .split(/[.\s]+/)
+      .filter((part) => part.length > 0)
+      .join(" "),
+  );
+  const stem = `${baseStem}${identifierSuffix(baseStem, stems)}`;
+  stems.add(stem);
+  const rel = templateEscape(leaf.name);
+  return {
+    entry: {
+      key: leaf.name,
+      stem,
+      label: leaf.label,
+      item: leaf.spec.item,
+      // The list hook is the variant hook, so the FieldArray argument and
+      // the value-type expression go unused; the comment path is honest.
+      listArg: "",
+      templateBase: `${scoped}.${rel}`,
+      commentBase: `${commentBase}.${leaf.name}`,
+      itemTypeExpr: "",
+      holes,
+      variant: { unionTemplate: scoped, rel },
+    },
+    ref: `<${stem}Rows${holes
+      .map((hole) =>
+        renames && hole === next ? ` ${hole}={index}` : ` ${hole}={${hole}}`,
+      )
+      .join("")} />`,
+  };
+};
+
+// The array leaves of a union's variant-only fields, one Rows pair per
+// leaf name (two variants declaring the same variant-only array share it,
+// as their scalar bindings do). A key EVERY variant declares is a plain
+// FieldPath, outside the variant hook's domain, and stays a TODO.
+const variantArrayRows = (
+  spec: Extract<FieldSpec, Readonly<{ kind: "union" }>>,
+  template: string,
+  commentBase: string,
+  baseSegments: number,
+  budget: number,
+  stems: Set<string>,
+): ReadonlyMap<string, Readonly<{ entry: NestedArrayEntry; ref: string }>> => {
+  const commonNames = unionCommonFieldNames(spec);
+  const leaves = spec.variants
+    .flatMap((variant) => variant.fields)
+    .filter((field) => !commonNames.has(field.name))
+    .flatMap((field) => variantLeavesOf(field, baseSegments, budget))
+    .flatMap((leaf) => (leaf.kind === "array" ? [leaf] : []));
+  return leaves.reduce<Map<string, Readonly<{ entry: NestedArrayEntry; ref: string }>>>(
+    (acc, leaf) =>
+      acc.has(leaf.name)
+        ? acc
+        : new Map([...acc, [leaf.name, variantRowsFor(template, commentBase, leaf, stems)]]),
+    new Map(),
+  );
+};
+
+const commonKeyArrayTodo = (indent: string, path: string): string =>
+  `${indent}{/* TODO: array ${commentText(q(path))} is a key every variant shares, bind it with the field-array hook by hand */}`;
 
 // The discriminant and common keys bind with the plain bound field hook on
 // the holed template, variant-only keys with the bound variant hook (typed
@@ -2696,6 +2803,9 @@ const rowUnionPieces = (
   // The row component's var scope; reserved names are added to it.
   usedVars: Set<string>,
   budget: number,
+  // The file's component stem registry, for Rows pairs extracted from
+  // arrays inside the variants.
+  stems: Set<string>,
 ): RowContainerPieces => {
   const reserve = (
     base: string,
@@ -2775,6 +2885,14 @@ const rowUnionPieces = (
     collected.variant.map((binding) => [binding.name, binding]),
   );
   const commonBindingNames = new Set(collected.common.map((b) => b.name));
+  const arrayRows = variantArrayRows(
+    spec,
+    template,
+    commentBase,
+    baseSegments,
+    budget,
+    stems,
+  );
   const discriminantSpec: FieldSpec = {
     kind: "enum",
     options: spec.variants.map((variant) => variant.tag),
@@ -2860,6 +2978,12 @@ const rowUnionPieces = (
               return [
                 depthTodoLine(`${commentBase}.${leaf.name}`, indent, budget),
               ];
+            case "array": {
+              const made = arrayRows.get(leaf.name);
+              return made === undefined
+                ? [commonKeyArrayTodo(indent, `${commentBase}.${leaf.name}`)]
+                : [`${indent}${made.ref}`];
+            }
             case "unsupported":
               return [
                 `${indent}{/* TODO: nested ${leaf.specKind} ${commentText(q(`${commentBase}.${leaf.name}`))} inside a union variant, extract it by hand */}`,
@@ -2908,6 +3032,9 @@ const rowUnionPieces = (
       ...collected.common.map((binding) => binding.spec),
       ...collected.variant.map((binding) => binding.spec),
     ],
+    children: [...arrayRows.values()].map((made) =>
+      nestedArrayComponents(ui, naming, made.entry, stems, budget),
+    ),
   };
 };
 
@@ -2992,6 +3119,17 @@ const nestedArrayComponents = (
   const rowName = `${entry.stem}Row`;
   const rowsName = `${entry.stem}Rows`;
   const emptyName = `empty${entry.stem}Item`;
+  const variant = entry.variant;
+  // A row leaf's hook: the plain field hook on the full template, or, under
+  // a variant array, the variant hook on the union template plus the
+  // relative row path (`${rel}.${index}.name`), which is what the library
+  // types there.
+  const leafHook = (tail: string): string =>
+    variant === undefined
+      ? `${naming.hook("Field")}(\`${entry.templateBase}.\${index}${tail}\`)`
+      : `${naming.hook("VariantField")}(\`${variant.unionTemplate}\`, \`${variant.rel}.\${index}${tail}\`)`;
+  const inVariantTodo = (what: string, path: string): string =>
+    `      {/* TODO: ${what} ${commentText(q(path))} inside a union variant's rows, bind it by hand */}`;
   const shell = arrayShell(ui, entry.label);
   const wrap = nestedListShell(ui, entry.label);
   const scalarItem = isScalarSpec(entry.item);
@@ -3050,6 +3188,14 @@ const nestedArrayComponents = (
       commentBase: `${entry.commentBase}.$\{${rowIndexHole}}${commentTail}`,
       itemTypeExpr: elemTypeExpr,
       holes: [...entry.holes, rowIndexHole],
+      // A list under a variant array's rows is a variant path too.
+      variant:
+        variant === undefined
+          ? undefined
+          : {
+              unionTemplate: variant.unionTemplate,
+              rel: `${variant.rel}.\${${rowIndexHole}}${tail}`,
+            },
     };
   };
 
@@ -3076,6 +3222,7 @@ const nestedArrayComponents = (
     spec?: FieldSpec;
     specs?: readonly FieldSpec[];
     part?: NestedParts;
+    parts?: readonly NestedParts[];
   }>;
   const rowVarUsed = new Set<string>([
     ...entry.holes,
@@ -3127,7 +3274,7 @@ const nestedArrayComponents = (
                 "      ",
               ),
               bindings: [
-                `  const ${varName} = ${naming.hook("Field")}(\`${entry.templateBase}.\${index}.${templateEscape(field.name)}\`)${degradedPin(field.spec)};`,
+                `  const ${varName} = ${leafHook(`.${templateEscape(field.name)}`)}${degradedPin(field.spec)};`,
                 ...numberPropsBindings(ui, [{ varName, spec: field.spec }]),
               ],
               spec: field.spec,
@@ -3150,6 +3297,18 @@ const nestedArrayComponents = (
           if (field.spec.kind === "union" || field.spec.kind === "tuple") {
             const template = `${entry.templateBase}.\${index}.${templateEscape(field.name)}`;
             const commentBase = `${entry.commentBase}.$\{index}.${field.name}`;
+            if (variant !== undefined) {
+              // Under a variant array its discriminant or positions would
+              // need plain typed hooks on variant paths.
+              return {
+                body: [
+                  inVariantTodo(
+                    field.spec.kind === "union" ? "discriminated union" : "tuple",
+                    commentBase,
+                  ),
+                ],
+              };
+            }
             const pieces =
               field.spec.kind === "union"
                 ? rowUnionPieces(
@@ -3161,6 +3320,7 @@ const nestedArrayComponents = (
                     field.label,
                     rowVarUsed,
                     budget,
+                    used,
                   )
                 : rowTuplePieces(
                     ui,
@@ -3175,6 +3335,7 @@ const nestedArrayComponents = (
               body: pieces.body,
               bindings: pieces.bindings,
               specs: pieces.specs,
+              parts: pieces.children ?? [],
             };
           }
           return {
@@ -3202,7 +3363,10 @@ const nestedArrayComponents = (
             ...(p.spec ? [p.spec] : []),
             ...(p.specs ?? []),
           ]),
-          children: objectPieces.flatMap((p) => (p.part ? [p.part] : [])),
+          children: objectPieces.flatMap((p) => [
+            ...(p.part ? [p.part] : []),
+            ...(p.parts ?? []),
+          ]),
         }
       : overDepthBudget(entry.item, rowSegments, budget)
         ? {
@@ -3219,7 +3383,7 @@ const nestedArrayComponents = (
         : scalarItem
           ? {
               bindings: [
-                `  const field = ${naming.hook("Field")}(\`${entry.templateBase}.\${index}\`)${degradedPin(entry.item)};`,
+                `  const field = ${leafHook("")}${degradedPin(entry.item)};`,
                 ...numberPropsBindings(ui, [
                   { varName: "field", spec: entry.item },
                 ]),
@@ -3250,6 +3414,20 @@ const nestedArrayComponents = (
                   children: [nestedArrayComponents(ui, naming, child, used, budget)],
                 };
               })()
+            : variant !== undefined
+              ? {
+                  // A union or tuple row ITEM under a variant array: see the
+                  // field case above.
+                  bindings: [],
+                  body: [
+                    inVariantTodo(
+                      entry.item.kind === "union" ? "discriminated union" : "tuple",
+                      `${entry.commentBase}.$\{index}`,
+                    ),
+                  ],
+                  specs: [],
+                  children: [],
+                }
             : ((): typeof parts => {
                 // A union or tuple as the row ITEM binds right in the Row
                 // component, on the row-indexed template.
@@ -3266,6 +3444,7 @@ const nestedArrayComponents = (
                         entry.label,
                         rowVarUsed,
                         budget,
+                        used,
                       )
                     : rowTuplePieces(
                         ui,
@@ -3283,7 +3462,7 @@ const nestedArrayComponents = (
                   bindings: pieces.bindings,
                   body: pieces.body,
                   specs: pieces.specs,
-                  children: [],
+                  children: pieces.children ?? [],
                 };
               })();
 
@@ -3292,13 +3471,17 @@ const nestedArrayComponents = (
   const optionsParams = entryOptionsProps.map((name) => `  ${name},`);
   const optionsTypes = optionsPropsTypeFields(entryOptionsProps);
 
+  // The empty item a push adds: at module scope typed from the values
+  // type, or, under a variant, inside Rows typed from the hook (the only
+  // place the variant's item type has a name).
+  const emptyItemLine = (typeExpr: string, indent: string): string =>
+    blankNeedsCast(entry.item)
+      ? `${indent}const ${emptyName} = ${emitInitialValues(entry.item, indent.length / 2)} as unknown as ${typeExpr};`
+      : `${indent}const ${emptyName}: ${typeExpr} = ${emitInitialValues(entry.item, indent.length / 2)};`;
   const lines = [
     // Children are declared before the Row that references them.
     ...parts.children.flatMap((part) => [...part.lines, ""]),
-    blankNeedsCast(entry.item)
-      ? `const ${emptyName} = ${emitInitialValues(entry.item, 0)} as unknown as ${entry.itemTypeExpr};`
-      : `const ${emptyName}: ${entry.itemTypeExpr} = ${emitInitialValues(entry.item, 0)};`,
-    "",
+    ...(variant === undefined ? [emptyItemLine(entry.itemTypeExpr, ""), ""] : []),
     `const ${rowName} = ({`,
     ...holeParams,
     "  index,",
@@ -3321,7 +3504,12 @@ const nestedArrayComponents = (
           ...optionsParams,
           `}: Readonly<{ ${[...holeTypes, ...optionsTypes].join("; ")} }>) => {`,
         ]),
-    `  const rows = ${naming.hook("FieldArray")}(${entry.listArg});`,
+    ...(variant === undefined
+      ? [`  const rows = ${naming.hook("FieldArray")}(${entry.listArg});`]
+      : [
+          `  const rows = ${naming.hook("VariantFieldArray")}(\`${variant.unionTemplate}\`, \`${variant.rel}\`);`,
+          emptyItemLine("Parameters<typeof rows.push>[0]", "  "),
+        ]),
     "  return (",
     ...wrap.open,
     "      {rows.fields.map((row, index) => (",
@@ -3481,6 +3669,7 @@ const objectSectionFile = (
                   field.label,
                   sectionVarUsed,
                   budget,
+                  nestedUsed,
                 ),
               ],
             ];
@@ -3507,6 +3696,11 @@ const objectSectionFile = (
   })();
   const containerBindings = [...staticContainers.values()].flatMap(
     (pieces) => pieces.bindings,
+  );
+  // Rows pairs for arrays inside a nested union's variants, declared with
+  // the nested array components and imported alongside them.
+  const containerParts = [...staticContainers.values()].flatMap(
+    (pieces) => pieces.children ?? [],
   );
   // The pieces render at a Row component's fixed body indent; the section
   // body places them at whatever depth the enclosing fieldsets reach.
@@ -3620,8 +3814,15 @@ const objectSectionFile = (
   // gains the bound Field/FieldArray hooks and the draft values type; a
   // nested union/tuple binds with the field hook (and the variant hook
   // when a variant-only field exists) but pushes nothing.
-  const usesVariantHook = containerBindings.some((line) =>
+  const containerLines = [
+    ...containerBindings,
+    ...containerParts.flatMap((part) => part.lines),
+  ];
+  const usesVariantHook = containerLines.some((line) =>
     line.includes(`${naming.hook("VariantField")}(`),
+  );
+  const usesVariantArrayHook = containerLines.some((line) =>
+    line.includes(`${naming.hook("VariantFieldArray")}(`),
   );
   const hookNames = [
     ...(nested.length > 0 || staticContainers.size > 0
@@ -3631,6 +3832,7 @@ const objectSectionFile = (
     naming.hook("IsDirty"),
     naming.hook("IsValid"),
     ...(usesVariantHook ? [naming.hook("VariantField")] : []),
+    ...(usesVariantArrayHook ? [naming.hook("VariantFieldArray")] : []),
   ];
   const hooksImports = [
     ...(hookNames.length === 2
@@ -3666,6 +3868,7 @@ const objectSectionFile = (
           ? [{ from: "@chakra-ui/react", names: ["Box"] } as const]
           : []),
         ...nestedParts.flatMap((part) => part.imports),
+        ...containerParts.flatMap((part) => part.imports),
         ...[...staticContainers.values()].flatMap((pieces) =>
           pieces.specs.flatMap((leaf) => leafImports(ui, leaf)),
         ),
@@ -3683,6 +3886,7 @@ const objectSectionFile = (
       "});",
       "",
       ...nestedParts.flatMap((part) => [...part.lines, ""]),
+      ...containerParts.flatMap((part) => [...part.lines, ""]),
       `export const ${section.componentName} = ({`,
       `  heading = ${q(section.label)},`,
       ...sectionProps.map((name) => `  ${name},`),
@@ -3933,6 +4137,7 @@ const arraySectionFile = (
                   field.label,
                   used,
                   budget,
+                  nestedUsed,
                 )
               : rowTuplePieces(
                   ui,
@@ -3979,6 +4184,7 @@ const arraySectionFile = (
           section.label,
           used,
           budget,
+          nestedUsed,
         )
       : spec.item.kind === "tuple"
         ? rowTuplePieces(
@@ -4052,13 +4258,21 @@ const arraySectionFile = (
             ]
           : (containerRow?.body ?? []);
 
+  // Rows pairs for arrays inside a row union's variants (a row field's or
+  // the row item's) join the nested parts: declared before the Row,
+  // imported alongside.
+  const everyPart = [
+    ...allNestedParts,
+    ...itemExtraPieces.flatMap((piece) => piece.children ?? []),
+    ...(containerRow?.children ?? []),
+  ];
   const imports = mergeImports([
     ...rowSpecs.flatMap((s) => leafImports(ui, s)),
     ...shell.imports,
     // The outer wrapper is objectShell, so panel/collapsible chrome pulls
     // its own components in.
     ...objectSectionImports(ui, visual),
-    ...allNestedParts.flatMap((part) => part.imports),
+    ...everyPart.flatMap((part) => part.imports),
   ]);
 
   // useXField / useXVariantField are only imported when a binding in this
@@ -4067,13 +4281,16 @@ const arraySectionFile = (
   // rows' bindings count too.
   const boundLines = [
     ...rowBindings,
-    ...allNestedParts.flatMap((part) => part.lines),
+    ...everyPart.flatMap((part) => part.lines),
   ];
   const usesField = boundLines.some((line) =>
     line.includes(`${naming.hook("Field")}(`),
   );
   const usesVariantField = boundLines.some((line) =>
     line.includes(`${naming.hook("VariantField")}(`),
+  );
+  const usesVariantFieldArray = boundLines.some((line) =>
+    line.includes(`${naming.hook("VariantFieldArray")}(`),
   );
 
   // Options props consumed anywhere in this section's rows (direct row
@@ -4098,6 +4315,7 @@ const arraySectionFile = (
       // A union's variant-only fields (a row item's or a row field's,
       // nested rows included) bind with the variant hook on the holed path.
       ...(usesVariantField ? [`  ${naming.hook("VariantField")},`] : []),
+      ...(usesVariantFieldArray ? [`  ${naming.hook("VariantFieldArray")},`] : []),
       `} from "../hooks";`,
       `import type { ${naming.valuesType} } from "../types";`,
       "",
@@ -4116,7 +4334,7 @@ const arraySectionFile = (
         ? `const ${emptyName} = ${emitInitialValues(spec.item, 0)} as unknown as NonNullable<${naming.valuesType}[${q(section.key)}]>[number];`
         : `const ${emptyName}: NonNullable<${naming.valuesType}[${q(section.key)}]>[number] = ${emitInitialValues(spec.item, 0)};`,
       "",
-      ...allNestedParts.flatMap((part) => [...part.lines, ""]),
+      ...everyPart.flatMap((part) => [...part.lines, ""]),
       `const ${rowName} = ({`,
       "  index,",
       "  onRemove,",
@@ -4509,6 +4727,20 @@ const unionSectionFile = (
   const bindings = partitioned.variant;
   const commonBindingNames = new Set(commonBindings.map((b) => b.name));
   const bindingByName = new Map(bindings.map((binding) => [binding.name, binding]));
+  // Arrays inside the variants: a Rows pair each, declared before the
+  // section component, referenced inside the variant block.
+  const stems = new Set<string>();
+  const arrayRows = variantArrayRows(
+    spec,
+    templateEscape(path),
+    path,
+    unionBaseSegments,
+    budget,
+    stems,
+  );
+  const arrayParts = [...arrayRows.values()].map((made) =>
+    nestedArrayComponents(ui, naming, made.entry, stems, budget),
+  );
 
   const discriminantSpec: FieldSpec = {
     kind: "enum",
@@ -4563,6 +4795,12 @@ const unionSectionFile = (
             }
             case "depth":
               return [depthTodoLine(`${path}.${leaf.name}`, indent, budget)];
+            case "array": {
+              const made = arrayRows.get(leaf.name);
+              return made === undefined
+                ? [commonKeyArrayTodo(indent, `${path}.${leaf.name}`)]
+                : [`${indent}${made.ref}`];
+            }
             case "unsupported":
               return [
                 `${indent}{/* TODO: nested ${leaf.specKind} ${commentText(q(`${path}.${leaf.name}`))} inside a union variant, extract it by hand */}`,
@@ -4622,11 +4860,19 @@ const unionSectionFile = (
   const imports = mergeImports([
     ...objectSectionImports(ui, shellVisual),
     ...leafSpecs.flatMap((leaf) => leafImports(ui, leaf)),
+    ...arrayParts.flatMap((part) => part.imports),
   ]);
 
+  // The Rows pairs bind their leaves with the variant hook, so it is
+  // imported whenever a variant-only scalar OR a variant array exists.
+  const partLines = arrayParts.flatMap((part) => part.lines);
   const hookImports = [
     naming.hook("Field"),
-    ...(bindings.length > 0 ? [naming.hook("VariantField")] : []),
+    ...(bindings.length > 0 ||
+    partLines.some((line) => line.includes(`${naming.hook("VariantField")}(`))
+      ? [naming.hook("VariantField")]
+      : []),
+    ...(arrayParts.length > 0 ? [naming.hook("VariantFieldArray")] : []),
     naming.hook("IsDirty"),
     naming.hook("IsValid"),
   ];
@@ -4649,6 +4895,7 @@ const unionSectionFile = (
       `  valid: ${naming.hook("IsValid")}(${q(path)}),`,
       "});",
       "",
+      ...arrayParts.flatMap((part) => [...part.lines, ""]),
       `export const ${section.componentName} = ({`,
       `  heading = ${q(section.label)},`,
       `}: ${propsType}) => {`,

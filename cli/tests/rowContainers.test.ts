@@ -15,7 +15,9 @@ import { freshTmpDir, typecheckDiagnostics } from "./helpers";
 // extracted component per site); the module layout binds in the Row
 // component itself, which is already a component. Containers INSIDE a
 // union variant bind too, as dotted variant sub-paths ("billing.zip",
-// formstand 0.20); only arrays/unions inside a variant still degrade.
+// formstand 0.20), and an ARRAY inside a variant extracts a Rows pair on
+// useVariantFieldArray (formstand 0.25); only a union inside a variant
+// still degrades.
 // Typechecking of both layouts' output against the real library is pinned
 // by typecheck.test.ts (rowContainersSchema fixture) and the module
 // typecheck below; these tests pin the emitted SHAPES.
@@ -31,13 +33,26 @@ const matrixSchema = z.object({
           kind: z.literal("card"),
           cardNumber: z.string(),
           // A container inside a variant: dotted sub-path bindings
-          // (formstand 0.20), the last TODO class the generator carried.
+          // (formstand 0.20).
           billing: z.object({ zip: z.string(), plus4: z.number() }),
+          // An ARRAY inside a variant, under a row union: a Rows pair on
+          // the variant-array hook (formstand 0.25), the last TODO class
+          // the generator carried.
+          receipts: z.array(z.object({ url: z.string(), amount: z.number() })),
         }),
         z.object({ kind: z.literal("paypal"), email: z.string() }),
       ]),
     }),
   ),
+  // A static union whose variant holds an array: the Rows pair takes no
+  // index props.
+  shipping: z.discriminatedUnion("mode", [
+    z.object({ mode: z.literal("pickup"), store: z.string() }),
+    z.object({
+      mode: z.literal("courier"),
+      stops: z.array(z.object({ address: z.string() })),
+    }),
+  ]),
   segments: z.array(
     z.object({ name: z.string(), span: z.tuple([z.number(), z.number()]) }),
   ),
@@ -46,7 +61,9 @@ const matrixSchema = z.object({
       title: z.string(),
       methods: z.array(
         z.discriminatedUnion("mode", [
-          z.object({ mode: z.literal("a"), x: z.string() }),
+          // A variant array of scalars under a union ROW ITEM: the row's
+          // own index must be renamed for the extracted Rows component.
+          z.object({ mode: z.literal("a"), x: z.string(), extras: z.array(z.string()) }),
           z.object({ mode: z.literal("b"), y: z.number() }),
         ]),
       ),
@@ -97,27 +114,81 @@ describe("row containers, single-file layout", () => {
     expect(code).not.toContain("inside a union variant");
   });
 
-  it("an array inside a row union's variant names its TODO with the row hole", () => {
-    // The one shape that still degrades. The extracted union component
+  it("an array inside a row union's variant extracts a Rows pair on the variant-array hook", () => {
+    expect(code).toContain("const InvoicesPayReceiptsRows = ({");
+    expect(code).toContain(
+      "useVariantFieldArray(form, `invoices.${p0}.pay`, `receipts`)",
+    );
+    // The empty item is typed from the hook, the only name the variant's
+    // item type has inside the file, and declared inside the component.
+    expect(code).toContain("Parameters<typeof invoicesPayReceiptsArray.push>[0]");
+    expect(code).toContain("<InvoicesPayReceiptsRows form={form} p0={p0} />");
+    // The rows are a Row component of their own (the Bound components type
+    // `path` against FieldPath, which cannot offer a variant path), and its
+    // leaves bind with the variant hook on the row template.
+    expect(code).toContain("const InvoicesPayReceiptsRow = ({");
+    expect(code).toContain(
+      "useVariantField(form, `invoices.${p0}.pay`, `receipts.${index}.url`)",
+    );
+    expect(code).toContain("<InvoicesPayReceiptsRow form={form} p0={p0} index={index} />");
+    expect(code).toContain("useVariantFieldArray,");
+    expect(code).not.toContain("inside a union variant");
+  });
+
+  it("an array inside a static union's variant extracts a Rows pair with no index props", () => {
+    expect(code).toContain("const ShippingStopsRows = ({");
+    expect(code).toContain("useVariantFieldArray(form, `shipping`, `stops`)");
+    expect(code).toContain("<ShippingStopsRows form={form} />");
+    expect(code).toContain("useVariantField(form, `shipping`, `stops.${index}.address`)");
+  });
+
+  it("a variant array under a union ROW ITEM renames the row's index to the next hole", () => {
+    // The union row component takes `index` as a prop and the Rows
+    // component maps its own, so the enclosing one becomes p1.
+    expect(code).toContain(
+      "useVariantFieldArray(form, `teams.${p0}.methods.${p1}`, `extras`)",
+    );
+    expect(code).toContain("<TeamsMethodsExtrasRows form={form} p0={p0} p1={index} />");
+    expect(code).toContain(
+      "useVariantField(form, `teams.${p0}.methods.${p1}`, `extras.${index}`)",
+    );
+  });
+
+  it("a union inside a variant still degrades, and its TODO names the holed path", () => {
+    // The one container shape left: a union's discriminant needs a typed
+    // useField the variant path cannot offer. The extracted union component
     // names itself from the hole-stripped segments; the TODO used to print
-    // that same stripped path ("pavements.lights"), which names no field a
-    // reader can find. It prints the holed template, as the module layout does.
+    // that stripped path ("pavements.sub"), which names no field a reader
+    // can find. It prints the holed template, as the module layout does.
     const schema = z.object({
       pavements: z.array(
         z.discriminatedUnion("kind", [
           z.object({
             kind: z.literal("asphalt"),
-            lights: z.array(z.object({ color: z.string() })),
+            sub: z.discriminatedUnion("t", [
+              z.object({ t: z.literal("x"), a: z.string() }),
+              z.object({ t: z.literal("y"), b: z.string() }),
+            ]),
           }),
           z.object({ kind: z.literal("grass"), length: z.number() }),
         ]),
       ),
     });
     const out = emitPlain(schema, "PavementsForm");
-    expect(out).toContain(
-      'nested array "pavements.${index}.lights" inside a union variant',
-    );
-    expect(out).not.toContain('"pavements.lights"');
+    expect(out).toContain('nested union "pavements.${index}.sub" inside a union variant');
+    expect(out).not.toContain('"pavements.sub"');
+  });
+
+  it("an array every variant shares stays a TODO naming the plain array hook", () => {
+    const schema = z.object({
+      top: z.discriminatedUnion("kind", [
+        z.object({ kind: z.literal("a"), tags: z.array(z.string()) }),
+        z.object({ kind: z.literal("b"), tags: z.array(z.string()) }),
+      ]),
+    });
+    const out = emitPlain(schema, "TopForm");
+    expect(out).toContain('array "top.tags" is a key every variant shares');
+    expect(out).not.toContain("useVariantFieldArray");
   });
 
   it("a tuple row-object field binds inline on the row path", () => {
@@ -218,6 +289,48 @@ describe("row containers, module layout", () => {
     );
     expect(teams).toContain("useMatrixField(`teams.${p0}.marks.${index}.0`)");
     expect(teams).not.toContain("bind it by hand");
+  });
+
+  it("an array inside a row union's variant extracts a Rows pair in the section file", () => {
+    const invoices = section("InvoicesSection");
+    expect(invoices).toContain("const InvoicesPayReceiptsRows = ({");
+    expect(invoices).toContain(
+      "useMatrixVariantFieldArray(`invoices.${p0}.pay`, `receipts`)",
+    );
+    // Row leaves are variant paths too: the variant hook on a row template.
+    expect(invoices).toContain(
+      "useMatrixVariantField(`invoices.${p0}.pay`, `receipts.${index}.url`)",
+    );
+    expect(invoices).toContain("Parameters<typeof rows.push>[0]");
+    expect(invoices).toContain("<InvoicesPayReceiptsRows p0={index} />");
+    expect(invoices).toContain("useMatrixVariantFieldArray,");
+    expect(invoices).not.toContain("inside a union variant");
+  });
+
+  it("an array inside a static union section's variant extracts a Rows pair", () => {
+    const shipping = section("ShippingSection");
+    expect(shipping).toContain("const ShippingStopsRows = () => {");
+    expect(shipping).toContain("useMatrixVariantFieldArray(`shipping`, `stops`)");
+    expect(shipping).toContain(
+      "useMatrixVariantField(`shipping`, `stops.${index}.address`)",
+    );
+    expect(shipping).toContain("<ShippingStopsRows />");
+  });
+
+  it("a variant array under a union ROW ITEM renames the row's index to the next hole", () => {
+    const teams = section("TeamsSection");
+    expect(teams).toContain(
+      "useMatrixVariantFieldArray(`teams.${p0}.methods.${p1}`, `extras`)",
+    );
+    expect(teams).toContain("<TeamsMethodsExtrasRows p0={p0} p1={index} />");
+    expect(teams).toContain(
+      "useMatrixVariantField(`teams.${p0}.methods.${p1}`, `extras.${index}`)",
+    );
+  });
+
+  it("the hooks file exports the variant-array hook", () => {
+    const hooks = byPath.get("hooks.ts") ?? "";
+    expect(hooks).toContain("useMatrixVariantFieldArray,");
   });
 
   // The real correctness check: every holed template path the sections bind

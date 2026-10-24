@@ -2,12 +2,27 @@
 
 ## formstand-cli Unreleased
 
+### Added
+
+- An **array inside a union variant** generates instead of degrading to a
+  TODO, in both layouts and every kit: a `{Stem}Rows` component on
+  `useVariantFieldArray(form, unionPath, "lights")` (formstand 0.25), its
+  row leaves on the variant path (the Bound components in the single-file
+  layout, `useVariantField` on a row template in the module layout), the
+  empty item typed from the hook, and deeper lists under those rows bound
+  the same way. Under a union row item the row's own index renames to the
+  next hole for the extracted component, as nested lists already do. Still
+  a TODO: a union inside a variant, a union or tuple inside a variant
+  array's rows, and an array every variant shares (a plain path, left to
+  `useFieldArray`). Generated output with a variant array needs formstand
+  0.25 or newer.
+
 ### Fixed
 
-- The single-file layout's TODO for an array inside a row union's variant
-  (the one shape that still degrades) printed the hole-stripped naming path
-  (`"pavements.lights"`), which names no field a reader can find. It prints
-  the row template (`"pavements.${index}.lights"`), as the module layout
+- The single-file layout's TODO for a container that still degrades inside
+  a row union's variant printed the hole-stripped naming path
+  (`"pavements.sub"`), which names no field a reader can find. It prints
+  the row template (`"pavements.${index}.sub"`), as the module layout
   already did.
 
 ## Unreleased
