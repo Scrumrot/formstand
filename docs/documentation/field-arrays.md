@@ -100,6 +100,34 @@ const AlbumRow = ({ form, index }: { form: Form<typeof schema>; index: number })
 
 Both directions work: `form.arrayPush("albums.0.tracks", track)` mutates the inner array, and reordering the outer `albums` array re-keys metadata for all nested paths. Inner ids are stored per *path* (`albums.0.tracks`), and the outer hook moves those stores with their rows: when it derives the new `albums` ids it notes which row went where and re-seats every descendant path's ids to match, so after a `move`, `swap`, `remove`, or a whole-array write the tracks of each album keep the ids they had. A slot vacated by `remove` drops its inner ids so a later row there starts fresh. The re-seat runs in the outer hook, so a tree that mounts only inner hooks and reorders the outer array imperatively still reconciles inner ids by value. Pass a `key` from the outer `fields` so each album's whole row subtree, inner hook included, moves with its album instead of being re-derived at a new index.
 
+## Arrays inside a union variant
+
+`FieldPath` on a discriminated union offers only the keys every variant shares, so an array that one variant declares sits at a path `useFieldArray` cannot take: with `top` as `asphalt | grass` and only asphalt carrying `lights`, `useFieldArray(form, "top.lights")` is a compile error. `useVariantFieldArray(form, unionPath, field)` is the array twin of [`useVariantField`](./components#discriminated-unions): it binds `${unionPath}.${field}` and types the rows from the variants that declare the array.
+
+```tsx
+const schema = z.object({
+  top: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("asphalt"), lights: z.array(z.object({ color: z.string() })) }),
+    z.object({ kind: z.literal("grass"), length: z.number() }),
+  ]),
+});
+
+function Lights({ form }: { form: Form<typeof schema> }) {
+  const kind = useField(form, "top.kind");                    // "asphalt" | "grass"
+  const lights = useVariantFieldArray(form, "top", "lights"); // UseFieldArrayReturn<{ color: string }>
+  return kind.value === "asphalt" ? (
+    <>
+      {lights.fields.map((row, index) => (
+        <LightRow key={row.id} form={form} index={index} onRemove={() => lights.remove(index)} />
+      ))}
+      <button type="button" onClick={() => lights.push({ color: "" })}>Add light</button>
+    </>
+  ) : null;
+}
+```
+
+The row's own fields are variant paths too, so they bind with `useVariantField` on a row template: `` useVariantField(form, "top", `lights.${index}.color`) ``. The return is exactly `useFieldArray`'s, stable ids included, and the runtime is the same hook on the joined path. The `field` argument is a variant sub-path like `useVariantField`'s: `"spec.lights"` reaches an array inside a variant-only object, and `` `lights.${index}.bulbs` `` an array nested in another variant array's rows. The union path may be row-indexed (`` `pavements.${index}` ``) when the union is itself a row item. A common-key array, one every variant declares, is a plain `FieldPath`, so it binds with `useFieldArray`, and the variant hook rejects it. Call the hook unconditionally and gate the rendering on the discriminant, as with `useVariantField`: its ops write the variant path whatever the active variant is. `createFormHooks` exposes a bound `use{Name}VariantFieldArray`, and `formstand-gen` emits this shape for arrays inside union variants.
+
 ## Array-level errors
 
 Constraints on the array itself (`z.array(...).min(1)`, `.max(n)`, a `.refine` on the array) produce errors keyed at the array's path, exposed as `useFieldArray(...).error` and distinct from per-row errors like `albums.0.tracks.1.title`:

@@ -90,6 +90,7 @@ export type {
   BoundUseFlag,
   BoundUseSelector,
   BoundUseVariantField,
+  BoundUseVariantFieldArray,
   FormHooks,
 } from "./react/createFormHooks";
 export type {
@@ -121,6 +122,11 @@ export type {
   VariantFieldValue,
   VariantKeys,
 } from "./react/useVariantField";
+// The array twin: a z.array that lives in one variant of a union binds
+// here with its rows typed, where ArrayFieldPath (common keys only) cannot
+// offer the path.
+export { useVariantFieldArray } from "./react/useVariantFieldArray";
+export type { VariantArrayFieldPath } from "./react/useVariantFieldArray";
 export type {
   UseFieldReturn,
   FieldFormApi,

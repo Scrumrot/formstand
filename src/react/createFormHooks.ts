@@ -26,6 +26,10 @@ import {
   type UseFieldArrayReturn,
   useFieldArray,
 } from "./useFieldArray";
+import {
+  type VariantArrayFieldPath,
+  useVariantFieldArray,
+} from "./useVariantFieldArray";
 import { useFormError } from "./useFormError";
 import { useFormValues } from "./useFormValues";
 import {
@@ -95,6 +99,18 @@ export type BoundUseVariantField<TSchema extends z.ZodType> = <
   VariantFieldValue<UnionValueAt<z.input<TSchema>, P>, TField> | undefined
 >;
 
+// The variant-array accessor bound to the form, the array twin of
+// BoundUseVariantField: the type math lives in useVariantFieldArray.
+export type BoundUseVariantFieldArray<TSchema extends z.ZodType> = <
+  P extends string,
+  TField extends VariantArrayFieldPath<UnionValueAt<z.input<TSchema>, P>>,
+>(
+  unionPath: P,
+  field: TField,
+) => UseFieldArrayReturn<
+  ArrayItemOf<VariantFieldValue<UnionValueAt<z.input<TSchema>, P>, TField>>
+>;
+
 export type BoundUseFieldArray<
   TSchema extends z.ZodType,
   D extends PathDepth = DefaultPathDepth,
@@ -128,6 +144,8 @@ export type FormHooks<
     [K in `use${Capitalize<N>}VariantField`]: BoundUseVariantField<TSchema>;
   } & {
     [K in `use${Capitalize<N>}FieldArray`]: BoundUseFieldArray<TSchema, D>;
+  } & {
+    [K in `use${Capitalize<N>}VariantFieldArray`]: BoundUseVariantFieldArray<TSchema>;
   } & { [K in `use${Capitalize<N>}Selector`]: BoundUseSelector<TSchema> } & {
     [K in `use${Capitalize<N>}SelectorShallow`]: BoundUseSelector<TSchema>;
   } & {
@@ -200,6 +218,16 @@ export const createFormHooks = <
     path: string | ((state: FormState<unknown>) => string),
   ): UseFieldArrayReturn<unknown> => useFieldArray(structural, path);
 
+  const useBoundVariantFieldArray = (
+    unionPath: string,
+    field: string,
+  ): UseFieldArrayReturn<unknown> =>
+    useVariantFieldArray(
+      structural as FieldArrayFormApi & { readonly schema?: undefined },
+      unionPath,
+      field,
+    );
+
   const useBoundSelector = <U,>(
     selector: (state: FormState<unknown>) => U,
   ): U => useFormSelector(structural, selector);
@@ -246,6 +274,7 @@ export const createFormHooks = <
     [`use${prefix}Field`]: useBoundField,
     [`use${prefix}VariantField`]: useBoundVariantField,
     [`use${prefix}FieldArray`]: useBoundFieldArray,
+    [`use${prefix}VariantFieldArray`]: useBoundVariantFieldArray,
     [`use${prefix}Selector`]: useBoundSelector,
     [`use${prefix}SelectorShallow`]: useBoundSelectorShallow,
     [`use${prefix}Error`]: useBoundError,

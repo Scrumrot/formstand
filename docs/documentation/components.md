@@ -148,6 +148,8 @@ const designator = useVariantField(form, `pavements.${index}`, "designator");
 
 Both the `` `pavements.${number}` `` template and a literal `"pavements.0"` resolve the row's variant keys (formstand 0.16 and newer; older versions collapse the field argument to `never` on any indexed path).
 
+An **array inside a variant** has the same problem one level up: `useFieldArray(form, "top.lights")` is a compile error when only the asphalt variant declares `lights`. `useVariantFieldArray(form, "top", "lights")` binds it with the rows typed from the declaring variants (formstand 0.25 and newer); see [Arrays inside a union variant](./field-arrays#arrays-inside-a-union-variant).
+
 ## Composite fields: `useFields`
 
 One control backed by several schema paths (a coordinate pair behind a single map-driven input, a range's min and max, a date span) binds them together with `useFields`:

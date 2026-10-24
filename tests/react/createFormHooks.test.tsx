@@ -31,6 +31,7 @@ describe("createFormHooks", () => {
         "useInvoiceField",
         "useInvoiceVariantField",
         "useInvoiceFieldArray",
+        "useInvoiceVariantFieldArray",
         "useInvoiceSelector",
         "useInvoiceSelectorShallow",
         "useInvoiceError",
@@ -46,6 +47,7 @@ describe("createFormHooks", () => {
     );
     expectTypeOf(hooks).toHaveProperty("useInvoiceField");
     expectTypeOf(hooks).toHaveProperty("useInvoiceVariantField");
+    expectTypeOf(hooks).toHaveProperty("useInvoiceVariantFieldArray");
     expectTypeOf(hooks).toHaveProperty("useInvoiceIsDirty");
   });
 
@@ -66,6 +68,42 @@ describe("createFormHooks", () => {
       usePayVariantField("payment", "cardNumber"),
     );
     expectTypeOf(result.current.value).toEqualTypeOf<string | undefined>();
+  });
+
+  it("the bound variant-array hook types the rows and rejects common keys", () => {
+    const unionSchema = z.object({
+      top: z.discriminatedUnion("kind", [
+        z.object({
+          kind: z.literal("asphalt"),
+          lights: z.array(z.object({ color: z.string() })),
+          tags: z.array(z.string()),
+        }),
+        z.object({ kind: z.literal("grass"), tags: z.array(z.string()) }),
+      ]),
+    });
+    // A const form, not an inline createForm(...) argument: inline, the
+    // inner call infers its depth from the outer unresolved parameter and
+    // every depth-typed bound hook collapses (a separate fix).
+    const topForm = createForm(unionSchema, {
+      initialValues: { top: { kind: "asphalt", lights: [], tags: [] } },
+    });
+    const { useTopVariantFieldArray, useTopFieldArray } = createFormHooks(
+      topForm,
+      "top",
+    );
+    const { result } = renderHook(() => ({
+      lights: useTopVariantFieldArray("top", "lights"),
+      // The common-key array binds with the plain bound array hook.
+      tags: useTopFieldArray("top.tags"),
+    }));
+    expectTypeOf(result.current.lights.items).toEqualTypeOf<
+      readonly { color: string }[]
+    >();
+    expectTypeOf(result.current.tags.items).toEqualTypeOf<readonly string[]>();
+    act(() => result.current.lights.push({ color: "red" }));
+    expect(result.current.lights.items).toEqual([{ color: "red" }]);
+    // @ts-expect-error a common key is not a variant path
+    renderHook(() => useTopVariantFieldArray("top", "tags"));
   });
 
   it("no name means unprefixed keys", () => {

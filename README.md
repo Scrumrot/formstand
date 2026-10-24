@@ -123,7 +123,7 @@ PATCH-ready payload of exactly what changed.
 | Area | What's there | Docs |
 | --- | --- | --- |
 | Form instance | `createForm`, `setValue`/`setValues`, `reset`/`resetField`/`adoptValues`, `submit`/`handleSubmit`, `diff`/`dirtyFields`, `snapshot`/`restore`, array ops | [createForm & Form](https://scrumrot.github.io/formstand/documentation/api/) |
-| Hooks | `useForm`, `useField`, `useFieldArray`, `useVariantField`, `useFormSelector`, `useFormValues`, the flag hooks, `createFormContext`, `createFormHooks` | [Hooks](https://scrumrot.github.io/formstand/documentation/api/hooks) |
+| Hooks | `useForm`, `useField`, `useFieldArray`, `useVariantField`, `useVariantFieldArray`, `useFormSelector`, `useFormValues`, the flag hooks, `createFormContext`, `createFormHooks` | [Hooks](https://scrumrot.github.io/formstand/documentation/api/hooks) |
 | Components | `TextField`, `NumberField`, `DateField`, `CheckboxField`, `SelectField`, the prop builders, `useNumberInput`, `focusField`/`focusFirstError` | [Components & bindings](https://scrumrot.github.io/formstand/documentation/api/components) |
 | Validation | five modes plus `reValidateMode`, field-scoped passes, async refines with race handling, per-field `debounceMs` | [Validation](https://scrumrot.github.io/formstand/documentation/validation) |
 | Utilities | `parsePath`/`getAtPath`/`setAtPath`, `validateSync`/`validateAsync`, `persistForm`, and the full type list | [Utilities & types](https://scrumrot.github.io/formstand/documentation/api/utilities) |

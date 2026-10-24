@@ -10,6 +10,23 @@
   the row template (`"pavements.${index}.lights"`), as the module layout
   already did.
 
+## Unreleased
+
+### Added
+
+- `useVariantFieldArray(form, unionPath, field)`, the array twin of
+  `useVariantField`: a `z.array` that lives in one variant of a
+  discriminated union sits at a path `useFieldArray` cannot take, since
+  `FieldPath` on a union offers only the keys every variant shares. The
+  hook binds `${unionPath}.${field}` and types the rows from the variants
+  that declare the array; `field` is a variant sub-path (`"lights"`,
+  `"spec.lights"`, or a row template for an array nested in another
+  variant array's rows), and a common-key array stays with plain
+  `useFieldArray`, which the variant hook rejects. Same return as
+  `useFieldArray`, row ids included. `createFormHooks` gains the bound
+  `use{Name}VariantFieldArray`, and the type `VariantArrayFieldPath` is
+  exported. formstand-cli emits it for arrays inside union variants.
+
 ## 0.24.0 — 2026-10-23
 
 ### Added
