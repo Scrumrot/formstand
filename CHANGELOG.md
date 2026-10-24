@@ -42,6 +42,17 @@
   `use{Name}VariantFieldArray`, and the type `VariantArrayFieldPath` is
   exported. formstand-cli emits it for arrays inside union variants.
 
+### Fixed
+
+- `createFormHooks(createForm(schema, options), name)` with the form
+  created inline collapsed every depth-typed bound hook (`useXField`,
+  `useXFieldArray`, `useXIsDirty`) to a `never` path: the inner call
+  inferred its depth from the outer call's still-unresolved depth
+  parameter, so the depth became the whole budget union. `createForm` and
+  `useForm` now take their depth from `pathDepth` alone (`NoInfer` on the
+  returned form), so the inline shape types like the const-form shape the
+  docs show, and an explicit `pathDepth` still infers its literal.
+
 ## 0.24.0 — 2026-10-23
 
 ### Added

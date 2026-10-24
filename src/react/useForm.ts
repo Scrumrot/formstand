@@ -19,7 +19,10 @@ export const useForm = <
 >(
   schema: TSchema,
   options: CreateFormOptions<TSchema, D>,
-): Form<TSchema, D> => {
+  // NoInfer for the same reason createForm's return has it: an inline
+  // `useFieldArray(useForm(schema, opts), "items")` would otherwise infer
+  // the depth from the outer call's unresolved parameter.
+): Form<TSchema, NoInfer<D>> => {
   const formRef = useRef<Form<TSchema, D> | null>(null);
   if (formRef.current === null) {
     formRef.current = createForm(schema, options);

@@ -106,6 +106,27 @@ describe("createFormHooks", () => {
     renderHook(() => useTopVariantFieldArray("top", "tags"));
   });
 
+  it("an inline createForm argument keeps the bound hooks depth-typed", () => {
+    // Regression: the inner call used to infer its depth from this call's
+    // still-unresolved D, becoming the whole PathDepth union, and every
+    // depth-typed bound hook collapsed its path argument to never.
+    const { useInlineField, useInlineFieldArray, useInlineIsDirty } =
+      createFormHooks(
+        createForm(schema, { initialValues, mode: "onBlur" }),
+        "inline",
+      );
+    const { result } = renderHook(() => ({
+      customer: useInlineField("customer"),
+      items: useInlineFieldArray("lineItems"),
+      dirty: useInlineIsDirty("customer"),
+    }));
+    expectTypeOf(result.current.customer.value).toEqualTypeOf<string>();
+    expectTypeOf(result.current.items.items).toEqualTypeOf<
+      readonly { description: string; quantity: number }[]
+    >();
+    expect(result.current.dirty).toBe(false);
+  });
+
   it("no name means unprefixed keys", () => {
     const hooks = createFormHooks(makeForm());
     expect(Object.keys(hooks)).toContain("useField");

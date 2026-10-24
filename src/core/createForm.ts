@@ -542,13 +542,21 @@ const releaseChangedSlices = (
 // option is omitted, D falls back to the default budget of 9. An
 // out-of-range literal (26, -1) or a `number`-typed variable fails the
 // constraint here, at the call site.
+//
+// NoInfer on the RETURNED depth: `options.pathDepth` is D's only inference
+// site on purpose. Without it, `createFormHooks(createForm(schema, opts),
+// name)` inferred the inner D from the outer call's contextual return type,
+// whose own D was still unresolved, so D became the whole PathDepth union
+// and every depth-typed bound hook (useXField, useXFieldArray, useXIsDirty)
+// collapsed its path argument to never. The const-form shape the docs
+// show never hit it; the inline one did.
 export const createForm = <
   TSchema extends z.ZodType,
   D extends PathDepth = DefaultPathDepth,
 >(
   schema: TSchema,
   options: CreateFormOptions<TSchema, D>,
-): Form<TSchema, D> => {
+): Form<TSchema, NoInfer<D>> => {
   type Values = z.input<TSchema>;
 
   const initialMode: ValidationMode = options.mode ?? "onBlur";
