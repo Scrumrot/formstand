@@ -86,7 +86,8 @@ Every flag is documented in full on the
 `useForm` with typed `initialValues` (blank values matching each field's kind, and
 `.default()` honored when the value is a safe literal), one bound control per field,
 nested objects as sections, arrays via `useFieldArray` with stable row keys and add and
-remove buttons, zod descriptions rendered as helper text, and a wired submit.
+remove buttons (flat object rows as a table, one column per field), zod descriptions
+rendered as helper text, and a wired submit.
 
 Supported schema surface: `string`, `number`/`int`, `boolean`, `date`, `enum`, unions of
 string literals, `object`, `array`, and `tuple`, with `.optional()`, `.nullable()`,

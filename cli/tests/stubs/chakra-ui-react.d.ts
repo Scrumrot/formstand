@@ -67,6 +67,7 @@ export declare const Input: (
     // The native datalist hookup (chakra's Input forwards DOM props) — the
     // autocomplete override binds suggestions through it.
     list?: string;
+    "aria-label"?: string;
     onChange?: (event: ChangeEvent<HTMLInputElement>) => void;
     onBlur?: () => void;
   }>,
@@ -101,6 +102,7 @@ export declare const NativeSelect: Readonly<{
       placeholder?: string;
       name?: string;
       value?: string;
+      "aria-label"?: string;
       onChange?: (event: ChangeEvent<HTMLSelectElement>) => void;
       onBlur?: () => void;
       children?: ReactNode;
@@ -119,7 +121,7 @@ export declare const Switch: Readonly<{
       children?: ReactNode;
     }>,
   ) => ReactElement;
-  HiddenInput: (props: Readonly<Record<string, never>>) => ReactElement;
+  HiddenInput: (props: Readonly<{ "aria-label"?: string }>) => ReactElement;
   Control: (props: Readonly<{ children?: ReactNode }>) => ReactElement;
   Thumb: (props: Readonly<Record<string, never>>) => ReactElement;
   Label: (props: Readonly<{ children?: ReactNode }>) => ReactElement;
@@ -154,4 +156,19 @@ export declare const Accordion: Readonly<{
   ItemBody: (
     props: StyleProps & Readonly<{ children?: ReactNode }>,
   ) => ReactElement;
+}>;
+
+// Table: the compound an array of flat object rows renders as (v3's
+// Root/Header/Body/Row/ColumnHeader/Cell namespace).
+export declare const Table: Readonly<{
+  Root: (
+    props: Readonly<{ size?: "sm" | "md" | "lg"; children?: ReactNode }>,
+  ) => ReactElement;
+  Header: (props: Readonly<{ children?: ReactNode }>) => ReactElement;
+  Body: (props: Readonly<{ children?: ReactNode }>) => ReactElement;
+  Row: (props: Readonly<{ key?: string; children?: ReactNode }>) => ReactElement;
+  ColumnHeader: (
+    props: Readonly<{ title?: string; children?: ReactNode }>,
+  ) => ReactElement;
+  Cell: (props: Readonly<{ children?: ReactNode }>) => ReactElement;
 }>;

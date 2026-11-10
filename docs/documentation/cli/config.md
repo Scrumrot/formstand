@@ -98,6 +98,21 @@ Each backend emits the span in the same layout dialect its section grids use: mu
 
 A span with no grid to act on is a generation-time error rather than a silent no-op: on a root-level field (the root list stacks in every layout), inside array rows (rows stack too), on a container (sections already span the row), on a 1-column form, or, under `--layout module`, on a field nested deeper than a section's direct children (deeper objects render there as stacked fieldsets; `--layout single` grids every level).
 
+## Per-array row layout
+
+An array whose rows are flat objects renders as a table by default, and the `fields` block can say otherwise per array. `layout` is the one override that names a container rather than a leaf:
+
+```ts
+export default defineConfig({
+  fields: {
+    "crew": { layout: "cards" }, // one stacked block per row instead of a table
+    "legs.*.stops": { layout: "table" }, // assert a table; an error if the rows cannot be one
+  },
+});
+```
+
+`"cards"` always applies to an array of objects. `"table"` is accepted only where the generator can build one: every row field a scalar (a nested object, array, union or tuple in a row needs a section, not a cell), within the typed-path budget, and without a `component` override (the autocomplete and textarea controls have no cell rendering). Anything else is a generation-time error naming the row field, since the default already falls back to cards, and an explicit `"table"` that silently did the same would be the no-op this config errors against. `layout` on a field that is not an array of objects is an error too. Arrays inside a discriminated union's variants cannot be named here (overrides do not descend into unions), so they take the default.
+
 ## Descriptions become helper text
 
 You don't need config for this one. A field's zod description is picked up automatically and rendered as the control's helper text:

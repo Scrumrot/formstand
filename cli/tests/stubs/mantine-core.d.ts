@@ -25,6 +25,7 @@ export declare const TextInput: (
     type?: string;
     inputMode?: "decimal";
     "aria-invalid"?: true | undefined;
+    "aria-label"?: string;
     onChange?: (
       event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
     ) => void;
@@ -75,6 +76,7 @@ export declare const NativeSelect: (
     error?: ReactNode;
     name?: string;
     value?: string;
+    "aria-label"?: string;
     onChange?: (event: ChangeEvent<HTMLSelectElement>) => void;
     onBlur?: () => void;
     children?: ReactNode;
@@ -87,6 +89,7 @@ export declare const Switch: (
     description?: ReactNode;
     name?: string;
     checked?: boolean;
+    "aria-label"?: string;
     onChange?: (event: ChangeEvent<HTMLInputElement>) => void;
     onBlur?: () => void;
   }>,
@@ -215,4 +218,17 @@ export declare const Grid: ((
         children?: ReactNode;
       }>,
   ) => ReactElement;
+};
+
+// Table: the compound an array of flat object rows renders as (Thead/Tbody/
+// Tr/Th/Td statics on the one Table). Only what the emitter writes is
+// typed; the version matrix proves the real declarations.
+export declare const Table: ((
+  props: Readonly<{ children?: ReactNode }>,
+) => ReactElement) & {
+  Thead: (props: Readonly<{ children?: ReactNode }>) => ReactElement;
+  Tbody: (props: Readonly<{ children?: ReactNode }>) => ReactElement;
+  Tr: (props: Readonly<{ key?: string; children?: ReactNode }>) => ReactElement;
+  Th: (props: Readonly<{ title?: string; children?: ReactNode }>) => ReactElement;
+  Td: (props: Readonly<{ children?: ReactNode }>) => ReactElement;
 };

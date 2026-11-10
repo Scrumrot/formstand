@@ -117,7 +117,12 @@ export type TextFieldProps = Readonly<{
   slotProps?: Readonly<{
     input?: Readonly<Record<string, unknown>>;
     inputLabel?: Readonly<Record<string, unknown>>;
+    // v6+ spelling of the native input's attributes (a table cell's
+    // aria-label rides it); v5 only has the legacy inputProps below.
+    htmlInput?: Readonly<Record<string, unknown>>;
   }>;
+  inputProps?: Readonly<Record<string, unknown>>;
+  size?: "small" | "medium";
   onChange?: TextChangeHandler;
   onBlur?: () => void;
   children?: ReactNode;
@@ -167,6 +172,11 @@ export declare const Switch: (
     checked?: boolean;
     onChange?: (event: ChangeEvent<HTMLInputElement>) => void;
     onBlur?: () => void;
+    // The native input's attributes (a table cell's aria-label): v6+
+    // spell it slotProps.input, v5 the legacy inputProps (v9 removed
+    // it; the matrix proves each major accepts only its own).
+    inputProps?: Readonly<Record<string, unknown>>;
+    slotProps?: Readonly<{ input?: Readonly<Record<string, unknown>> }>;
   }>,
 ) => ReactElement;
 
@@ -185,4 +195,26 @@ export declare const Grid: (
     key?: string;
     children?: ReactNode;
   }>,
+) => ReactElement;
+
+// Table: the chrome an array of flat object rows renders as. Only what the
+// emitter writes is typed; the matrix proves the real declarations.
+export declare const Table: (
+  props: Readonly<{ size?: "small" | "medium"; children?: ReactNode }>,
+) => ReactElement;
+
+export declare const TableHead: (
+  props: Readonly<{ children?: ReactNode }>,
+) => ReactElement;
+
+export declare const TableBody: (
+  props: Readonly<{ children?: ReactNode }>,
+) => ReactElement;
+
+export declare const TableRow: (
+  props: Readonly<{ key?: string; children?: ReactNode }>,
+) => ReactElement;
+
+export declare const TableCell: (
+  props: Readonly<{ title?: string; children?: ReactNode }>,
 ) => ReactElement;

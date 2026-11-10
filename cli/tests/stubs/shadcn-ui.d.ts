@@ -28,6 +28,7 @@ declare module "@/components/ui/checkbox" {
       name?: string;
       checked?: boolean;
       "aria-invalid"?: boolean;
+      "aria-label"?: string;
       onCheckedChange?: (checked: boolean | "indeterminate") => void;
       onBlur?: () => void;
     }>,
@@ -65,6 +66,7 @@ declare module "@/components/ui/input" {
       // the autocomplete override binds suggestions through it.
       list?: string;
       "aria-invalid"?: boolean;
+      "aria-label"?: string;
       onChange?: (event: ChangeEvent<HTMLInputElement>) => void;
       onBlur?: () => void;
     }>,
@@ -98,6 +100,7 @@ declare module "@/components/ui/select" {
       id?: string;
       className?: string;
       "aria-invalid"?: boolean;
+      "aria-label"?: string;
       children?: ReactNode;
     }>,
   ) => ReactElement;
@@ -109,5 +112,27 @@ declare module "@/components/ui/select" {
   ) => ReactElement;
   export const SelectItem: (
     props: Readonly<{ value: string; children?: ReactNode }>,
+  ) => ReactElement;
+}
+
+// The table primitives an array of flat object rows renders with (shadcn's
+// table recipe: thead/tbody/tr/th/td wrappers under one Table).
+declare module "@/components/ui/table" {
+  import type { ReactElement, ReactNode } from "react";
+  export const Table: (props: Readonly<{ children?: ReactNode }>) => ReactElement;
+  export const TableHeader: (
+    props: Readonly<{ children?: ReactNode }>,
+  ) => ReactElement;
+  export const TableBody: (
+    props: Readonly<{ children?: ReactNode }>,
+  ) => ReactElement;
+  export const TableRow: (
+    props: Readonly<{ key?: string; children?: ReactNode }>,
+  ) => ReactElement;
+  export const TableHead: (
+    props: Readonly<{ title?: string; children?: ReactNode }>,
+  ) => ReactElement;
+  export const TableCell: (
+    props: Readonly<{ children?: ReactNode }>,
   ) => ReactElement;
 }

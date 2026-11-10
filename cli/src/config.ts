@@ -49,7 +49,11 @@ export type FormstandConfig = Readonly<{
   //   fields: {
   //     "icao": { component: "autocomplete", optionsProp: true },
   //     "crew.*.role": { component: "autocomplete", optionsProp: true },
+  //     "crew": { layout: "cards" },
   //   }
+  // `layout` names an ARRAY of objects: "table" (the default wherever the
+  // rows are flat) or "cards"; "table" on rows a table cannot host is an
+  // error naming the row field.
   // "autocomplete" (free text with suggestions) is the only flavor today;
   // string fields REQUIRE optionsProp: true (the generated component then
   // takes e.g. `crewRoleOptions: readonly string[]`), enum fields default

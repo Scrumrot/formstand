@@ -184,6 +184,21 @@ the CLI from two UI targets to six, and make the docs match.
   root audit; the docs build, the link check, three painted pages from the
   preview server and the dev server were checked under it. The override
   goes when VitePress 2 lands.
+- **Tables for arrays of objects, the next CLI cycle (started
+  2026-11-10).** An array whose rows are flat objects, every field a
+  scalar within the path budget and none carrying a component override,
+  generates as a table by default: one column per row field with the
+  label in the header, a `{Stem}Row` component per row binding each cell
+  through `useField` (or `useVariantField` for an array inside a union
+  variant), a Remove column, and the array-level error plus the Add
+  button under the table. Rows that hold a nested object, array, union or
+  tuple, or an overridden leaf, keep the card layout, and
+  `fields: { "crew": { layout: "cards" } }` opts a tabular array back
+  out; `layout: "table"` on rows the table cannot host is a
+  generation-time error naming the field. Every kit, antd through its
+  data-driven `Table` with one cell component per column. Order: the
+  single-file layout, then the module layout, then the docs and the
+  playground.
 
 ## Toward 1.0
 

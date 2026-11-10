@@ -27,6 +27,10 @@ export type FieldOverrideSpec = Readonly<{
   // does not. Validated loudly against placements that cannot work (root
   // fields, array rows, 1-column forms, see applyFieldOverrides).
   span?: number | "full";
+  // On an ARRAY of objects: how its rows render, a table (the default
+  // wherever the rows are flat, see ./tables) or the older cards. The
+  // one override that lands on a container rather than a leaf.
+  layout?: "table" | "cards";
 }>;
 
 export type SharedSpecProps = Readonly<{
@@ -68,7 +72,8 @@ export type SharedSpecProps = Readonly<{
   description?: string;
   // Set by applyFieldOverrides when formstand.config.ts `fields` names this
   // leaf: the emitters swap the kind's default control for the override's
-  // component. Only ever present on string/enum leaves (validated loudly).
+  // component. Present on string/enum leaves (component, span) and on
+  // arrays of objects (layout), validated loudly.
   override?: FieldOverrideSpec;
 }>;
 

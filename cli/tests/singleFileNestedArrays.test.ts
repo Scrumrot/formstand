@@ -38,8 +38,10 @@ describe("single-file nested arrays", () => {
     expect(code).toContain(
       "const contactsPhonesArray = useFieldArray(form, `contacts.${p0}.phones`);",
     );
+    // Flat object rows render as a table, so the row's cells bind from a
+    // Row component's hoisted hooks rather than a Bound component's path.
     expect(code).toContain(
-      "path={`contacts.${p0}.phones.${index}.number`}",
+      "useField(form, `contacts.${p0}.phones.${index}.number`)",
     );
     // The main row threads its own index down as p0.
     expect(code).toContain("<ContactsPhonesRows form={form} p0={index} />");

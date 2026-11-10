@@ -54,7 +54,7 @@ describe("span config parsing", () => {
       parseFieldOverrides({ "employment.notes": { span: "half" } }, "cfg"),
     ).toThrow(/span must be "full" or an integer >= 2/);
     expect(() => parseFieldOverrides({ "employment.notes": {} }, "cfg")).toThrow(
-      /must set component and\/or span/,
+      /must set component, span and\/or layout/,
     );
     // optionsProp feeds a component override; without one it is dead config.
     expect(() =>

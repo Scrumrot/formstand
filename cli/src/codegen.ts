@@ -7,6 +7,7 @@ import {
 } from "./depth";
 import { type FieldSpec, type NamedField, labelFromName } from "./ir";
 import { type MuiVersion, DEFAULT_MUI_VERSION } from "./uiTarget";
+import { type TableLayout, tableColumns } from "./tables";
 import type {
   Template,
   TemplateImport,
@@ -987,12 +988,19 @@ type ArrayEntry = Readonly<{
   itemTypeName: string;
   emptyItemName: string;
   itemTypeExpr: string;
+  // The PascalCase naming stem every derived identifier shares; a tabular
+  // array's Row component is `${stem}Row`.
+  stem: string;
+  // The config's row layout for this array (fields[path].layout),
+  // consulted by tableColumns; absent means the default.
+  layout?: TableLayout | undefined;
 }>;
 
 type RawArrayEntry = Readonly<{
   segments: readonly string[];
   label: string;
   item: FieldSpec;
+  layout?: TableLayout | undefined;
 }>;
 
 const collectRawArrays = (
@@ -1024,7 +1032,7 @@ const collectRawArrays = (
       // emitted as TODO comments instead of hooks.
       return overDepthBudget(spec, segments.length, budget)
         ? []
-        : [{ segments, label, item: spec.item }];
+        : [{ segments, label, item: spec.item, layout: spec.override?.layout }];
     default:
       return [];
   }
@@ -1070,6 +1078,8 @@ const arrayEntry = (raw: RawArrayEntry, suffix: string): ArrayEntry => {
     path: raw.segments.join("."),
     label: raw.label,
     item: raw.item,
+    stem: `${pascal}${suffix}`,
+    layout: raw.layout,
     hookName: `${camelJoin(raw.segments)}Array${suffix}`,
     itemTypeName: `${pascal}Item${suffix}`,
     emptyItemName: `empty${pascal}Item${suffix}`,
@@ -1559,7 +1569,7 @@ export const collectUnionUsage = (
         NO_USAGE,
       );
     case "array":
-      return collectUnionUsage(spec.item, count + 1);
+      return collectUnionUsage(spec.item, budget, count + 1);
     case "union":
       return unionKindUsage(spec, budget);
     default:
@@ -1594,8 +1604,14 @@ export const collectStaticUsage = (
           ),
         NO_USAGE,
       );
+    // A tabular array's cells render from hoisted hooks through the prop
+    // builders (see emitTableRowComponents), never through the leaf
+    // components, so it contributes nothing, like a union.
     case "array":
-      return collectStaticUsage(spec.item, budget, count + 1, leafUsage);
+      return tableColumns(spec.item, count + 1, budget, spec.override?.layout) !==
+        undefined
+        ? NO_USAGE
+        : collectStaticUsage(spec.item, budget, count + 1, leafUsage);
     // Only the SCALAR elements render a static leaf; non-scalar elements are
     // TODOs, so they contribute no leaf-component import.
     case "tuple":
@@ -1630,12 +1646,17 @@ const hasStaticDescriptions = (
       return spec.fields.some((field) =>
         hasStaticDescriptions(field.spec, budget, count + 1),
       );
+    // A tabular array's descriptions ride its header cells, not a Bound
+    // component's helper text.
     case "array":
-      return hasStaticDescriptions(spec.item, count + 1);
+      return tableColumns(spec.item, count + 1, budget, spec.override?.layout) !==
+        undefined
+        ? false
+        : hasStaticDescriptions(spec.item, budget, count + 1);
     case "tuple":
       return spec.elements
         .filter(isScalarSpec)
-        .some((el) => hasStaticDescriptions(el, count + 1));
+        .some((el) => hasStaticDescriptions(el, budget, count + 1));
     case "union":
       return false;
     default:
@@ -1752,6 +1773,125 @@ export const hasVariantFieldUsage = (
   }
 };
 
+// ---------------------------------------------------------------------------
+// Tables (arrays of flat object rows)
+// ---------------------------------------------------------------------------
+
+// Whether any array in the tree renders as a table whose cells bind with
+// plain useField: every tabular array outside a union variant (a table
+// inside a variant array binds its cells with useVariantField, which the
+// variant gates import on their own). `count` is the segment count of
+// `spec`'s path. Gates the plain backend's useField import.
+export const hasFieldTableUsage = (
+  spec: FieldSpec,
+  budget: number,
+  count = 0,
+): boolean => {
+  if (overDepthBudget(spec, count, budget)) return false;
+  switch (spec.kind) {
+    case "object":
+      return spec.fields.some((field) =>
+        hasFieldTableUsage(field.spec, budget, count + 1),
+      );
+    case "array":
+      return (
+        tableColumns(spec.item, count + 1, budget, spec.override?.layout) !==
+          undefined || hasFieldTableUsage(spec.item, budget, count + 1)
+      );
+    default:
+      return false;
+  }
+};
+
+// Whether any array renders as a table at all, field- or variant-bound:
+// gates the kit table imports. Walks into union variants (a variant-only
+// array's rows can be a table too), skipping the common keys, which stay a
+// TODO (see unionLines) and so render no table.
+export const hasTableUsage = (
+  spec: FieldSpec,
+  budget: number,
+  count = 0,
+): boolean => {
+  if (overDepthBudget(spec, count, budget)) return false;
+  switch (spec.kind) {
+    case "object":
+      return spec.fields.some((field) =>
+        hasTableUsage(field.spec, budget, count + 1),
+      );
+    case "array":
+      return (
+        tableColumns(spec.item, count + 1, budget, spec.override?.layout) !==
+          undefined || hasTableUsage(spec.item, budget, count + 1)
+      );
+    case "union": {
+      const common = unionCommonFieldNames(spec);
+      return spec.variants.some((variant) =>
+        variant.fields.some(
+          (field) =>
+            !common.has(field.name) &&
+            hasTableUsage(field.spec, budget, count + 1),
+        ),
+      );
+    }
+    default:
+      return false;
+  }
+};
+
+// The scalar kinds bound inside table cells. Cells render through the raw
+// prop builders (plain) or the kit adapter builders from hoisted hooks,
+// never through the leaf COMPONENTS, so this gates the builder imports the
+// way union usage does, and collectStaticUsage excludes the same leaves.
+// Same walk as hasTableUsage.
+export const collectTableUsage = (
+  spec: FieldSpec,
+  budget: number,
+  count = 0,
+): KindUsage => {
+  if (overDepthBudget(spec, count, budget)) return NO_USAGE;
+  switch (spec.kind) {
+    case "object":
+      return spec.fields.reduce(
+        (acc, field) =>
+          mergeUsage(acc, collectTableUsage(field.spec, budget, count + 1)),
+        NO_USAGE,
+      );
+    case "array": {
+      const columns = tableColumns(
+        spec.item,
+        count + 1,
+        budget,
+        spec.override?.layout,
+      );
+      return columns === undefined
+        ? collectTableUsage(spec.item, budget, count + 1)
+        : columns.reduce(
+            (acc, column) => mergeUsage(acc, defaultLeafUsage(column.spec)),
+            NO_USAGE,
+          );
+    }
+    case "union": {
+      const common = unionCommonFieldNames(spec);
+      return spec.variants.reduce<KindUsage>(
+        (acc, variant) =>
+          variant.fields
+            .filter((field) => !common.has(field.name))
+            .reduce(
+              (inner, field) =>
+                mergeUsage(
+                  inner,
+                  collectTableUsage(field.spec, budget, count + 1),
+                ),
+              acc,
+            ),
+        NO_USAGE,
+      );
+    }
+    default:
+      return NO_USAGE;
+  }
+};
+
 // A path prefix under construction. For dynamic prefixes (inside array rows)
 // `text` is already template-escaped, apart from the deliberate ${index}
 // hole for the current row and ${p0}, ${p1}, ... holes for enclosing rows,
@@ -1858,6 +1998,22 @@ export const assertObjectRoot = (ir: FieldSpec): ObjectSpec => {
 // The shared walk + scaffold, parameterized by a Backend
 // ---------------------------------------------------------------------------
 
+// One column of a tabular array: the row field's name and label, its
+// description for the header cell's title attribute, and, for a "column"
+// kit, the extracted cell component that renders it.
+export type TableColumn = Readonly<{
+  name: string;
+  label: string;
+  title?: string;
+  component?: string;
+}>;
+
+// How a table chrome references the extracted components: `row` is the
+// Row component's name ("row" kits), `attrs` the props every reference
+// passes through (`form={form}` plus the enclosing index holes); the row
+// index and the remove handler are added per row.
+export type TableRef = Readonly<{ row: string; attrs: readonly string[] }>;
+
 type Backend = Readonly<{
   // Imports at the top of the file (everything before the schema import).
   header: (
@@ -1942,6 +2098,40 @@ type Backend = Readonly<{
     label: string,
     level: number,
     body: readonly string[],
+  ) => readonly string[];
+  // A table cell's control for one row field, rendered from a bound field
+  // VARIABLE like variantLeaf (the Row component hoists the hooks), with
+  // no visible label: the column header carries it, and the control names
+  // itself through aria-label. The error line stays with the cell. A
+  // description has no cell slot; the header carries it as a title.
+  cell: (
+    spec: FieldSpec,
+    fieldVar: string,
+    label: string,
+    level: number,
+  ) => readonly string[];
+  // How the kit's table reaches its cells: "row" maps each row to ONE Row
+  // component rendering the row element with every cell inside it;
+  // "column" is a data-driven table (antd) that renders the rows itself,
+  // so the emitter extracts one cell component PER COLUMN and the chrome
+  // references them from a columns array. See emitTableRowComponents.
+  tableCells: "row" | "column";
+  // "row" kits only: the Row component's body, the row element holding
+  // the rendered cells (each built at level + 2, inside its cell element)
+  // plus the Remove cell wired to the component's `onRemove` prop.
+  tableRow: (
+    cells: readonly (readonly string[])[],
+    level: number,
+  ) => readonly string[];
+  // The table chrome: the section open, the header row from the column
+  // labels, the body mapping the list hook's rows through the Row
+  // component (or antd's columns array over the cell components), the
+  // array-level error, the Add button, the section close.
+  table: (
+    entry: ArrayEntry,
+    level: number,
+    columns: readonly TableColumn[],
+    ref: TableRef,
   ) => readonly string[];
   // Wrapper around a field array's mapped rows. rowBody arrives built at
   // level + 3 (the flat-chrome row depth, arraySectionLines cannot know
@@ -2437,6 +2627,32 @@ const arraySectionLines = (
   // depth TODO must be the advice (extraction is impossible within budget),
   // not extraction. overBudgetFieldPaths mirrors both decisions exactly.
   const rowPath = `${templateEscape(entry.path)}.\${index}`;
+  // Flat object rows render as a table: a Row component per row (hoisted
+  // hooks, one cell per field) referenced from the kit's table chrome.
+  // Every other row shape, or a config `layout: "cards"`, keeps the cards
+  // below; tableColumns is the one decision both layouts share.
+  const columns = tableColumns(
+    entry.item,
+    pathSegmentCount(rowPath),
+    ctx.budget,
+    entry.layout,
+  );
+  if (columns !== undefined) {
+    const table = emitTableRowComponents(
+      backend,
+      {
+        stem: entry.stem,
+        listTemplate: templateEscape(entry.path),
+        holes: [],
+        columns,
+      },
+      ctx,
+    );
+    return backend.table(entry, level, table.columns, {
+      row: table.row,
+      attrs: ["form={form}"],
+    });
+  }
   const rowBody: readonly string[] =
     entry.item.kind === "object"
       ? fieldLines(backend, entry.item.fields, rowPrefix, level + 3, arrays, unions, ctx)
@@ -2486,6 +2702,7 @@ const arraySectionLines = (
                       holes: ["p0"],
                       itemTypeExpr: `NonNullable<${entry.itemTypeExpr}>[number]`,
                       itemOptionsProps,
+                      layout: item.override?.layout,
                     },
                     arrays,
                     unions,
@@ -2684,6 +2901,7 @@ const emitNestedRows = (
       holes: [...prefix.holes, nextHole],
       itemTypeExpr: `NonNullable<${prefix.valueTypeExpr}[${q(field.name)}]>[number]`,
       itemOptionsProps,
+      layout: field.spec.override?.layout,
     },
     arrays,
     unions,
@@ -2918,6 +3136,196 @@ const emitVariantRowComponent = (
   return rowName;
 };
 
+// The chrome pieces every "row" kit's table shares: the header cells from
+// the column labels (an empty last header over the Remove column; a
+// description rides the cell's title attribute) and the body mapping the
+// list hook's rows through the Row component.
+const tableHeaderCells = (
+  columns: readonly TableColumn[],
+  level: number,
+  // The header cell's open-tag body (`th scope="col"`) and its tag name.
+  open: string,
+  tag: string,
+): readonly string[] => [
+  ...columns.map(
+    (column) =>
+      `${ind(level)}<${open}${
+        column.title === undefined ? "" : ` ${jsxAttr("title", column.title)}`
+      }>${jsxText(column.label)}</${tag}>`,
+  ),
+  `${ind(level)}<${open} />`,
+];
+
+const tableRowsMap = (
+  entry: ArrayEntry,
+  ref: TableRef,
+  level: number,
+): readonly string[] => [
+  `${ind(level)}{${entry.hookName}.fields.map((row, index) => (`,
+  `${ind(level + 1)}<${ref.row}`,
+  `${ind(level + 2)}key={row.id}`,
+  ...ref.attrs.map((attr) => `${ind(level + 2)}${attr}`),
+  `${ind(level + 2)}index={index}`,
+  `${ind(level + 2)}onRemove={() => ${entry.hookName}.remove(index)}`,
+  `${ind(level + 1)}/>`,
+  `${ind(level)}))}`,
+];
+
+// A "row" kit's tableRow from its row and cell tags plus its Remove button:
+// the row element, one cell element per rendered cell, the Remove cell.
+const tableRowShell =
+  (
+    row: readonly [string, string],
+    cell: readonly [string, string],
+    removeButton: (level: number) => readonly string[],
+  ): Backend["tableRow"] =>
+  (cells, level) => [
+    `${ind(level)}${row[0]}`,
+    ...cells.flatMap((lines) => [
+      `${ind(level + 1)}${cell[0]}`,
+      ...lines,
+      `${ind(level + 1)}${cell[1]}`,
+    ]),
+    `${ind(level + 1)}${cell[0]}`,
+    ...removeButton(level + 2),
+    `${ind(level + 1)}${cell[1]}`,
+    `${ind(level)}${row[1]}`,
+  ];
+
+// The components a tabular array's rows render through, appended to the
+// context before the caller's own component. A "row" kit gets ONE
+// `{Stem}Row` component taking `form`, one number prop per enclosing hole,
+// the row's `index` and `onRemove`; it hoists one hook per column (useField
+// on the row template, or useVariantField on the union template plus the
+// relative row path for an array inside a variant) and the kit's
+// number-props hook where the kit has one, and renders the row element
+// through backend.tableRow with one backend.cell per column. A "column" kit
+// (antd, whose Table renders the rows itself) gets one `{Stem}{Column}Cell`
+// component per column instead, each hoisting its own hook, and the
+// chrome's columns array references them. Hoisted hooks are what both
+// shapes need: hooks cannot run inside rows.map, so the cells cannot bind
+// inline, and the Bound components type `path` against FieldPath, which a
+// variant row path cannot satisfy.
+const emitTableRowComponents = (
+  backend: Backend,
+  args: Readonly<{
+    stem: string;
+    // Pre-escaped list template with live holes (`crew`, `teams.${p0}.members`).
+    listTemplate: string;
+    holes: readonly string[];
+    columns: readonly NamedField[];
+    variant?: Readonly<{ unionTemplate: string; rel: string }> | undefined;
+  }>,
+  ctx: NestedCtx,
+): Readonly<{ row: string; columns: readonly TableColumn[] }> => {
+  const { stem, listTemplate, holes, columns, variant } = args;
+  const hookCall = (name: string): string =>
+    variant === undefined
+      ? `useField(form, \`${listTemplate}.\${index}.${templateEscape(name)}\`)`
+      : `useVariantField(form, \`${variant.unionTemplate}\`, \`${variant.rel}.\${index}.${templateEscape(name)}\`)`;
+  const propsType = (extra: readonly string[]): string =>
+    `Readonly<{ ${[
+      `form: ${formType(`typeof ${ctx.schemaName}`, ctx.budget)}`,
+      ...holes.map((hole) => `${hole}: number`),
+      "index: number",
+      ...extra,
+    ].join("; ")} }>`;
+  const params = (extra: readonly string[]): readonly string[] => [
+    "  form,",
+    ...holes.map((hole) => `  ${hole},`),
+    "  index,",
+    ...extra.map((name) => `  ${name},`),
+  ];
+  // Kit number bindings hoist their props hook next to the field hook, as a
+  // union component's do (React's rules of hooks).
+  const numberHoist = (spec: FieldSpec, varName: string): readonly string[] =>
+    backend.numberPropsHook === undefined || spec.kind !== "number"
+      ? []
+      : [
+          `  const ${varName}NumberProps = ${backend.numberPropsHook}(${varName});`,
+        ];
+  const titleOf = (column: NamedField): Readonly<{ title?: string }> =>
+    column.spec.description === undefined
+      ? {}
+      : { title: column.spec.description };
+
+  if (backend.tableCells === "column") {
+    const cells = columns.map((column): TableColumn => {
+      const base = `${stem}${pascalCase(column.name)}Cell`;
+      const name = `${base}${identifierSuffix(base, ctx.used)}`;
+      ctx.used.add(name);
+      ctx.components.push([
+        `const ${name} = ({`,
+        ...params([]),
+        `}: ${propsType([])}) => {`,
+        `  const field = ${hookCall(column.name)}${degradedPin(column.spec)};`,
+        ...numberHoist(column.spec, "field"),
+        "  return (",
+        `${ind(2)}<>`,
+        ...todoComment(column.spec, 3),
+        ...backend.cell(column.spec, "field", column.label, 3),
+        `${ind(2)}</>`,
+        "  );",
+        "};",
+      ]);
+      return {
+        name: column.name,
+        label: column.label,
+        ...titleOf(column),
+        component: name,
+      };
+    });
+    return { row: "", columns: cells };
+  }
+
+  const rowBase = `${stem}Row`;
+  const rowName = `${rowBase}${identifierSuffix(rowBase, ctx.used)}`;
+  ctx.used.add(rowName);
+  // Binding vars allocated against the component's own scope, the same rules
+  // as a union component's (number leaves reserve the hoisted NumberProps
+  // const).
+  const scope = new Set<string>(["form", "index", "onRemove", ...holes]);
+  const bound = columns.map((column) => {
+    const camel = camelCase(column.name);
+    const base = camel.length === 0 ? "value" : camelIdent(camel);
+    const { varName, reserved } = allocateBindingVar(
+      base,
+      column.spec.kind === "number",
+      scope,
+    );
+    reserved.forEach((name) => scope.add(name));
+    return { column, varName };
+  });
+  ctx.components.push([
+    `const ${rowName} = ({`,
+    ...params(["onRemove"]),
+    `}: ${propsType(["onRemove: () => void"])}) => {`,
+    ...bound.map(
+      ({ column, varName }) =>
+        `  const ${varName} = ${hookCall(column.name)}${degradedPin(column.spec)};`,
+    ),
+    ...bound.flatMap(({ column, varName }) => numberHoist(column.spec, varName)),
+    "  return (",
+    ...backend.tableRow(
+      bound.map(({ column, varName }) => [
+        ...todoComment(column.spec, 4),
+        ...backend.cell(column.spec, varName, column.label, 4),
+      ]),
+      2,
+    ),
+    "  );",
+    "};",
+  ]);
+  return {
+    row: rowName,
+    columns: columns.map((column) => ({
+      name: column.name,
+      label: column.label,
+      ...titleOf(column),
+    })),
+  };
+};
+
 // The extracted Rows component behind every array that must render inside
 // rows.map: nested arrays under object rows, and container row items
 // (array-of-arrays), at any depth. It takes `form` plus one number prop per
@@ -2949,12 +3357,15 @@ const emitRowsComponent = (
     itemTypeExpr: string;
     itemOptionsProps: readonly string[];
     variant?: Readonly<{ unionTemplate: string; rel: string }> | undefined;
+    // The config's row layout for this array (see ArrayEntry.layout).
+    layout?: TableLayout | undefined;
   }>,
   arrays: ReadonlyMap<string, ArrayEntry>,
   unions: ReadonlyMap<string, UnionEntry>,
   ctx: NestedCtx,
 ): string => {
-  const { listTemplate, item, itemTypeExpr, itemOptionsProps, variant } = args;
+  const { listTemplate, item, itemTypeExpr, itemOptionsProps, variant, layout } =
+    args;
   // Field segments (holes stripped) name the component and hook. Braces are
   // excluded from the hole body for the same linear-scan reason as
   // pathSegmentCount above.
@@ -3000,8 +3411,26 @@ const emitRowsComponent = (
   // (already-validated) list template, and an over-budget row's advice is
   // the depth TODO for every item kind.
   const rowPath = `${listTemplate}.\${index}`;
+  // Flat object rows render as a table (see arraySectionLines); the Row or
+  // per-column cell components land before this Rows component.
+  const columns = tableColumns(
+    item,
+    pathSegmentCount(rowPath),
+    ctx.budget,
+    layout,
+  );
+  const table =
+    columns === undefined
+      ? undefined
+      : emitTableRowComponents(
+          backend,
+          { stem, listTemplate, holes: args.holes, columns, variant },
+          ctx,
+        );
   const rowBody: readonly string[] =
-    variant !== undefined
+    table !== undefined
+      ? []
+      : variant !== undefined
       ? [
           `${ind(5)}<${emitVariantRowComponent(
             backend,
@@ -3059,6 +3488,8 @@ const emitRowsComponent = (
                       holes: [...args.holes, nextHole],
                       itemTypeExpr: `NonNullable<${itemTypeExpr}>[number]`,
                       itemOptionsProps,
+                      layout: (item as Extract<FieldSpec, { kind: "array" }>)
+                        .override?.layout,
                     },
                     arrays,
                     unions,
@@ -3077,6 +3508,8 @@ const emitRowsComponent = (
     path: listTemplate,
     label: args.label,
     item,
+    stem,
+    layout,
     hookName,
     itemTypeName: `${stem}Item`,
     emptyItemName: emptyName,
@@ -3107,7 +3540,15 @@ const emitRowsComponent = (
           ...emptyItemLines("  "),
         ]),
     "  return (",
-    ...backend.arraySection(synthEntry, 2, rowBody),
+    ...(table === undefined
+      ? backend.arraySection(synthEntry, 2, rowBody)
+      : backend.table(synthEntry, 2, table.columns, {
+          row: table.row,
+          attrs: [
+            "form={form}",
+            ...args.holes.map((hole) => `${hole}={${hole}}`),
+          ],
+        })),
     "  );",
     "};",
   ];
@@ -3540,6 +3981,58 @@ const plainVariantLeaf = (
   }
 };
 
+// A table cell for the plain backend: the raw control bound from the
+// hoisted field variable, named by aria-label (the column header is the
+// visible label), the error line under it. No zf-field wrapper, the cell
+// element is the field's box.
+const plainCell = (
+  spec: FieldSpec,
+  fieldVar: string,
+  label: string,
+  level: number,
+): readonly string[] => {
+  const pathExpr = `${fieldVar}.path`;
+  const describedBy = plainDescribedByAttr(fieldVar, pathExpr);
+  const aria = jsxAttr("aria-label", label);
+  const error = [
+    `${ind(level)}{${fieldVar}.error?.[0] !== undefined ? (`,
+    `${ind(level + 1)}<p ${plainErrorIdAttr(pathExpr)} role="alert">{${fieldVar}.error?.[0]}</p>`,
+    `${ind(level)}) : null}`,
+  ];
+  switch (spec.kind) {
+    case "boolean":
+      return [
+        `${ind(level)}<input {...checkboxProps(${fieldVar})} ${aria} ${describedBy} />`,
+        ...error,
+      ];
+    case "enum":
+      return [
+        `${ind(level)}<select {...selectProps(${fieldVar})} ${aria} ${describedBy}>`,
+        `${ind(level + 1)}<option value="">{"Select…"}</option>`,
+        ...spec.options.map(
+          (option) =>
+            `${ind(level + 1)}<option value=${jsxText(option)}>${jsxText(labelFromName(option))}</option>`,
+        ),
+        `${ind(level)}</select>`,
+        ...error,
+      ];
+    case "string":
+    case "number":
+    case "date":
+      return [
+        `${ind(level)}<input {...${PLAIN_BUILDER[spec.kind]}(${fieldVar})} ${aria} ${describedBy} />`,
+        ...error,
+      ];
+    case "object":
+    case "array":
+    case "tuple":
+    case "union":
+      return [
+        `${ind(level)}{/* unreachable: containers never fill a table cell */}`,
+      ];
+  }
+};
+
 // The plain (and custom-template fallback) autocomplete override control:
 // free text with suggestions as a plain input bound through formstand's
 // textInputProps, the suggestion list a native <datalist>, no new
@@ -3767,6 +4260,28 @@ const plainBackend = (
     visual.sections === "panel"
       ? `border: "1px solid #d0d7e2", borderRadius: 8, padding: 16, margin: 0`
       : "";
+  // The chrome around an array's rows, shared by the card and table
+  // shapes: the section (or collapsible) open with the heading, and the
+  // footer (array-level error, Add button, close).
+  const listOpen = (label: string, level: number): readonly string[] =>
+    visual.sections === "collapsible"
+      ? [
+          `${ind(level)}<details open${styleAttr(span)}>`,
+          `${ind(level + 1)}<summary style={{ cursor: "pointer", fontWeight: 600 }}>${jsxText(label)}</summary>`,
+        ]
+      : [
+          `${ind(level)}<section${styleAttr(span, panelChrome)}>`,
+          `${ind(level + 1)}<h3>${jsxText(label)}</h3>`,
+        ];
+  const listFooter = (entry: ArrayEntry, level: number): readonly string[] => [
+    // The array-level error (z.array().min(...) etc.), the same line the
+    // module layout's list shell renders.
+    `${ind(level + 1)}{${entry.hookName}.error ? <p role="alert">{${entry.hookName}.error[0]}</p> : null}`,
+    `${ind(level + 1)}<button type="button" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
+    `${ind(level + 2)}${jsxText(`Add ${singularize(entry.label).toLowerCase()}`)}`,
+    `${ind(level + 1)}</button>`,
+    `${ind(level)}${visual.sections === "collapsible" ? "</details>" : "</section>"}`,
+  ];
 
   return {
   header: (usage, arrays, root, budget) => {
@@ -3784,17 +4299,20 @@ const plainBackend = (
       staticUsage.textarea ||
       staticUsage.placeholder ||
       staticUsage.tsEnum;
-    // The prop builders the union controls call (discriminant select +
-    // common/variant field kinds), imported only when a union renders.
-    const builderImports = usage.union
-      ? [
-          ...(unionUsage.string ? ["textInputProps"] : []),
-          ...(unionUsage.number ? ["numberInputProps"] : []),
-          ...(unionUsage.date ? ["dateInputProps"] : []),
-          ...(unionUsage.boolean ? ["checkboxProps"] : []),
-          ...(unionUsage.enum ? ["selectProps"] : []),
-        ]
-      : [];
+    // The prop builders the union controls (discriminant select +
+    // common/variant field kinds) and the table cells call, both rendered
+    // from hoisted hooks; imported only when such a control renders.
+    const builderUsage = mergeUsage(
+      usage.union ? unionUsage : NO_USAGE,
+      collectTableUsage(root, budget),
+    );
+    const builderImports = [
+      ...(builderUsage.string ? ["textInputProps"] : []),
+      ...(builderUsage.number ? ["numberInputProps"] : []),
+      ...(builderUsage.date ? ["dateInputProps"] : []),
+      ...(builderUsage.boolean ? ["checkboxProps"] : []),
+      ...(builderUsage.enum ? ["selectProps"] : []),
+    ];
     const formstandImports = [
       ...(staticUsage.boolean ? ["CheckboxField"] : []),
       ...(staticUsage.date ? ["DateField"] : []),
@@ -3815,7 +4333,9 @@ const plainBackend = (
         ? ["selectProps"]
         : []),
       ...(arrays.length > 0 ? ["useFieldArray"] : []),
-      ...(usage.union || inFileControls ? ["useField"] : []),
+      ...(usage.union || inFileControls || hasFieldTableUsage(root, budget)
+        ? ["useField"]
+        : []),
       ...(hasVariantFieldUsage(root, budget) || variantArraysBindLeaves(root, budget)
         ? ["useVariantField"]
         : []),
@@ -3844,6 +4364,27 @@ const plainBackend = (
   },
   leaf: plainLeaf,
   variantLeaf: plainVariantLeaf,
+  cell: plainCell,
+  tableCells: "row",
+  tableRow: tableRowShell(["<tr>", "</tr>"], ["<td>", "</td>"], (level) => [
+    `${ind(level)}<button type="button" onClick={onRemove}>`,
+    `${ind(level + 1)}Remove`,
+    `${ind(level)}</button>`,
+  ]),
+  table: (entry, level, columns, ref) => [
+    ...listOpen(entry.label, level),
+    `${ind(level + 1)}<table>`,
+    `${ind(level + 2)}<thead>`,
+    `${ind(level + 3)}<tr>`,
+    ...tableHeaderCells(columns, level + 4, `th scope="col"`, "th"),
+    `${ind(level + 3)}</tr>`,
+    `${ind(level + 2)}</thead>`,
+    `${ind(level + 2)}<tbody>`,
+    ...tableRowsMap(entry, ref, level + 3),
+    `${ind(level + 2)}</tbody>`,
+    `${ind(level + 1)}</table>`,
+    ...listFooter(entry, level),
+  ],
   objectSection: (label, level, body) =>
     visual.sections === "collapsible"
       ? [
@@ -3870,15 +4411,7 @@ const plainBackend = (
           `${ind(level)}</fieldset>`,
         ],
   arraySection: (entry, level, rowBody) => [
-    ...(visual.sections === "collapsible"
-      ? [
-          `${ind(level)}<details open${styleAttr(span)}>`,
-          `${ind(level + 1)}<summary style={{ cursor: "pointer", fontWeight: 600 }}>${jsxText(entry.label)}</summary>`,
-        ]
-      : [
-          `${ind(level)}<section${styleAttr(span, panelChrome)}>`,
-          `${ind(level + 1)}<h3>${jsxText(entry.label)}</h3>`,
-        ]),
+    ...listOpen(entry.label, level),
     `${ind(level + 1)}{${entry.hookName}.fields.map((row, index) => (`,
     `${ind(level + 2)}<fieldset key={row.id}>`,
     `${ind(level + 3)}<legend>${jsxText(`${entry.label} #`)}{index + 1}</legend>`,
@@ -3888,13 +4421,7 @@ const plainBackend = (
     `${ind(level + 3)}</button>`,
     `${ind(level + 2)}</fieldset>`,
     `${ind(level + 1)}))}`,
-    // The array-level error (z.array().min(...) etc.), the same line the
-    // module layout's list shell renders.
-    `${ind(level + 1)}{${entry.hookName}.error ? <p role="alert">{${entry.hookName}.error[0]}</p> : null}`,
-    `${ind(level + 1)}<button type="button" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
-    `${ind(level + 2)}${jsxText(`Add ${singularize(entry.label).toLowerCase()}`)}`,
-    `${ind(level + 1)}</button>`,
-    `${ind(level)}${visual.sections === "collapsible" ? "</details>" : "</section>"}`,
+    ...listFooter(entry, level),
   ],
   spanCell:
     cols === 1 ? undefined : (fieldSpan) => spanCellFor("plain", fieldSpan, cols),
@@ -4442,6 +4969,62 @@ const muiVariantLeaf = (
   }
 };
 
+// A table cell for MUI: the same adapter-bound TextField/Switch a variant
+// leaf renders, without the label (the column header carries it) and at
+// the dense size a table row wants. The native input's aria-label is the
+// cell's accessible name: v6+ TextField spells it slotProps.htmlInput and
+// Switch slotProps.input, v5 the legacy inputProps on both (v9 removed
+// it). The number binding's own slotProps (inputMode) must survive, so its
+// cell spreads them back in; the date binding's inputLabel shrink has no
+// label to act on here, so losing it is harmless.
+const muiCell = (version: MuiVersion): Backend["cell"] => {
+  const { textFieldSlotProps } = muiVersionConfig(version);
+  const inputAria = (label: string, merge?: string): string =>
+    textFieldSlotProps
+      ? `slotProps={{ ${merge === undefined ? "" : `...${merge}.slotProps, `}htmlInput: { "aria-label": ${q(label)} } }}`
+      : `inputProps={{ "aria-label": ${q(label)} }}`;
+  const switchAria = (label: string): string =>
+    textFieldSlotProps
+      ? `slotProps={{ input: { "aria-label": ${q(label)} } }}`
+      : `inputProps={{ "aria-label": ${q(label)} }}`;
+  return (spec, fieldVar, label, level) => {
+    switch (spec.kind) {
+      case "boolean":
+        return [
+          `${ind(level)}<Switch {...muiSwitchProps(${fieldVar})} ${switchAria(label)} />`,
+        ];
+      case "enum":
+        return [
+          `${ind(level)}<TextField select fullWidth size="small" {...muiSelectProps(${fieldVar})} ${inputAria(label)}>`,
+          ...spec.options.map(
+            (option) =>
+              `${ind(level + 1)}<MenuItem value=${jsxText(option)}>${jsxText(labelFromName(option))}</MenuItem>`,
+          ),
+          `${ind(level)}</TextField>`,
+        ];
+      case "number":
+        return [
+          `${ind(level)}<TextField fullWidth size="small" {...${fieldVar}NumberProps} ${inputAria(label, `${fieldVar}NumberProps`)} />`,
+        ];
+      case "date":
+        return [
+          `${ind(level)}<TextField fullWidth size="small" {...${kitScalarBinding("mui", "date")}(${fieldVar})} ${inputAria(label)} />`,
+        ];
+      case "string":
+        return [
+          `${ind(level)}<TextField fullWidth size="small" {...${kitScalarBinding("mui", "string")}(${fieldVar})} ${inputAria(label)} />`,
+        ];
+      case "object":
+      case "array":
+      case "tuple":
+      case "union":
+        return [
+          `${ind(level)}{/* unreachable: containers never fill a table cell */}`,
+        ];
+    }
+  };
+};
+
 // The shadcn twin: renders from a bound field variable via the in-file
 // shadcn adapter builders, keyed off the field's own path for its ids.
 const shadcnVariantLeaf = (
@@ -4511,6 +5094,57 @@ const shadcnVariantLeaf = (
     case "union":
       return [
         `${ind(level)}{/* unreachable: containers never bind as a variant field */}`,
+      ];
+  }
+};
+
+// A table cell for shadcn: the control a variant leaf renders, without its
+// Label (the column header carries it; aria-label names the control) and
+// with the error line beneath. Two siblings inside the cell element.
+const shadcnCell = (
+  spec: FieldSpec,
+  fieldVar: string,
+  label: string,
+  level: number,
+): readonly string[] => {
+  const id = `{${fieldVar}.path}`;
+  const aria = jsxAttr("aria-label", label);
+  switch (spec.kind) {
+    case "boolean":
+      return [
+        `${ind(level)}<Checkbox id=${id} ${aria} {...shadcnCheckboxProps(${fieldVar})} />`,
+        `${ind(level)}<FieldError field={${fieldVar}} />`,
+      ];
+    case "enum":
+      return [
+        `${ind(level)}<Select {...shadcnSelectProps(${fieldVar})}>`,
+        `${ind(level + 1)}<SelectTrigger id=${id} ${aria} className="w-full" aria-invalid={ariaInvalid(${fieldVar})}>`,
+        `${ind(level + 2)}<SelectValue placeholder=${jsxText(`Select ${label.toLowerCase()}`)} />`,
+        `${ind(level + 1)}</SelectTrigger>`,
+        `${ind(level + 1)}<SelectContent>`,
+        ...spec.options.map(
+          (option) =>
+            `${ind(level + 2)}<SelectItem value=${jsxText(option)}>${jsxText(labelFromName(option))}</SelectItem>`,
+        ),
+        `${ind(level + 1)}</SelectContent>`,
+        `${ind(level)}</Select>`,
+        `${ind(level)}<FieldError field={${fieldVar}} />`,
+      ];
+    case "string":
+    case "number":
+    case "date": {
+      const builder = kitScalarBinding("shadcn", spec.kind);
+      return [
+        `${ind(level)}<Input id=${id} ${aria} {...${builder}(${fieldVar})} />`,
+        `${ind(level)}<FieldError field={${fieldVar}} />`,
+      ];
+    }
+    case "object":
+    case "array":
+    case "tuple":
+    case "union":
+      return [
+        `${ind(level)}{/* unreachable: containers never fill a table cell */}`,
       ];
   }
 };
@@ -4976,6 +5610,7 @@ const muiBackend = (
   return {
   header: (usage, arrays, root, budget) => {
     const hasSection = arrays.length > 0 || anyAddressableSectionField(root);
+    const hasTable = hasTableUsage(root, budget);
     const muiImports = [
       ...(hasSection && visual.sections === "collapsible"
         ? ["Accordion", "AccordionDetails", "AccordionSummary"]
@@ -4992,6 +5627,9 @@ const muiBackend = (
       ...(usage.enum ? ["MenuItem"] : []),
       "Stack",
       ...(usage.boolean ? ["Switch"] : []),
+      ...(hasTable
+        ? ["Table", "TableBody", "TableCell", "TableHead", "TableRow"]
+        : []),
       // The autocomplete's renderInput is a TextField too (and casts its
       // params through the exported props type, see BoundAutocompleteField).
       ...(usage.string ||
@@ -5021,6 +5659,46 @@ const muiBackend = (
   ],
   leaf: muiLeaf,
   variantLeaf: muiVariantLeaf,
+  cell: muiCell(version),
+  tableCells: "row",
+  tableRow: tableRowShell(
+    ["<TableRow>", "</TableRow>"],
+    ["<TableCell>", "</TableCell>"],
+    (level) => [
+      `${ind(level)}<Button type="button" onClick={onRemove}>`,
+      `${ind(level + 1)}Remove`,
+      `${ind(level)}</Button>`,
+    ],
+  ),
+  table: (entry, level, columns, ref) => {
+    // The table and its error/add pair sit under the chrome's innermost
+    // container, inside one spanning cell at cols > 1, the same shift
+    // arraySection applies.
+    const base = level + 1 + bodyDelta;
+    const inner = cols === 1 ? base : base + 1;
+    return [
+      ...sectionOpen(entry.label, level),
+      ...(cols === 1 ? [] : [`${ind(base)}${fullRowCell[0]}`]),
+      `${ind(inner)}<Table size="small">`,
+      `${ind(inner + 1)}<TableHead>`,
+      `${ind(inner + 2)}<TableRow>`,
+      ...tableHeaderCells(columns, inner + 3, "TableCell", "TableCell"),
+      `${ind(inner + 2)}</TableRow>`,
+      `${ind(inner + 1)}</TableHead>`,
+      `${ind(inner + 1)}<TableBody>`,
+      ...tableRowsMap(entry, ref, inner + 2),
+      `${ind(inner + 1)}</TableBody>`,
+      `${ind(inner)}</Table>`,
+      `${ind(inner)}{${entry.hookName}.error ? (`,
+      `${ind(inner + 1)}<Typography role="alert" color="error">{${entry.hookName}.error[0]}</Typography>`,
+      `${ind(inner)}) : null}`,
+      `${ind(inner)}<Button type="button" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
+      `${ind(inner + 1)}${jsxText(`Add ${singularize(entry.label).toLowerCase()}`)}`,
+      `${ind(inner)}</Button>`,
+      ...(cols === 1 ? [] : [`${ind(base)}${fullRowCell[1]}`]),
+      ...sectionClose(level),
+    ];
+  },
   numberPropsHook: kitScalarBinding("mui", "number"),
   objectSection: wrapSection(sectionOpen, sectionClose, bodyDelta),
   gridChild:
@@ -5472,6 +6150,18 @@ const shadcnBackend = (
             `} from "@/components/ui/select";`,
           ]
         : []),
+      ...(hasTableUsage(root, budget)
+        ? [
+            "import {",
+            "  Table,",
+            "  TableBody,",
+            "  TableCell,",
+            "  TableHead,",
+            "  TableHeader,",
+            "  TableRow,",
+            `} from "@/components/ui/table";`,
+          ]
+        : []),
       ...(usage.textarea
         ? [`import { Textarea } from "@/components/ui/textarea";`]
         : []),
@@ -5486,6 +6176,62 @@ const shadcnBackend = (
   ],
   leaf: shadcnLeaf,
   variantLeaf: shadcnVariantLeaf,
+  cell: shadcnCell,
+  tableCells: "row",
+  tableRow: tableRowShell(
+    ["<TableRow>", "</TableRow>"],
+    ["<TableCell>", "</TableCell>"],
+    (level) => [
+      `${ind(level)}<Button`,
+      `${ind(level + 1)}type="button"`,
+      `${ind(level + 1)}variant="outline"`,
+      `${ind(level + 1)}size="sm"`,
+      `${ind(level + 1)}onClick={onRemove}`,
+      `${ind(level)}>`,
+      `${ind(level + 1)}Remove`,
+      `${ind(level)}</Button>`,
+    ],
+  ),
+  table: (entry, level, columns, ref) => {
+    // Same chrome and shift as arraySection; the table replaces the
+    // mapped row cards.
+    const base = level + 1 + bodyDelta;
+    return [
+      ...(visual.sections === "collapsible"
+        ? [
+            `${ind(level)}<details open className="rounded-lg border${span}">`,
+            `${ind(level + 1)}<summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium">${jsxText(entry.label)}</summary>`,
+            `${ind(level + 1)}<div className="grid gap-3 px-4 pb-4">`,
+          ]
+        : [
+            `${ind(level)}<section className="grid gap-3${visual.sections === "panel" ? ` rounded-lg border p-4${panelChrome}` : ""}${span}">`,
+            `${ind(level + 1)}<h3 className="text-sm font-medium">${jsxText(entry.label)}</h3>`,
+          ]),
+      `${ind(base)}<Table>`,
+      `${ind(base + 1)}<TableHeader>`,
+      `${ind(base + 2)}<TableRow>`,
+      ...tableHeaderCells(columns, base + 3, "TableHead", "TableHead"),
+      `${ind(base + 2)}</TableRow>`,
+      `${ind(base + 1)}</TableHeader>`,
+      `${ind(base + 1)}<TableBody>`,
+      ...tableRowsMap(entry, ref, base + 2),
+      `${ind(base + 1)}</TableBody>`,
+      `${ind(base)}</Table>`,
+      `${ind(base)}{${entry.hookName}.error ? <p role="alert">{${entry.hookName}.error[0]}</p> : null}`,
+      `${ind(base)}<Button`,
+      `${ind(base + 1)}type="button"`,
+      `${ind(base + 1)}variant="outline"`,
+      `${ind(base + 1)}size="sm"`,
+      `${ind(base + 1)}className="w-fit"`,
+      `${ind(base + 1)}onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}`,
+      `${ind(base)}>`,
+      `${ind(base + 1)}${jsxText(`Add ${singularize(entry.label).toLowerCase()}`)}`,
+      `${ind(base)}</Button>`,
+      ...(visual.sections === "collapsible"
+        ? [`${ind(level + 1)}</div>`, `${ind(level)}</details>`]
+        : [`${ind(level)}</section>`]),
+    ];
+  },
   objectSection: wrapSection(sectionOpen, sectionClose, bodyDelta),
   arraySection: (entry, level, rowBody) => {
     // Rows sit under the chrome's innermost container (the collapsible grid
@@ -5927,6 +6673,70 @@ const chakraVariantLeaf = (
   }
 };
 
+// A table cell for chakra: the control a variant leaf renders, without its
+// Field.Label (the column header carries it; aria-label names the control)
+// and with Field.ErrorText beneath.
+const chakraCell = (
+  spec: FieldSpec,
+  fieldVar: string,
+  label: string,
+  level: number,
+): readonly string[] => {
+  const aria = jsxAttr("aria-label", label);
+  const invalid = `invalid={fieldError(${fieldVar}) !== undefined}`;
+  const errorText = `${ind(level + 1)}<Field.ErrorText>{fieldError(${fieldVar})}</Field.ErrorText>`;
+  switch (spec.kind) {
+    case "boolean":
+      return [
+        `${ind(level)}<Switch.Root {...chakraSwitchProps(${fieldVar})}>`,
+        `${ind(level + 1)}<Switch.HiddenInput ${aria} />`,
+        `${ind(level + 1)}<Switch.Control>`,
+        `${ind(level + 2)}<Switch.Thumb />`,
+        `${ind(level + 1)}</Switch.Control>`,
+        `${ind(level)}</Switch.Root>`,
+      ];
+    case "enum":
+      return [
+        `${ind(level)}<Field.Root ${invalid}>`,
+        `${ind(level + 1)}<NativeSelect.Root>`,
+        `${ind(level + 2)}<NativeSelect.Field ${aria} ${jsxAttr("placeholder", `Select ${label.toLowerCase()}`)} {...chakraSelectProps(${fieldVar})}>`,
+        ...spec.options.map(
+          (option) =>
+            `${ind(level + 3)}<option value=${jsxText(option)}>${jsxText(labelFromName(option))}</option>`,
+        ),
+        `${ind(level + 2)}</NativeSelect.Field>`,
+        `${ind(level + 2)}<NativeSelect.Indicator />`,
+        `${ind(level + 1)}</NativeSelect.Root>`,
+        errorText,
+        `${ind(level)}</Field.Root>`,
+      ];
+    case "number":
+      return [
+        `${ind(level)}<Field.Root ${invalid}>`,
+        `${ind(level + 1)}<Input ${aria} {...${fieldVar}NumberProps} />`,
+        errorText,
+        `${ind(level)}</Field.Root>`,
+      ];
+    case "string":
+    case "date": {
+      const builder = kitScalarBinding("chakra", spec.kind);
+      return [
+        `${ind(level)}<Field.Root ${invalid}>`,
+        `${ind(level + 1)}<Input ${aria} {...${builder}(${fieldVar})} />`,
+        errorText,
+        `${ind(level)}</Field.Root>`,
+      ];
+    }
+    case "object":
+    case "array":
+    case "tuple":
+    case "union":
+      return [
+        `${ind(level)}{/* unreachable: containers never fill a table cell */}`,
+      ];
+  }
+};
+
 const chakraLeaf = boundLeaf("BoundSwitchField", describedLeafKinds("chakra"));
 
 const chakraBackend = (
@@ -6023,6 +6833,7 @@ const chakraBackend = (
       ...(usage.enum ? ["NativeSelect"] : []),
       "Stack",
       ...(usage.boolean ? ["Switch"] : []),
+      ...(hasTableUsage(root, budget) ? ["Table"] : []),
       // Text renders each array's list-level error line.
       ...(arrays.length > 0 ? ["Text"] : []),
       ...(usage.textarea ? ["Textarea"] : []),
@@ -6054,6 +6865,41 @@ const chakraBackend = (
   ],
   leaf: chakraLeaf,
   variantLeaf: chakraVariantLeaf,
+  cell: chakraCell,
+  tableCells: "row",
+  tableRow: tableRowShell(
+    ["<Table.Row>", "</Table.Row>"],
+    ["<Table.Cell>", "</Table.Cell>"],
+    (level) => [
+      `${ind(level)}<Button type="button" variant="outline" size="sm" onClick={onRemove}>`,
+      `${ind(level + 1)}Remove`,
+      `${ind(level)}</Button>`,
+    ],
+  ),
+  table: (entry, level, columns, ref) => {
+    // Same chrome and shift as arraySection.
+    const base = level + 1 + bodyDelta;
+    return [
+      ...sectionOpen(entry.label, level),
+      `${ind(base)}<Table.Root size="sm">`,
+      `${ind(base + 1)}<Table.Header>`,
+      `${ind(base + 2)}<Table.Row>`,
+      ...tableHeaderCells(columns, base + 3, "Table.ColumnHeader", "Table.ColumnHeader"),
+      `${ind(base + 2)}</Table.Row>`,
+      `${ind(base + 1)}</Table.Header>`,
+      `${ind(base + 1)}<Table.Body>`,
+      ...tableRowsMap(entry, ref, base + 2),
+      `${ind(base + 1)}</Table.Body>`,
+      `${ind(base)}</Table.Root>`,
+      `${ind(base)}{${entry.hookName}.error ? (`,
+      `${ind(base + 1)}<Text role="alert" color="red.500">{${entry.hookName}.error[0]}</Text>`,
+      `${ind(base)}) : null}`,
+      `${ind(base)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
+      `${ind(base + 1)}${jsxText(`Add ${singularize(entry.label).toLowerCase()}`)}`,
+      `${ind(base)}</Button>`,
+      ...sectionClose(level),
+    ];
+  },
   numberPropsHook: kitScalarBinding("chakra", "number"),
   objectSection: wrapSection(sectionOpen, sectionClose, bodyDelta),
   arraySection: (entry, level, rowBody) => {
@@ -6414,6 +7260,52 @@ const mantineVariantLeaf = (
   }
 };
 
+// A table cell for mantine: the control a variant leaf renders, with
+// aria-label in place of the label prop (the column header carries it);
+// the error rides the control's own slot through the adapter.
+const mantineCell = (
+  spec: FieldSpec,
+  fieldVar: string,
+  label: string,
+  level: number,
+): readonly string[] => {
+  const aria = jsxAttr("aria-label", label);
+  switch (spec.kind) {
+    case "boolean":
+      return [
+        `${ind(level)}<Switch ${aria} {...mantineSwitchProps(${fieldVar})} />`,
+      ];
+    case "enum":
+      return [
+        `${ind(level)}<NativeSelect ${aria} {...mantineSelectProps(${fieldVar})}>`,
+        `${ind(level + 1)}<option value="">${jsxText(`Select ${label.toLowerCase()}`)}</option>`,
+        ...spec.options.map(
+          (option) =>
+            `${ind(level + 1)}<option value=${jsxText(option)}>${jsxText(labelFromName(option))}</option>`,
+        ),
+        `${ind(level)}</NativeSelect>`,
+      ];
+    case "number":
+      return [
+        `${ind(level)}<TextInput ${aria} {...${fieldVar}NumberProps} />`,
+      ];
+    case "string":
+    case "date": {
+      const builder = kitScalarBinding("mantine", spec.kind);
+      return [
+        `${ind(level)}<TextInput ${aria} {...${builder}(${fieldVar})} />`,
+      ];
+    }
+    case "object":
+    case "array":
+    case "tuple":
+    case "union":
+      return [
+        `${ind(level)}{/* unreachable: containers never fill a table cell */}`,
+      ];
+  }
+};
+
 const mantineLeaf = boundLeaf("BoundSwitchField", describedLeafKinds("mantine"));
 
 const mantineBackend = (
@@ -6510,6 +7402,7 @@ const mantineBackend = (
       ...(hasSection && cols > 1 ? ["Grid"] : []),
       "Stack",
       ...(usage.boolean ? ["Switch"] : []),
+      ...(hasTableUsage(root, budget) ? ["Table"] : []),
       // Text renders each array's list-level error line.
       ...(arrays.length > 0 ? ["Text"] : []),
       ...(usage.string || usage.date || usage.number ? ["TextInput"] : []),
@@ -6544,6 +7437,46 @@ const mantineBackend = (
   ],
   leaf: mantineLeaf,
   variantLeaf: mantineVariantLeaf,
+  cell: mantineCell,
+  tableCells: "row",
+  tableRow: tableRowShell(
+    ["<Table.Tr>", "</Table.Tr>"],
+    ["<Table.Td>", "</Table.Td>"],
+    (level) => [
+      `${ind(level)}<Button type="button" variant="outline" size="sm" onClick={onRemove}>`,
+      `${ind(level + 1)}Remove`,
+      `${ind(level)}</Button>`,
+    ],
+  ),
+  table: (entry, level, columns, ref) => {
+    // The table and its error/add pair sit under the chrome's innermost
+    // container, inside one spanning Col at cols > 1, the same shift
+    // arraySection applies.
+    const base = level + 1 + bodyDelta;
+    const inner = cols === 1 ? base : base + 1;
+    return [
+      ...sectionOpen(entry.label, level),
+      ...(cols === 1 ? [] : [`${ind(base)}<Grid.Col span={12}>`]),
+      `${ind(inner)}<Table>`,
+      `${ind(inner + 1)}<Table.Thead>`,
+      `${ind(inner + 2)}<Table.Tr>`,
+      ...tableHeaderCells(columns, inner + 3, "Table.Th", "Table.Th"),
+      `${ind(inner + 2)}</Table.Tr>`,
+      `${ind(inner + 1)}</Table.Thead>`,
+      `${ind(inner + 1)}<Table.Tbody>`,
+      ...tableRowsMap(entry, ref, inner + 2),
+      `${ind(inner + 1)}</Table.Tbody>`,
+      `${ind(inner)}</Table>`,
+      `${ind(inner)}{${entry.hookName}.error ? (`,
+      `${ind(inner + 1)}<Text role="alert" c="red">{${entry.hookName}.error[0]}</Text>`,
+      `${ind(inner)}) : null}`,
+      `${ind(inner)}<Button type="button" variant="outline" size="sm" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
+      `${ind(inner + 1)}${jsxText(`Add ${singularize(entry.label).toLowerCase()}`)}`,
+      `${ind(inner)}</Button>`,
+      ...(cols === 1 ? [] : [`${ind(base)}</Grid.Col>`]),
+      ...sectionClose(level),
+    ];
+  },
   numberPropsHook: kitScalarBinding("mantine", "number"),
   gridChild:
     cols === 1
@@ -7050,6 +7983,68 @@ const antdVariantLeaf = (
   }
 };
 
+// A table cell for antd: the control a variant leaf renders, without its
+// label element (the column header carries it; aria-label names the
+// control) and with the FieldError line beneath. The booleans' Checkbox has
+// no label text, so it stands alone.
+const antdCell = (
+  spec: FieldSpec,
+  fieldVar: string,
+  label: string,
+  level: number,
+): readonly string[] => {
+  const id = `{${fieldVar}.path}`;
+  const aria = jsxAttr("aria-label", label);
+  switch (spec.kind) {
+    case "boolean":
+      return [
+        `${ind(level)}<Checkbox ${aria} {...antdCheckboxProps(${fieldVar})} />`,
+      ];
+    case "enum":
+      return [
+        `${ind(level)}<Flex vertical gap="small">`,
+        `${ind(level + 1)}<Select`,
+        `${ind(level + 2)}id=${id}`,
+        `${ind(level + 2)}${aria}`,
+        `${ind(level + 2)}${jsxAttr("placeholder", `Select ${label.toLowerCase()}`)}`,
+        `${ind(level + 2)}options={[`,
+        ...spec.options.map(
+          (option) =>
+            `${ind(level + 3)}{ value: ${q(option)}, label: ${q(labelFromName(option))} },`,
+        ),
+        `${ind(level + 2)}]}`,
+        `${ind(level + 2)}{...antdSelectProps(${fieldVar})}`,
+        `${ind(level + 1)}/>`,
+        `${ind(level + 1)}<FieldError field={${fieldVar}} />`,
+        `${ind(level)}</Flex>`,
+      ];
+    case "number":
+      return [
+        `${ind(level)}<Flex vertical gap="small">`,
+        `${ind(level + 1)}<Input id=${id} ${aria} {...${fieldVar}NumberProps} />`,
+        `${ind(level + 1)}<FieldError field={${fieldVar}} />`,
+        `${ind(level)}</Flex>`,
+      ];
+    case "string":
+    case "date": {
+      const builder = kitScalarBinding("antd", spec.kind);
+      return [
+        `${ind(level)}<Flex vertical gap="small">`,
+        `${ind(level + 1)}<Input id=${id} ${aria} {...${builder}(${fieldVar})} />`,
+        `${ind(level + 1)}<FieldError field={${fieldVar}} />`,
+        `${ind(level)}</Flex>`,
+      ];
+    }
+    case "object":
+    case "array":
+    case "tuple":
+    case "union":
+      return [
+        `${ind(level)}{/* unreachable: containers never fill a table cell */}`,
+      ];
+  }
+};
+
 const antdLeaf = boundLeaf("BoundCheckboxField", describedLeafKinds("antd"));
 
 const antdBackend = (
@@ -7160,6 +8155,7 @@ const antdBackend = (
         ? ["Input"]
         : []),
       ...(usage.enum ? ["Select"] : []),
+      ...(hasTableUsage(root, budget) ? ["Table"] : []),
       // Typography.Title heads sections; Typography.Text renders the
       // explicit error line (no Form.Item means no built-in error slot)
       // and each array's list-level error.
@@ -7188,6 +8184,65 @@ const antdBackend = (
   ],
   leaf: antdLeaf,
   variantLeaf: antdVariantLeaf,
+  cell: antdCell,
+  // antd's Table renders the rows itself from columns + dataSource, so the
+  // emitter extracts one cell component per column and the columns array
+  // below references them; there is no Row component to shape.
+  tableCells: "column",
+  tableRow: () => [],
+  table: (entry, level, columns, ref) => {
+    // The table and its error/add pair sit under the chrome's innermost
+    // container, inside one spanning Col at cols > 1, the same shift
+    // arraySection applies. The row entries are the dataSource (keyed by
+    // their stable id); each column renders its cell component with the
+    // row index, which is all a hoisted hook needs.
+    const base = level + 1 + bodyDelta;
+    const inner = cols === 1 ? base : base + 1;
+    const refAttrs = [...ref.attrs, "index={index}"].join(" ");
+    return [
+      ...sectionOpen(entry.label, level),
+      ...(cols === 1 ? [] : [`${ind(base)}<Col span={24}>`]),
+      `${ind(inner)}<Table`,
+      `${ind(inner + 1)}size="small"`,
+      `${ind(inner + 1)}pagination={false}`,
+      `${ind(inner + 1)}rowKey="id"`,
+      `${ind(inner + 1)}dataSource={${entry.hookName}.fields}`,
+      `${ind(inner + 1)}columns={[`,
+      ...columns.flatMap((column) => [
+        `${ind(inner + 2)}{`,
+        `${ind(inner + 3)}key: ${q(column.name)},`,
+        `${ind(inner + 3)}title: ${
+          column.title === undefined
+            ? q(column.label)
+            : `<span ${jsxAttr("title", column.title)}>${jsxText(column.label)}</span>`
+        },`,
+        `${ind(inner + 3)}render: (_value, _row, index) => (`,
+        `${ind(inner + 4)}<${column.component ?? ""} ${refAttrs} />`,
+        `${ind(inner + 3)}),`,
+        `${ind(inner + 2)}},`,
+      ]),
+      `${ind(inner + 2)}{`,
+      `${ind(inner + 3)}key: "remove",`,
+      `${ind(inner + 3)}render: (_value, _row, index) => (`,
+      `${ind(inner + 4)}<Button htmlType="button" size="small" onClick={() => ${entry.hookName}.remove(index)}>`,
+      `${ind(inner + 5)}Remove`,
+      `${ind(inner + 4)}</Button>`,
+      `${ind(inner + 3)}),`,
+      `${ind(inner + 2)}},`,
+      `${ind(inner + 1)}]}`,
+      `${ind(inner)}/>`,
+      `${ind(inner)}{${entry.hookName}.error ? (`,
+      `${ind(inner + 1)}<Typography.Text role="alert" type="danger">`,
+      `${ind(inner + 2)}{${entry.hookName}.error[0]}`,
+      `${ind(inner + 1)}</Typography.Text>`,
+      `${ind(inner)}) : null}`,
+      `${ind(inner)}<Button htmlType="button" size="small" onClick={() => ${entry.hookName}.push(${entry.emptyItemName})}>`,
+      `${ind(inner + 1)}${jsxText(`Add ${singularize(entry.label).toLowerCase()}`)}`,
+      `${ind(inner)}</Button>`,
+      ...(cols === 1 ? [] : [`${ind(base)}</Col>`]),
+      ...sectionClose(level),
+    ];
+  },
   numberPropsHook: kitScalarBinding("antd", "number"),
   gridChild:
     cols === 1
@@ -7632,7 +8687,9 @@ const templateBackend = (
         ...(arrays.length > 0 ? ["useFieldArray"] : []),
         // useField backs both the Bound wrappers and the union discriminant/
         // common-field hooks.
-        ...(hasStaticLeaf || usage.union ? ["useField"] : []),
+        ...(hasStaticLeaf || usage.union || hasFieldTableUsage(root, budget)
+          ? ["useField"]
+          : []),
         ...(hasVariantFieldUsage(root, budget) || variantArraysBindLeaves(root, budget)
           ? ["useVariantField"]
           : []),

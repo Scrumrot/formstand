@@ -123,14 +123,18 @@ describe("row containers, single-file layout", () => {
     // item type has inside the file, and declared inside the component.
     expect(code).toContain("Parameters<typeof invoicesPayReceiptsArray.push>[0]");
     expect(code).toContain("<InvoicesPayReceiptsRows form={form} p0={p0} />");
-    // The rows are a Row component of their own (the Bound components type
-    // `path` against FieldPath, which cannot offer a variant path), and its
-    // leaves bind with the variant hook on the row template.
+    // The rows are flat objects, so the pair is a TABLE: a Row component of
+    // its own (the Bound components type `path` against FieldPath, which
+    // cannot offer a variant path) binding each cell with the variant hook
+    // on the row template, referenced from the table body.
     expect(code).toContain("const InvoicesPayReceiptsRow = ({");
     expect(code).toContain(
       "useVariantField(form, `invoices.${p0}.pay`, `receipts.${index}.url`)",
     );
-    expect(code).toContain("<InvoicesPayReceiptsRow form={form} p0={p0} index={index} />");
+    expect(code).toContain("<InvoicesPayReceiptsRow");
+    expect(code).toContain(
+      "onRemove={() => invoicesPayReceiptsArray.remove(index)}",
+    );
     expect(code).toContain("useVariantFieldArray,");
     expect(code).not.toContain("inside a union variant");
   });

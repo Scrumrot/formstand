@@ -23,6 +23,7 @@ export declare const Input: ((
     type?: string;
     inputMode?: "decimal";
     status?: "error" | "warning" | "" | undefined;
+    "aria-label"?: string;
     onChange?: (event: ChangeEvent<HTMLInputElement>) => void;
     onBlur?: () => void;
   }>,
@@ -56,6 +57,7 @@ export declare const Checkbox: (
   props: Readonly<{
     name?: string;
     checked?: boolean;
+    "aria-label"?: string;
     onChange?: (event: CheckboxChangeEvent) => void;
     onBlur?: FocusEventHandler<HTMLInputElement>;
     children?: ReactNode;
@@ -71,6 +73,7 @@ export declare const Select: (
     options?: readonly Readonly<{ value: string; label: ReactNode }>[];
     value?: string | null;
     status?: "error" | "warning" | "" | undefined;
+    "aria-label"?: string;
     onChange?: (value: string) => void;
     onBlur?: FocusEventHandler<HTMLElement>;
   }>,
@@ -166,5 +169,24 @@ export declare const Col: (
     md?: number;
     key?: string;
     children?: ReactNode;
+  }>,
+) => ReactElement;
+
+// Table: antd's data-driven table (columns + dataSource, no row markup),
+// what an array of flat object rows renders as: one cell component per
+// column, referenced from each column's render. The record type is the
+// field-array row entry; only what the emitter writes is typed, and the
+// version matrix proves the real declarations.
+export declare const Table: <RecordType>(
+  props: Readonly<{
+    size?: "small" | "middle" | "large";
+    pagination?: false;
+    rowKey?: string;
+    dataSource?: readonly RecordType[];
+    columns?: readonly Readonly<{
+      key: string;
+      title?: ReactNode;
+      render?: (value: unknown, record: RecordType, index: number) => ReactNode;
+    }>[];
   }>,
 ) => ReactElement;
