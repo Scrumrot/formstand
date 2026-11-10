@@ -21,8 +21,8 @@
 
 - **Arrays of flat object rows generate as tables.** Where every row
   field is a scalar within the path budget and none carries a component
-  override, the array renders as a table in the single-file layout and
-  every kit (the module layout follows): one column per row field with
+  override, the array renders as a table in both layouts and every kit:
+  one column per row field with
   the label in the header (a description becomes the header's title), a
   `{Stem}Row` component per row binding each cell from hoisted `useField`
   hooks (`useVariantField` for an array inside a union variant) and

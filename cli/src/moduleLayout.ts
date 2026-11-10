@@ -58,11 +58,18 @@ import {
   shiftLines,
   spanCellFor,
   templateEscape,
+  type CellRenderer,
+  type TableColumn,
+  ind,
+  kitCell,
+  tableHeaderCells,
+  tableRowShell,
   unionCommonFieldNames,
   type VariantLeaf,
 } from "./codegen";
 import { type FieldSpec, type NamedField, labelFromName } from "./ir";
 import { DEFAULT_MUI_VERSION, type MuiVersion } from "./uiTarget";
+import { type TableLayout, tableColumns } from "./tables";
 
 // The --layout module emitter: instead of one file, a feature-module folder
 // in the shape of the Onboarding playground demo,
@@ -469,6 +476,23 @@ const leafImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] => {
       return base;
   }
 };
+
+// The imports a table CELL needs: the leaf's, minus the label element the
+// cell does not render (shadcn's Label, MUI's FormControlLabel around a
+// Switch). Cells never carry an override (tableColumns refuses them) and
+// render no helper line (a description rides the header's title), so the
+// base set is the whole story.
+const cellImports = (ui: ModuleUi, spec: FieldSpec): readonly ImportLine[] =>
+  baseLeafImports(ui, spec).flatMap((line) =>
+    line.from === "@/components/ui/label"
+      ? []
+      : [
+          {
+            from: line.from,
+            names: line.names.filter((name) => name !== "FormControlLabel"),
+          },
+        ],
+  );
 
 const baseLeafImports = (
   ui: ModuleUi,
@@ -2497,12 +2521,16 @@ type NestedArrayEntry = Readonly<{
   // need plain typed hooks the union path cannot offer). `rel` is the
   // list's path past the union template, holes included.
   variant?: Readonly<{ unionTemplate: string; rel: string }> | undefined;
+  // The config's row layout for this array (fields[path].layout),
+  // consulted by tableColumns; absent means the default.
+  layout?: TableLayout | undefined;
 }>;
 
 type RawNestedArray = Readonly<{
   segments: readonly string[];
   label: string;
   item: FieldSpec;
+  layout?: TableLayout | undefined;
 }>;
 
 // Addressable arrays anywhere under an object section's fields. Objects do
@@ -2525,7 +2553,14 @@ const collectNestedArrays = (
       case "array":
         return overDepthBudget(field.spec, at.length, budget)
           ? []
-          : [{ segments: at, label: field.label, item: field.spec.item }];
+          : [
+              {
+                segments: at,
+                label: field.label,
+                item: field.spec.item,
+                layout: field.spec.override?.layout,
+              },
+            ];
       default:
         return [];
     }
@@ -2565,6 +2600,7 @@ const objectNestedEntries = (
               naming.valuesType,
             )}[number]`,
             holes: [],
+            layout: raw.layout,
           },
         ],
       };
@@ -2584,7 +2620,7 @@ const arrayNestedEntries = (
   itemFields
     .flatMap((field) =>
       !isUnaddressable(field.name) && field.spec.kind === "array"
-        ? [{ field, item: field.spec.item }]
+        ? [{ field, item: field.spec.item, layout: field.spec.override?.layout }]
         : [],
     )
     .reduce<
@@ -2593,7 +2629,7 @@ const arrayNestedEntries = (
         entries: readonly NestedArrayEntry[];
       }>
     >(
-      (acc, { field, item }) => {
+      (acc, { field, item, layout }) => {
         const base = `${sectionStem}${pascalCase(field.name)}`;
         const stem = `${base}${identifierSuffix(base, acc.used)}`;
         const templateBase = `${templateEscape(sectionKey)}.\${p0}.${templateEscape(field.name)}`;
@@ -2611,12 +2647,315 @@ const arrayNestedEntries = (
               commentBase: `${sectionKey}.$\{p0}.${field.name}`,
               itemTypeExpr: `NonNullable<NonNullable<${naming.valuesType}[${q(sectionKey)}]>[number][${q(field.name)}]>[number]`,
               holes: ["p0"],
+              layout,
             },
           ],
         };
       },
       { used: new Set<string>([sectionStem]), entries: [] },
     ).entries;
+
+// The table a flat-rowed array renders as, per kit, the module twin of the
+// single-file backends' table chrome. "row" kits map each row through ONE
+// Row component returning the row element (open/close wrap the mapped rows
+// in the table; the map sits at level + 2, inside the body); antd's Table is
+// data-driven ("column"), so it renders the rows itself from a columns
+// array whose renders reference one cell component per column.
+type TableShellParts = Readonly<{
+  imports: readonly ImportLine[];
+  cells: "row" | "column";
+  // "row" kits: the Row component's body, the row element with one cell per
+  // rendered control plus the Remove cell wired to `onRemove`.
+  row: (
+    cells: readonly (readonly string[])[],
+    level: number,
+  ) => readonly string[];
+  // "row" kits: the table, its header row and the body open at `level`;
+  // close is the body and table close.
+  open: (columns: readonly TableColumn[], level: number) => readonly string[];
+  close: (level: number) => readonly string[];
+  // "column" kits: the whole table over `rows.fields`, each column rendering
+  // its cell component with `attrs` (the ancestor holes) plus the row
+  // index, and the Remove column.
+  columnTable: (
+    columns: readonly TableColumn[],
+    level: number,
+    attrs: readonly string[],
+  ) => readonly string[];
+}>;
+
+const tableShell = (ui: ModuleUi): TableShellParts => {
+  const rowOnly = (): readonly string[] => [];
+  const plainButton = (level: number): readonly string[] => [
+    `${ind(level)}<button type="button" onClick={onRemove}>`,
+    `${ind(level + 1)}Remove`,
+    `${ind(level)}</button>`,
+  ];
+  const outlineButton = (level: number): readonly string[] => [
+    `${ind(level)}<Button type="button" variant="outline" size="sm" onClick={onRemove}>`,
+    `${ind(level + 1)}Remove`,
+    `${ind(level)}</Button>`,
+  ];
+  switch (ui) {
+    case "plain":
+      return {
+        imports: [],
+        cells: "row",
+        row: tableRowShell(["<tr>", "</tr>"], ["<td>", "</td>"], plainButton),
+        open: (columns, level) => [
+          `${ind(level)}<table>`,
+          `${ind(level + 1)}<thead>`,
+          `${ind(level + 2)}<tr>`,
+          ...tableHeaderCells(columns, level + 3, `th scope="col"`, "th"),
+          `${ind(level + 2)}</tr>`,
+          `${ind(level + 1)}</thead>`,
+          `${ind(level + 1)}<tbody>`,
+        ],
+        close: (level) => [`${ind(level + 1)}</tbody>`, `${ind(level)}</table>`],
+        columnTable: rowOnly,
+      };
+    case "mui":
+      return {
+        imports: [
+          {
+            from: "@mui/material",
+            names: ["Table", "TableBody", "TableCell", "TableHead", "TableRow"],
+          },
+        ],
+        cells: "row",
+        row: tableRowShell(
+          ["<TableRow>", "</TableRow>"],
+          ["<TableCell>", "</TableCell>"],
+          (level) => [
+            `${ind(level)}<Button type="button" onClick={onRemove}>`,
+            `${ind(level + 1)}Remove`,
+            `${ind(level)}</Button>`,
+          ],
+        ),
+        open: (columns, level) => [
+          `${ind(level)}<Table size="small">`,
+          `${ind(level + 1)}<TableHead>`,
+          `${ind(level + 2)}<TableRow>`,
+          ...tableHeaderCells(columns, level + 3, "TableCell", "TableCell"),
+          `${ind(level + 2)}</TableRow>`,
+          `${ind(level + 1)}</TableHead>`,
+          `${ind(level + 1)}<TableBody>`,
+        ],
+        close: (level) => [`${ind(level + 1)}</TableBody>`, `${ind(level)}</Table>`],
+        columnTable: rowOnly,
+      };
+    case "shadcn":
+      return {
+        imports: [
+          {
+            from: "@/components/ui/table",
+            names: [
+              "Table",
+              "TableBody",
+              "TableCell",
+              "TableHead",
+              "TableHeader",
+              "TableRow",
+            ],
+          },
+        ],
+        cells: "row",
+        row: tableRowShell(
+          ["<TableRow>", "</TableRow>"],
+          ["<TableCell>", "</TableCell>"],
+          (level) => [
+            `${ind(level)}<Button`,
+            `${ind(level + 1)}type="button"`,
+            `${ind(level + 1)}variant="outline"`,
+            `${ind(level + 1)}size="sm"`,
+            `${ind(level + 1)}onClick={onRemove}`,
+            `${ind(level)}>`,
+            `${ind(level + 1)}Remove`,
+            `${ind(level)}</Button>`,
+          ],
+        ),
+        open: (columns, level) => [
+          `${ind(level)}<Table>`,
+          `${ind(level + 1)}<TableHeader>`,
+          `${ind(level + 2)}<TableRow>`,
+          ...tableHeaderCells(columns, level + 3, "TableHead", "TableHead"),
+          `${ind(level + 2)}</TableRow>`,
+          `${ind(level + 1)}</TableHeader>`,
+          `${ind(level + 1)}<TableBody>`,
+        ],
+        close: (level) => [`${ind(level + 1)}</TableBody>`, `${ind(level)}</Table>`],
+        columnTable: rowOnly,
+      };
+    case "chakra":
+      return {
+        imports: [{ from: "@chakra-ui/react", names: ["Table"] }],
+        cells: "row",
+        row: tableRowShell(
+          ["<Table.Row>", "</Table.Row>"],
+          ["<Table.Cell>", "</Table.Cell>"],
+          outlineButton,
+        ),
+        open: (columns, level) => [
+          `${ind(level)}<Table.Root size="sm">`,
+          `${ind(level + 1)}<Table.Header>`,
+          `${ind(level + 2)}<Table.Row>`,
+          ...tableHeaderCells(
+            columns,
+            level + 3,
+            "Table.ColumnHeader",
+            "Table.ColumnHeader",
+          ),
+          `${ind(level + 2)}</Table.Row>`,
+          `${ind(level + 1)}</Table.Header>`,
+          `${ind(level + 1)}<Table.Body>`,
+        ],
+        close: (level) => [
+          `${ind(level + 1)}</Table.Body>`,
+          `${ind(level)}</Table.Root>`,
+        ],
+        columnTable: rowOnly,
+      };
+    case "mantine":
+      return {
+        imports: [{ from: "@mantine/core", names: ["Table"] }],
+        cells: "row",
+        row: tableRowShell(
+          ["<Table.Tr>", "</Table.Tr>"],
+          ["<Table.Td>", "</Table.Td>"],
+          outlineButton,
+        ),
+        open: (columns, level) => [
+          `${ind(level)}<Table>`,
+          `${ind(level + 1)}<Table.Thead>`,
+          `${ind(level + 2)}<Table.Tr>`,
+          ...tableHeaderCells(columns, level + 3, "Table.Th", "Table.Th"),
+          `${ind(level + 2)}</Table.Tr>`,
+          `${ind(level + 1)}</Table.Thead>`,
+          `${ind(level + 1)}<Table.Tbody>`,
+        ],
+        close: (level) => [
+          `${ind(level + 1)}</Table.Tbody>`,
+          `${ind(level)}</Table>`,
+        ],
+        columnTable: rowOnly,
+      };
+    case "antd":
+      return {
+        imports: [{ from: "antd", names: ["Table"] }],
+        cells: "column",
+        row: rowOnly,
+        open: rowOnly,
+        close: rowOnly,
+        columnTable: (columns, level, attrs) => {
+          const refAttrs = [...attrs, "index={index}"].join(" ");
+          return [
+            `${ind(level)}<Table`,
+            `${ind(level + 1)}size="small"`,
+            `${ind(level + 1)}pagination={false}`,
+            `${ind(level + 1)}rowKey="id"`,
+            `${ind(level + 1)}dataSource={rows.fields}`,
+            `${ind(level + 1)}columns={[`,
+            ...columns.flatMap((column) => [
+              `${ind(level + 2)}{`,
+              `${ind(level + 3)}key: ${q(column.name)},`,
+              `${ind(level + 3)}title: ${
+                column.title === undefined
+                  ? q(column.label)
+                  : `<span title=${jsxText(column.title)}>${jsxText(column.label)}</span>`
+              },`,
+              `${ind(level + 3)}render: (_value, _row, index) => (`,
+              `${ind(level + 4)}<${column.component ?? ""} ${refAttrs} />`,
+              `${ind(level + 3)}),`,
+              `${ind(level + 2)}},`,
+            ]),
+            `${ind(level + 2)}{`,
+            `${ind(level + 3)}key: "remove",`,
+            `${ind(level + 3)}render: (_value, _row, index) => (`,
+            `${ind(level + 4)}<Button htmlType="button" size="small" onClick={() => rows.remove(index)}>`,
+            `${ind(level + 5)}Remove`,
+            `${ind(level + 4)}</Button>`,
+            `${ind(level + 3)}),`,
+            `${ind(level + 2)}},`,
+            `${ind(level + 1)}]}`,
+            `${ind(level)}/>`,
+          ];
+        },
+      };
+  }
+};
+
+// The rows map every "row"-kit list renders: the Row component per field
+// array entry, keyed by the stable row id, threaded the ancestor holes, its
+// index, the remove handler and the subtree's options props.
+const rowsMapLines = (
+  rowName: string,
+  holes: readonly string[],
+  optionsProps: readonly string[],
+  level: number,
+): readonly string[] => [
+  `${ind(level)}{rows.fields.map((row, index) => (`,
+  `${ind(level + 1)}<${rowName}`,
+  `${ind(level + 2)}key={row.id}`,
+  ...holes.map((hole) => `${ind(level + 2)}${hole}={${hole}}`),
+  `${ind(level + 2)}index={index}`,
+  `${ind(level + 2)}onRemove={() => rows.remove(index)}`,
+  ...optionsProps.map((name) => `${ind(level + 2)}${name}={${name}}`),
+  `${ind(level + 1)}/>`,
+  `${ind(level)}))}`,
+];
+
+// The table columns of a tabular row item: the field's name and label, its
+// description as the header title, and, for a "column" kit, the cell
+// component that renders it.
+const tableColumnsOf = (
+  columns: readonly NamedField[],
+  components: readonly string[] | undefined,
+): readonly TableColumn[] =>
+  columns.map((column, i) => ({
+    name: column.name,
+    label: column.label,
+    ...(column.spec.description === undefined
+      ? {}
+      : { title: column.spec.description }),
+    ...(components === undefined ? {} : { component: components[i] ?? "" }),
+  }));
+
+// One cell's lines inside a Row (level 4, inside the cell element) or a
+// "column" kit's cell component (level 3): the TODO comments, then the
+// control.
+const cellLines = (
+  cell: CellRenderer,
+  field: NamedField,
+  varName: string,
+  level: number,
+): readonly string[] => [
+  ...todoTexts(field.spec).map((text) => `${ind(level)}{/* TODO: ${text} */}`),
+  ...cell(field.spec, varName, field.label, level),
+];
+
+// A "column" kit's cell component: `index` plus the ancestor holes, one
+// hoisted hook, the cell at level 3 inside a fragment.
+const cellComponentLines = (
+  ui: ModuleUi,
+  cell: CellRenderer,
+  name: string,
+  holes: readonly string[],
+  field: NamedField,
+  hook: string,
+): readonly string[] => [
+  `const ${name} = ({`,
+  ...holes.map((hole) => `  ${hole},`),
+  "  index,",
+  `}: Readonly<{ ${[...holes.map((hole) => `${hole}: number`), "index: number"].join("; ")} }>) => {`,
+  `  const field = ${hook}${degradedPin(field.spec)};`,
+  ...numberPropsBindings(ui, [{ varName: "field", spec: field.spec }]),
+  "  return (",
+  "    <>",
+  ...cellLines(cell, field, "field", 3),
+  "    </>",
+  "  );",
+  "};",
+];
 
 // The labeled wrapper around a nested list, the section keeps the outer
 // chrome, this is just a subheading plus container.
@@ -2806,6 +3145,7 @@ const rowUnionPieces = (
   // The file's component stem registry, for Rows pairs extracted from
   // arrays inside the variants.
   stems: Set<string>,
+  muiVersion: MuiVersion = DEFAULT_MUI_VERSION,
 ): RowContainerPieces => {
   const reserve = (
     base: string,
@@ -3033,7 +3373,7 @@ const rowUnionPieces = (
       ...collected.variant.map((binding) => binding.spec),
     ],
     children: [...arrayRows.values()].map((made) =>
-      nestedArrayComponents(ui, naming, made.entry, stems, budget),
+      nestedArrayComponents(ui, naming, made.entry, stems, budget, muiVersion),
     ),
   };
 };
@@ -3115,6 +3455,8 @@ const nestedArrayComponents = (
   entry: NestedArrayEntry,
   used: Set<string>,
   budget: number,
+  // The MUI major, for the table cells' slot spelling (see muiCell).
+  muiVersion: MuiVersion = DEFAULT_MUI_VERSION,
 ): NestedParts => {
   const rowName = `${entry.stem}Row`;
   const rowsName = `${entry.stem}Rows`;
@@ -3147,6 +3489,17 @@ const nestedArrayComponents = (
   // child array's list adds one more.
   const rowSegments = pathSegmentCount(entry.templateBase) + 1;
 
+  // Flat object rows render as a table (tableColumns is the one decision
+  // both layouts share): the Row returns a table row of cells, Rows wraps
+  // the mapped rows in the table; antd gets one cell component per column
+  // in place of the Row.
+  const columns =
+    entry.item.kind === "object"
+      ? tableColumns(entry.item, rowSegments, budget, entry.layout)
+      : undefined;
+  const table = columns === undefined ? undefined : tableShell(ui);
+  const cell = kitCell(ui, muiVersion);
+
   // The one production of an over-budget row-field TODO (shared by every
   // item-field kind, scalar bindings, child lists, and nested containers
   // degrade identically).
@@ -3168,6 +3521,7 @@ const nestedArrayComponents = (
     label: string,
     item: FieldSpec,
     elemTypeExpr: string,
+    layout: TableLayout | undefined,
   ): NestedArrayEntry => {
     const baseStem =
       fieldName === undefined
@@ -3196,6 +3550,7 @@ const nestedArrayComponents = (
               unionTemplate: variant.unionTemplate,
               rel: `${variant.rel}.\${${rowIndexHole}}${tail}`,
             },
+      layout,
     };
   };
 
@@ -3218,6 +3573,9 @@ const nestedArrayComponents = (
   // TODO.
   type Piece = Readonly<{
     body: readonly string[];
+    // A table cell's lines (level 4, inside the cell element), set for
+    // every scalar field when the item is tabular.
+    cell?: readonly string[];
     bindings?: readonly string[];
     spec?: FieldSpec;
     specs?: readonly FieldSpec[];
@@ -3273,6 +3631,9 @@ const nestedArrayComponents = (
                 dynamicId(field.name),
                 "      ",
               ),
+              ...(table === undefined
+                ? {}
+                : { cell: cellLines(cell, field, varName, 4) }),
               bindings: [
                 `  const ${varName} = ${leafHook(`.${templateEscape(field.name)}`)}${degradedPin(field.spec)};`,
                 ...numberPropsBindings(ui, [{ varName, spec: field.spec }]),
@@ -3286,10 +3647,18 @@ const nestedArrayComponents = (
               field.label,
               field.spec.item,
               `NonNullable<(${entry.itemTypeExpr})[${q(field.name)}]>[number]`,
+              field.spec.override?.layout,
             );
             return {
               body: [childRef(child)],
-              part: nestedArrayComponents(ui, naming, child, used, budget),
+              part: nestedArrayComponents(
+                ui,
+                naming,
+                child,
+                used,
+                budget,
+                muiVersion,
+              ),
             };
           }
           // A union or tuple FIELD of the row binds right in the Row
@@ -3321,6 +3690,7 @@ const nestedArrayComponents = (
                     rowVarUsed,
                     budget,
                     used,
+                    muiVersion,
                   )
                 : rowTuplePieces(
                     ui,
@@ -3406,12 +3776,22 @@ const nestedArrayComponents = (
                   entry.label,
                   entry.item.item,
                   `NonNullable<${entry.itemTypeExpr}>[number]`,
+                  entry.item.override?.layout,
                 );
                 return {
                   bindings: [],
                   body: [childRef(child)],
                   specs: [],
-                  children: [nestedArrayComponents(ui, naming, child, used, budget)],
+                  children: [
+                    nestedArrayComponents(
+                      ui,
+                      naming,
+                      child,
+                      used,
+                      budget,
+                      muiVersion,
+                    ),
+                  ],
                 };
               })()
             : variant !== undefined
@@ -3445,6 +3825,7 @@ const nestedArrayComponents = (
                         rowVarUsed,
                         budget,
                         used,
+                        muiVersion,
                       )
                     : rowTuplePieces(
                         ui,
@@ -3478,23 +3859,55 @@ const nestedArrayComponents = (
     blankNeedsCast(entry.item)
       ? `${indent}const ${emptyName} = ${emitInitialValues(entry.item, indent.length / 2)} as unknown as ${typeExpr};`
       : `${indent}const ${emptyName}: ${typeExpr} = ${emitInitialValues(entry.item, indent.length / 2)};`;
+  // A tabular item's cells, in column order (one per scalar field), and,
+  // for a "column" kit, the cell component per column that replaces the
+  // Row. The cell components bind through the same leafHook (the plain
+  // field hook, or the variant hook under a variant array).
+  const tableCells = objectPieces.flatMap((p) => (p.cell ? [p.cell] : []));
+  const tableFields = columns ?? [];
+  const cellNames =
+    table?.cells === "column"
+      ? tableFields.map((field) => {
+          const base = `${entry.stem}${pascalCase(field.name)}Cell`;
+          const name = `${base}${identifierSuffix(base, used)}`;
+          used.add(name);
+          return name;
+        })
+      : undefined;
+  const rowComponent: readonly string[] =
+    cellNames !== undefined
+      ? tableFields.flatMap((field, i) => [
+          ...(i === 0 ? [] : [""]),
+          ...cellComponentLines(
+            ui,
+            cell,
+            cellNames[i] ?? "",
+            entry.holes,
+            field,
+            leafHook(`.${templateEscape(field.name)}`),
+          ),
+        ])
+      : [
+          `const ${rowName} = ({`,
+          ...holeParams,
+          "  index,",
+          "  onRemove,",
+          ...optionsParams,
+          `}: Readonly<{ ${[...holeTypes, "index: number", "onRemove: () => void", ...optionsTypes].join("; ")} }>) => {`,
+          ...parts.bindings,
+          "  return (",
+          ...(table === undefined
+            ? [...shell.rowOpen, ...parts.body, ...shell.rowClose("onRemove")]
+            : table.row(tableCells, 2)),
+          "  );",
+          "};",
+        ];
+  const tableColumnList = tableColumnsOf(tableFields, cellNames);
   const lines = [
     // Children are declared before the Row that references them.
     ...parts.children.flatMap((part) => [...part.lines, ""]),
     ...(variant === undefined ? [emptyItemLine(entry.itemTypeExpr, ""), ""] : []),
-    `const ${rowName} = ({`,
-    ...holeParams,
-    "  index,",
-    "  onRemove,",
-    ...optionsParams,
-    `}: Readonly<{ ${[...holeTypes, "index: number", "onRemove: () => void", ...optionsTypes].join("; ")} }>) => {`,
-    ...parts.bindings,
-    "  return (",
-    ...shell.rowOpen,
-    ...parts.body,
-    ...shell.rowClose("onRemove"),
-    "  );",
-    "};",
+    ...rowComponent,
     "",
     ...(entry.holes.length === 0 && entryOptionsProps.length === 0
       ? [`const ${rowsName} = () => {`]
@@ -3512,15 +3925,19 @@ const nestedArrayComponents = (
         ]),
     "  return (",
     ...wrap.open,
-    "      {rows.fields.map((row, index) => (",
-    `        <${rowName}`,
-    "          key={row.id}",
-    ...entry.holes.map((h) => `          ${h}={${h}}`),
-    "          index={index}",
-    "          onRemove={() => rows.remove(index)}",
-    ...entryOptionsProps.map((name) => `          ${name}={${name}}`),
-    "        />",
-    "      ))}",
+    ...(table === undefined
+      ? rowsMapLines(rowName, entry.holes, entryOptionsProps, 3)
+      : table.cells === "column"
+        ? table.columnTable(
+            tableColumnList,
+            3,
+            entry.holes.map((h) => `${h}={${h}}`),
+          )
+        : [
+            ...table.open(tableColumnList, 3),
+            ...rowsMapLines(rowName, entry.holes, entryOptionsProps, 5),
+            ...table.close(3),
+          ]),
     ...shell.listError,
     ...shell.addButton(
       `() => rows.push(${emptyName})`,
@@ -3534,7 +3951,10 @@ const nestedArrayComponents = (
   return {
     lines,
     imports: [
-      ...parts.specs.flatMap((s) => leafImports(ui, s)),
+      ...parts.specs.flatMap((s) =>
+        table === undefined ? leafImports(ui, s) : cellImports(ui, s),
+      ),
+      ...(table?.imports ?? []),
       ...shell.imports,
       ...wrap.imports,
       ...parts.children.flatMap((part) => part.imports),
@@ -3573,7 +3993,7 @@ const objectSectionFile = (
   // collide with each other or with the top-level entries.
   const nestedUsed = new Set<string>(nested.map((entry) => entry.stem));
   const nestedParts = nested.map((entry) =>
-    nestedArrayComponents(ui, naming, entry, nestedUsed, budget),
+    nestedArrayComponents(ui, naming, entry, nestedUsed, budget, muiVersion),
   );
 
   // Container uis lay the shell out with a real layout component (antd
@@ -3670,6 +4090,7 @@ const objectSectionFile = (
                   sectionVarUsed,
                   budget,
                   nestedUsed,
+                  muiVersion,
                 ),
               ],
             ];
@@ -4027,6 +4448,21 @@ const arraySectionFile = (
   const rowName = `${sectionStem}Row`;
   const emptyName = `empty${sectionStem}Item`;
   const shell = arrayShell(ui, section.label);
+  // Flat object rows render as a table (tableColumns is the one decision
+  // both layouts share): the Row returns a table row of cells and the
+  // section wraps the mapped rows in the table; antd gets one cell
+  // component per column in place of the Row.
+  const columns =
+    spec.item.kind === "object"
+      ? tableColumns(
+          spec.item,
+          pathSegmentCount(section.key) + 1,
+          budget,
+          spec.override?.layout,
+        )
+      : undefined;
+  const table = columns === undefined ? undefined : tableShell(ui);
+  const cell = kitCell(ui, muiVersion);
   const itemLeaves =
     spec.item.kind === "object"
       ? spec.item.fields.filter(
@@ -4046,7 +4482,7 @@ const arraySectionFile = (
   const nestedByKey = new Map(nested.map((entry) => [entry.key, entry]));
   const nestedUsed = new Set<string>(nested.map((entry) => entry.stem));
   const nestedParts = nested.map((entry) =>
-    nestedArrayComponents(ui, naming, entry, nestedUsed, budget),
+    nestedArrayComponents(ui, naming, entry, nestedUsed, budget, muiVersion),
   );
 
   // An array whose row item is ITSELF an array (an array-of-arrays section):
@@ -4069,6 +4505,7 @@ const arraySectionFile = (
             commentBase: `${section.key}.$\{p0}`,
             itemTypeExpr: `NonNullable<NonNullable<${naming.valuesType}[${q(section.key)}]>[number]>[number]`,
             holes: ["p0"],
+            layout: spec.item.override?.layout,
           };
         })()
       : undefined;
@@ -4076,7 +4513,16 @@ const arraySectionFile = (
     ...nestedParts,
     ...(arrayItemEntry === undefined
       ? []
-      : [nestedArrayComponents(ui, naming, arrayItemEntry, nestedUsed, budget)]),
+      : [
+          nestedArrayComponents(
+            ui,
+            naming,
+            arrayItemEntry,
+            nestedUsed,
+            budget,
+            muiVersion,
+          ),
+        ]),
   ];
 
   const used = new Set<string>(["index", "onRemove", "field", "rows"]);
@@ -4138,6 +4584,7 @@ const arraySectionFile = (
                   used,
                   budget,
                   nestedUsed,
+                  muiVersion,
                 )
               : rowTuplePieces(
                   ui,
@@ -4185,6 +4632,7 @@ const arraySectionFile = (
           used,
           budget,
           nestedUsed,
+          muiVersion,
         )
       : spec.item.kind === "tuple"
         ? rowTuplePieces(
@@ -4267,7 +4715,10 @@ const arraySectionFile = (
     ...(containerRow?.children ?? []),
   ];
   const imports = mergeImports([
-    ...rowSpecs.flatMap((s) => leafImports(ui, s)),
+    ...rowSpecs.flatMap((s) =>
+      table === undefined ? leafImports(ui, s) : cellImports(ui, s),
+    ),
+    ...(table?.imports ?? []),
     ...shell.imports,
     // The outer wrapper is objectShell, so panel/collapsible chrome pulls
     // its own components in.
@@ -4279,8 +4730,68 @@ const arraySectionFile = (
   // file actually calls them (an unused import breaks a consumer's
   // noUnusedLocals), detected by scanning the emitted lines, so nested
   // rows' bindings count too.
+  // The table shapes: the cells in column order for the Row, or, for a
+  // "column" kit, one cell component per column in place of the Row.
+  const tableFields = columns ?? [];
+  const cellNames =
+    table?.cells === "column"
+      ? tableFields.map((field) => {
+          const base = `${sectionStem}${pascalCase(field.name)}Cell`;
+          const name = `${base}${identifierSuffix(base, nestedUsed)}`;
+          nestedUsed.add(name);
+          return name;
+        })
+      : undefined;
+  const tableColumnList = tableColumnsOf(tableFields, cellNames);
+  const rowOptionsProps = rowItemOptionsProps(spec.item);
+  const rowComponent: readonly string[] =
+    cellNames !== undefined
+      ? tableFields.flatMap((field, i) => [
+          ...(i === 0 ? [] : [""]),
+          ...cellComponentLines(
+            ui,
+            cell,
+            cellNames[i] ?? "",
+            [],
+            field,
+            `${naming.hook("Field")}(\`${templateEscape(section.key)}.\${index}.${templateEscape(field.name)}\`)`,
+          ),
+        ])
+      : [
+          `const ${rowName} = ({`,
+          "  index,",
+          "  onRemove,",
+          ...rowOptionsProps.map((name) => `  ${name},`),
+          `}: Readonly<{ ${["index: number", "onRemove: () => void", ...optionsPropsTypeFields(rowOptionsProps)].join("; ")} }>) => {`,
+          ...rowBindings,
+          // Container rows (union/tuple items and row fields) carry their
+          // number-props hoists inside their own bindings already.
+          ...numberPropsBindings(
+            ui,
+            spec.item.kind === "object"
+              ? rowVars.map(({ field, varName }) => ({
+                  varName,
+                  spec: field.spec,
+                }))
+              : scalarItem
+                ? [{ varName: "field", spec: spec.item }]
+                : [],
+          ),
+          "  return (",
+          ...(table === undefined
+            ? [...shell.rowOpen, ...rowBody, ...shell.rowClose("onRemove")]
+            : table.row(
+                rowVars.map(({ field, varName }) =>
+                  cellLines(cell, field, varName, 4),
+                ),
+                2,
+              )),
+          "  );",
+          "};",
+        ];
   const boundLines = [
     ...rowBindings,
+    ...rowComponent,
     ...everyPart.flatMap((part) => part.lines),
   ];
   const usesField = boundLines.some((line) =>
@@ -4296,7 +4807,6 @@ const arraySectionFile = (
   // Options props consumed anywhere in this section's rows (direct row
   // leaves and nested arrays alike): the section declares them, the Row
   // takes the full set, and each nested ref forwards its own subset.
-  const rowOptionsProps = rowItemOptionsProps(spec.item);
   const sectionPropsTypeFields = [
     "heading?: string",
     ...optionsPropsTypeFields(rowOptionsProps),
@@ -4335,31 +4845,7 @@ const arraySectionFile = (
         : `const ${emptyName}: NonNullable<${naming.valuesType}[${q(section.key)}]>[number] = ${emitInitialValues(spec.item, 0)};`,
       "",
       ...everyPart.flatMap((part) => [...part.lines, ""]),
-      `const ${rowName} = ({`,
-      "  index,",
-      "  onRemove,",
-      ...rowOptionsProps.map((name) => `  ${name},`),
-      `}: Readonly<{ ${["index: number", "onRemove: () => void", ...optionsPropsTypeFields(rowOptionsProps)].join("; ")} }>) => {`,
-      ...rowBindings,
-      // Container rows (union/tuple items and row fields) carry their
-      // number-props hoists inside their own bindings already.
-      ...numberPropsBindings(
-        ui,
-        spec.item.kind === "object"
-          ? rowVars.map(({ field, varName }) => ({
-              varName,
-              spec: field.spec,
-            }))
-          : scalarItem
-            ? [{ varName: "field", spec: spec.item }]
-            : [],
-      ),
-      "  return (",
-      ...shell.rowOpen,
-      ...rowBody,
-      ...shell.rowClose("onRemove"),
-      "  );",
-      "};",
+      ...rowComponent,
       "",
       `export const ${section.componentName} = ({`,
       `  heading = ${q(section.label)},`,
@@ -4377,6 +4863,30 @@ const arraySectionFile = (
         visual,
         (() => {
           const cells = containerCellTags(ui, visual.columns, muiVersion);
+          if (table !== undefined) {
+            // The table, the error line and the Add button share one
+            // spanning cell at cols > 1 (the rows are not grid items).
+            const level = cells === undefined ? 3 : 4;
+            const body =
+              table.cells === "column"
+                ? table.columnTable(tableColumnList, level, [])
+                : [
+                    ...table.open(tableColumnList, level),
+                    ...rowsMapLines(rowName, [], rowOptionsProps, level + 2),
+                    ...table.close(level),
+                  ];
+            const inner = [
+              ...body,
+              ...shell.listError,
+              ...shell.addButton(
+                `() => rows.push(${emptyName})`,
+                `Add ${singularize(section.label).toLowerCase()}`,
+              ),
+            ];
+            return cells === undefined
+              ? inner
+              : [`      ${cells.fullRow[0]}`, ...inner, `      ${cells.fullRow[1]}`];
+          }
           return cells !== undefined
             ? [
                 "      {rows.fields.map((row, index) => (",
@@ -4626,6 +5136,7 @@ const unionSectionFile = (
   naming: Naming,
   section: SectionPlan,
   budget: number,
+  muiVersion: MuiVersion = DEFAULT_MUI_VERSION,
 ): ModuleFile => {
   const spec = section.spec as Extract<FieldSpec, Readonly<{ kind: "union" }>>;
   const propsType = `${section.componentName}Props`;
@@ -4739,7 +5250,7 @@ const unionSectionFile = (
     stems,
   );
   const arrayParts = [...arrayRows.values()].map((made) =>
-    nestedArrayComponents(ui, naming, made.entry, stems, budget),
+    nestedArrayComponents(ui, naming, made.entry, stems, budget, muiVersion),
   );
 
   const discriminantSpec: FieldSpec = {
@@ -4990,7 +5501,14 @@ export const emitModuleForm = (
             ? arraySectionFile(ui, visual, naming, section, budget, options.muiVersion)
             : section.spec.kind === "tuple"
               ? tupleSectionFile(ui, visual, naming, section, options.muiVersion)
-              : unionSectionFile(ui, visual, naming, section, budget),
+              : unionSectionFile(
+                  ui,
+                  visual,
+                  naming,
+                  section,
+                  budget,
+                  options.muiVersion,
+                ),
       )
       .map(withDegradedPinImport),
     formFile(ui, naming, root, plan, scaffold, budget),

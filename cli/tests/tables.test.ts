@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
@@ -11,6 +13,10 @@ import {
 } from "../src/codegen";
 import { fromZod } from "../src/fromZod";
 import type { FieldSpec } from "../src/ir";
+import { type ModuleUi, emitModuleForm } from "../src/moduleLayout";
+import { nestedArraySchema } from "./fixtures/nestedArraySchema";
+import { rowContainersSchema } from "./fixtures/rowContainersSchema";
+import { fixturesDir, freshTmpDir, typecheckDiagnostics } from "./helpers";
 import { applyFieldOverrides, parseFieldOverrides } from "../src/overrides";
 import { tableColumns, tableRejection } from "../src/tables";
 
@@ -382,5 +388,153 @@ describe("usage walks under array rows (regressions found with the tables)", () 
     const code = emit(emitMuiForm, fromZod(deep));
     expect(code).toContain("  description?: string;");
     expect(code).toContain('description={"Why it matters"}');
+  });
+});
+
+describe("tables: the module layout", () => {
+  const files = (
+    ui: ModuleUi,
+    ir: FieldSpec = fromZod(schema),
+    columns: 1 | 2 | 3 = 1,
+  ): ReadonlyMap<string, string> =>
+    new Map(
+      emitModuleForm({
+        ir,
+        formName: "FlightForm",
+        ui,
+        schemaImport: { name: "schema", from: "./schema", kind: "named" },
+        visual: { sections: "flat", columns },
+      }).map((file) => [file.path, file.content]),
+    );
+  const section = (ui: ModuleUi, name: string, ir?: FieldSpec): string =>
+    files(ui, ir).get(`sections/${name}.tsx`) ?? "";
+
+  it("plain: the section's Row is a table row of cells, the section a table", () => {
+    const crew = section("plain", "CrewSection");
+    expect(crew).toContain("const CrewRow = ({");
+    expect(crew).toContain("const name = useFlightField(`crew.${index}.name`);");
+    expect(crew).toContain("    <tr>\n      <td>");
+    expect(crew).toContain(
+      '<input {...textInputProps(name)} aria-label={"Name"} aria-describedby=',
+    );
+    expect(crew).toContain('<button type="button" onClick={onRemove}>');
+    expect(crew).toContain('<th scope="col" title={"Years at the last birthday"}>{"Age"}</th>');
+    expect(crew).toContain("<tbody>\n          {rows.fields.map((row, index) => (");
+    expect(crew).toContain("onRemove={() => rows.remove(index)}");
+    expect(crew).toContain("onClick={() => rows.push(emptyCrewItem)}");
+    expect(crew).not.toContain('<legend>{"Crew #"}{index + 1}</legend>');
+    // Builders only: no label element, no leaf component.
+    expect(crew).toContain('import { textInputProps, numberInputProps, selectProps, checkboxProps, dateInputProps } from "formstand";');
+  });
+
+  it("plain: rows holding a list keep the cards, their flat nested list is a table", () => {
+    const legs = section("plain", "LegsSection");
+    expect(legs).toContain('<legend>{"Legs #"}{index + 1}</legend>');
+    expect(legs).toContain("const LegsStopsRow = ({");
+    expect(legs).toContain(
+      "const code = useFlightField(`legs.${p0}.stops.${index}.code`);",
+    );
+    expect(legs).toContain("    <tr>\n      <td>");
+    expect(legs).toContain("<LegsStopsRows p0={index} />");
+    const tags = section("plain", "TagsSection");
+    expect(tags).toContain('<legend>{"Tags #"}{index + 1}</legend>');
+  });
+
+  it("plain: layout cards opts the section back out", () => {
+    const crew = section("plain", "CrewSection", irWith({ crew: { layout: "cards" } }));
+    expect(crew).toContain('<legend>{"Crew #"}{index + 1}</legend>');
+    expect(crew).not.toContain("<tr>");
+  });
+
+  it("mui: dense cells in a Table, the table in one spanning cell at two columns", () => {
+    const crew = section("mui", "CrewSection");
+    // The table components ride the kit import; the boolean cell is a bare
+    // Switch, so FormControlLabel is not imported.
+    ["Table", "TableBody", "TableCell", "TableHead", "TableRow", "Switch"].forEach(
+      (name) => expect(crew).toContain(` ${name},`),
+    );
+    expect(crew).not.toContain("FormControlLabel");
+    expect(crew).toContain(
+      '<TextField fullWidth size="small" {...muiTextFieldProps(name)} slotProps={{ htmlInput: { "aria-label": "Name" } }} />',
+    );
+    expect(crew).toContain(
+      '<TextField fullWidth size="small" {...ageNumberProps} slotProps={{ ...ageNumberProps.slotProps, htmlInput: { "aria-label": "Age" } }} />',
+    );
+    expect(crew).toContain('<TableCell title={"Years at the last birthday"}>{"Age"}</TableCell>');
+    const wide = files("mui", fromZod(schema), 2).get("sections/CrewSection.tsx") ?? "";
+    expect(wide).toContain('<Grid size={12}>\n        <Table size="small">');
+  });
+
+  it("shadcn: the table primitives without the Label import", () => {
+    const crew = section("shadcn", "CrewSection");
+    expect(crew).toContain(
+      'import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";',
+    );
+    expect(crew).not.toContain("@/components/ui/label");
+    expect(crew).toContain('<Input id={name.path} aria-label={"Name"} {...shadcnTextInputProps(name)} />');
+    expect(crew).toContain('<TableHead title={"Years at the last birthday"}>{"Age"}</TableHead>');
+  });
+
+  it("chakra and mantine: their table compounds", () => {
+    const chakra = section("chakra", "CrewSection");
+    expect(chakra).toContain('<Table.Root size="sm">');
+    expect(chakra).toContain('<Switch.HiddenInput aria-label={"Lead"} />');
+    const mantine = section("mantine", "CrewSection");
+    expect(mantine).toContain("<Table.Thead>");
+    expect(mantine).toContain('<TextInput aria-label={"Name"} {...mantineTextInputProps(name)} />');
+  });
+
+  it("antd: a cell component per column in the section file, no Row", () => {
+    const crew = section("antd", "CrewSection");
+    expect(crew).toContain("const CrewNameCell = ({");
+    expect(crew).toContain("const field = useFlightField(`crew.${index}.age`);");
+    expect(crew).toContain("const fieldNumberProps = useAntdNumberInputProps(field);");
+    expect(crew).toContain("dataSource={rows.fields}");
+    expect(crew).toContain("<CrewNameCell index={index} />");
+    expect(crew).toContain("onClick={() => rows.remove(index)}");
+    expect(crew).not.toContain("const CrewRow = ({");
+    // The nested list under the legs cards: cell components threaded p0.
+    const legs = section("antd", "LegsSection");
+    expect(legs).toContain("const LegsStopsCodeCell = ({");
+    expect(legs).toContain("<LegsStopsCodeCell p0={p0} index={index} />");
+  });
+
+  it("a variant array's rows are a table on the variant hooks", () => {
+    const invoices = (
+      new Map(
+        emitModuleForm({
+          ir: fromZod(rowContainersSchema),
+          formName: "MatrixForm",
+          ui: "plain",
+          schemaImport: { name: "rowContainersSchema", from: "./schema", kind: "named" },
+        }).map((file) => [file.path, file.content]),
+      ).get("sections/InvoicesSection.tsx") ?? ""
+    );
+    expect(invoices).toContain("const InvoicesPayReceiptsRow = ({");
+    expect(invoices).toContain(
+      "const url = useMatrixVariantField(`invoices.${p0}.pay`, `receipts.${index}.url`);",
+    );
+    expect(invoices).toContain("    <tr>\n      <td>");
+    expect(invoices).toContain("const rows = useMatrixVariantFieldArray(`invoices.${p0}.pay`, `receipts`);");
+  });
+
+  it("the plain module output with tables typechecks against the library", () => {
+    const dir = freshTmpDir("tables-module-plain");
+    const rel = path
+      .relative(dir, path.join(fixturesDir, "nestedArraySchema"))
+      .split(path.sep)
+      .join("/");
+    const written = emitModuleForm({
+      ir: fromZod(nestedArraySchema),
+      formName: "NestedForm",
+      ui: "plain",
+      schemaImport: { name: "nestedArraySchema", from: rel, kind: "named" },
+    }).map((file) => {
+      const abs = path.join(dir, file.path);
+      fs.mkdirSync(path.dirname(abs), { recursive: true });
+      fs.writeFileSync(abs, file.content, "utf8");
+      return abs;
+    });
+    expect(typecheckDiagnostics(written, {}, { noUnusedLocals: true })).toEqual([]);
   });
 });

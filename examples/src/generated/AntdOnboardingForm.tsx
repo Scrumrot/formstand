@@ -9,6 +9,7 @@ import {
   Row,
   Input,
   Select,
+  Table,
   Typography,
   type CheckboxChangeEvent,
 } from "antd";
@@ -23,6 +24,7 @@ import {
   type UseFieldReturn,
 } from "formstand";
 import { z } from "zod";
+import type { Form } from "formstand";
 import { onboardingSchema } from "../forms/OnboardingForm/schema";
 
 type FormValues = z.input<typeof onboardingSchema>;
@@ -254,6 +256,51 @@ const BoundCheckboxField = ({ form, path, label }: BoundFieldProps) => {
   return <Checkbox {...antdCheckboxProps(field)}>{label}</Checkbox>;
 };
 
+const EmergencyContactsNameCell = ({
+  form,
+  index,
+}: Readonly<{ form: Form<typeof onboardingSchema>; index: number }>) => {
+  const field = useField(form, `emergencyContacts.${index}.name`);
+  return (
+    <>
+      <Flex vertical gap="small">
+        <Input id={field.path} aria-label={"Name"} {...antdTextInputProps(field)} />
+        <FieldError field={field} />
+      </Flex>
+    </>
+  );
+};
+
+const EmergencyContactsRelationshipCell = ({
+  form,
+  index,
+}: Readonly<{ form: Form<typeof onboardingSchema>; index: number }>) => {
+  const field = useField(form, `emergencyContacts.${index}.relationship`);
+  return (
+    <>
+      <Flex vertical gap="small">
+        <Input id={field.path} aria-label={"Relationship"} {...antdTextInputProps(field)} />
+        <FieldError field={field} />
+      </Flex>
+    </>
+  );
+};
+
+const EmergencyContactsPhoneCell = ({
+  form,
+  index,
+}: Readonly<{ form: Form<typeof onboardingSchema>; index: number }>) => {
+  const field = useField(form, `emergencyContacts.${index}.phone`);
+  return (
+    <>
+      <Flex vertical gap="small">
+        <Input id={field.path} aria-label={"Phone"} {...antdTextInputProps(field)} />
+        <FieldError field={field} />
+      </Flex>
+    </>
+  );
+};
+
 export const AntdOnboardingForm = () => {
   const form = useForm(onboardingSchema, { initialValues, mode: "onBlur" });
   const submitting = useIsSubmitting(form);
@@ -399,23 +446,44 @@ export const AntdOnboardingForm = () => {
             <Col span={24}>
               <Typography.Title level={5}>{"Emergency Contacts"}</Typography.Title>
             </Col>
-            {emergencyContactsArray.fields.map((row, index) => (
-              <Col key={row.id} xs={24} sm={12}>
-                <Flex
-                  vertical
-                  gap="middle"
-                  style={{ border: "1px solid #d9d9d9", borderRadius: 8, padding: 16 }}
-                >
-                  <BoundTextField form={form} path={`emergencyContacts.${index}.name`} label={"Name"} />
-                  <BoundTextField form={form} path={`emergencyContacts.${index}.relationship`} label={"Relationship"} />
-                  <BoundTextField form={form} path={`emergencyContacts.${index}.phone`} label={"Phone"} />
-                  <Button htmlType="button" size="small" onClick={() => emergencyContactsArray.remove(index)}>
-                    Remove
-                  </Button>
-                </Flex>
-              </Col>
-            ))}
             <Col span={24}>
+              <Table
+                size="small"
+                pagination={false}
+                rowKey="id"
+                dataSource={emergencyContactsArray.fields}
+                columns={[
+                  {
+                    key: "name",
+                    title: "Name",
+                    render: (_value, _row, index) => (
+                      <EmergencyContactsNameCell form={form} index={index} />
+                    ),
+                  },
+                  {
+                    key: "relationship",
+                    title: "Relationship",
+                    render: (_value, _row, index) => (
+                      <EmergencyContactsRelationshipCell form={form} index={index} />
+                    ),
+                  },
+                  {
+                    key: "phone",
+                    title: "Phone",
+                    render: (_value, _row, index) => (
+                      <EmergencyContactsPhoneCell form={form} index={index} />
+                    ),
+                  },
+                  {
+                    key: "remove",
+                    render: (_value, _row, index) => (
+                      <Button htmlType="button" size="small" onClick={() => emergencyContactsArray.remove(index)}>
+                        Remove
+                      </Button>
+                    ),
+                  },
+                ]}
+              />
               {emergencyContactsArray.error ? (
                 <Typography.Text role="alert" type="danger">
                   {emergencyContactsArray.error[0]}

@@ -2008,6 +2008,17 @@ export type TableColumn = Readonly<{
   component?: string;
 }>;
 
+// A table cell renderer: one row field's control from its bound field
+// variable (see Backend.cell). Exported by name per kit for the module
+// layout, whose Row components render the same cells from the same
+// adapter builders.
+export type CellRenderer = (
+  spec: FieldSpec,
+  fieldVar: string,
+  label: string,
+  level: number,
+) => readonly string[];
+
 // How a table chrome references the extracted components: `row` is the
 // Row component's name ("row" kits), `attrs` the props every reference
 // passes through (`form={form}` plus the enclosing index holes); the row
@@ -2104,12 +2115,7 @@ type Backend = Readonly<{
   // no visible label: the column header carries it, and the control names
   // itself through aria-label. The error line stays with the cell. A
   // description has no cell slot; the header carries it as a title.
-  cell: (
-    spec: FieldSpec,
-    fieldVar: string,
-    label: string,
-    level: number,
-  ) => readonly string[];
+  cell: CellRenderer;
   // How the kit's table reaches its cells: "row" maps each row to ONE Row
   // component rendering the row element with every cell inside it;
   // "column" is a data-driven table (antd) that renders the rows itself,
@@ -3140,7 +3146,7 @@ const emitVariantRowComponent = (
 // the column labels (an empty last header over the Remove column; a
 // description rides the cell's title attribute) and the body mapping the
 // list hook's rows through the Row component.
-const tableHeaderCells = (
+export const tableHeaderCells = (
   columns: readonly TableColumn[],
   level: number,
   // The header cell's open-tag body (`th scope="col"`) and its tag name.
@@ -3173,7 +3179,7 @@ const tableRowsMap = (
 
 // A "row" kit's tableRow from its row and cell tags plus its Remove button:
 // the row element, one cell element per rendered cell, the Remove cell.
-const tableRowShell =
+export const tableRowShell =
   (
     row: readonly [string, string],
     cell: readonly [string, string],
@@ -3985,7 +3991,7 @@ const plainVariantLeaf = (
 // hoisted field variable, named by aria-label (the column header is the
 // visible label), the error line under it. No zf-field wrapper, the cell
 // element is the field's box.
-const plainCell = (
+export const plainCell = (
   spec: FieldSpec,
   fieldVar: string,
   label: string,
@@ -4977,7 +4983,7 @@ const muiVariantLeaf = (
 // it). The number binding's own slotProps (inputMode) must survive, so its
 // cell spreads them back in; the date binding's inputLabel shrink has no
 // label to act on here, so losing it is harmless.
-const muiCell = (version: MuiVersion): Backend["cell"] => {
+export const muiCell = (version: MuiVersion): CellRenderer => {
   const { textFieldSlotProps } = muiVersionConfig(version);
   const inputAria = (label: string, merge?: string): string =>
     textFieldSlotProps
@@ -5101,7 +5107,7 @@ const shadcnVariantLeaf = (
 // A table cell for shadcn: the control a variant leaf renders, without its
 // Label (the column header carries it; aria-label names the control) and
 // with the error line beneath. Two siblings inside the cell element.
-const shadcnCell = (
+export const shadcnCell = (
   spec: FieldSpec,
   fieldVar: string,
   label: string,
@@ -6676,7 +6682,7 @@ const chakraVariantLeaf = (
 // A table cell for chakra: the control a variant leaf renders, without its
 // Field.Label (the column header carries it; aria-label names the control)
 // and with Field.ErrorText beneath.
-const chakraCell = (
+export const chakraCell = (
   spec: FieldSpec,
   fieldVar: string,
   label: string,
@@ -7263,7 +7269,7 @@ const mantineVariantLeaf = (
 // A table cell for mantine: the control a variant leaf renders, with
 // aria-label in place of the label prop (the column header carries it);
 // the error rides the control's own slot through the adapter.
-const mantineCell = (
+export const mantineCell = (
   spec: FieldSpec,
   fieldVar: string,
   label: string,
@@ -7987,7 +7993,7 @@ const antdVariantLeaf = (
 // label element (the column header carries it; aria-label names the
 // control) and with the FieldError line beneath. The booleans' Checkbox has
 // no label text, so it stands alone.
-const antdCell = (
+export const antdCell = (
   spec: FieldSpec,
   fieldVar: string,
   label: string,
@@ -8042,6 +8048,27 @@ const antdCell = (
       return [
         `${ind(level)}{/* unreachable: containers never fill a table cell */}`,
       ];
+  }
+};
+
+// The cell renderer by UI name, for the module layout.
+export const kitCell = (
+  ui: KitUi | "plain",
+  muiVersion: MuiVersion,
+): CellRenderer => {
+  switch (ui) {
+    case "plain":
+      return plainCell;
+    case "mui":
+      return muiCell(muiVersion);
+    case "shadcn":
+      return shadcnCell;
+    case "chakra":
+      return chakraCell;
+    case "mantine":
+      return mantineCell;
+    case "antd":
+      return antdCell;
   }
 };
 

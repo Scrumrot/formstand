@@ -10,6 +10,7 @@ import {
   NativeSelect,
   Stack,
   Switch,
+  Table,
   Text,
 } from "@chakra-ui/react";
 import {
@@ -23,6 +24,7 @@ import {
   type UseFieldReturn,
 } from "formstand";
 import { z } from "zod";
+import type { Form } from "formstand";
 import { onboardingSchema } from "../forms/OnboardingForm/schema";
 
 type FormValues = z.input<typeof onboardingSchema>;
@@ -249,6 +251,43 @@ const BoundSwitchField = ({ form, path, label }: BoundFieldProps) => {
   );
 };
 
+const EmergencyContactsRow = ({
+  form,
+  index,
+  onRemove,
+}: Readonly<{ form: Form<typeof onboardingSchema>; index: number; onRemove: () => void }>) => {
+  const name = useField(form, `emergencyContacts.${index}.name`);
+  const relationship = useField(form, `emergencyContacts.${index}.relationship`);
+  const phone = useField(form, `emergencyContacts.${index}.phone`);
+  return (
+    <Table.Row>
+      <Table.Cell>
+        <Field.Root invalid={fieldError(name) !== undefined}>
+          <Input aria-label={"Name"} {...chakraTextInputProps(name)} />
+          <Field.ErrorText>{fieldError(name)}</Field.ErrorText>
+        </Field.Root>
+      </Table.Cell>
+      <Table.Cell>
+        <Field.Root invalid={fieldError(relationship) !== undefined}>
+          <Input aria-label={"Relationship"} {...chakraTextInputProps(relationship)} />
+          <Field.ErrorText>{fieldError(relationship)}</Field.ErrorText>
+        </Field.Root>
+      </Table.Cell>
+      <Table.Cell>
+        <Field.Root invalid={fieldError(phone) !== undefined}>
+          <Input aria-label={"Phone"} {...chakraTextInputProps(phone)} />
+          <Field.ErrorText>{fieldError(phone)}</Field.ErrorText>
+        </Field.Root>
+      </Table.Cell>
+      <Table.Cell>
+        <Button type="button" variant="outline" size="sm" onClick={onRemove}>
+          Remove
+        </Button>
+      </Table.Cell>
+    </Table.Row>
+  );
+};
+
 export const ChakraOnboardingForm = () => {
   const form = useForm(onboardingSchema, { initialValues, mode: "onBlur" });
   const submitting = useIsSubmitting(form);
@@ -339,22 +378,26 @@ export const ChakraOnboardingForm = () => {
         <Card.Root gridColumn="1 / -1">
           <Card.Body display="grid" gridTemplateColumns={{ base: "1fr", md: "repeat(2, minmax(0, 1fr))" }} gap="4">
             <Heading size="sm" gridColumn="1 / -1">{"Emergency Contacts"}</Heading>
-            {emergencyContactsArray.fields.map((row, index) => (
-              <Stack
-                key={row.id}
-                gap="4"
-                p="4"
-                borderWidth="1px"
-                borderRadius="md"
-              >
-                <BoundTextField form={form} path={`emergencyContacts.${index}.name`} label={"Name"} />
-                <BoundTextField form={form} path={`emergencyContacts.${index}.relationship`} label={"Relationship"} />
-                <BoundTextField form={form} path={`emergencyContacts.${index}.phone`} label={"Phone"} />
-                <Button type="button" variant="outline" size="sm" onClick={() => emergencyContactsArray.remove(index)}>
-                  Remove
-                </Button>
-              </Stack>
-            ))}
+            <Table.Root size="sm">
+              <Table.Header>
+                <Table.Row>
+                  <Table.ColumnHeader>{"Name"}</Table.ColumnHeader>
+                  <Table.ColumnHeader>{"Relationship"}</Table.ColumnHeader>
+                  <Table.ColumnHeader>{"Phone"}</Table.ColumnHeader>
+                  <Table.ColumnHeader />
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
+                {emergencyContactsArray.fields.map((row, index) => (
+                  <EmergencyContactsRow
+                    key={row.id}
+                    form={form}
+                    index={index}
+                    onRemove={() => emergencyContactsArray.remove(index)}
+                  />
+                ))}
+              </Table.Body>
+            </Table.Root>
             {emergencyContactsArray.error ? (
               <Text role="alert" color="red.500">{emergencyContactsArray.error[0]}</Text>
             ) : null}

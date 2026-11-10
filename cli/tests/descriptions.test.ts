@@ -372,10 +372,12 @@ describe("module-layout description emission", () => {
     expect(joined).toContain(
       'import { useMuiNumberFieldProps, fieldError } from "../adapter";',
     );
-    // Array-row leaf inside the section file gets the same slot.
+    // The legs rows are flat, so they render as a table: a cell has no
+    // helper slot, and the description rides the column header's title.
     expect(joined).toContain(
-      'helperText={fieldError(distance) ?? "nautical miles"}',
+      '<TableCell title={"nautical miles"}>{"Distance"}</TableCell>',
     );
+    expect(joined).not.toContain('helperText={fieldError(distance)');
     expect(typecheckDiagnostics(files, muiStubPaths)).toEqual([]);
   });
 

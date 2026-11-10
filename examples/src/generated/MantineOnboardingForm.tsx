@@ -8,6 +8,7 @@ import {
   Grid,
   Stack,
   Switch,
+  Table,
   Text,
   TextInput,
   Title,
@@ -23,6 +24,7 @@ import {
   type UseFieldReturn,
 } from "formstand";
 import { z } from "zod";
+import type { Form } from "formstand";
 import { onboardingSchema } from "../forms/OnboardingForm/schema";
 
 type FormValues = z.input<typeof onboardingSchema>;
@@ -222,6 +224,34 @@ const BoundSwitchField = ({ form, path, label }: BoundFieldProps) => {
   return <Switch label={label} {...mantineSwitchProps(field)} />;
 };
 
+const EmergencyContactsRow = ({
+  form,
+  index,
+  onRemove,
+}: Readonly<{ form: Form<typeof onboardingSchema>; index: number; onRemove: () => void }>) => {
+  const name = useField(form, `emergencyContacts.${index}.name`);
+  const relationship = useField(form, `emergencyContacts.${index}.relationship`);
+  const phone = useField(form, `emergencyContacts.${index}.phone`);
+  return (
+    <Table.Tr>
+      <Table.Td>
+        <TextInput aria-label={"Name"} {...mantineTextInputProps(name)} />
+      </Table.Td>
+      <Table.Td>
+        <TextInput aria-label={"Relationship"} {...mantineTextInputProps(relationship)} />
+      </Table.Td>
+      <Table.Td>
+        <TextInput aria-label={"Phone"} {...mantineTextInputProps(phone)} />
+      </Table.Td>
+      <Table.Td>
+        <Button type="button" variant="outline" size="sm" onClick={onRemove}>
+          Remove
+        </Button>
+      </Table.Td>
+    </Table.Tr>
+  );
+};
+
 export const MantineOnboardingForm = () => {
   const form = useForm(onboardingSchema, { initialValues, mode: "onBlur" });
   const submitting = useIsSubmitting(form);
@@ -368,24 +398,27 @@ export const MantineOnboardingForm = () => {
             <Grid.Col span={12}>
               <Title order={4}>{"Emergency Contacts"}</Title>
             </Grid.Col>
-            {emergencyContactsArray.fields.map((row, index) => (
-              <Grid.Col key={row.id} span={{ base: 12, sm: 6 }}>
-                <Stack
-                  gap="md"
-                  p="md"
-                  bd="1px solid gray.3"
-                  bdrs="md"
-                >
-                  <BoundTextField form={form} path={`emergencyContacts.${index}.name`} label={"Name"} />
-                  <BoundTextField form={form} path={`emergencyContacts.${index}.relationship`} label={"Relationship"} />
-                  <BoundTextField form={form} path={`emergencyContacts.${index}.phone`} label={"Phone"} />
-                  <Button type="button" variant="outline" size="sm" onClick={() => emergencyContactsArray.remove(index)}>
-                    Remove
-                  </Button>
-                </Stack>
-              </Grid.Col>
-            ))}
             <Grid.Col span={12}>
+              <Table>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>{"Name"}</Table.Th>
+                    <Table.Th>{"Relationship"}</Table.Th>
+                    <Table.Th>{"Phone"}</Table.Th>
+                    <Table.Th />
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {emergencyContactsArray.fields.map((row, index) => (
+                    <EmergencyContactsRow
+                      key={row.id}
+                      form={form}
+                      index={index}
+                      onRemove={() => emergencyContactsArray.remove(index)}
+                    />
+                  ))}
+                </Table.Tbody>
+              </Table>
               {emergencyContactsArray.error ? (
                 <Text role="alert" c="red">{emergencyContactsArray.error[0]}</Text>
               ) : null}
