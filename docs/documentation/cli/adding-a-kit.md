@@ -21,7 +21,11 @@ The `Backend` type (search `type Backend = Readonly<{` in codegen.ts) has these 
 | `unionCellShell` | vertical rhythm for a union riding a grid cell, for kits whose leaves do not carry their own wrapper | undefined (antd leaves are each a `Flex`) |
 | `spanCell` | the cell for a config `fields` span (`span: "full"` or a column count) | an antd `Col` with the span's `sm` value, through `spanCellFor("antd", ...)` |
 | `objectSection` | the wrapper around a nested object's fields, per `--sections` style | `Typography.Title` plus `Row`/`Col` (panel), `Collapse` with the items API (collapsible), a vertical `Flex` (flat) |
-| `arraySection` | the wrapper around a field array's mapped rows and its add button | the same chrome around rows with `Button` controls |
+| `arraySection` | the wrapper around a field array's mapped rows and its add button, the card shape for rows a table cannot host | the same chrome around rows with `Button` controls |
+| `cell` | one row field's control inside a table cell, from an already-bound field variable, with no visible label (the column header carries it) and the control named through `aria-label` | the `variantLeaf` markup minus its `<label>`, `aria-label` on the `Input`/`Select`/`Checkbox` |
+| `tableCells` | whether the kit's table maps rows through one Row component (`"row"`) or renders the rows itself from a columns array over one cell component per column (`"column"`) | `"column"`: antd's `Table` is data-driven |
+| `tableRow` | `"row"` kits only: the row element holding the rendered cells plus the Remove cell wired to the Row component's `onRemove` prop | unused (an empty list) |
+| `table` | the table chrome around an array of flat object rows: the section open, the header row from the column labels, the body over the Row component or the columns array, the array-level error, the Add button, the section close | `<Table size="small" pagination={false} rowKey="id" dataSource={rows} columns={[...]} />`, each column's `render` mounting its cell component with the row index |
 | `bodyLevel` | the indentation level of the top-level field list | 4 |
 | `formShell` | the form element in pieces (`open`, `afterSubmit`, `submitButton`, `close`) so the submit and `--live` shapes compose from one source | a `<form>` whose submit control is an antd `Button htmlType="submit"` |
 

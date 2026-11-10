@@ -34,7 +34,7 @@ Each `leaf` renderer receives a context whose fields are **JS-expression strings
 | `options` | enum only: a `string[]` expression, so `data={${options}}` |
 | `description` | the field's captured `.describe()` or JSDoc text as a `string \| undefined` expression, and `""` when the schema carries none. Gate your markup on it |
 
-Unlisted kinds fall back to the plain output, so a template can override only the kinds its kit actually changes.
+Unlisted kinds fall back to the plain output, so a template can override only the kinds its kit actually changes. Table cells are plain output too: an array of flat object rows renders as a table whose cells use the plain controls named through `aria-label`, since a template describes a labeled field and a cell has no label of its own. Opt such an array back to cards with `layout: "cards"` in the [config](./config#per-array-row-layout) if the template's controls matter more there.
 
 ## Rules and limits
 
