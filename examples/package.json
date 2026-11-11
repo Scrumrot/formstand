@@ -9,36 +9,36 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@chakra-ui/react": "^3.37.0",
+    "@chakra-ui/react": "^3.38.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
-    "@mantine/core": "^9.7.2",
+    "@mantine/core": "^9.7.5",
     "@mantine/hooks": "^9.7.2",
     "@mui/icons-material": "^9.5.0",
     "@mui/material": "^9.5.0",
-    "@mui/x-tree-view": "^9.15.0",
-    "antd": "^6.6.5",
+    "@mui/x-tree-view": "^9.17.0",
+    "antd": "^6.7.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "lucide-react": "^1.55.0",
+    "lucide-react": "^1.70.0",
     "prismjs": "^1.30.0",
     "radix-ui": "^1.7.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "tailwind-merge": "^3.7.0",
     "zod": "^4.6.6",
-    "zustand": "^5.0.15"
+    "zustand": "^5.1.0"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.2",
-    "@types/node": "^26.6.5",
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/node": "^26.6.6",
     "@types/prismjs": "^1.26.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^6.1.2",
-    "playwright": "^1.64.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "playwright": "^1.65.0",
     "tailwindcss": "^4.3.2",
     "typescript": "^7.0.2",
-    "vite": "^8.3.4"
+    "vite": "^8.3.6"
   }
 }
