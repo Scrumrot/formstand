@@ -141,7 +141,12 @@ export const useFormSteps = <
   const goTo = useCallback(
     async (target: number): Promise<number> => {
       const count = latest.current.length;
-      const clamped = Math.max(0, Math.min(target, count - 1));
+      // A NaN target (Number("") from an empty <select> option) passed
+      // through the clamp as NaN, and the forward walk's `from >= NaN`
+      // never held, so it recursed without bound. A target that is not a
+      // finite number is a no-op that resolves where the form is.
+      if (!Number.isFinite(target)) return currentStep.current;
+      const clamped = Math.max(0, Math.min(Math.trunc(target), count - 1));
       if (clamped <= step) {
         setStep(clamped);
         return clamped;

@@ -58,6 +58,28 @@
 - `usePersistForm` ignored a change of `options.storage` and kept writing
   to the first storage it saw; it resubscribes on it, as it does for
   `key`.
+- `DateField` and `dateInputProps` threw `value.getTime is not a
+  function` at render after a persisted draft loaded a `Date` back as
+  the string JSON made of it (persist does not revive Dates, by design),
+  and the rewritten draft made the crash stick across visits. The input
+  now shows the string's calendar date; the schema still rejects it at
+  validation.
+- `useFormSteps.goTo(NaN)` (a `Number("")` from an empty option)
+  recursed without bound and froze the tab. A target that is not a
+  finite number now resolves the current index.
+- `parseNumberText`, behind `NumberField`, `numberInputProps` and
+  `useNumberInput`, accepted every JavaScript number literal, so typing
+  `0x10` stored 16. It reads plain decimal notation only.
+- `useMaskedInput` cleared a required string field to `undefined` when
+  its key was omitted from the initial values, because the initial
+  value's type was the only signal. The current value counts too, so the
+  field clears to `""` and reports your message instead of zod's.
+- `useField`'s `debounceMs` also delayed the blur validation. Blur now
+  drops a pending timer and validates at once.
+- `useFields` returned a fresh object, `fields` array and `onBlur` on
+  every render while its sibling hooks memoize; it keeps its identity
+  until one of its fields changes. A paths tuple that changes length now
+  throws the hook's own message, ahead of React's hooks-count error.
 
 ## 0.25.0 — 2026-11-12
 

@@ -77,12 +77,20 @@ export type ParsedNumberText =
   // "1.", "1e") or Infinity.
   | Readonly<{ kind: "invalid" }>;
 
+// Plain decimal notation: an optional sign, digits with an optional
+// fraction (a bare ".5" included), an optional exponent. Number() alone
+// also reads hex, octal and binary literals ("0x10" stored 16) and the
+// Infinity spellings, none of which a person means in a number field.
+const DECIMAL_TEXT = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
+
 // The single rule for turning user-typed text into a numeric field value:
-// whitespace counts as empty (Number("  ") is 0) and non-finite results are
-// rejected. Shared with NumberField.
+// whitespace counts as empty (Number("  ") is 0), only decimal notation
+// parses, and non-finite results are rejected. Shared with NumberField.
 export const parseNumberText = (text: string): ParsedNumberText => {
-  if (text.trim() === "") return { kind: "empty" };
-  const parsed = Number(text);
+  const trimmed = text.trim();
+  if (trimmed === "") return { kind: "empty" };
+  if (!DECIMAL_TEXT.test(trimmed)) return { kind: "invalid" };
+  const parsed = Number(trimmed);
   return Number.isFinite(parsed)
     ? { kind: "number", value: parsed }
     : { kind: "invalid" };
@@ -133,12 +141,20 @@ export const numberInputProps = <T extends number | null | undefined>(
 // as "yyyy-MM-dd" (what <input type="date"> speaks). Local parts, NOT
 // toISOString(): a date picked as June 1 must not render as May 31 for
 // users west of UTC. Invalid Dates count as empty. Shared with DateField.
+//
+// A value that is not a Date at runtime is read as one for display: a
+// persisted draft hands a Date field back as the ISO string JSON made of
+// it (persistForm documents that it does not revive Dates), and the
+// `.getTime()` on that string threw at render, on every visit, since the
+// crashing draft was the one being rewritten. The schema still rejects the
+// string at validation, which is the honest state to leave it in.
 export const dateToInputText = (value: Date | null | undefined): string => {
-  if (value === undefined || value === null || Number.isNaN(value.getTime())) {
-    return "";
-  }
+  if (value === undefined || value === null) return "";
+  const date =
+    value instanceof Date ? value : new Date(value as unknown as string);
+  if (Number.isNaN(date.getTime())) return "";
   const pad = (part: number): string => String(part).padStart(2, "0");
-  return `${String(value.getFullYear()).padStart(4, "0")}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+  return `${String(date.getFullYear()).padStart(4, "0")}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 };
 
 export type ParsedDateText =

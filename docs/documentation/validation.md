@@ -92,7 +92,7 @@ For async checks that hit the network, debounce the validation `useField` trigge
 const username = useField(form, "username", { debounceMs: 300 });
 ```
 
-With `debounceMs` set, each triggering interaction resets a timer; when it fires, the field runs `validateFieldAsync`. While a check is in flight, `username.isValidating` is `true`, which is what a "checking..." indicator reads:
+With `debounceMs` set, each change resets a timer; when it fires, the field runs `validateFieldAsync`. Blur is not debounced: leaving the field drops a pending timer and validates at once, so the option throttles keystrokes without delaying the verdict the user is waiting for. While a check is in flight, `username.isValidating` is `true`, which is what a "checking..." indicator reads:
 
 ```tsx
 <span>

@@ -31,7 +31,7 @@ The rules the built-in bindings follow are exported alongside them, so adapters 
 | Helper | Signature | Notes |
 | --- | --- | --- |
 | `numberToInputText` | `(value: number \| null \| undefined) => string` | canonical display text for a numeric field value (`""` for empty, `null`, or `NaN`) |
-| `parseNumberText` | `(text: string) => ParsedNumberText` | classifies user-typed text: `{ kind: "number", value }` for a finite number, `{ kind: "empty" }` for whitespace-only, `{ kind: "invalid" }` for partial entries (`-`, `1.`, `1e`) and `Infinity` |
+| `parseNumberText` | `(text: string) => ParsedNumberText` | classifies user-typed text: `{ kind: "number", value }` for a finite number, `{ kind: "empty" }` for whitespace-only, `{ kind: "invalid" }` for partial entries (`-`, `1.`, `1e`), `Infinity`, and anything outside plain decimal notation (`0x10` is not 16 here) |
 | `emptyValueForSchema` | `(schema: z.ZodType) => null \| undefined` | the empty representation a field's schema accepts: `null` when nullable and not optional, `undefined` otherwise. This is the schema-introspection rule behind [`useField().emptyValue`](./hooks#usefieldreturn-tvalue) |
 | `isClearableSchema` | `(schema: z.ZodType) => boolean` | whether the schema accepts its own `emptyValue` as input (optional, nullable, or defaulted); the rule behind [`useField().clearable`](./hooks#usefieldreturn-tvalue) |
 | `dateToInputText` | `(value: Date \| null \| undefined) => string` | canonical `"yyyy-MM-dd"` text for a date field value (`""` for empty, `null`, or an invalid `Date`), read from the **local** calendar parts |

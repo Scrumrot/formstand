@@ -164,7 +164,7 @@ const [latitude, longitude] = location.fields; // full, typed field bindings
 
 Each element of `fields` is a complete `useField` result, position-typed from the tuple, so it spreads into the same prop builders and components a solo binding would. The wrapper adds the combined view: `error` merges every path's messages in path order and dedupes them, so a cross-field `superRefine` that stamps both paths reads once; `firstError` is its display shorthand; `touched`, `dirty`, and `isValidating` answer "any of them"; and `onBlur` blurs every path under the form's validation mode, so the composite behaves like one control losing focus.
 
-The paths tuple is part of the hook contract: it expands to exactly that many `useField` calls, so its length and order must be stable across renders. Pass a literal or a module-level constant: a tuple that changes length throws React's own hooks-count error at the offending render.
+The paths tuple is part of the hook contract: it expands to exactly that many `useField` calls, so its length and order must be stable across renders. Pass a literal or a module-level constant: a tuple that changes length throws at the offending render, with a message that names the hook.
 
 ## `NumberField` and partial entries
 

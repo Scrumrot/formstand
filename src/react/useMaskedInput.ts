@@ -90,13 +90,18 @@ export const useMaskedInput = <TValue>(
           // message (z.string().min(1, "required")) instead of zod's
           // "expected string, received undefined". Non-string fields
           // (a masked number or date) have no honest blank besides
-          // emptyValue, exactly like numberInputProps, so they keep it;
-          // the initial value's runtime type is the signal, since TValue
-          // is erased. The cast is the emptyValue contract, not a guess.
+          // emptyValue, exactly like numberInputProps, so they keep it.
+          // TValue is erased, so the runtime values are the signal: the
+          // initial value, OR the current one, because a required string
+          // whose key the initial values omitted (filled in later) read
+          // as a non-string field on the initial value alone and cleared
+          // to undefined where the schema wanted "". The cast is the
+          // emptyValue contract, not a guess.
+          const isStringField =
+            typeof field.initialValue === "string" ||
+            typeof field.value === "string";
           const empty = (
-            field.clearable || typeof field.initialValue !== "string"
-              ? field.emptyValue
-              : ""
+            field.clearable || !isStringField ? field.emptyValue : ""
           ) as TValue;
           setEdit({ raw: text, pushed: empty });
           field.setValue(empty);

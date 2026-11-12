@@ -94,11 +94,11 @@ describe("useFields stable-arity contract", () => {
     vi.restoreAllMocks();
   });
 
-  it("a tuple that changes length throws React's own hooks-count error", () => {
-    // The contract is enforced by React itself, at the exact render that
-    // broke it — the hook needs (and has) no guard of its own. Pinned so
-    // a future refactor away from per-path hook calls updates this
-    // deliberately.
+  it("a tuple that changes length throws the hook's own arity error", () => {
+    // Enforced at the exact render that broke it, ahead of React's own
+    // hooks-count error (whose slot shift would otherwise surface as a
+    // crash inside the composite's memo). Pinned so a future refactor
+    // away from per-path hook calls updates this deliberately.
     const { rerender } = renderHook(
       ({ paths }: Readonly<{ paths: readonly string[] }>) => {
         const form = useForm(schema, {
@@ -110,6 +110,6 @@ describe("useFields stable-arity contract", () => {
     );
     expect(() => {
       rerender({ paths: ["latitude"] as readonly string[] });
-    }).toThrowError(/Rendered fewer hooks than expected/);
+    }).toThrowError(/useFields: the paths tuple changed length \(2 to 1\)/);
   });
 });

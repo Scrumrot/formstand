@@ -237,6 +237,17 @@ export function useField<TValue = unknown>(
     };
   }, [form, path, debounceMs]);
 
+  // The core routes async schemas itself: validateField returns
+  // { kind: "pending" } having already started the async pass, which
+  // commits its errors and isValidating flags to the store — so the
+  // result needs no handling here beyond observing a rejection.
+  const validateNow = useCallback(() => {
+    const result = form.validateField(path);
+    if (result.kind === "pending") {
+      void result.promise.catch(reportBackgroundFailure);
+    }
+  }, [form, path]);
+
   const triggerValidate = useCallback(() => {
     if (debounceMs !== undefined && debounceMs > 0) {
       const debouncer = debouncerRef.current ?? createDebouncer(debounceMs);
@@ -273,15 +284,8 @@ export function useField<TValue = unknown>(
       });
       return;
     }
-    // The core routes async schemas itself: validateField returns
-    // { kind: "pending" } having already started the async pass, which
-    // commits its errors and isValidating flags to the store — so the
-    // result needs no handling here beyond observing a rejection.
-    const result = form.validateField(path);
-    if (result.kind === "pending") {
-      void result.promise.catch(reportBackgroundFailure);
-    }
-  }, [form, path, debounceMs]);
+    validateNow();
+  }, [form, path, debounceMs, validateNow]);
 
   const setValue = useCallback(
     (value: TValue) => {
@@ -347,9 +351,14 @@ export function useField<TValue = unknown>(
         true,
       )
     ) {
-      triggerValidate();
+      // Leaving the field is the moment to judge it: a change debounce
+      // still pending is dropped in favour of validating now, so
+      // debounceMs throttles keystroke validation without delaying the
+      // verdict on blur (the one the user is waiting for).
+      debouncerRef.current?.cancel();
+      validateNow();
     }
-  }, [form, path, triggerValidate]);
+  }, [form, path, validateNow]);
 
   return useMemo(
     () => ({
