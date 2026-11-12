@@ -17,8 +17,12 @@ import { gzipSync } from "node:zlib";
 
 // { label, resolve the file(s), gzip budget in bytes }
 const BUDGETS = [
-  { label: "formstand (ESM)", file: "dist/index.js", budget: 21_000 },
-  { label: "formstand (CJS)", file: "dist/index.cjs", budget: 22_500 },
+  // Raised by 1 kB each on 2026-11-12 for the November review fixes: the
+  // async passes release their flags on rejection, full-parse passes
+  // prune stale errors, persist fills required gaps and asks the schema
+  // about kind changes, and the handle gained flush().
+  { label: "formstand (ESM)", file: "dist/index.js", budget: 22_000 },
+  { label: "formstand (CJS)", file: "dist/index.cjs", budget: 23_500 },
   { label: "formstand/devtools", file: "dist/devtools/index.js", budget: 3_300 },
   { label: "formstand/testing", file: "dist/testing/index.js", budget: 600 },
   {
