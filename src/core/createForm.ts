@@ -39,6 +39,7 @@ import {
   isAsyncRequiredError,
   isPathOrChild,
   prefixErrorKeys,
+  reportBackgroundFailure,
   schemaHasPath,
   validateAsync,
   validateSync,
@@ -207,6 +208,8 @@ export type Form<
     path: ErrorPath<z.input<TSchema>, D>,
     errors: string | readonly string[],
   ) => void;
+  // Replaces the whole server channel. An empty list is the absence of an
+  // error, never an entry, the same rule setError and addErrors apply.
   setErrors: (errors: ErrorMap) => void;
   // The merge-many sibling of setError: server responses arrive as a MAP
   // of runtime-keyed field errors, and mapping them one setError at a time
@@ -447,21 +450,60 @@ const reuseErrorRefs = (next: ErrorMap, prev: ErrorMap): ErrorMap => {
   return sameShape ? prev : Object.fromEntries(entries);
 };
 
-// Shape a parse result into an error map scoped to `path`: sub-schema results
-// re-key to absolute form paths; full-form results filter to the path's scope,
-// except the root "" whose scope is explicitly the whole form.
-const scopeSettledResult = (
+// What one scope's parse yields: the error map scoped to `path` (sub-schema
+// results re-key to absolute form paths; full-form results filter to the
+// path's scope, except the root "" whose scope is explicitly the whole
+// form), plus the WHOLE map when the parse was full-form. A full parse
+// judged every key against the live values, so it is also the truth about
+// keys outside the scope; a subschema parse judged only its slot and
+// carries null. See pruneUnreported for what the commit does with it.
+type ScopeParse = Readonly<{ scoped: ErrorMap; full: ErrorMap | null }>;
+
+const noScopeErrors: ScopeParse = { scoped: emptyErrors, full: null };
+
+const scopeParse = (
   result: SettledValidationResult<unknown>,
   path: string,
   viaSubschema: boolean,
-): ErrorMap =>
-  result.kind !== "invalid"
-    ? emptyErrors
-    : viaSubschema
-      ? prefixErrorKeys(result.errors, path)
-      : path === ""
-        ? result.errors
-        : pickScope(result.errors, [path]);
+): ScopeParse => {
+  const errors = result.kind === "invalid" ? result.errors : emptyErrors;
+  return viaSubschema
+    ? { scoped: prefixErrorKeys(errors, path), full: null }
+    : {
+        scoped: path === "" ? errors : pickScope(errors, [path]),
+        full: errors,
+      };
+};
+
+// Drop every entry of `prev` that a full-form parse did not report. The
+// parse is the truth for the live values, so an entry it is silent on is
+// stale however it got there. The canonical case is a discriminated union
+// whose discriminant changes under a field-scoped pass (the select's own
+// change validation): that pass replaces only the keys under the
+// discriminant, so the OLD variant's errors (payment.cardNumber after the
+// switch to paypal) survived until a full validate() happened to run, and
+// useIsValid read false for a form the schema accepted. Pruning never ADDS
+// an entry outside the scope: a full parse run on behalf of one field still
+// surfaces nothing for fields the user has not reached.
+const pruneUnreported = (prev: ErrorMap, full: ErrorMap): ErrorMap => {
+  const entries = Object.entries(prev);
+  const kept = entries.filter(([k]) => Object.hasOwn(full, k));
+  return kept.length === entries.length ? prev : Object.fromEntries(kept);
+};
+
+// The one rule for a list-valued error map handed in by the app: an empty
+// (or missing) list is the ABSENCE of an error, never an entry. setError and
+// addErrors always dropped those; setErrors, updateState's channel patches
+// and restore() kept them, so the same state read valid to useIsValid
+// (which skips empty lists), errored to useFormSteps (key presence) and
+// `[]` from useField.
+const dropEmptyLists = (map: ErrorMap): ErrorMap => {
+  const entries = Object.entries(map);
+  const kept = entries.filter(
+    ([, list]) => list !== undefined && list.length > 0,
+  );
+  return kept.length === entries.length ? map : Object.fromEntries(kept);
+};
 
 // The one merge rule between the two error channels: the schema's message
 // wins at a key (it re-judged the same value the server did), server entries
@@ -691,17 +733,17 @@ export const createForm = <
               ? acc
               : {
                   ...acc,
-                  ...scopeSettledResult(
+                  ...scopeParse(
                     validateSyncLatched(path, scope.schema, scope.value),
                     path,
                     true,
-                  ),
+                  ).scoped,
                 },
           {},
         );
         store.setState((state) => ({
           ...state,
-          ...commitScopedErrors(state, merged, paths),
+          ...commitScopedErrors(state, merged, paths, null),
         }));
         return settledFields(merged);
       }
@@ -711,7 +753,7 @@ export const createForm = <
       const requestedErrors = pickScope(fullErrors, paths);
       store.setState((state) => ({
         ...state,
-        ...commitScopedErrors(state, requestedErrors, paths),
+        ...commitScopedErrors(state, requestedErrors, paths, fullErrors),
       }));
       return settledFields(requestedErrors);
     } catch (e) {
@@ -802,10 +844,10 @@ export const createForm = <
   const parseScopeAsync = async (
     path: string,
     scope: FieldScope,
-  ): Promise<ErrorMap> =>
+  ): Promise<ScopeParse> =>
     scope.kind === "skip"
-      ? emptyErrors
-      : scopeSettledResult(
+      ? noScopeErrors
+      : scopeParse(
           await validateAsync(scope.schema, scope.value),
           path,
           scope.viaSubschema,
@@ -864,15 +906,24 @@ export const createForm = <
   // slice under `paths` and release the server verdicts there — a
   // validation explicitly targeting a scope supersedes the server's word on
   // it. Shared by the singular and plural, sync and async passes so the
-  // supersede rule lives exactly once.
+  // supersede rule lives exactly once. When the pass ran a FULL parse,
+  // `full` carries the whole map and the stale entries outside the scope
+  // go with it (pruneUnreported); a subschema pass passes null.
   const commitScopedErrors = (
     state: FormState<Values>,
     scoped: ErrorMap,
     paths: readonly string[],
+    full: ErrorMap | null,
   ): ErrorChannels =>
     errorChannels(state, {
       schemaErrors: reuseErrorRefs(
-        mergeScopedErrors(state.schemaErrors, scoped, paths),
+        mergeScopedErrors(
+          full === null
+            ? state.schemaErrors
+            : pruneUnreported(state.schemaErrors, full),
+          scoped,
+          paths,
+        ),
         state.schemaErrors,
       ),
       serverErrors: omitScope(state.serverErrors, paths),
@@ -882,12 +933,12 @@ export const createForm = <
   // whole-form pass, so it lands like validate() (server channel untouched).
   const commitFieldErrors = (
     state: FormState<Values>,
-    scoped: ErrorMap,
+    parse: ScopeParse,
     path: string,
   ): ErrorChannels =>
     path === ""
-      ? commitFullPass(state, scoped)
-      : commitScopedErrors(state, scoped, [path]);
+      ? commitFullPass(state, parse.scoped)
+      : commitScopedErrors(state, parse.scoped, [path], parse.full);
 
   const validateField = (path: string): FieldValidationResult => {
     warnMissingSchemaPath("validateField", path);
@@ -904,10 +955,10 @@ export const createForm = <
       return { kind: "pending", promise: validateFieldAsync(path) };
     }
     try {
-      const scoped =
+      const parse =
         scope.kind === "skip"
-          ? emptyErrors
-          : scopeSettledResult(
+          ? noScopeErrors
+          : scopeParse(
               validateSyncLatched(
                 scope.viaSubschema ? path : "",
                 scope.schema,
@@ -918,9 +969,9 @@ export const createForm = <
             );
       store.setState((state) => ({
         ...state,
-        ...commitFieldErrors(state, scoped, path),
+        ...commitFieldErrors(state, parse, path),
       }));
-      return fieldResult(scoped);
+      return fieldResult(parse.scoped);
     } catch (e) {
       if (isAsyncRequiredError(e)) {
         return { kind: "pending", promise: validateFieldAsync(path) };
@@ -962,7 +1013,19 @@ export const createForm = <
     const valuesAtStart = store.getState().values;
     store.setState((state) => ({ ...state, isValidatingForm: true }));
 
-    const result = await validateAsync(schema, valuesAtStart);
+    const result = await validateAsync(schema, valuesAtStart).catch(
+      (error: unknown) => {
+        // A throwing refinement (a rejected fetch inside an async refine)
+        // rejects the parse itself, and the rejection travels on to the
+        // caller as it always did. The flag this pass set is still its
+        // own, though: releasing it here is what keeps isValidatingForm
+        // from reading true forever after one network failure.
+        if (sequences.get(FORM_SEQ_KEY) === pass) {
+          store.setState((state) => ({ ...state, isValidatingForm: false }));
+        }
+        throw error;
+      },
+    );
 
     const live = store.getState();
     const stillOwns = sequences.get(FORM_SEQ_KEY) === pass;
@@ -1024,24 +1087,45 @@ export const createForm = <
     type BatchParse =
       | Readonly<{ kind: "slots"; byPath: ReadonlyMap<string, ErrorMap> }>
       | Readonly<{ kind: "full"; errors: ErrorMap }>;
-    const parsed: BatchParse = allViaSubschema
-      ? {
-          kind: "slots",
-          byPath: new Map(
-            await Promise.all(
-              scopes.map(
-                async ({ path, scope }) =>
-                  [path, await parseScopeAsync(path, scope)] as const,
+    const parseBatch = async (): Promise<BatchParse> =>
+      allViaSubschema
+        ? {
+            kind: "slots",
+            byPath: new Map(
+              await Promise.all(
+                scopes.map(
+                  async ({ path, scope }) =>
+                    [
+                      path,
+                      (await parseScopeAsync(path, scope)).scoped,
+                    ] as const,
+                ),
               ),
             ),
-          ),
-        }
-      : {
-          kind: "full",
-          errors: await validateAsync(schema, valuesAtStart).then((result) =>
-            result.kind === "invalid" ? result.errors : emptyErrors,
-          ),
-        };
+          }
+        : {
+            kind: "full",
+            errors: await validateAsync(schema, valuesAtStart).then(
+              (result) =>
+                result.kind === "invalid" ? result.errors : emptyErrors,
+            ),
+          };
+    const parsed = await parseBatch().catch((error: unknown) => {
+      // Same release-on-rejection rule as the form-level pass: every path
+      // this pass still owns gets its flag back before the rejection
+      // travels on, so one rejected refine cannot strand a whole step's
+      // in-flight flags.
+      const stillOwned = new Set(
+        paths.filter((p) => sequences.get(p) === passes.get(p)),
+      );
+      if (stillOwned.size > 0) {
+        store.setState((state) => ({
+          ...state,
+          isValidating: omitKeys(state.isValidating, stillOwned),
+        }));
+      }
+      throw error;
+    });
     const errorsFor = (path: string): ErrorMap => {
       switch (parsed.kind) {
         case "slots":
@@ -1084,6 +1168,7 @@ export const createForm = <
               fresh.flatMap((path) => Object.entries(errorsFor(path))),
             ),
             fresh,
+            parsed.kind === "full" ? parsed.errors : null,
           )),
       isValidating: omitKeys(state.isValidating, ownedKeys),
     }));
@@ -1113,27 +1198,38 @@ export const createForm = <
       isValidating: { ...state.isValidating, [path]: true },
     }));
 
-    const scoped = await parseScopeAsync(path, scope);
-
-    const live = store.getState();
-    const stillOwns = sequences.get(path) === pass;
-    if (!stillOwns || scopeStale(scope, path, valuesAtStart, live.values)) {
-      if (stillOwns) {
+    const releaseOwnFlag = (): void => {
+      if (sequences.get(path) === pass) {
         store.setState((state) => ({
           ...state,
           isValidating: omitKey(state.isValidating, path),
         }));
       }
-      return fieldResult(scoped);
+    };
+    const parse = await parseScopeAsync(path, scope).catch(
+      (error: unknown) => {
+        // Release-on-rejection, as in the form-level pass: the "checking"
+        // flag a throwing refine would otherwise leave behind is the one
+        // every spinner and submit gate on this field reads.
+        releaseOwnFlag();
+        throw error;
+      },
+    );
+
+    const live = store.getState();
+    const stillOwns = sequences.get(path) === pass;
+    if (!stillOwns || scopeStale(scope, path, valuesAtStart, live.values)) {
+      releaseOwnFlag();
+      return fieldResult(parse.scoped);
     }
 
     store.setState((state) => ({
       ...state,
-      ...commitFieldErrors(state, scoped, path),
+      ...commitFieldErrors(state, parse, path),
       isValidating: omitKey(state.isValidating, path),
     }));
 
-    return fieldResult(scoped);
+    return fieldResult(parse.scoped);
   };
 
   const applyArrayOp = (
@@ -1288,7 +1384,9 @@ export const createForm = <
         } catch (error) {
           // Same contract as a throwing onValid below: a failing caller
           // handler resolves as { kind: "error" }, never a rejection out of
-          // a DOM event handler.
+          // a DOM event handler, and onError observes it the same way (it
+          // is the hook for "a handler of mine failed", whichever one).
+          submitOptions?.onError?.(error);
           return { kind: "error", error };
         }
         return { kind: "invalid", errors: merged };
@@ -1321,8 +1419,13 @@ export const createForm = <
 
   if (options.validateOnMount === true) {
     // Async schemas route themselves: validate() returns a "pending" result
-    // whose background pass writes the error map when it settles.
-    validate();
+    // whose background pass writes the error map when it settles. Nobody
+    // awaits that promise, so a rejecting pass is reported here instead of
+    // surfacing as an unhandled rejection with no pointer to the form.
+    const result = validate();
+    if (result.kind === "pending") {
+      void result.promise.catch(reportBackgroundFailure);
+    }
   }
 
   return Object.freeze({
@@ -1462,7 +1565,7 @@ export const createForm = <
     setErrors: (errors) =>
       store.setState((state) => ({
         ...state,
-        ...errorChannels(state, { serverErrors: errors }),
+        ...errorChannels(state, { serverErrors: dropEmptyLists(errors) }),
       })),
     addErrors: (errors) =>
       store.setState((state) => {
@@ -1546,14 +1649,17 @@ export const createForm = <
       // stating the channel for the new values.
       const serverErrors =
         patch.serverErrors !== undefined
-          ? patch.serverErrors
+          ? dropEmptyLists(patch.serverErrors)
           : next.values !== state.values
             ? releaseChangedSlices(state.serverErrors, state.values, next.values)
             : state.serverErrors;
       store.setState(() => ({
         ...next,
         ...errorChannels(state, {
-          schemaErrors: next.schemaErrors,
+          schemaErrors:
+            patch.schemaErrors === undefined
+              ? state.schemaErrors
+              : dropEmptyLists(patch.schemaErrors),
           serverErrors,
         }),
       }));
@@ -1760,8 +1866,8 @@ export const createForm = <
         // so the errors-is-derived invariant holds at this boundary too —
         // otherwise an inconsistent snapshot renders phantom errors until
         // the next write silently rewrites them (or crashes a channel scan).
-        const schemaErrors = snap.schemaErrors ?? emptyErrors;
-        const serverErrors = snap.serverErrors ?? emptyErrors;
+        const schemaErrors = dropEmptyLists(snap.schemaErrors ?? emptyErrors);
+        const serverErrors = dropEmptyLists(snap.serverErrors ?? emptyErrors);
         return {
           ...snap,
           schemaErrors,

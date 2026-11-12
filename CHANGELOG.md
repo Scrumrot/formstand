@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- A throwing async refinement (a rejected fetch inside `refine(async
+  ...)`) left `isValidatingForm` or `isValidating[path]` at `true` for
+  good: none of the async passes released their flag when the parse
+  rejected, so every spinner and submit gate built on them stuck after
+  one network failure. The passes now release the flags they own before
+  the rejection travels on to whoever awaited them. The passes nobody
+  awaits, `validateOnMount` and the change and blur triggers inside
+  `useField`, report the error through `console.error` instead of
+  leaving an unhandled rejection.
+- Switching a discriminated union's variant through its discriminant
+  (`useField(form, "payment.method").setValue("paypal")`, which is how
+  generated forms bind it) left the old variant's schema errors in place
+  until a full `validate()` ran, so `useIsValid` read `false` for a form
+  the schema accepted. A field-scoped pass that runs the full parse (any
+  path under a union or a refined object) now also drops the schema
+  errors elsewhere that the parse no longer reports. It still adds
+  nothing outside its scope.
+- `setErrors({ field: [] })`, an `updateState` patch of either error
+  channel, and `restore()` kept empty lists as entries, where `setError`
+  and `addErrors` dropped them, so one state read valid to `useIsValid`,
+  errored to `useFormSteps`, and `[]` from `useField(...).error`. Every
+  writer now drops an empty list.
+- A throwing `onInvalid` resolved `{ kind: "error" }` without calling
+  `onError`; it does now, like a throwing `onValid`.
+
 ## 0.25.0 — 2026-11-12
 
 ### Added

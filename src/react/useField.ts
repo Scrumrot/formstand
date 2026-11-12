@@ -22,6 +22,7 @@ import {
   emptyValueForSchema,
   isClearableSchema,
   fieldSchemaForIntrospection,
+  reportBackgroundFailure,
 } from "../core/validation";
 
 type ReadonlyStore<T> = Pick<
@@ -265,15 +266,21 @@ export function useField<TValue = unknown>(
           state.values === state.initialValues;
         if (rebased) return;
         if (!Object.is(getAtPath(state.values, path), scheduled)) return;
-        void form.validateFieldAsync(path);
+        // Nobody awaits a trigger's pass: a rejecting refine is reported
+        // (the core has released the field's flag) instead of escaping as
+        // an unhandled rejection.
+        void form.validateFieldAsync(path).catch(reportBackgroundFailure);
       });
       return;
     }
     // The core routes async schemas itself: validateField returns
     // { kind: "pending" } having already started the async pass, which
     // commits its errors and isValidating flags to the store — so the
-    // result needs no handling here.
-    form.validateField(path);
+    // result needs no handling here beyond observing a rejection.
+    const result = form.validateField(path);
+    if (result.kind === "pending") {
+      void result.promise.catch(reportBackgroundFailure);
+    }
   }, [form, path, debounceMs]);
 
   const setValue = useCallback(

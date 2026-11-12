@@ -129,6 +129,19 @@ export const isAsyncRequiredError = (e: unknown): boolean =>
   (e instanceof Error &&
     /Encountered Promise during synchronous parse/i.test(e.message));
 
+// For the fire-and-forget entry points (createForm's validateOnMount,
+// useField's change and blur triggers): they drop the pending promise, so
+// a rejecting pass (an async refine whose fetch failed) would surface as an
+// unhandled rejection with no pointer back to the form. The pass has
+// already released its in-flight flags by the time this runs; what is
+// left is to say where the error came from.
+export const reportBackgroundFailure = (error: unknown): void => {
+  console.error(
+    "[formstand] a background validation pass threw (an async refinement rejected). Its in-flight flags were released. The error:",
+    error,
+  );
+};
+
 // True when `key` is `path` itself or a descendant ("a.b" under "a"). The
 // root "" matches only the "" key — whole-form scope is never implicit;
 // call sites that want it (validateField(""), focusFirstError's fallback)

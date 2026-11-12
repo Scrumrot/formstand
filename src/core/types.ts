@@ -29,8 +29,10 @@ export type FormState<TValues> = Readonly<{
   isSubmitting: boolean;
   submitCount: number;
   isValidating: BoolMap;
-  // Whole-form async validation in flight (validateAsync / async submit path).
-  // Field-level passes use per-path keys in `isValidating`.
+  // Whole-form async validation in flight (validateAsync, or a validate() /
+  // validateField("") that routed itself to the async pass). Field-level
+  // passes use per-path keys in `isValidating`. Submit does NOT set it:
+  // its own parse is tracked by isSubmitting.
   isValidatingForm: boolean;
   mode: ValidationMode;
   reValidateMode: ValidationMode;
