@@ -1,6 +1,34 @@
 # Changelog
 
-## formstand-cli Unreleased
+## 0.25.0 — 2026-11-12
+
+### Added
+
+- `useVariantFieldArray(form, unionPath, field)`, the array twin of
+  `useVariantField`: a `z.array` that lives in one variant of a
+  discriminated union sits at a path `useFieldArray` cannot take, since
+  `FieldPath` on a union offers only the keys every variant shares. The
+  hook binds `${unionPath}.${field}` and types the rows from the variants
+  that declare the array; `field` is a variant sub-path (`"lights"`,
+  `"spec.lights"`, or a row template for an array nested in another
+  variant array's rows), and a common-key array stays with plain
+  `useFieldArray`, which the variant hook rejects. Same return as
+  `useFieldArray`, row ids included. `createFormHooks` gains the bound
+  `use{Name}VariantFieldArray`, and the type `VariantArrayFieldPath` is
+  exported. formstand-cli emits it for arrays inside union variants.
+
+### Fixed
+
+- `createFormHooks(createForm(schema, options), name)` with the form
+  created inline collapsed every depth-typed bound hook (`useXField`,
+  `useXFieldArray`, `useXIsDirty`) to a `never` path: the inner call
+  inferred its depth from the outer call's still-unresolved depth
+  parameter, so the depth became the whole budget union. `createForm` and
+  `useForm` now take their depth from `pathDepth` alone (`NoInfer` on the
+  returned form), so the inline shape types like the const-form shape the
+  docs show, and an explicit `pathDepth` still infers its literal.
+
+## formstand-cli 0.26.0 — 2026-11-12
 
 ### Added
 
@@ -47,34 +75,6 @@
   importing the prop builders they call, and a described leaf there was
   handed a `description` prop the Bound components did not declare.
   Both walks carry the real budget now.
-
-## Unreleased
-
-### Added
-
-- `useVariantFieldArray(form, unionPath, field)`, the array twin of
-  `useVariantField`: a `z.array` that lives in one variant of a
-  discriminated union sits at a path `useFieldArray` cannot take, since
-  `FieldPath` on a union offers only the keys every variant shares. The
-  hook binds `${unionPath}.${field}` and types the rows from the variants
-  that declare the array; `field` is a variant sub-path (`"lights"`,
-  `"spec.lights"`, or a row template for an array nested in another
-  variant array's rows), and a common-key array stays with plain
-  `useFieldArray`, which the variant hook rejects. Same return as
-  `useFieldArray`, row ids included. `createFormHooks` gains the bound
-  `use{Name}VariantFieldArray`, and the type `VariantArrayFieldPath` is
-  exported. formstand-cli emits it for arrays inside union variants.
-
-### Fixed
-
-- `createFormHooks(createForm(schema, options), name)` with the form
-  created inline collapsed every depth-typed bound hook (`useXField`,
-  `useXFieldArray`, `useXIsDirty`) to a `never` path: the inner call
-  inferred its depth from the outer call's still-unresolved depth
-  parameter, so the depth became the whole budget union. `createForm` and
-  `useForm` now take their depth from `pathDepth` alone (`NoInfer` on the
-  returned form), so the inline shape types like the const-form shape the
-  docs show, and an explicit `pathDepth` still infers its literal.
 
 ## 0.24.0 — 2026-10-23
 
