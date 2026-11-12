@@ -111,13 +111,16 @@ const drafts = persistForm(form, {
   apply: "adopt",           // default: the draft becomes the new baseline (form reads clean)
 });
 
+// before a navigation the debounce would miss:
+drafts.flush();             // write a pending draft now
 // after a successful submit:
-drafts.clear();             // also cancels any pending write
+drafts.clear();             // also cancels any pending write; a reset() right after
+                            // does not re-create the draft, the next edit does
 // on unmount:
-drafts.dispose();
+drafts.dispose();           // writes a pending draft first, then stops watching
 ```
 
-`apply: "edit"` loads the draft as *edits*, meaning dirty against the original initial values, instead of rebasing (`"restore"` is the older spelling and still works as an alias). `apply: "manual"` never auto-applies, so you call the returned `load()` yourself; a manual `load()` applies with **adopt** semantics (the loaded draft reads clean, a rebase rather than an edit); pick `apply: "edit"` when the draft should read dirty against the original initials. The handle method is named `load`, not restore, for exactly that reason: what it does by default is a rebase, and `form.restore(snapshot)` means something else entirely (putting back a whole `FormState`). Storage defaults to `localStorage` and is structural, so `sessionStorage` or any `{ getItem, setItem, removeItem }` works. Every storage touch is guarded, so private-mode failures just skip persistence, corrupt drafts return `false` from `load()` instead of throwing, and (same caveat as the recipe) drafts round-trip through JSON, so they are for JSON-safe values: a `Date` comes back as a string. In SSR apps, call it inside an effect, or reach for `usePersistForm(form, options)`, the React wrapper that owns the mount/dispose effect (StrictMode safe) and returns a reference-stable handle you can call `clear()` on after submit. See [SSR & Next.js](./ssr).
+`apply: "edit"` loads the draft as *edits*, meaning dirty against the original initial values, instead of rebasing (`"restore"` is the older spelling and still works as an alias). `apply: "manual"` never auto-applies, so you call the returned `load()` yourself; a manual `load()` applies with **adopt** semantics (the loaded draft reads clean, a rebase rather than an edit); pick `apply: "edit"` when the draft should read dirty against the original initials. The handle method is named `load`, not restore, for exactly that reason: what it does by default is a rebase, and `form.restore(snapshot)` means something else entirely (putting back a whole `FormState`). Storage defaults to `localStorage` and is structural, so `sessionStorage` or any `{ getItem, setItem, removeItem }` works. Every storage touch is guarded, so private-mode failures just skip persistence, corrupt drafts return `false` from `load()` instead of throwing (a dev build also logs why a draft that was present got ignored), and (same caveat as the recipe) drafts round-trip through JSON, so they are for JSON-safe values: a `Date` comes back as a string. In SSR apps, call it inside an effect, or reach for `usePersistForm(form, options)`, the React wrapper that owns the mount/dispose effect (StrictMode safe) and returns a reference-stable handle you can call `clear()` on after submit. See [SSR & Next.js](./ssr).
 
 ::: warning A loaded draft is adopted, not validated
 Applying a draft goes through `adoptValues` (or `setValues` under `apply: "edit"`), and like every imperative write that is validation-silent: the draft becomes the values with `errors` left at `{}`, so a stored `name: ""` under `z.string().min(1)` loads clean and `useIsValid` reads `true` until something validates. `validateOnMount: true` does not cover it, because that pass runs inside `createForm`, before `persistForm` applies the draft, and `adopt` then clears what it found. When UI is gated on `useIsValid` or on field errors, call `form.validate()` once the draft is in: right after `persistForm(...)` returns, after a manual `load()`, or in an effect declared after `usePersistForm` (effects run in declaration order). Submit always re-validates, so an invalid draft cannot get through on its own. Treat the draft as input the schema has not seen yet, not as data the form already judged; see [Security notes](./validation#security-notes).
@@ -125,9 +128,11 @@ Applying a draft goes through `adoptValues` (or `setValues` under `apply: "edit"
 
 ### Drafts that outlive the schema
 
-A stored draft can be older than the schema reading it. `persistForm` will not apply a draft whose shape conflicts with the form's: a path holding a string where the form expects an object, or an array of strings where it expects rows. No ordinary edit produces that, only a changed schema, and applying it would rebase the form onto values it cannot validate while `adopt` cleared the errors, so it would read clean while holding them.
+A stored draft can be older than the schema reading it. `persistForm` will not apply a draft whose shape conflicts with the form's: a path holding a string where the form expects an object, or an array of strings where it expects rows. No ordinary edit produces that, only a changed schema, and applying it would rebase the form onto values it cannot validate while `adopt` cleared the errors, so it would read clean while holding them. The schema has the last word on a mismatch: where it declares a coerced scalar (`z.coerce.number()` behind a `""` initial value), a pipe, or a union whose variants shape the key differently, a kind change is legitimate and the draft is applied. A dev build logs the path of a refused draft.
 
 The guard compares only overlapping paths, and only their kinds. It deliberately does **not** treat a missing key as evidence: JSON drops undefined slots, so an optional the user never filled is absent from the reference and an optional they did fill is present only in the draft. Neither means the schema changed, and rejecting on that would throw away good drafts from any form with an optional field.
+
+A draft stored before the schema **gained** a key lacks that key. Required keys the draft lacks are filled from the initial values when it is applied (nested objects included), so the new field keeps its default and your message instead of zod's generic one. An optional key stays absent, because an optional the user cleared looks exactly the same.
 
 That leaves renames and removals, which are indistinguishable from optionals. Set `version` for those:
 

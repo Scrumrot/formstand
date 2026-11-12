@@ -8,6 +8,10 @@
 export type Debouncer = Readonly<{
   schedule: (run: () => void) => void;
   cancel: () => void;
+  // Run the pending thunk NOW instead of waiting out the delay (a no-op
+  // when nothing is pending): persistForm's dispose and flush, where the
+  // moment cannot wait.
+  flush: () => void;
   // True while a scheduled run has not fired or been cancelled.
   readonly pending: () => boolean;
 }>;
@@ -21,11 +25,14 @@ export const createDebouncer = (ms: number): Debouncer => {
   const timer: { current: ReturnType<typeof setTimeout> | null } = {
     current: null,
   };
+  // The thunk the timer will run, kept so flush can run it early.
+  const scheduled: { current: (() => void) | null } = { current: null };
   const cancel = (): void => {
     if (timer.current !== null) {
       clearTimeout(timer.current);
       timer.current = null;
     }
+    scheduled.current = null;
   };
   const schedule = (run: () => void): void => {
     cancel();
@@ -33,14 +40,23 @@ export const createDebouncer = (ms: number): Debouncer => {
       run();
       return;
     }
+    scheduled.current = run;
     timer.current = setTimeout(() => {
       timer.current = null;
+      scheduled.current = null;
       run();
     }, ms);
+  };
+  const flush = (): void => {
+    const run = scheduled.current;
+    if (run === null) return;
+    cancel();
+    run();
   };
   return Object.freeze({
     schedule,
     cancel,
+    flush,
     pending: () => timer.current !== null,
   });
 };

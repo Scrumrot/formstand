@@ -44,6 +44,19 @@ describe("createDebouncer", () => {
     expect(debouncer.pending()).toBe(false);
   });
 
+  it("flush runs the pending thunk now, once, and is a no-op when idle", () => {
+    const debouncer = createDebouncer(50);
+    const calls: string[] = [];
+    debouncer.flush();
+    expect(calls).toEqual([]);
+    debouncer.schedule(() => calls.push("run"));
+    debouncer.flush();
+    expect(calls).toEqual(["run"]);
+    expect(debouncer.pending()).toBe(false);
+    vi.advanceTimersByTime(100);
+    expect(calls).toEqual(["run"]);
+  });
+
   it("scheduling again after a fire starts a fresh window", () => {
     const debouncer = createDebouncer(10);
     const calls: number[] = [];

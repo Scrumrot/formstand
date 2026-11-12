@@ -170,19 +170,24 @@ describe("persistForm", () => {
     expect(storage.map.has(KEY)).toBe(false);
   });
 
-  it("dispose() stops future writes and cancels the pending one", () => {
+  it("dispose() writes the pending draft, then stops future writes", () => {
     const storage = memoryStorage();
     const form = makeForm();
     const handle = persistForm(form, { key: KEY, storage, debounceMs: 300 });
 
     form.setValue("title", "pending at dispose");
     handle.dispose();
-    vi.advanceTimersByTime(1000);
-    expect(storage.map.size).toBe(0);
+    expect(JSON.parse(storage.map.get(KEY) ?? "null")).toEqual({
+      title: "pending at dispose",
+      body: "",
+    });
 
     form.setValue("title", "after dispose");
     vi.advanceTimersByTime(1000);
-    expect(storage.map.size).toBe(0);
+    expect(JSON.parse(storage.map.get(KEY) ?? "null")).toEqual({
+      title: "pending at dispose",
+      body: "",
+    });
   });
 
   it("throwing storage skips persistence instead of throwing (private mode)", () => {

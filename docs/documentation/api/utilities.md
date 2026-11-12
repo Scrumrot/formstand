@@ -22,6 +22,7 @@ shouldValidateOn(trigger, mode, reValidateMode, submitAttempted, touched?): bool
 ```ts
 persistForm(form, options): PersistHandle   // debounced draft save + load
 // options: { key, storage?, debounceMs?, apply?, version? }
+// handle:  { load(), flush(), clear(), dispose() }
 ```
 
 `persistForm` is the autosave recipe as a helper: it saves a debounced draft under `options.key` and restores it on the next load. Storage defaults to `localStorage` and is structural, so `sessionStorage` or any `{ getItem, setItem, removeItem }` works. See [Persistence](../state#persistence) for the `apply` modes and the SSR caveat, and [Drafts that outlive the schema](../state#drafts-that-outlive-the-schema) for `version`, which stamps each draft so one written under an older schema is discarded instead of applied.

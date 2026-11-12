@@ -24,7 +24,8 @@ import {
 // guarded no-throw posture persistForm itself has.
 //
 // Options are read when the subscription (re)starts — on mount, and again
-// if `form` or `options.key` changes — not on every render, mirroring
+// if `form`, `options.key` or `options.storage` changes — not on every
+// render, mirroring
 // useForm's locked-options rule; pass a stable options object or accept
 // that later edits to it are ignored until the key or form changes.
 export const usePersistForm = <
@@ -45,6 +46,10 @@ export const usePersistForm = <
   });
 
   const key = options.key;
+  // The storage object is an identity like the key: a swap (session to
+  // local, a per-user namespace) moves the subscription, where it used to
+  // keep writing to the first one it saw.
+  const storage = options.storage;
   useEffect(() => {
     const handle = persistForm(form, latestOptions.current);
     inner.current = handle;
@@ -54,11 +59,12 @@ export const usePersistForm = <
     };
     // StrictMode's mount-cleanup-mount runs this twice: each pass gets its
     // own subscription and disposes the previous, so no double-writes.
-  }, [form, key]);
+  }, [form, key, storage]);
 
   return useMemo(
     () => ({
       load: () => inner.current?.load() ?? false,
+      flush: () => inner.current?.flush(),
       clear: () => inner.current?.clear(),
       // dispose stops THIS component's watching early; the effect cleanup
       // still runs its own dispose harmlessly (persistForm's dispose is

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- `PersistHandle.flush()` writes the pending debounced draft now, for
+  the moments that cannot wait out the debounce (a route change, a
+  `pagehide` handler). `dispose()` flushes too; see Fixed below.
+
 ### Fixed
 
 - A throwing async refinement (a rejected fetch inside `refine(async
@@ -28,6 +34,30 @@
   writer now drops an empty list.
 - A throwing `onInvalid` resolved `{ kind: "error" }` without calling
   `onError`; it does now, like a throwing `onValid`.
+- `persistForm`: unmounting inside the debounce window lost the last
+  edits, because `dispose()` cancelled the pending write. It writes the
+  draft first now.
+- `persistForm`: `clear()` followed by `reset()` (the usual after-submit
+  pair) wrote the fresh baseline straight back as a draft, which the
+  next visit then adopted over whatever initial values the app had
+  meanwhile computed. After `clear()`, a rebase that leaves the form
+  pristine no longer writes; the next real edit does.
+- `persistForm`: a draft stored before the schema gained a key erased
+  that key's initial value from `values` and `initialValues`, so
+  `reset()` could not bring it back and the user saw zod's generic
+  message instead of yours. Required keys the draft lacks are now filled
+  from the initial values (nested objects included); optional keys stay
+  absent, since an optional the user cleared looks the same.
+- `persistForm`'s shape guard refused legitimate drafts: `z.coerce.number()`
+  behind a `""` initial value, and unions whose variants shape the same
+  key differently. The guard now asks the schema whether a kind change
+  is legitimate at the path before refusing, and a dev build logs why a
+  draft that was present got ignored (version mismatch, shape conflict
+  and its path, corrupt JSON), where `load()` used to return a silent
+  `false`.
+- `usePersistForm` ignored a change of `options.storage` and kept writing
+  to the first storage it saw; it resubscribes on it, as it does for
+  `key`.
 
 ## 0.25.0 — 2026-11-12
 

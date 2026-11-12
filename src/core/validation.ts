@@ -281,6 +281,81 @@ export const schemaHasPath = (schema: z.ZodType, path: string): boolean => {
   return walk(schema, parsePath(path), SCHEMA_WALK_BUDGET);
 };
 
+// Can the schema legitimately hold values of DIFFERENT JSON kinds at
+// `path`? persistForm's shape guard compares a stored draft against the
+// initial values kind by kind and reads a mismatch as a schema change. A
+// coerced scalar (z.coerce.number() behind a "" initial, 42 stored), a
+// pipe, a union whose variants shape the key differently, and anything
+// too dynamic to judge (any, unknown, lazy, catch) all make a mismatch
+// legitimate. Biased toward "yes" like schemaHasPath: only a path that
+// walks through closed objects, arrays, tuples and records to a plain leaf
+// answers false, so the guard can refuse a draft only where the schema
+// provably has one shape.
+export const schemaAllowsKindChangeAt = (
+  schema: z.ZodType,
+  path: string,
+): boolean => {
+  const flexible = (s: z.ZodType): boolean =>
+    s instanceof z.ZodUnion ||
+    s instanceof z.ZodDiscriminatedUnion ||
+    s instanceof z.ZodPipe ||
+    s instanceof z.ZodAny ||
+    s instanceof z.ZodUnknown ||
+    s instanceof z.ZodLazy ||
+    s instanceof z.ZodCatch ||
+    (s.def as Readonly<{ coerce?: boolean }>).coerce === true;
+  // Optional/nullable/default/readonly/nonoptional are transparent to the
+  // kind question; a pipe or catch is itself an answer, so it stays.
+  const strip = (s: z.ZodType): z.ZodType => {
+    if (s instanceof z.ZodOptional || s instanceof z.ZodNullable) {
+      return strip(s.unwrap() as z.ZodType);
+    }
+    if (
+      s instanceof z.ZodDefault ||
+      s instanceof z.ZodPrefault ||
+      s instanceof z.ZodReadonly ||
+      s instanceof z.ZodNonOptional
+    ) {
+      return strip(s.def.innerType as z.ZodType);
+    }
+    return s;
+  };
+  const walk = (
+    s: z.ZodType,
+    segments: readonly PathSegment[],
+    budget: number,
+  ): boolean => {
+    if (budget <= 0) return true;
+    const node = strip(s);
+    if (flexible(node)) return true;
+    const [head, ...rest] = segments;
+    if (head === undefined) return false;
+    if (node instanceof z.ZodObject) {
+      const shape: Readonly<Record<string, z.ZodType | undefined>> =
+        node.shape;
+      const child = Object.hasOwn(shape, String(head))
+        ? shape[String(head)]
+        : undefined;
+      return child === undefined ? true : walk(child, rest, budget - 1);
+    }
+    if (node instanceof z.ZodArray) {
+      return typeof head === "number"
+        ? walk(node.element as z.ZodType, rest, budget - 1)
+        : true;
+    }
+    if (node instanceof z.ZodTuple && typeof head === "number") {
+      const item = node.def.items[head] as z.ZodType | undefined;
+      return item === undefined ? true : walk(item, rest, budget - 1);
+    }
+    if (node instanceof z.ZodRecord) {
+      return walk(node.valueType as z.ZodType, rest, budget - 1);
+    }
+    // A container kind the walk does not model: it cannot judge.
+    return true;
+  };
+  return walk(schema, parsePath(path), SCHEMA_WALK_BUDGET);
+};
+
 const hasChecks = (s: z.ZodType): boolean => {
   const checks = (s.def as Readonly<{ checks?: readonly unknown[] }>).checks;
   return checks !== undefined && checks.length > 0;

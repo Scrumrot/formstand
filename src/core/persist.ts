@@ -1,7 +1,14 @@
 import type { z } from "zod";
 import type { Form } from "./createForm";
 import { createDebouncer } from "./debounce";
+import { isDevBuild } from "./env";
+import { isPlainObject } from "./equality";
 import type { DefaultPathDepth, PathDepth } from "./fieldPath";
+import {
+  fieldSchemaForIntrospection,
+  isClearableSchema,
+  schemaAllowsKindChangeAt,
+} from "./validation";
 
 // Draft persistence for a form: watch the values, debounce-write them as JSON
 // under a storage key, and re-apply a found draft on the next visit. This is
@@ -58,17 +65,24 @@ export type PersistOptions<TSchema extends z.ZodType> = Readonly<{
 export type PersistHandle = Readonly<{
   // Load + apply the stored draft now (see `apply` for the semantics):
   // returns true if a draft existed, parsed, and applied. Corrupt or absent
-  // JSON returns false and never throws. (Named load, not restore: the
-  // DEFAULT application is adoptValues — a rebase that reads clean — and
-  // "restore" promised setValues semantics the method only has when the
-  // apply option asks for them.)
+  // JSON returns false and never throws; a dev build also logs WHY a draft
+  // that was present got ignored. (Named load, not restore: the DEFAULT
+  // application is adoptValues — a rebase that reads clean — and "restore"
+  // promised setValues semantics the method only has when the apply option
+  // asks for them.)
   load: () => boolean;
+  // Write the pending debounced draft now (a no-op when nothing is
+  // pending): for the moments that cannot wait out the debounce, a route
+  // change or a pagehide handler.
+  flush: () => void;
   // Delete the stored draft (e.g. after a successful submit). Also cancels
   // any pending debounced write, so a stale draft isn't re-written right
-  // after clearing.
+  // after clearing, and a rebase that follows (reset(), adoptValues()) does
+  // not re-create it either; the next real edit does.
   clear: () => void;
-  // Stop watching the form (does not clear storage). Cancels any pending
-  // debounced write.
+  // Stop watching the form (does not clear storage). Writes any pending
+  // debounced draft first: unmounting inside the debounce window used to
+  // cancel it, which lost the last edits an autosave exists to keep.
   dispose: () => void;
 }>;
 
@@ -83,8 +97,12 @@ const kindOf = (value: unknown): string =>
       ? "array"
       : typeof value;
 
-// Does the draft CONFLICT with the shape the form expects? Only overlapping
-// paths are compared, and only their kinds.
+const joinPath = (base: string, key: string | number): string =>
+  base === "" ? String(key) : `${base}.${String(key)}`;
+
+// The first path where the draft CONFLICTS with the shape the form expects,
+// or null when the two agree everywhere they overlap. Only overlapping paths
+// are compared, and only their kinds.
 //
 // Deliberately not a key-set equality check. JSON drops undefined slots, so an
 // optional the user never filled is absent from the reference, and an optional
@@ -94,30 +112,44 @@ const kindOf = (value: unknown): string =>
 // unambiguous is a path holding a string on one side and an object on the
 // other: no edit produces that, only a changed schema. Renames and removals
 // are the `version` option's job.
-const conflictsWith = (draft: unknown, reference: unknown): boolean => {
+//
+// `flexibleAt` is the schema's word on a kind mismatch: a coerced number
+// behind a "" initial, a pipe, or a union whose variants shape the key
+// differently all make the mismatch legitimate (see schemaAllowsKindChangeAt),
+// and the guard used to refuse exactly those drafts with no reason given.
+const conflictPath = (
+  draft: unknown,
+  reference: unknown,
+  path: string,
+  flexibleAt: (path: string) => boolean,
+): string | null => {
   // null and undefined carry NO shape information, on either side. null is the
   // canonical empty for a nullable field (see emptyValue), so it can legally
   // appear at any nullable path whatever that path's filled shape is: a
   // nullable object starting null and then filled in, or starting filled and
   // then cleared, are both ordinary edits. Reading either as a kind conflict
   // would discard the drafts of every form with a nullable field.
-  if (draft === undefined || draft === null) return false;
-  if (reference === undefined || reference === null) return false;
+  if (draft === undefined || draft === null) return null;
+  if (reference === undefined || reference === null) return null;
   const draftKind = kindOf(draft);
   const referenceKind = kindOf(reference);
-  if (draftKind !== referenceKind) return true;
+  if (draftKind !== referenceKind) return flexibleAt(path) ? null : path;
   if (draftKind === "array") {
     const [d] = draft as readonly unknown[];
     const [r] = reference as readonly unknown[];
     // Row counts differ for ordinary reasons; the ROW SHAPE is the signal.
-    return conflictsWith(d, r);
+    return conflictPath(d, r, joinPath(path, 0), flexibleAt);
   }
   if (draftKind === "object") {
     const d = draft as Record<string, unknown>;
     const r = reference as Record<string, unknown>;
-    return Object.keys(d).some((key) => conflictsWith(d[key], r[key]));
+    return Object.keys(d).reduce<string | null>(
+      (found, key) =>
+        found ?? conflictPath(d[key], r[key], joinPath(path, key), flexibleAt),
+      null,
+    );
   }
-  return false;
+  return null;
 };
 
 // Resolved lazily inside persistForm — never at module scope — so importing
@@ -133,6 +165,15 @@ const defaultStorage = (): PersistStorage | null => {
   }
 };
 
+// What load() found. The boolean the handle returns is "applied"; the
+// reason an existing draft was ignored is for the dev-build warning, since
+// a silent false left no way to tell a version mismatch from a shape
+// conflict from an empty storage slot.
+type LoadOutcome =
+  | Readonly<{ kind: "applied" }>
+  | Readonly<{ kind: "absent" }>
+  | Readonly<{ kind: "ignored"; reason: string }>;
+
 export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = DefaultPathDepth>(
   form: Form<TSchema, D>,
   options: PersistOptions<TSchema>,
@@ -140,13 +181,56 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
   const storage = options.storage ?? defaultStorage();
   const debounceMs = options.debounceMs ?? 300;
   const apply = options.apply ?? "adopt";
+  const schema: z.ZodType = form.schema;
 
-  // "restore" is a plain values write (dirty vs the original initials);
-  // "adopt" and "manual" rebase via adoptValues so the draft reads clean.
-  const applyDraft = (values: z.input<TSchema>): void =>
-    apply === "edit" || apply === "restore"
-      ? form.setValues(values)
-      : form.adoptValues(values);
+  // A draft stored before the schema GAINED a key lacks that key, and
+  // applying it wholesale erased the key's initial value from values AND
+  // initialValues (reset() could not bring it back, and the user met zod's
+  // generic message instead of the author's). Fill the gap from the initial
+  // values, but only where the schema says the key is REQUIRED: an optional
+  // key absent from the draft may have been cleared on purpose (JSON drops
+  // undefined), and filling it would undo that edit. Objects recurse so a
+  // nested gain is covered; arrays are left alone (row counts differ for
+  // ordinary reasons). A key the schema walk cannot place is filled too:
+  // the initial value is the author's default, the safer guess.
+  const fillRequiredGaps = (
+    draft: unknown,
+    initial: unknown,
+    path: string,
+  ): unknown => {
+    if (!isPlainObject(draft) || !isPlainObject(initial)) return draft;
+    return Object.keys(initial).reduce<Record<string, unknown>>(
+      (acc, key) => {
+        const childPath = joinPath(path, key);
+        if (Object.hasOwn(draft, key)) {
+          const next = fillRequiredGaps(draft[key], initial[key], childPath);
+          return Object.is(next, draft[key]) ? acc : { ...acc, [key]: next };
+        }
+        if (initial[key] === undefined) return acc;
+        const sub = fieldSchemaForIntrospection(schema, childPath);
+        return sub !== null && isClearableSchema(sub)
+          ? acc
+          : { ...acc, [key]: initial[key] };
+      },
+      draft,
+    );
+  };
+
+  // "edit" (and its alias "restore") is a plain values write (dirty vs the
+  // original initials); "adopt" and "manual" rebase via adoptValues so the
+  // draft reads clean.
+  const applyDraft = (values: z.input<TSchema>): void => {
+    const filled = fillRequiredGaps(
+      values,
+      form.getState().initialValues,
+      "",
+    ) as z.input<TSchema>;
+    if (apply === "edit" || apply === "restore") {
+      form.setValues(filled);
+    } else {
+      form.adoptValues(filled);
+    }
+  };
 
   // The shape the draft is checked against, in stored form. Round-tripping
   // the reference through JSON puts both sides in the same representation.
@@ -161,12 +245,21 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
     }
   };
 
-  const load = (): boolean => {
+  const flexibleAt = (path: string): boolean =>
+    schemaAllowsKindChangeAt(schema, path);
+
+  const inspect = (): LoadOutcome => {
     // Every storage touch is guarded: private-mode/security errors read as
-    // "no draft", corrupt JSON parses as "no draft" — load never throws.
+    // "no draft", corrupt JSON as an ignored one — load never throws.
+    const raw = ((): string | null => {
+      try {
+        return storage === null ? null : storage.getItem(options.key);
+      } catch {
+        return null;
+      }
+    })();
+    if (raw === null) return { kind: "absent" };
     try {
-      const raw = storage === null ? null : storage.getItem(options.key);
-      if (raw === null) return false;
       const parsed: unknown = JSON.parse(raw);
       // Versioned drafts are wrapped; unversioned ones are the bare values,
       // which is the format every existing draft is already in.
@@ -175,11 +268,16 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
         typeof parsed === "object" &&
         parsed !== null &&
         "__v" in parsed;
-      if (options.version !== undefined && !versioned) return false;
+      if (options.version !== undefined && !versioned) {
+        return {
+          kind: "ignored",
+          reason: `it carries no version and this configuration expects version ${String(options.version)}`,
+        };
+      }
       // The config-downgrade hole: a draft WRITTEN with a version is the
       // {__v, values} wrapper, and if the app later ships without the
       // version option, nothing above catches it — the wrapper's keys
-      // don't overlap the reference shape, so conflictsWith stays quiet
+      // don't overlap the reference shape, so the shape guard stays quiet
       // and the WRAPPER OBJECT gets adopted as form values (then
       // re-persisted, making the corruption self-sustaining). A versioned
       // draft under a version-less config is a contract the current app
@@ -192,38 +290,67 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
         Object.hasOwn(parsed, "__v") &&
         Object.hasOwn(parsed, "values")
       ) {
-        return false;
+        return {
+          kind: "ignored",
+          reason: "it was written with a version and this configuration has none",
+        };
       }
       const wrapper = parsed as unknown as {
         readonly __v?: unknown;
         readonly values?: unknown;
       };
-      if (versioned && wrapper.__v !== options.version) return false;
+      if (versioned && wrapper.__v !== options.version) {
+        return {
+          kind: "ignored",
+          reason: `its version (${String(wrapper.__v)}) is not the configured version (${String(options.version)})`,
+        };
+      }
       // A wrapper with no payload is not a draft. Only reachable via tampered
       // or foreign storage, but applying it would write undefined over the
       // whole values object.
-      if (versioned && wrapper.values === undefined) return false;
+      if (versioned && wrapper.values === undefined) {
+        return { kind: "ignored", reason: "its version wrapper holds no values" };
+      }
       const values = (versioned ? wrapper.values : parsed) as z.input<TSchema>;
       // A null or missing TOP-LEVEL payload is not a draft either (an
       // unversioned "null" in storage, or a versioned wrapper holding
-      // values: null). conflictsWith deliberately treats null as shapeless
+      // values: null). The shape guard deliberately treats null as shapeless
       // because nested nullable fields legally hold it, so the top level is
       // the one place to refuse it: adoptValues(null) would make every path
       // read on the form crash and then re-persist the same null.
-      if (values === null || values === undefined) return false;
+      if (values === null || values === undefined) {
+        return { kind: "ignored", reason: "it holds no values" };
+      }
       // A draft whose shape conflicts with the form's is from another schema.
       // Applying it would rebase the form onto values it cannot validate, and
       // because "adopt" clears errors, the form would read CLEAN while holding
       // them. Ignore it instead; the next change overwrites it.
       const reference = referenceShape();
-      if (reference !== undefined && conflictsWith(values, reference)) {
-        return false;
+      const conflict =
+        reference === undefined
+          ? null
+          : conflictPath(values, reference, "", flexibleAt);
+      if (conflict !== null) {
+        return {
+          kind: "ignored",
+          reason: `its shape conflicts with the form's initial values at "${conflict}" (set the version option when the schema changes)`,
+        };
       }
       applyDraft(values);
-      return true;
+      return { kind: "applied" };
     } catch {
-      return false;
+      return { kind: "ignored", reason: "it is not valid JSON" };
     }
+  };
+
+  const load = (): boolean => {
+    const outcome = inspect();
+    if (outcome.kind === "ignored" && isDevBuild()) {
+      console.warn(
+        `[formstand] persistForm: ignored the draft under "${options.key}": ${outcome.reason}. The next edit overwrites it.`,
+      );
+    }
+    return outcome.kind === "applied";
   };
 
   const writeDraft = (values: z.input<TSchema>): void => {
@@ -246,7 +373,6 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
 
   // Trailing-edge debounce of draft writes (0 = write synchronously).
   const writes = createDebouncer(debounceMs);
-  const cancelPending = (): void => writes.cancel();
 
   // Auto-apply BEFORE subscribing, so applying the draft doesn't immediately
   // schedule a write of the values we just read.
@@ -254,16 +380,29 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
     load();
   }
 
+  // Armed by clear(): the usual after-submit pair is clear() then reset(),
+  // and the reset's values change used to write the fresh baseline straight
+  // back as a draft, which the next visit then adopted over whatever initial
+  // values the app had meanwhile computed. A rebase leaves values ===
+  // initialValues (reset, adoptValues, a pristine restore); while armed,
+  // such a write is skipped. Any real edit disarms it. A sanctioned mutable
+  // ref, like the timer handle inside the debouncer.
+  const cleared = { current: false };
+
   const unsubscribe = form.watchValues((values) => {
+    if (cleared.current && values === form.getState().initialValues) return;
+    cleared.current = false;
     writes.schedule(() => writeDraft(values));
   });
 
   return Object.freeze({
     load,
+    flush: () => writes.flush(),
     clear: () => {
       // Cancel first: a pending debounced write landing after removeItem
       // would silently resurrect the draft.
-      cancelPending();
+      writes.cancel();
+      cleared.current = true;
       try {
         storage?.removeItem(options.key);
       } catch {
@@ -271,7 +410,7 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
       }
     },
     dispose: () => {
-      cancelPending();
+      writes.flush();
       unsubscribe();
     },
   });
