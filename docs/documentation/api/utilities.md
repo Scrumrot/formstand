@@ -31,7 +31,7 @@ persistForm(form, options): PersistHandle   // debounced draft save + load
 
 Everything importable via `import type { ... } from "formstand"`:
 
-- **Core:** `Form`, `CreateFormOptions`, `SubmitHandler`, `InvalidSubmitHandler`, `SubmitOptions`, `SubmitResult`, `ResetOptions`, `ReadonlyStoreApi`, `FieldSnapshot`
+- **Core:** `Form`, `CreateFormOptions`, `SubmitHandler`, `InvalidSubmitHandler`, `SubmitOptions`, `SubmitResult`, `ResetOptions`, `ReadonlyStoreApi`, `ErrorPath` (the path type the error writers and field validators take: `FieldPath` plus the root `""`), `FieldSnapshot`
 - **State:** `FormState`, `ErrorMap`, `BoolMap`
 - **Paths:** `PathSegment`, `FieldPath`, `FieldValue`, `PathDepth` (the legal `pathDepth` budgets, the literals 0–25), `DefaultPathDepth` (the default budget, 9), `ArrayFieldPath<Values, D>` (the subset of `FieldPath` whose value is a variable-length array, what every `form.array*` op and `useFieldArray` accept) and `ArrayItemOf<V>` (the item type the array ops take at a value: the element type of a variable-length array, optional/nullable stripped, `never` for a tuple or a non-array)
 - **Validation:** `ValidationResult`, `SettledValidationResult`, `FieldValidationResult`, `SettledFieldValidationResult`, `FieldsValidationResult`, `SettledFieldsValidationResult`, `ValidationMode`, `ValidationTrigger`

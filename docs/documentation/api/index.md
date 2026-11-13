@@ -53,8 +53,8 @@ const form = createForm(schema, {
 | `updateState(updater)` | atomic multi-field patch. `errors` is derived from `schemaErrors`/`serverErrors`, so patch the channels instead: the patch type omits `errors` entirely, and a plain-JS `errors` patch is warned about and ignored |
 | `validate()` / `validateField(path)` / `validateFields(paths)` | sync validation. On an async schema all three transparently start the async pass instead and return `{ kind: "pending", promise }` |
 | `validateAsync()` / `validateFieldAsync(path)` / `validateFieldsAsync(paths)` | async; supports `async .refine` |
-| `submit(onValid, onInvalid?, options?)` | full submit flow with [`SubmitOptions`](#submitoptions), returns `Promise<SubmitResult>`. Resolves `{ kind: "valid", data }`, `{ kind: "invalid", errors }` (errored fields are also marked touched), `{ kind: "skipped" }` when another submit is in flight and `force` isn't set, or `{ kind: "error", error }` when `onValid` or `onInvalid` throws or rejects (`onError` sees it either way). Submit resolves instead of rejecting for anything a handler does, so `handleSubmit` never leaves an unhandled rejection; the one rejection it passes through is a schema whose async refinement itself throws, which rejects the way `validateAsync` does |
-| `handleSubmit(onValid, onInvalid?, options?)` | returns an event handler that calls `preventDefault()` and runs `submit` |
+| `submit(onValid, onInvalid?, options?)` / `submit(onValid, options)` | full submit flow with [`SubmitOptions`](#submitoptions), returns `Promise<SubmitResult>`. Resolves `{ kind: "valid", data }`, `{ kind: "invalid", errors }` (errored fields are also marked touched), `{ kind: "skipped" }` when another submit is in flight and `force` isn't set, or `{ kind: "error", error }` when `onValid` or `onInvalid` throws or rejects (`onError` sees it either way). Submit resolves instead of rejecting for anything a handler does, so `handleSubmit` never leaves an unhandled rejection; the one rejection it passes through is a schema whose async refinement itself throws, which rejects the way `validateAsync` does |
+| `handleSubmit(onValid, onInvalid?, options?)` / `handleSubmit(onValid, options)` | returns an event handler that calls `preventDefault()` and runs `submit` |
 | `getField(path)` | typed one-shot value read |
 | `getFieldState(path)` | typed one-shot read of a field's full slice, a [`FieldSnapshot`](#fieldsnapshot-tvalue) |
 | `watchField(path, listener)` | subscribe to one field's [`FieldSnapshot`](#fieldsnapshot-tvalue); returns an unsubscribe function |
@@ -66,10 +66,11 @@ const form = createForm(schema, {
 
 All paths on the imperative surface are `FieldPath`-typed; runtime-built strings need a cast. See [Typed paths](../typed-paths#dynamic-paths).
 
-The positional `submit(onValid, onInvalid?, options?)` is the committed shape. No options-object overload is planned, so when you need options without an invalid handler, pass `undefined` in its slot:
+`submit` and `handleSubmit` take either shape: positional `(onValid, onInvalid?, options?)`, or `(onValid, options)` with `onInvalid` inside the options object, the shape `useFormAction`'s `FormActionOptions` always had. Both stay; the options object is the one to reach for when you need `force` or `onError` without an invalid handler:
 
 ```ts
-await form.submit(onValid, undefined, { force: true });
+await form.submit(onValid, { force: true });
+await form.submit(onValid, { onInvalid, onError });
 ```
 
 ## Result and option types
@@ -88,12 +89,14 @@ type SubmitResult<TOutput> =
 
 ### `SubmitOptions`
 
-The third argument of `submit` and `handleSubmit`:
+The options of `submit` and `handleSubmit` (the third argument in the positional shape, the second in the options shape):
 
 ```ts
 type SubmitOptions = {
   force?: boolean;                    // run even while another submit is in flight
                                       // (otherwise the call resolves { kind: "skipped" })
+  onInvalid?: InvalidSubmitHandler;   // the options-object spelling of the second argument;
+                                      // a positional onInvalid wins when both are given
   onError?: (error: unknown) => void; // called when onValid throws or rejects, the save-failure
                                       // hook mirroring onInvalid; the result still resolves
                                       // { kind: "error" } so imperative callers can switch on it
@@ -117,7 +120,9 @@ Returned by `getFieldState` and passed to `watchField` listeners:
 ```ts
 type FieldSnapshot<TValue> = {
   value: TValue;
+  initialValue: TValue;                // what `dirty` compares against
   error: readonly string[] | undefined;
+  firstError: string | undefined;      // error?.[0], the display shorthand useField has
   touched: boolean;
   dirty: boolean;
   isValidating: boolean;

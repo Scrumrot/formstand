@@ -79,7 +79,7 @@ The step index is deliberately React state, not form state: it is UI navigation,
 
 ## Validation scoping, honestly
 
-`next()` parses the **whole schema** and scopes the resulting errors to the step's paths. That means a cross-field refine *inside* a step (the `confirm` check above, issued at a path the step owns) gates the advance. A rule whose issue lands at the root `""` key, or at a path a *different* step owns, does not: a step only re-judges its own paths. Cross-step rules surface at submit, which is where every wizard ultimately reconciles, and the final step's submit button goes through the ordinary [`handleSubmit`](./validation) (or the [form-actions bridge](./ssr#react-19-form-actions)).
+`next()` validates the step's paths through `validateFieldsAsync`: just those slots when every path extracts a subschema, and the **whole schema**, scoped to the step's paths, when a refine on an ancestor could reach them (the `confirm` check above sits on the root object, so that step takes the full parse). Either way a cross-field refine *inside* a step, issued at a path the step owns, gates the advance. A rule whose issue lands at the root `""` key, or at a path a *different* step owns, does not: a step only re-judges its own paths. Cross-step rules surface at submit, which is where every wizard ultimately reconciles, and the final step's submit button goes through the ordinary [`handleSubmit`](./validation) (or the [form-actions bridge](./ssr#react-19-form-actions)).
 
 Values entered on other steps are still validated on submit even if the user never revisits them: one schema, one values object, nothing is partial.
 

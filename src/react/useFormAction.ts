@@ -97,10 +97,11 @@ export const useFormAction = <
   return useCallback(
     async (formData: FormData) => {
       const { onValid: handler, options: opts } = latest.current;
+      // FormActionOptions IS a SubmitOptions (onInvalid + onError), so it
+      // rides through the options-object shape as it is.
       const result = await form.submit(
         (data) => handler(data, formData),
-        opts?.onInvalid,
-        opts?.onError === undefined ? undefined : { onError: opts.onError },
+        opts ?? {},
       );
       warnUnobserved(result, opts, "useFormAction");
     },
@@ -141,10 +142,7 @@ export const useFormActionState = <
         async (data) => {
           nextRef.current = await action(prev, data, formData);
         },
-        options?.onInvalid,
-        options?.onError === undefined
-          ? undefined
-          : { onError: options.onError },
+        options ?? {},
       );
       warnUnobserved(result, options, "useFormActionState");
       return nextRef.current;

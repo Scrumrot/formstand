@@ -8,6 +8,7 @@ import type {
   FieldValue,
   PathDepth,
 } from "../core/fieldPath";
+import type { PersistHandle, PersistOptions } from "../core/persist";
 import type { FormState } from "../core/types";
 import {
   type FieldFormApi,
@@ -39,6 +40,14 @@ import {
 } from "./useFormSteps";
 import { type UseFieldsReturn, useFields } from "./useFields";
 import {
+  type FormActionHandler,
+  type FormActionOptions,
+  type FormActionStateHandler,
+  useFormAction,
+  useFormActionState,
+} from "./useFormAction";
+import { usePersistForm } from "./usePersistForm";
+import {
   useIsDirty,
   useIsSubmitting,
   useIsValid,
@@ -63,6 +72,16 @@ import {
 //
 // Typed paths survive the binding: useInvoiceField("customer") infers the
 // value type from the schema, and a typo'd path is a compile error.
+//
+// Every hook that takes a form is bound, the form-actions bridges and
+// usePersistForm included (they were the three the first cut skipped
+// while the docs promised every hook). The bound names drop the "Form"
+// of the originals, as the others do: useFormAction becomes
+// use{Name}Action, useFormActionState use{Name}ActionState, and
+// usePersistForm use{Name}Persist. Without a name the keys are the bare
+// spellings (useAction, useActionState, usePersist), which shadow the
+// library's own exports and, for useActionState, React's, wherever they
+// are destructured; a name is the better habit.
 //
 // Reach for this when the form is a genuine module-level singleton (one
 // instance for the app's lifetime — settings, a global compose box). For a
@@ -132,6 +151,23 @@ export type BoundUseFlag<TSchema extends z.ZodType, D extends PathDepth = Defaul
   path?: FieldPath<z.input<TSchema>, D>,
 ) => boolean;
 
+// The form-actions bridges and persistence, bound: the unbound signatures
+// minus the form argument, like every other entry.
+export type BoundUseAction<TSchema extends z.ZodType> = (
+  onValid: FormActionHandler<TSchema>,
+  options?: FormActionOptions,
+) => (formData: FormData) => Promise<void>;
+
+export type BoundUseActionState<TSchema extends z.ZodType> = <S>(
+  action: FormActionStateHandler<TSchema, S>,
+  initialState: S,
+  options?: FormActionOptions,
+) => [state: S, formAction: (formData: FormData) => void, isPending: boolean];
+
+export type BoundUsePersist<TSchema extends z.ZodType> = (
+  options: PersistOptions<TSchema>,
+) => PersistHandle;
+
 // One single-key mapped type per hook, intersected: template-literal keys
 // carry the capitalized name, so the destructured names are typo-checked
 // ({ useInvoceField } fails to compile against createFormHooks(f, "invoice")).
@@ -162,7 +198,9 @@ export type FormHooks<
     [K in `use${Capitalize<N>}Steps`]: (
       steps: readonly FormStep<z.input<TSchema>, D>[],
     ) => UseFormStepsReturn;
-  }
+  } & { [K in `use${Capitalize<N>}Action`]: BoundUseAction<TSchema> } & {
+    [K in `use${Capitalize<N>}ActionState`]: BoundUseActionState<TSchema>;
+  } & { [K in `use${Capitalize<N>}Persist`]: BoundUsePersist<TSchema> }
 >;
 
 // The bound composite-fields hook: same const-inferred tuple and
@@ -266,6 +304,22 @@ export const createFormHooks = <
     steps: readonly FormStep<z.input<TSchema>, D>[],
   ): UseFormStepsReturn => useFormSteps(form, steps);
 
+  const useBoundAction = (
+    onValid: FormActionHandler<TSchema>,
+    options?: FormActionOptions,
+  ): ((formData: FormData) => Promise<void>) =>
+    useFormAction(form, onValid, options);
+
+  const useBoundActionState = <S,>(
+    action: FormActionStateHandler<TSchema, S>,
+    initialState: S,
+    options?: FormActionOptions,
+  ): [state: S, formAction: (formData: FormData) => void, isPending: boolean] =>
+    useFormActionState(form, action, initialState, options);
+
+  const useBoundPersist = (options: PersistOptions<TSchema>): PersistHandle =>
+    usePersistForm(form, options);
+
   const prefix = capitalize(name ?? "");
   // Computed keys erase to an index signature, so the literal is asserted
   // to the mapped FormHooks type — the real contract, verified by type
@@ -286,5 +340,8 @@ export const createFormHooks = <
     [`use${prefix}Values`]: useBoundValues,
     [`use${prefix}Fields`]: useBoundFields,
     [`use${prefix}Steps`]: useBoundSteps,
+    [`use${prefix}Action`]: useBoundAction,
+    [`use${prefix}ActionState`]: useBoundActionState,
+    [`use${prefix}Persist`]: useBoundPersist,
   } as FormHooks<TSchema, N, D>;
 };

@@ -7,6 +7,27 @@
 - `PersistHandle.flush()` writes the pending debounced draft now, for
   the moments that cannot wait out the debounce (a route change, a
   `pagehide` handler). `dispose()` flushes too; see Fixed below.
+- `submit` and `handleSubmit` take an options object in the second
+  position: `submit(onValid, { onInvalid, onError, force })`, the shape
+  `useFormAction`'s `FormActionOptions` always had, so `submit(onValid,
+  undefined, { force: true })` is no longer the only spelling.
+  `SubmitOptions` gains `onInvalid`; a positional `onInvalid` wins when
+  both are given. The positional shape stays.
+- `ErrorPath<TValues, D>` is exported: the path type `setError`,
+  `clearErrors`, `validateField` and `validateFieldAsync` take
+  (`FieldPath` plus the root `""`), for wrappers that forward those
+  calls.
+- `createFormHooks` binds the three hooks it skipped while the docs
+  promised every hook: `use{Name}Action` and `use{Name}ActionState`
+  (the form-actions bridges) and `use{Name}Persist` (`usePersistForm`),
+  with the `BoundUseAction`, `BoundUseActionState` and `BoundUsePersist`
+  types exported.
+- `FieldSnapshot` (from `getFieldState` and `watchField`) carries
+  `initialValue` and `firstError`, matching `useField`.
+- `fillField`, `blurField` and `fillAndBlurField` from `formstand/testing`
+  return the `FieldValidationResult` when the gate validated
+  (`undefined` when it did not), so a test can await a pending async
+  refine instead of guessing a delay.
 
 ### Fixed
 

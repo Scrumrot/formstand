@@ -238,7 +238,7 @@ const CustomerField = () => {
 };
 ```
 
-The optional name is baked into the hook names at both the type level and runtime (`"invoice"` gives you `useInvoiceField`, `useInvoiceSelector`, `useInvoiceIsDirty`, and so on), so a typo'd destructure is a compile error. Omit it for unprefixed names (`useField`, `useSelector`, and the rest). Every returned hook keeps its unbound signature minus the `form` argument, including typed paths, item inference in `useInvoiceFieldArray`, and path-scoped flags.
+The optional name is baked into the hook names at both the type level and runtime (`"invoice"` gives you `useInvoiceField`, `useInvoiceSelector`, `useInvoiceIsDirty`, and so on), so a typo'd destructure is a compile error. Omit it for unprefixed names (`useField`, `useSelector`, and the rest), knowing that those shadow the library's own exports, and `useActionState` React's, wherever you destructure them, so a name is the better habit. Every hook that takes a form is bound, the form-actions bridges (`useInvoiceAction`, `useInvoiceActionState`) and persistence (`useInvoicePersist`) included, and each keeps its unbound signature minus the `form` argument, including typed paths, item inference in `useInvoiceFieldArray`, and path-scoped flags.
 
 ::: warning A singleton is a singleton
 The module-level form never unmounts: its state persists across route changes until you `reset()` it, and under SSR (Next.js and friends) module scope is shared **across requests** on the server. Keep `createFormHooks` forms to client-only modules, and use `useForm` plus `createFormContext` for anything with a per-mount lifecycle.

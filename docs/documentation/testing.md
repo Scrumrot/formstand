@@ -25,7 +25,7 @@ if (result.kind === "valid") {
 ```
 
 - **`fillField(form, path, value)`**: a user edit. Write, then validate under the **change** gate, exactly `useField`'s `setValue` (the no-op guard included: writing the identical value skips the gate too). The value is typed from the path.
-- **`blurField(form, path)`**: mark touched, then validate under the **blur** gate, exactly `useField`'s `onBlur`.
+- **`blurField(form, path)`**: mark touched, then validate under the **blur** gate, exactly `useField`'s `onBlur`. Both return the `FieldValidationResult` when the gate validated and `undefined` when it did not, so a test that hit an async refine awaits the pending result's `promise` instead of guessing a delay.
 - **`fillAndBlurField(form, path, value)`**: edit-then-leave; what touched-gated error UIs respond to.
 - **`fillFields(form, values)`**: a fixture object applied in order, each entry through the full fill recipe. The object is a mapped type over the schema's paths, so each value is typed from its own key: `fillFields(form, { age: "x" })` is a compile error exactly as `fillField(form, "age", "x")` is. Fixtures that are genuinely runtime-keyed cast at the call site.
 - **`submitForm(form)`**: submit with a no-op handler and hand back the `SubmitResult`: `"valid"` carries parsed data, `"invalid"` the error map (written and marked touched like any failed submit). Switch on `kind`; the discriminant does the shape-assertion work.

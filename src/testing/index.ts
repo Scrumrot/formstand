@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { Form, SubmitResult } from "../core/createForm";
+import type { FieldValidationResult } from "../core/validation";
 import type {
   DefaultPathDepth,
   FieldPath,
@@ -23,6 +24,9 @@ import { shouldValidateOn } from "../core/mode";
 // A user edit: write the value, then validate under the CHANGE gate —
 // exactly useField's setValue, including the no-op guard (writing the
 // identical value leaves state untouched, so the gate is skipped too).
+// Returns the validation's result when the gate validated (so a test that
+// hit an async refine can `await result.promise` instead of guessing a
+// delay), undefined when it did not.
 export const fillField = <
   TSchema extends z.ZodType,
   P extends FieldPath<z.input<TSchema>, D>,
@@ -31,50 +35,48 @@ export const fillField = <
   form: Form<TSchema, D>,
   path: P,
   value: FieldValue<z.input<TSchema>, P>,
-): void => {
+): FieldValidationResult | undefined => {
   const before = form.store.getState();
   form.setValue(path, value);
   const state = form.store.getState();
-  if (state === before) return;
-  if (
-    shouldValidateOn(
-      "change",
-      state.mode,
-      state.reValidateMode,
-      state.submitCount > 0,
-      flagAt(state.touched, path),
-    )
-  ) {
-    form.validateField(path);
-  }
+  if (state === before) return undefined;
+  return shouldValidateOn(
+    "change",
+    state.mode,
+    state.reValidateMode,
+    state.submitCount > 0,
+    flagAt(state.touched, path),
+  )
+    ? form.validateField(path)
+    : undefined;
 };
 
 // A user leaving the field: mark it touched, then validate under the
-// BLUR gate — exactly useField's onBlur.
+// BLUR gate — exactly useField's onBlur. Same return as fillField.
 export const blurField = <
   TSchema extends z.ZodType,
   D extends PathDepth = DefaultPathDepth,
 >(
   form: Form<TSchema, D>,
   path: FieldPath<z.input<TSchema>, D>,
-): void => {
+): FieldValidationResult | undefined => {
   form.setTouched(path, true);
   const state = form.store.getState();
-  if (
-    shouldValidateOn(
-      "blur",
-      state.mode,
-      state.reValidateMode,
-      state.submitCount > 0,
-      true,
-    )
-  ) {
-    form.validateField(path);
-  }
+  return shouldValidateOn(
+    "blur",
+    state.mode,
+    state.reValidateMode,
+    state.submitCount > 0,
+    true,
+  )
+    ? form.validateField(path)
+    : undefined;
 };
 
 // Edit-then-leave, the way a user fills a form field. The common case in
 // a test that wants touched-gated error UIs to show what they would show.
+// Returns the blur's result (the later of the two passes, and the one
+// that is guaranteed to have run under every mode but onSubmit).
 export const fillAndBlurField = <
   TSchema extends z.ZodType,
   P extends FieldPath<z.input<TSchema>, D>,
@@ -83,9 +85,9 @@ export const fillAndBlurField = <
   form: Form<TSchema, D>,
   path: P,
   value: FieldValue<z.input<TSchema>, P>,
-): void => {
+): FieldValidationResult | undefined => {
   fillField(form, path, value);
-  blurField(form, path);
+  return blurField(form, path);
 };
 
 // Fill several fields in one call: entries are applied in order, each

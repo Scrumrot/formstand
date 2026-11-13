@@ -9,6 +9,9 @@ export type {
   ResetOptions,
   ReadonlyStoreApi,
   FieldSnapshot,
+  // The path type the error writers and field validators take: FieldPath
+  // plus the root "" (a schema-wide refine's key).
+  ErrorPath,
 } from "./core/createForm";
 export type { FormState, ErrorMap, BoolMap } from "./core/types";
 export { parsePath, getAtPath, setAtPath } from "./core/path";
@@ -84,10 +87,13 @@ export type {
 export { createFormContext } from "./react/FormContext";
 export { createFormHooks } from "./react/createFormHooks";
 export type {
+  BoundUseAction,
+  BoundUseActionState,
   BoundUseField,
   BoundUseFieldArray,
   BoundUseFields,
   BoundUseFlag,
+  BoundUsePersist,
   BoundUseSelector,
   BoundUseVariantField,
   BoundUseVariantFieldArray,

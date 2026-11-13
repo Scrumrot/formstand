@@ -97,6 +97,10 @@ export type InvalidSubmitHandler = (errors: ErrorMap) => void;
 
 export type SubmitOptions = Readonly<{
   force?: boolean;
+  // The options-object spelling of submit's second argument, the shape
+  // useFormAction's FormActionOptions always had, so the two surfaces
+  // read the same. In the positional shape a positional onInvalid wins.
+  onInvalid?: InvalidSubmitHandler;
   // Called when onValid throws or rejects (the "error" SubmitResult) — the
   // save-failure hook, mirroring onInvalid for the validation side. The
   // result still resolves {kind: "error"}, so imperative submit() callers
@@ -118,8 +122,10 @@ export type SubmitResult<TOutput> =
   | Readonly<{ kind: "skipped" }>
   | Readonly<{ kind: "error"; error: unknown }>;
 
-// Root-level errors (schema-wide .refine) live at the "" key.
-type ErrorPath<TValues, D extends PathDepth = DefaultPathDepth> =
+// Root-level errors (schema-wide .refine) live at the "" key. Exported for
+// wrappers that forward setError / clearErrors / validateField calls and
+// had to re-derive `FieldPath | ""` by hand.
+export type ErrorPath<TValues, D extends PathDepth = DefaultPathDepth> =
   | FieldPath<TValues, D>
   | "";
 
@@ -132,19 +138,28 @@ export type ResetOptions = Readonly<{
   keepSubmitCount?: boolean;
 }>;
 
+// The same slice useField renders, so an imperative reader (getFieldState,
+// a watchField listener) and a bound component agree field for field.
 export type FieldSnapshot<TValue> = Readonly<{
   value: TValue;
+  // The slice of initialValues at the path (what `dirty` compares against).
+  initialValue: TValue;
   error: readonly string[] | undefined;
+  // The first message, or undefined: the display shorthand useField has.
+  firstError: string | undefined;
   touched: boolean;
   dirty: boolean;
   isValidating: boolean;
 }>;
 
+// firstError derives from `error`, so the identity compare on `error`
+// covers it.
 const shallowFieldEqual = <TValue>(
   a: FieldSnapshot<TValue>,
   b: FieldSnapshot<TValue>,
 ): boolean =>
   Object.is(a.value, b.value) &&
+  Object.is(a.initialValue, b.initialValue) &&
   a.error === b.error &&
   a.touched === b.touched &&
   a.dirty === b.dirty &&
@@ -261,11 +276,22 @@ export type Form<
   validateFieldsAsync: (
     paths: readonly FieldPath<z.input<TSchema>, D>[],
   ) => Promise<SettledFieldsValidationResult>;
-  submit: (
-    onValid: SubmitHandler<TSchema>,
-    onInvalid?: InvalidSubmitHandler,
-    options?: SubmitOptions,
-  ) => Promise<SubmitResult<z.output<TSchema>>>;
+  // Two call shapes, one body: the positional (onValid, onInvalid?,
+  // options?) and the options object (onValid, { onInvalid, onError,
+  // force }), which is the shape useFormAction's FormActionOptions always
+  // had. Before the second shape, options without an invalid handler
+  // meant `submit(onValid, undefined, { force: true })`.
+  submit: {
+    (
+      onValid: SubmitHandler<TSchema>,
+      onInvalid?: InvalidSubmitHandler,
+      options?: SubmitOptions,
+    ): Promise<SubmitResult<z.output<TSchema>>>;
+    (
+      onValid: SubmitHandler<TSchema>,
+      options: SubmitOptions,
+    ): Promise<SubmitResult<z.output<TSchema>>>;
+  };
   // Every array op takes an ARRAY path (ArrayFieldPath: variable-length
   // arrays, optional/nullable included, tuples and scalars excluded), so a
   // misaddressed op is blamed on the path argument. The index-only ops
@@ -294,13 +320,22 @@ export type Form<
     a: number,
     b: number,
   ) => void;
-  handleSubmit: (
-    onValid: SubmitHandler<TSchema>,
-    onInvalid?: InvalidSubmitHandler,
-    options?: SubmitOptions,
-  ) => (event?: {
-    preventDefault: () => void;
-  }) => Promise<SubmitResult<z.output<TSchema>>>;
+  // Same two shapes as submit.
+  handleSubmit: {
+    (
+      onValid: SubmitHandler<TSchema>,
+      onInvalid?: InvalidSubmitHandler,
+      options?: SubmitOptions,
+    ): (event?: {
+      preventDefault: () => void;
+    }) => Promise<SubmitResult<z.output<TSchema>>>;
+    (
+      onValid: SubmitHandler<TSchema>,
+      options: SubmitOptions,
+    ): (event?: {
+      preventDefault: () => void;
+    }) => Promise<SubmitResult<z.output<TSchema>>>;
+  };
   diff: () => Readonly<Record<string, unknown>>;
   dirtyFields: () => readonly string[];
   snapshot: () => FormState<z.input<TSchema>>;
@@ -985,11 +1020,15 @@ export const createForm = <
     path: string,
   ): FieldSnapshot<unknown> => {
     const value = getAtPath(state.values, path);
+    const initialValue = getAtPath(state.initialValues, path);
+    const error = entryAt(state.errors, path);
     return {
       value,
-      error: entryAt(state.errors, path),
+      initialValue,
+      error,
+      firstError: error?.[0],
       touched: flagAt(state.touched, path),
-      dirty: isFieldDirty(value, getAtPath(state.initialValues, path)),
+      dirty: isFieldDirty(value, initialValue),
       isValidating: flagAt(state.isValidating, path),
     };
   };
@@ -1321,9 +1360,21 @@ export const createForm = <
 
   const submit = async (
     onValid: SubmitHandler<TSchema>,
-    onInvalid?: InvalidSubmitHandler,
-    submitOptions?: SubmitOptions,
+    onInvalidOrOptions?: InvalidSubmitHandler | SubmitOptions,
+    positionalOptions?: SubmitOptions,
   ): Promise<SubmitResult<z.output<TSchema>>> => {
+    // Both call shapes normalize here (see the Form type): an object in
+    // the second slot is the options bag carrying onInvalid; a function
+    // (or an omitted slot, `submit(onValid, undefined, { force })`) is
+    // the positional shape, whose options sit in the third.
+    const submitOptions =
+      typeof onInvalidOrOptions === "object"
+        ? onInvalidOrOptions
+        : positionalOptions;
+    const onInvalid =
+      typeof onInvalidOrOptions === "function"
+        ? onInvalidOrOptions
+        : submitOptions?.onInvalid;
     if (inFlight.count > 0 && submitOptions?.force !== true) {
       return { kind: "skipped" };
     }
@@ -1820,10 +1871,22 @@ export const createForm = <
           b < len,
       ),
     handleSubmit:
-      (onValid, onInvalid, opts) =>
-      async (event) => {
+      (
+        onValid: SubmitHandler<TSchema>,
+        onInvalidOrOptions?: InvalidSubmitHandler | SubmitOptions,
+        positionalOptions?: SubmitOptions,
+      ) =>
+      async (event?: { preventDefault: () => void }) => {
         event?.preventDefault();
-        const result = await submit(onValid, onInvalid, opts);
+        const opts =
+          typeof onInvalidOrOptions === "object"
+            ? onInvalidOrOptions
+            : positionalOptions;
+        const result = await submit(
+          onValid,
+          onInvalidOrOptions,
+          positionalOptions,
+        );
         // The event-handler form is fire-and-forget: nobody reads the
         // resolved result, so a save failure with no onError handler
         // would otherwise vanish COMPLETELY — no state, no rejection, no
