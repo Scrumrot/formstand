@@ -54,18 +54,26 @@ type FieldRow = Readonly<{
 // JSON.stringify throws on a bigint (a z.bigint() field), which took the
 // whole panel down with it; a bigint renders as its literal spelling. An
 // undefined slot is dropped by JSON, so a field cleared to undefined
-// showed a diff of `{}`; it renders as the word instead.
+// showed a diff of `{}`; it renders as the word instead. NaN and the
+// infinities serialise as null, which hid the one value a number field
+// most often gets wrong behind a real-looking null; they render as their
+// own spelling too.
 const jsonReplacer = (_key: string, value: unknown): unknown =>
   typeof value === "bigint"
     ? `${String(value)}n`
     : value === undefined
       ? "undefined"
-      : value;
+      : typeof value === "number" && !Number.isFinite(value)
+        ? String(value)
+        : value;
 
 const preview = (value: unknown): string => {
   if (value === undefined) return "undefined";
   if (value instanceof Date) return value.toISOString();
   if (typeof value === "bigint") return `${String(value)}n`;
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    return String(value);
+  }
   const json = JSON.stringify(value, jsonReplacer);
   // Long strings and big row objects would push the value column past the
   // panel; the full value is one expand away in the Values section.
@@ -293,7 +301,14 @@ const DevtoolsPanel = <TSchema extends z.ZodType, D extends PathDepth>({
 }: FormstandDevtoolsProps<TSchema, D>) => {
   const state = useDevtoolsState(form);
   const [open, setOpen] = useState(defaultOpen);
-  const [held, setHeld] = useState<FormState<z.input<TSchema>> | null>(null);
+  // The snapshot remembers which form it came from: a `form` prop swap
+  // used to keep the old form's snapshot and restore it into the new one.
+  const [held, setHeld] = useState<Readonly<{
+    form: Form<TSchema, D>;
+    snapshot: FormState<z.input<TSchema>>;
+  }> | null>(null);
+  const heldForThisForm =
+    held !== null && held.form === form ? held.snapshot : null;
 
   return (
     <div style={{ ...styles.root, ...anchorFor(position) }}>
@@ -302,8 +317,8 @@ const DevtoolsPanel = <TSchema extends z.ZodType, D extends PathDepth>({
           form={form}
           state={state}
           label={label}
-          held={held}
-          onHold={setHeld}
+          held={heldForThisForm}
+          onHold={(snapshot) => setHeld({ form, snapshot })}
           onClose={() => setOpen(false)}
         />
       ) : (

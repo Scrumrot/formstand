@@ -88,6 +88,10 @@
   are reference-stable across renders now.
 - `dateToInputText` renders `""` for a date-shaped string that spells no
   real day (`"2026-02-31"`) instead of the Date constructor's reading.
+- The devtools panel renders `NaN` and the infinities as their own
+  spelling in the fields table and the diff instead of `null`, and
+  forgets its held snapshot when the `form` prop changes to another
+  form instead of restoring the old form's state into the new one.
 
 ## 0.26.0 — 2026-11-12
 
