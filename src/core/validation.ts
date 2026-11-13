@@ -221,8 +221,13 @@ const unwrapForWalk = (s: z.ZodType): z.ZodType | null => {
   }
   // A lazy schema's children live behind its getter. The budgeted walks
   // cannot loop on a recursive schema; the path-bounded ones stop at the
-  // path's end.
-  if (s instanceof z.ZodLazy) return s.def.getter() as z.ZodType;
+  // path's end. The getter is NOT called here: the recursive idiom
+  // `z.lazy(() => z.object(...))` builds a fresh schema per call, and
+  // useField compares the node this walk lands on by reference inside its
+  // store selector, so a fresh node per run re-rendered without end
+  // ("Maximum update depth exceeded" at mount). zod caches the getter's
+  // first result on `_zod.innerType` (classic `unwrap()` does not).
+  if (s instanceof z.ZodLazy) return s._zod.innerType as z.ZodType;
   return null;
 };
 
@@ -240,7 +245,10 @@ const isLeafSchema = (s: z.ZodType): boolean =>
   s instanceof z.ZodUndefined ||
   s instanceof z.ZodVoid ||
   s instanceof z.ZodNaN ||
-  s instanceof z.ZodSymbol;
+  s instanceof z.ZodSymbol ||
+  s instanceof z.ZodNever ||
+  s instanceof z.ZodFile ||
+  s instanceof z.ZodTemplateLiteral;
 
 // Every unwrap and every consumed segment costs one step — generous for any
 // real path, but it bounds pathological wrapper towers.
@@ -517,12 +525,15 @@ export const schemaAcceptsUndefined = (schema: z.ZodType): boolean =>
 // Whether a gap fill may walk the keys of the value at `path`: false only
 // where the schema PROVABLY shapes the keys some other way. A union's keys
 // belong to whichever variant a value holds, a record's, map's or set's
-// keys are data, an array's or tuple's slots are rows, and a scalar leaf
-// has no keys. Everything else answers true: a plain object, an
+// keys are data, an array's or tuple's slots are rows, a scalar leaf
+// has no keys, and a free-form slot (any, unknown, custom) declares no
+// keys for the fill to restore, so a key the draft dropped there stays
+// dropped. Everything else answers true: a plain object, an
 // intersection of objects, a lazy or preprocessed object, and a path the
 // walk cannot place, the same safer-guess bias the fill applies to a key
 // it cannot place. (An earlier spelling asked "is this a ZodObject" and
-// stopped filling under lazy, intersection and preprocess roots.)
+// stopped filling under lazy, intersection and preprocess roots; the one
+// after it let the fill through any/unknown/custom.)
 export const isObjectSchemaAt = (schema: z.ZodType, path: string): boolean => {
   const sub = fieldSchemaForIntrospection(schema, path);
   if (sub === null) return true;
@@ -539,6 +550,9 @@ export const isObjectSchemaAt = (schema: z.ZodType, path: string): boolean => {
     node instanceof z.ZodSet ||
     node instanceof z.ZodArray ||
     node instanceof z.ZodTuple ||
+    node instanceof z.ZodAny ||
+    node instanceof z.ZodUnknown ||
+    node instanceof z.ZodCustom ||
     isLeafSchema(node)
   );
 };

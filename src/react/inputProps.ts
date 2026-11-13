@@ -158,13 +158,16 @@ export const dateToInputText = (value: Date | null | undefined): string => {
   // midnight, which rendered the previous day west of UTC.
   if (typeof value === "string") {
     // Out of the declared type (the parameter says Date), hence the cast.
-    const text = value as unknown as string;
+    // Trimmed once for both the parse and the shape guard below: the
+    // guard used to trim while the parse did not, so a padded
+    // " 2026-02-28 " fell past the parse into the guard and rendered "".
+    const text = (value as unknown as string).trim();
     const parsed = parseDateText(text);
     if (parsed.kind === "date") return dateToInputText(parsed.value);
     // A date-shaped string the parser rejects (a rolled-over "2026-02-31")
     // must not fall through to the Date constructor's UTC reading either;
     // it spells no day, so it renders as empty.
-    if (/^\d{4}-\d{2}-\d{2}$/.test(text.trim())) return "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return "";
   }
   const date =
     value instanceof Date ? value : new Date(value as unknown as string);

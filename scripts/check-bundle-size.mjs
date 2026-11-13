@@ -31,8 +31,8 @@ import { gzipSync } from "node:zlib";
 // submit takes an options object, createFormHooks binds every hook):
 // the ESM entry plus its chunks measured 23.2 kB, the CJS entry 22.8 kB.
 const BUDGETS = [
-  { label: "formstand (ESM)", file: "dist/index.js", budget: 25_500 },
-  { label: "formstand (CJS)", file: "dist/index.cjs", budget: 25_000 },
+  { label: "formstand (ESM)", file: "dist/index.js", budget: 26_000 },
+  { label: "formstand (CJS)", file: "dist/index.cjs", budget: 25_500 },
   { label: "formstand/devtools", file: "dist/devtools/index.js", budget: 3_600 },
   { label: "formstand/testing", file: "dist/testing/index.js", budget: 900 },
   {

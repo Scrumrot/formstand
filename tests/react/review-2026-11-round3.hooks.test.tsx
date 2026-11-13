@@ -144,3 +144,12 @@ describe("dateToInputText on a date-shaped string that spells no day", () => {
     );
   });
 });
+
+describe("dateToInputText on a whitespace-padded date-only string", () => {
+  it("reads the padded day instead of rendering empty", () => {
+    expect(dateToInputText(" 2026-02-28 " as unknown as Date)).toBe(
+      "2026-02-28",
+    );
+    expect(dateToInputText("\t2026-02-31\n" as unknown as Date)).toBe("");
+  });
+});

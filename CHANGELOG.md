@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- `useField` (and every bound component) under an inline
+  `z.lazy(() => z.object(...))` threw "Maximum update depth exceeded" at
+  mount in 0.26.1: the introspection walk called the lazy getter, which
+  builds a fresh schema per call, so the field's schema node changed on
+  every selector run. The walk reads zod's cached inner type instead.
+- The persisted-draft gap fill no longer restores keys the draft dropped
+  under a `z.any()`, `z.unknown()` or `z.custom()` slot; a free-form slot
+  declares no keys to restore.
+- `dateToInputText` renders a whitespace-padded date-only string
+  (`" 2026-02-28 "`) as that day instead of `""`.
+
 ## 0.26.1 — 2026-11-13
 
 ### Added
