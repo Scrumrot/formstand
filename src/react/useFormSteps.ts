@@ -140,34 +140,38 @@ export const useFormSteps = <
     [form],
   );
 
-  // The step the user is on RIGHT NOW, readable after an await. next() and
-  // goTo() validate asynchronously from the render-time `step` (the one the
-  // user acted on), but the user may press back() while that validation is
-  // in flight; applying the advance then would land two steps past where
-  // they now are. Each transition re-checks that the step is still the one
-  // it validated before writing, and otherwise leaves the user's newer
-  // navigation alone.
+  // The step the user is on RIGHT NOW: a ref every navigation writes
+  // synchronously, which next() and goTo() read when they start and again
+  // after their await. The render-time `step` lagged twice over: a closure
+  // held the step of the render it came from, so two awaited next() calls
+  // from one handler validated the same step twice (both resolved true,
+  // the wizard moved once), and the guard ref used to move in an effect, a
+  // commit late. State mirrors the ref for rendering. The user may press
+  // back() while a validation is in flight; applying the advance then
+  // would land two steps past where they now are, so each transition
+  // re-checks that the step is still the one it validated before writing,
+  // and otherwise leaves the user's newer navigation alone.
   const currentStep = useRef(step);
-  useEffect(() => {
-    currentStep.current = step;
-  });
+  const navigate = useCallback((target: number): void => {
+    currentStep.current = target;
+    setStep(target);
+  }, []);
 
   const next = useCallback(async (): Promise<boolean> => {
-    // Functional reads through state setters would race the async
-    // validation; the render-time `step` is the one the user acted on.
-    const ok = await validateStep(step);
+    const from = currentStep.current;
+    const ok = await validateStep(from);
     if (!ok) return false;
-    if (currentStep.current !== step) return false;
+    if (currentStep.current !== from) return false;
     // Clamped at 0 as well: with no steps defined the last index is -1.
-    const target = Math.max(0, Math.min(step + 1, latest.current.length - 1));
-    setStep(target);
+    const target = Math.max(0, Math.min(from + 1, latest.current.length - 1));
+    navigate(target);
     setVisited((prev) => new Set([...prev, target]));
     return true;
-  }, [validateStep, step]);
+  }, [validateStep, navigate]);
 
   const back = useCallback((): void => {
-    setStep((prev) => Math.max(prev - 1, 0));
-  }, []);
+    navigate(Math.max(currentStep.current - 1, 0));
+  }, [navigate]);
 
   const goTo = useCallback(
     async (target: number): Promise<number> => {
@@ -177,33 +181,34 @@ export const useFormSteps = <
       // never held, so it recursed without bound. A target that is not a
       // finite number is a no-op that resolves where the form is.
       if (!Number.isFinite(target)) return currentStep.current;
+      const from = currentStep.current;
       const clamped = Math.max(0, Math.min(Math.trunc(target), count - 1));
-      if (clamped <= step) {
-        setStep(clamped);
+      if (clamped <= from) {
+        navigate(clamped);
         return clamped;
       }
       // Walk forward, validating each step on the way; land on the first
       // failure so its errors are on screen.
-      const walk = async (from: number): Promise<number> => {
-        if (from >= clamped) return clamped;
-        return (await validateStep(from)) ? walk(from + 1) : from;
+      const walk = async (at: number): Promise<number> => {
+        if (at >= clamped) return clamped;
+        return (await validateStep(at)) ? walk(at + 1) : at;
       };
-      const landed = await walk(step);
+      const landed = await walk(from);
       // The user navigated during the walk (back(), or another goTo that
       // resolved first): their newer position wins, and the caller learns
       // where the form actually is.
-      if (currentStep.current !== step) return currentStep.current;
-      setStep(landed);
+      if (currentStep.current !== from) return currentStep.current;
+      navigate(landed);
       setVisited(
         (prev) =>
           new Set([
             ...prev,
-            ...Array.from({ length: landed - step + 1 }, (_, i) => step + i),
+            ...Array.from({ length: landed - from + 1 }, (_, i) => from + i),
           ]),
       );
       return landed;
     },
-    [validateStep, step],
+    [validateStep, navigate],
   );
 
   // Live per-step error presence, shallow-compared so renders happen only

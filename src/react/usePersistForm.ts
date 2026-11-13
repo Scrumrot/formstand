@@ -5,6 +5,7 @@ import type { DefaultPathDepth, PathDepth } from "../core/fieldPath";
 import {
   type PersistHandle,
   type PersistOptions,
+  type PersistStorage,
   persistForm,
 } from "../core/persist";
 
@@ -24,13 +25,16 @@ import {
 // guarded no-throw posture persistForm itself has.
 //
 // Options are read when the subscription (re)starts — on mount, and again
-// if `form`, `options.key` or `options.storage` changes — not on every
-// render, mirroring
+// if `form` or `options.key` changes — not on every render, mirroring
 // useForm's locked-options rule; pass a stable options object or accept
-// that later edits to it are ignored until the key or form changes. A
-// resubscribe finds the draft the previous subscription flushed and leaves
-// the form alone (persistForm skips a draft the form already holds), so an
-// inline storage object costs a resubscribe per render and nothing else.
+// that later edits to it are ignored until the key or form changes. The
+// one exception is `storage`: every call goes to the storage of the
+// LATEST render through a proxy, so a swap (session to local, a per-user
+// namespace) takes effect on the next touch without a resubscribe. With
+// storage in the effect deps instead, an inline storage literal
+// resubscribed on every render, and the outgoing subscription's dispose()
+// flushed, which collapsed the debounce to nothing and re-read the draft
+// each render.
 export const usePersistForm = <
   TSchema extends z.ZodType,
   D extends PathDepth = DefaultPathDepth,
@@ -49,12 +53,24 @@ export const usePersistForm = <
   });
 
   const key = options.key;
-  // The storage object is an identity like the key: a swap (session to
-  // local, a per-user namespace) moves the subscription, where it used to
-  // keep writing to the first one it saw.
-  const storage = options.storage;
+  // Whether a storage is given at all still keys the subscription: the
+  // proxy cannot stand in for persistForm's default (localStorage), so
+  // switching between "a storage" and "the default" resubscribes.
+  const hasStorage = options.storage !== undefined;
+  const storageProxy = useMemo<PersistStorage>(
+    () => ({
+      getItem: (k) => latestOptions.current.storage?.getItem(k) ?? null,
+      setItem: (k, v) => latestOptions.current.storage?.setItem(k, v),
+      removeItem: (k) => latestOptions.current.storage?.removeItem(k),
+    }),
+    [],
+  );
   useEffect(() => {
-    const handle = persistForm(form, latestOptions.current);
+    const options = latestOptions.current;
+    const handle = persistForm(form, {
+      ...options,
+      ...(options.storage === undefined ? {} : { storage: storageProxy }),
+    });
     inner.current = handle;
     return () => {
       inner.current = null;
@@ -62,7 +78,7 @@ export const usePersistForm = <
     };
     // StrictMode's mount-cleanup-mount runs this twice: each pass gets its
     // own subscription and disposes the previous, so no double-writes.
-  }, [form, key, storage]);
+  }, [form, key, hasStorage, storageProxy]);
 
   return useMemo(
     () => ({

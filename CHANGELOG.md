@@ -76,6 +76,18 @@
 - A field-scoped pass that ran the full parse takes the parse's current
   message for an out-of-scope key it already held, so a cross-field rule
   with a dynamic message no longer shows the stale text.
+- `usePersistForm` forwards every storage call to the storage of the
+  latest render through a proxy instead of resubscribing when the
+  `storage` identity changes: an inline storage object resubscribed on
+  every render, and each outgoing subscription flushed, which collapsed
+  the debounce to nothing and re-read the draft each render.
+- `useFormSteps` reads the step the user is on when `next()`, `back()`
+  or `goTo()` is called, not the step of the render the closure came
+  from, so two awaited `next()` calls from one handler advance twice and
+  a `back()` pressed during an in-flight advance wins at once. The three
+  are reference-stable across renders now.
+- `dateToInputText` renders `""` for a date-shaped string that spells no
+  real day (`"2026-02-31"`) instead of the Date constructor's reading.
 
 ## 0.26.0 — 2026-11-12
 

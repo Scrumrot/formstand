@@ -157,8 +157,14 @@ export const dateToInputText = (value: Date | null | undefined): string => {
   // calendar date it spells: the Date constructor parses that form as UTC
   // midnight, which rendered the previous day west of UTC.
   if (typeof value === "string") {
-    const parsed = parseDateText(value);
+    // Out of the declared type (the parameter says Date), hence the cast.
+    const text = value as unknown as string;
+    const parsed = parseDateText(text);
     if (parsed.kind === "date") return dateToInputText(parsed.value);
+    // A date-shaped string the parser rejects (a rolled-over "2026-02-31")
+    // must not fall through to the Date constructor's UTC reading either;
+    // it spells no day, so it renders as empty.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text.trim())) return "";
   }
   const date =
     value instanceof Date ? value : new Date(value as unknown as string);
