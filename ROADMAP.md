@@ -292,6 +292,15 @@ source on 2026-09-23 (sweep in the `chore/internal-debt-sweep` branch).
   spelled in `namingFor`, `ownerHookName`, and the demo's `generate.ts`.
   Sharing it means exporting the stem rule across the cli/examples
   boundary; small, but not worth a public API surface on its own.
+- `useField` resolves its schema node inside the store selector since
+  0.26.1 (the live-variant fix: `fieldSchemaForIntrospection` runs against
+  the current values so a shared key follows the active discriminant).
+  Measured on 2026-11-13: 200 mounted fields taking 100 writes went from
+  47.5 ms to 150.3 ms, about 5 microseconds per selector run, with render
+  counts unchanged. A 200-field form pays roughly a millisecond per
+  keystroke, so it waits until a real form notices. The fix when it does:
+  a cache keyed on schema, path and the discriminant tags the walk read,
+  so a write that does not move a tag reuses the node.
 
 Closed on 2026-09-23: `SectionPlan` now carries its leaf `FieldPlan`s
 (`objectSectionFile` reads its own slice instead of string-matching the
