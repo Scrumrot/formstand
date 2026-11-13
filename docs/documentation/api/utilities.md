@@ -43,7 +43,7 @@ Everything importable via `import type { ... } from "formstand"`:
 - **Components:** `TextFieldProps`, `NumberFieldProps`, `DateFieldProps`, `CheckboxFieldProps`, `SelectFieldProps`, `SelectFieldOption`, `FieldRef`, `NumberInputBinding` (what [`useNumberInput`](./components#usenumberinput-field) returns), and the path filters behind the bound components' `path` props, for custom components with the same contract: `PathsOf<F>` (every typed path of a form prop), `PathsAccepting<F, V>` (the paths whose value is assignable to `V`), `ArrayPathsOf<F>` (the array paths, the form-level spelling of `ArrayFieldPath`), and `SelectValueAt<F, P>` (the option values a select at `P` may hold)
 - **Prop builders:** `TextInputProps`, `NumberInputProps`, `DateInputProps`, `CheckboxProps`, `SelectProps`, `ParsedNumberText`, `ParsedDateText`
 - **Persistence:** `PersistOptions`, `PersistStorage`, `PersistHandle` (see [`persistForm`](../state#persistence))
-- **Pre-wired hooks:** `FormHooks` (the whole object [`createFormHooks`](../state#pre-wired-hooks-createformhooks) returns) and its member shapes `BoundUseField`, `BoundUseFieldArray`, `BoundUseFields`, `BoundUseVariantField`, `BoundUseSelector`, `BoundUseFlag`
+- **Pre-wired hooks:** `FormHooks` (the whole object [`createFormHooks`](../state#pre-wired-hooks-createformhooks) returns) and its member shapes `BoundUseField`, `BoundUseFieldArray`, `BoundUseFields`, `BoundUseVariantField`, `BoundUseVariantFieldArray`, `BoundUseSelector`, `BoundUseFlag`, `BoundUseAction`, `BoundUseActionState`, `BoundUsePersist`
 
 From the `formstand/testing` subpath (see [Testing](../testing)):
 

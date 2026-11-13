@@ -30,7 +30,7 @@ You can try the panel without installing anything: the playground's [Devtools ta
 
 **Diff vs initial.** `form.diff()`, the PATCH-shaped payload of exactly what changed. Reads `clean` when nothing has.
 
-**Time travel.** `snapshot` holds the full state; `restore` puts it back. Both are the public `snapshot()` and `restore()` methods, so anything you can do here you can also do from code.
+**Time travel.** `snapshot` holds the full state; `restore` puts it back. The held snapshot survives collapsing and reopening the panel. Both are the public `snapshot()` and `restore()` methods, so anything you can do here you can also do from code.
 
 ## Props
 

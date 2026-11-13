@@ -56,6 +56,12 @@
   walked common keys only, so neither spelling compiled.
 - `CheckboxField` without a `label` no longer renders an empty `<label>`
   around the input.
+- The devtools panel keeps its held snapshot across a collapse (0.26.0
+  moved the held state into the open branch), and its diff shows a
+  field cleared to `undefined` as `"undefined"` instead of `{}`.
+- `fillAndBlurField` returns the fill's result when the blur gate did
+  not validate (`mode: "onChange"`, or after a submit), instead of
+  `undefined` for a pass it had started.
 
 ## 0.26.0 — 2026-11-12
 

@@ -52,9 +52,15 @@ type FieldRow = Readonly<{
 // warnings may.
 
 // JSON.stringify throws on a bigint (a z.bigint() field), which took the
-// whole panel down with it; a bigint renders as its literal spelling.
+// whole panel down with it; a bigint renders as its literal spelling. An
+// undefined slot is dropped by JSON, so a field cleared to undefined
+// showed a diff of `{}`; it renders as the word instead.
 const jsonReplacer = (_key: string, value: unknown): unknown =>
-  typeof value === "bigint" ? `${String(value)}n` : value;
+  typeof value === "bigint"
+    ? `${String(value)}n`
+    : value === undefined
+      ? "undefined"
+      : value;
 
 const preview = (value: unknown): string => {
   if (value === undefined) return "undefined";
@@ -118,6 +124,11 @@ type OpenPanelProps<TSchema extends z.ZodType, D extends PathDepth> = Readonly<{
   form: Form<TSchema, D>;
   state: DevtoolsState<z.input<TSchema>>;
   label: string;
+  // The held snapshot lives in the parent: this component unmounts when
+  // the panel collapses, and a snapshot taken before a collapse must
+  // still be there to restore after the reopen.
+  held: FormState<z.input<TSchema>> | null;
+  onHold: (snapshot: FormState<z.input<TSchema>>) => void;
   onClose: () => void;
 }>;
 
@@ -129,10 +140,10 @@ const OpenPanel = <TSchema extends z.ZodType, D extends PathDepth>({
   form,
   state,
   label,
+  held,
+  onHold,
   onClose,
 }: OpenPanelProps<TSchema, D>) => {
-  const [held, setHeld] = useState<FormState<z.input<TSchema>> | null>(null);
-
   // Computed every render rather than memoized. getFieldState and diff() read
   // through `form`, not through anything in a dependency array, so a memo
   // would need deps the linter can't see and would go stale the moment one
@@ -252,7 +263,7 @@ const OpenPanel = <TSchema extends z.ZodType, D extends PathDepth>({
         <button
           type="button"
           style={styles.button}
-          onClick={() => setHeld(form.snapshot())}
+          onClick={() => onHold(form.snapshot())}
         >
           snapshot
         </button>{" "}
@@ -282,6 +293,7 @@ const DevtoolsPanel = <TSchema extends z.ZodType, D extends PathDepth>({
 }: FormstandDevtoolsProps<TSchema, D>) => {
   const state = useDevtoolsState(form);
   const [open, setOpen] = useState(defaultOpen);
+  const [held, setHeld] = useState<FormState<z.input<TSchema>> | null>(null);
 
   return (
     <div style={{ ...styles.root, ...anchorFor(position) }}>
@@ -290,6 +302,8 @@ const DevtoolsPanel = <TSchema extends z.ZodType, D extends PathDepth>({
           form={form}
           state={state}
           label={label}
+          held={held}
+          onHold={setHeld}
           onClose={() => setOpen(false)}
         />
       ) : (

@@ -75,8 +75,11 @@ export const blurField = <
 
 // Edit-then-leave, the way a user fills a form field. The common case in
 // a test that wants touched-gated error UIs to show what they would show.
-// Returns the blur's result (the later of the two passes, and the one
-// that is guaranteed to have run under every mode but onSubmit).
+// Returns the blur's result (the later of the two passes) when the blur
+// gate validated, else the fill's: under mode "onChange", and after a
+// submit with the default reValidateMode, the fill runs the pass and the
+// blur does not, and a test awaiting an async rule needs that pending
+// result rather than undefined.
 export const fillAndBlurField = <
   TSchema extends z.ZodType,
   P extends FieldPath<z.input<TSchema>, D>,
@@ -86,8 +89,8 @@ export const fillAndBlurField = <
   path: P,
   value: FieldValue<z.input<TSchema>, P>,
 ): FieldValidationResult | undefined => {
-  fillField(form, path, value);
-  return blurField(form, path);
+  const filled = fillField(form, path, value);
+  return blurField(form, path) ?? filled;
 };
 
 // Fill several fields in one call: entries are applied in order, each
