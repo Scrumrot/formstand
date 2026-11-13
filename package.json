@@ -125,6 +125,9 @@
     "validation"
   ],
   "overrides": {
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "^11.0.1"
+    },
     "esbuild": "^0.28.1",
     "vitepress": {
       "vite": "^6.4.5",
