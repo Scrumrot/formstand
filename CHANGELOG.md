@@ -7,6 +7,13 @@
 - `watchField` listeners receive the previous snapshot as a second
   argument, `listener(snapshot, prev)`, the way `watchValue` passes the
   previous value.
+- `useFieldArray` returns `validateAsync()`, the awaitable twin of
+  `validate()`; `FieldArrayFormApi` gains the optional
+  `validateFieldAsync` member that backs it.
+- `useVariantField` and `useFields` (and their bound forms from
+  `createFormHooks`) take the same `options` as `useField`, so a variant
+  or composite field can debounce its change validation.
+- `FormActionOptions.force`, mirroring `SubmitOptions.force`.
 
 ### Fixed
 
@@ -31,6 +38,26 @@
   render) no longer re-adopts the draft every render, wiping errors and
   dirty state and looping with `useFormValues`; StrictMode's second
   mount adopts nothing either.
+- `useFieldArray`'s change and blur triggers report a throwing async
+  array refine through `console.error`, the way `useField`'s triggers
+  do, instead of leaving an unhandled rejection.
+- `useFieldArray.update(index, item)` past the end (or with a
+  non-integer index) is refused with a warning, like the index ops; it
+  used to write `null` holes.
+- `useFormSteps.next()` and `goTo()` judge a step on its live values: a
+  step value that changed while an async rule was in flight is validated
+  again instead of advancing on the stale verdict. With no steps defined
+  `next()` no longer sets the index to -1.
+- `parseNumberText("1.")` is a partial entry, as the docs and the type
+  comment always said, not the number 1.
+- `dateToInputText` reads a date-only string (a persisted draft's
+  `"2026-03-01"`) as the calendar date it spells; the Date constructor
+  parsed it as UTC midnight, which rendered the previous day west of UTC.
+- The typed variant hooks bind a union nested inside another union's
+  variant (`useVariantField(form, "shape.detail", "x")`); `UnionValueAt`
+  walked common keys only, so neither spelling compiled.
+- `CheckboxField` without a `label` no longer renders an empty `<label>`
+  around the input.
 
 ## 0.26.0 — 2026-11-12
 

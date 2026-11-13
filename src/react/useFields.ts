@@ -7,7 +7,12 @@ import type {
   FieldValue,
   PathDepth,
 } from "../core/fieldPath";
-import { type FieldFormApi, type UseFieldReturn, useField } from "./useField";
+import {
+  type FieldFormApi,
+  type UseFieldOptions,
+  type UseFieldReturn,
+  useField,
+} from "./useField";
 
 // Composite fields: ONE control backed by SEVERAL schema paths — a
 // coordinate pair behind a single map-driven input, a range's min/max, a
@@ -53,6 +58,7 @@ export type UseFieldsReturn<TFields extends readonly unknown[]> = Readonly<{
 export function useFields(
   form: FieldFormApi & { readonly schema?: undefined },
   paths: readonly string[],
+  options?: UseFieldOptions,
 ): UseFieldsReturn<readonly UseFieldReturn<unknown>[]>;
 // The typed overload: `paths` is a const-inferred tuple and `fields` maps
 // it position-for-position, so destructuring keeps each path's exact value
@@ -65,6 +71,9 @@ export function useFields<
 >(
   form: Form<TSchema, D>,
   paths: P,
+  // One options bag for every bound path (a composite control debounces
+  // as one control).
+  options?: UseFieldOptions,
 ): UseFieldsReturn<{
   readonly [K in keyof P]: UseFieldReturn<
     FieldValue<z.input<TSchema>, P[K] & string>
@@ -73,6 +82,7 @@ export function useFields<
 export function useFields(
   form: FieldFormApi,
   paths: readonly string[],
+  options?: UseFieldOptions,
 ): UseFieldsReturn<readonly UseFieldReturn<unknown>[]> {
   // The arity the hook was first called with, held in a hook slot that
   // sits BEFORE the per-path calls: a tuple that changes length is caught
@@ -87,7 +97,11 @@ export function useFields(
   }
   const fields = paths.map((path) =>
     // eslint-disable-next-line react-hooks/rules-of-hooks -- a fixed hook count by the stable-arity contract above; each element must be a REAL UseFieldReturn so it spreads into the prop builders
-    useField(form as FieldFormApi & { readonly schema?: undefined }, path),
+    useField(
+      form as FieldFormApi & { readonly schema?: undefined },
+      path,
+      options,
+    ),
   );
   // Memoized on the bound fields themselves (each a memoized
   // UseFieldReturn), so the composite keeps its identity, its `fields`

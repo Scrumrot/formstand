@@ -142,7 +142,7 @@ const FieldShell = ({
   children,
 }: FieldShellProps) => (
   <div className="zf-field">
-    {wrapLabel === true ? (
+    {wrapLabel === true && label !== undefined ? (
       <label htmlFor={id} className="zf-label">
         {children} {label}
       </label>

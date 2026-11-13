@@ -54,6 +54,9 @@ export type FormActionOptions = Readonly<{
   // handler. Without it, dev builds warn when a failure resolves
   // unobserved — the action form is fire-and-forget, like handleSubmit.
   onError?: (error: unknown) => void;
+  // Mirrors SubmitOptions.force: let this submit claim the in-flight slot
+  // from one already running instead of resolving "skipped".
+  force?: boolean;
 }>;
 
 // The fire-and-forget dev warning, same contract as handleSubmit's: a

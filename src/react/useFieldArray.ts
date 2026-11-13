@@ -21,7 +21,11 @@ import { entryAt, flagAt } from "../core/maps";
 import { shouldValidateOn } from "../core/mode";
 import { getAtPath } from "../core/path";
 import type { FormState } from "../core/types";
-import type { FieldValidationResult } from "../core/validation";
+import {
+  type FieldValidationResult,
+  type SettledFieldValidationResult,
+  reportBackgroundFailure,
+} from "../core/validation";
 import type { FieldPathArg } from "./useField";
 
 type ReadonlyStore<T> = Pick<
@@ -50,6 +54,9 @@ export type FieldArrayFormApi = Readonly<{
   // stale. NOTE for custom implementations: a hand-rolled FieldArrayFormApi
   // without this member still works — the ops simply skip revalidation.
   validateField?(path: string): FieldValidationResult;
+  // OPTIONAL, the awaitable twin: backs the hook's validateAsync, which
+  // resolves valid without running on an implementation that lacks it.
+  validateFieldAsync?(path: string): Promise<SettledFieldValidationResult>;
   // OPTIONAL like validateField, same custom-implementation contract: when
   // present (createForm always provides them), the hook exposes the
   // array-level server-error channel — a "too many rows" verdict from the
@@ -103,6 +110,11 @@ export type UseFieldArrayReturn<TItem> = Readonly<{
   // On a hand-rolled FieldArrayFormApi without validateField it reports
   // valid without running anything (the member is optional, see above).
   validate: () => FieldValidationResult;
+  // The awaitable form, the same shape as useField.validateAsync: for an
+  // async array rule a caller wants a verdict from (a submit gate on the
+  // list alone). Resolves valid without running on a hand-rolled
+  // FieldArrayFormApi without validateFieldAsync.
+  validateAsync: () => Promise<SettledFieldValidationResult>;
   push: (item: TItem) => void;
   remove: (index: number) => void;
   insert: (index: number, item: TItem) => void;
@@ -535,12 +547,21 @@ export function useFieldArray<TItem = unknown>(
   // After every op, revalidate the ARRAY path under the exact change-trigger
   // gate useField.setValue applies (same shouldValidateOn call), so a visible
   // array-level error (z.array().min()) tracks push/remove instead of going
-  // stale. The result is deliberately unhandled — the core self-routes async
-  // schemas (validateField returns { kind: "pending" } having already started
-  // the async pass). validateField is probed: a hand-rolled FieldArrayFormApi
+  // stale. The core self-routes async schemas (validateField returns
+  // { kind: "pending" } having already started the async pass); nobody
+  // awaits that pass, so a throwing array refine is reported the way
+  // useField's triggers report it instead of escaping as an unhandled
+  // rejection. validateField is probed: a hand-rolled FieldArrayFormApi
   // without it skips revalidation instead of crashing. The IMPERATIVE
   // form.arrayPush/arrayRemove stay non-revalidating on purpose — the same
   // layering as form.setValue (raw write) vs useField.setValue (write + gate).
+  const validateNow = useCallback(() => {
+    const result = form.validateField?.(path);
+    if (result?.kind === "pending") {
+      void result.promise.catch(reportBackgroundFailure);
+    }
+  }, [form, path]);
+
   const revalidate = useCallback(() => {
     const state = form.store.getState();
     if (
@@ -552,9 +573,9 @@ export function useFieldArray<TItem = unknown>(
         flagAt(state.touched, path),
       )
     ) {
-      form.validateField?.(path);
+      validateNow();
     }
-  }, [form, path]);
+  }, [form, path, validateNow]);
 
   const push = useCallback(
     (item: TItem) => {
@@ -635,13 +656,19 @@ export function useFieldArray<TItem = unknown>(
         true,
       )
     ) {
-      form.validateField?.(path);
+      validateNow();
     }
-  }, [form, path]);
+  }, [form, path, validateNow]);
 
   const validate = useCallback(
     (): FieldValidationResult =>
       form.validateField?.(path) ?? { kind: "valid" },
+    [form, path],
+  );
+
+  const validateAsync = useCallback(
+    (): Promise<SettledFieldValidationResult> =>
+      form.validateFieldAsync?.(path) ?? Promise.resolve({ kind: "valid" }),
     [form, path],
   );
 
@@ -655,7 +682,18 @@ export function useFieldArray<TItem = unknown>(
 
   const update = useCallback(
     (index: number, item: TItem) => {
-      form.setValue?.(`${path}.${index}`, item);
+      // Bounds-checked like the index ops: a write past the end went
+      // through setValue, which filled the gap with null holes that crash
+      // row renders and fail the schema, with no warning.
+      const current = getAtPath(form.store.getState().values, path);
+      const length = Array.isArray(current) ? current.length : 0;
+      if (!Number.isInteger(index) || index < 0 || index >= length) {
+        console.warn(
+          `[formstand] array op on "${path}" with an out-of-range or non-integer index (length ${String(length)}). Operation skipped.`,
+        );
+        return;
+      }
+      form.setValue?.(`${path}.${String(index)}`, item);
       revalidate();
     },
     [form, path, revalidate],
@@ -690,6 +728,7 @@ export function useFieldArray<TItem = unknown>(
       setTouched,
       onBlur,
       validate,
+      validateAsync,
       push,
       remove,
       insert,
@@ -713,6 +752,7 @@ export function useFieldArray<TItem = unknown>(
       setTouched,
       onBlur,
       validate,
+      validateAsync,
       push,
       remove,
       insert,

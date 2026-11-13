@@ -114,6 +114,7 @@ export type BoundUseVariantField<TSchema extends z.ZodType> = <
 >(
   unionPath: P,
   field: TField,
+  options?: UseFieldOptions,
 ) => UseFieldReturn<
   VariantFieldValue<UnionValueAt<z.input<TSchema>, P>, TField> | undefined
 >;
@@ -210,6 +211,7 @@ export type BoundUseFields<
   D extends PathDepth = DefaultPathDepth,
 > = <const P extends readonly FieldPath<z.input<TSchema>, D>[]>(
   paths: P,
+  options?: UseFieldOptions,
 ) => UseFieldsReturn<{
   readonly [K in keyof P]: UseFieldReturn<
     FieldValue<z.input<TSchema>, P[K] & string>
@@ -245,11 +247,13 @@ export const createFormHooks = <
   const useBoundVariantField = (
     unionPath: string,
     field: string,
+    options?: UseFieldOptions,
   ): UseFieldReturn<unknown> =>
     useVariantField(
       structural as FieldFormApi & { readonly schema?: undefined },
       unionPath,
       field,
+      options,
     );
 
   const useBoundFieldArray = (
@@ -292,10 +296,12 @@ export const createFormHooks = <
 
   const useBoundFields = (
     paths: readonly string[],
+    options?: UseFieldOptions,
   ): UseFieldsReturn<readonly UseFieldReturn<unknown>[]> =>
     useFields(
       structural as FieldFormApi & { readonly schema?: undefined },
       paths,
+      options,
     );
 
   const useBoundSubmitCount = (): number => useSubmitCount(structural);

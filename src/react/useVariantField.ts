@@ -6,7 +6,12 @@ import type {
   FieldValue,
   PathDepth,
 } from "../core/fieldPath";
-import { type FieldFormApi, type UseFieldReturn, useField } from "./useField";
+import {
+  type FieldFormApi,
+  type UseFieldOptions,
+  type UseFieldReturn,
+  useField,
+} from "./useField";
 
 // Discriminated-union support. A z.discriminatedUnion field types its value
 // as a union of variant objects, and FieldPath<T> only exposes the keys
@@ -86,12 +91,30 @@ export type VariantFieldPath<
 // top-level or nested key reaching a union of objects); misuse on a
 // non-union path yields `never` field keys, so the call simply won't
 // typecheck a field argument.
-export type UnionValueAt<TValues, P extends string> = P extends keyof TValues
-  ? // NonNullable is essential: for an OPTIONAL/nullable union field the
+// One segment's value, looked up PER MEMBER when TValues is itself a union:
+// `keyof` on a union is the common keys only, so a union nested inside
+// another union's variant ("shape.detail", where detail exists on one
+// shape) resolved to never and neither spelling of the nested bind
+// compiled. Distributing collects the value from every member that
+// declares the key; members without it contribute nothing.
+type MemberValueAt<TValues, K extends string> = TValues extends unknown
+  ? K extends keyof TValues
+    ? TValues[K]
+    : never
+  : never;
+
+export type UnionValueAt<TValues, P extends string> = [
+  MemberValueAt<TValues, P>,
+] extends [never]
+  ? UnionValueAtDeep<TValues, P>
+  : // NonNullable is essential: for an OPTIONAL/nullable union field the
     // resolved value includes undefined, which collapses `keyof V` to never
     // — VariantKeys would then leak EVERY key (discriminant included) and
     // the whole guard inverts. Strip the nullish part first.
-    NonNullable<TValues[P]>
+    NonNullable<MemberValueAt<TValues, P>>;
+
+type UnionValueAtDeep<TValues, P extends string> = P extends keyof TValues
+  ? NonNullable<TValues[P]>
   : TValues extends readonly (infer Item)[]
     ? // Array rows: a numeric segment — a literal "0" or the `${number}`
       // a template path like `pavements.${index}` produces — selects the
@@ -111,16 +134,16 @@ export type UnionValueAt<TValues, P extends string> = P extends keyof TValues
           // collapses to common keys and killed the variant-key set). A
           // plain array's keyof has no numeric-string members, so it
           // falls through to the element branch unchanged.
-          Head extends keyof TValues
-          ? UnionValueAt<NonNullable<TValues[Head]>, Tail>
-          : Head extends `${number}`
+          [MemberValueAt<TValues, Head>] extends [never]
+          ? Head extends `${number}`
             ? UnionValueAt<NonNullable<Item>, Tail>
             : never
+          : UnionValueAt<NonNullable<MemberValueAt<TValues, Head>>, Tail>
         : never
     : P extends `${infer Head}.${infer Tail}`
-      ? Head extends keyof TValues
-        ? UnionValueAt<NonNullable<TValues[Head]>, Tail>
-        : never
+      ? [MemberValueAt<TValues, Head>] extends [never]
+        ? never
+        : UnionValueAt<NonNullable<MemberValueAt<TValues, Head>>, Tail>
       : never;
 
 // The readable-error trap-guard, mirroring useField's/useFieldArray's: an
@@ -148,6 +171,7 @@ export function useVariantField<TValue = InferredTypeArg>(
     ? never
     : "Remove the explicit type argument: a schema-typed form infers the variant value from the union path and field",
   field: string,
+  options?: UseFieldOptions,
 ): UseFieldReturn<TValue | undefined>;
 // Schema-less forms keep the plain-string, caller-typed shape. The
 // `schema?: undefined` brand forces a real Form past this widened overload
@@ -156,6 +180,7 @@ export function useVariantField<TValue = unknown>(
   form: FieldFormApi & { readonly schema?: undefined },
   unionPath: string,
   field: string,
+  options?: UseFieldOptions,
 ): UseFieldReturn<TValue | undefined>;
 // D is recovered from the form argument (the Form type's "~pathDepth"
 // marker). It sits LAST with a default, so pre-existing explicit
@@ -177,6 +202,9 @@ export function useVariantField<
   form: Form<TSchema, D>,
   unionPath: P,
   field: TField,
+  // The same per-field options useField takes (debounceMs): a variant
+  // field is an ordinary field that FieldPath could not name.
+  options?: UseFieldOptions,
 ): UseFieldReturn<
   VariantFieldValue<UnionValueAt<z.input<TSchema>, P>, TField> | undefined
 >;
@@ -184,6 +212,7 @@ export function useVariantField(
   form: FieldFormApi,
   unionPath: string,
   field: string,
+  options?: UseFieldOptions,
 ): UseFieldReturn<unknown> {
   // Structural string-path bind: the joined path is exactly what a variant
   // field lives at; only its TYPE was unreachable through FieldPath, so the
@@ -191,5 +220,6 @@ export function useVariantField(
   return useField(
     form as FieldFormApi & { readonly schema?: undefined },
     `${unionPath}.${field}`,
+    options,
   );
 }

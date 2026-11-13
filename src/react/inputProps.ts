@@ -78,10 +78,11 @@ export type ParsedNumberText =
   | Readonly<{ kind: "invalid" }>;
 
 // Plain decimal notation: an optional sign, digits with an optional
-// fraction (a bare ".5" included), an optional exponent. Number() alone
-// also reads hex, octal and binary literals ("0x10" stored 16) and the
-// Infinity spellings, none of which a person means in a number field.
-const DECIMAL_TEXT = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
+// fraction (a bare ".5" included; a trailing "1." is a partial entry, as
+// the type above says, not the number 1), an optional exponent. Number()
+// alone also reads hex, octal and binary literals ("0x10" stored 16) and
+// the Infinity spellings, none of which a person means in a number field.
+const DECIMAL_TEXT = /^[+-]?(\d+(\.\d+)?|\.\d+)([eE][+-]?\d+)?$/;
 
 // The single rule for turning user-typed text into a numeric field value:
 // whitespace counts as empty (Number("  ") is 0), only decimal notation
@@ -150,6 +151,13 @@ export const numberInputProps = <T extends number | null | undefined>(
 // string at validation, which is the honest state to leave it in.
 export const dateToInputText = (value: Date | null | undefined): string => {
   if (value === undefined || value === null) return "";
+  // A date-only string (a persisted draft's "2026-03-01") is read as the
+  // calendar date it spells: the Date constructor parses that form as UTC
+  // midnight, which rendered the previous day west of UTC.
+  if (typeof value === "string") {
+    const parsed = parseDateText(value);
+    if (parsed.kind === "date") return dateToInputText(parsed.value);
+  }
   const date =
     value instanceof Date ? value : new Date(value as unknown as string);
   if (Number.isNaN(date.getTime())) return "";

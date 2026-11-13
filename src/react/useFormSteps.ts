@@ -6,7 +6,10 @@ import type {
   FieldPath,
   PathDepth,
 } from "../core/fieldPath";
-import { isPathOrChild } from "../core/validation";
+import {
+  type SettledFieldsValidationResult,
+  isPathOrChild,
+} from "../core/validation";
 import { useFormSelectorShallow } from "./useFormSelector";
 
 // The multi-step (wizard) story: one form, one schema, one values object —
@@ -53,8 +56,10 @@ export type UseFormStepsReturn = Readonly<{
   isLast: boolean;
   // Validate the current step; on clean, advance (no-op advance on the
   // last step — submit is the last step's "next"). Resolves whether the
-  // step validated clean, so `if (await steps.next())` reads naturally on
-  // any step, the last included.
+  // step validated clean AND the advance applied, so `if (await
+  // steps.next())` reads naturally on any step, the last included; a
+  // user who navigated elsewhere while the pass was in flight keeps their
+  // newer position and the call resolves false.
   next: () => Promise<boolean>;
   // Never validates: leaving a half-filled step backward is normal.
   back: () => void;
@@ -67,6 +72,29 @@ export type UseFormStepsReturn = Readonly<{
   // Per-step live status, index-aligned with the definitions.
   steps: readonly StepStatus[];
 }>;
+
+// A step's verdict for the values it holds NOW. validateFieldsAsync's
+// verdict describes the values the pass started with: the core refuses to
+// commit a stale one but still resolves it, so a step whose value changed
+// while an async rule was in flight used to advance on the old value. A
+// changed step re-runs on the live values; a few rounds cover a user still
+// typing, past that (null) the advance refuses.
+const settleOnLiveValues = async <
+  TSchema extends z.ZodType,
+  D extends PathDepth,
+>(
+  form: Form<TSchema, D>,
+  fields: readonly FieldPath<z.input<TSchema>, D>[],
+  round = 0,
+): Promise<SettledFieldsValidationResult | null> => {
+  const before = fields.map((path) => form.getField(path));
+  const result = await form.validateFieldsAsync(fields);
+  const changed = fields.some(
+    (path, i) => !Object.is(form.getField(path), before[i]),
+  );
+  if (!changed) return result;
+  return round < 3 ? settleOnLiveValues(form, fields, round + 1) : null;
+};
 
 export const useFormSteps = <
   TSchema extends z.ZodType,
@@ -93,12 +121,14 @@ export const useFormSteps = <
   // Validate one step's paths and mirror submit's convention on failure:
   // the errored keys (already scoped to the step by validateFieldsAsync)
   // are marked touched, so touched-gated error UIs show why the advance
-  // refused.
+  // refused. The pass is judged on the step's live values (see
+  // settleOnLiveValues).
   const validateStep = useCallback(
     async (index: number): Promise<boolean> => {
       const definition = latest.current[index];
       if (definition === undefined) return true;
-      const result = await form.validateFieldsAsync(definition.fields);
+      const result = await settleOnLiveValues(form, definition.fields);
+      if (result === null) return false;
       if (result.kind === "invalid") {
         Object.keys(result.errors).forEach((key) => {
           form.setTouched(key as FieldPath<z.input<TSchema>, D>, true);
@@ -128,7 +158,8 @@ export const useFormSteps = <
     const ok = await validateStep(step);
     if (!ok) return false;
     if (currentStep.current !== step) return false;
-    const target = Math.min(step + 1, latest.current.length - 1);
+    // Clamped at 0 as well: with no steps defined the last index is -1.
+    const target = Math.max(0, Math.min(step + 1, latest.current.length - 1));
     setStep(target);
     setVisited((prev) => new Set([...prev, target]));
     return true;
