@@ -42,7 +42,7 @@ You can try the panel without installing anything: the playground's [Devtools ta
 | `label` | `string` | `"formstand"` | shown on the toggle, for telling two mounted panels apart |
 | `enabled` | `boolean` | the build gate | overrides the gate: `true` mounts the panel even in a production build, for a page whose purpose is showing the form state (the [playground's Devtools tab](https://scrumrot.github.io/formstand/examples/#devtools) is one); `false` hides it in development. Leave it unset in an app |
 
-Mount one per form. The toggle shows an error count when the form has any, so a collapsed panel still tells you something is wrong.
+Mount one per form. The toggle shows an error count when the form has any, so a collapsed panel still tells you something is wrong; collapsed, the panel keeps only its store subscription and derives nothing.
 
 Styling is inline and self-contained. There is no stylesheet to import, and nothing in your app's CSS can restyle the panel into lying to you.
 

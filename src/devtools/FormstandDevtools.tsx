@@ -7,7 +7,6 @@ import type {
   FieldPath,
   PathDepth,
 } from "../core/fieldPath";
-import { getAtPath } from "../core/path";
 import type { FormState } from "../core/types";
 import { useFormSelectorShallow } from "../react/useFormSelector";
 import { leafPaths, unmatchedErrorKeys } from "./paths";
@@ -52,10 +51,16 @@ type FieldRow = Readonly<{
 // nothing rather than assuming it is a dev build the way the console
 // warnings may.
 
+// JSON.stringify throws on a bigint (a z.bigint() field), which took the
+// whole panel down with it; a bigint renders as its literal spelling.
+const jsonReplacer = (_key: string, value: unknown): unknown =>
+  typeof value === "bigint" ? `${String(value)}n` : value;
+
 const preview = (value: unknown): string => {
   if (value === undefined) return "undefined";
   if (value instanceof Date) return value.toISOString();
-  const json = JSON.stringify(value);
+  if (typeof value === "bigint") return `${String(value)}n`;
+  const json = JSON.stringify(value, jsonReplacer);
   // Long strings and big row objects would push the value column past the
   // panel; the full value is one expand away in the Values section.
   return json === undefined
@@ -95,6 +100,10 @@ const useDevtoolsState = <TSchema extends z.ZodType, D extends PathDepth>(
     mode: state.mode,
   }));
 
+type DevtoolsState<TValues> = ReturnType<
+  typeof useDevtoolsState<z.ZodType<TValues>, PathDepth>
+>;
+
 const Section = ({
   title,
   children,
@@ -105,14 +114,23 @@ const Section = ({
   </div>
 );
 
-const DevtoolsPanel = <TSchema extends z.ZodType, D extends PathDepth>({
+type OpenPanelProps<TSchema extends z.ZodType, D extends PathDepth> = Readonly<{
+  form: Form<TSchema, D>;
+  state: DevtoolsState<z.input<TSchema>>;
+  label: string;
+  onClose: () => void;
+}>;
+
+// The expanded panel. Rows and the diff are derived HERE, inside the open
+// branch, so a collapsed panel costs its store subscription and nothing
+// else: it used to walk every leaf through getFieldState and run diff() on
+// every store write while showing only the toggle.
+const OpenPanel = <TSchema extends z.ZodType, D extends PathDepth>({
   form,
-  position = "bottom-right",
-  defaultOpen = false,
-  label = "formstand",
-}: FormstandDevtoolsProps<TSchema, D>) => {
-  const state = useDevtoolsState(form);
-  const [open, setOpen] = useState(defaultOpen);
+  state,
+  label,
+  onClose,
+}: OpenPanelProps<TSchema, D>) => {
   const [held, setHeld] = useState<FormState<z.input<TSchema>> | null>(null);
 
   // Computed every render rather than memoized. getFieldState and diff() read
@@ -144,118 +162,136 @@ const DevtoolsPanel = <TSchema extends z.ZodType, D extends PathDepth>({
   const diff = form.diff();
 
   return (
+    <div style={styles.panel}>
+      <div style={styles.header}>
+        <strong>{label}</strong>
+        <span style={styles.muted}>
+          {state.mode}
+          {state.isSubmitting ? " · submitting" : ""}
+          {state.isValidatingForm ? " · validating" : ""}
+          {state.submitCount > 0 ? ` · submits ${state.submitCount}` : ""}
+        </span>
+        <button type="button" style={styles.button} onClick={onClose}>
+          close
+        </button>
+      </div>
+
+      <Section title={`fields (${rows.length})`}>
+        <table style={styles.table}>
+          <thead>
+            <tr>
+              <th style={{ ...styles.th, width: "38%" }}>path</th>
+              <th style={styles.th}>value</th>
+              <th style={{ ...styles.th, width: "26%" }}>state</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.path}>
+                <td style={{ ...styles.td, ...styles.path }}>{row.path}</td>
+                <td style={styles.td}>
+                  {preview(row.value)}
+                  {row.error === undefined ? null : (
+                    <div style={styles.error}>{row.error.join(", ")}</div>
+                  )}
+                </td>
+                <td style={{ ...styles.td, ...styles.flag }}>{flags(row)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Section>
+
+      {orphanErrors.length === 0 ? null : (
+        // Errors with no field of their own: the root "" key, array-level
+        // messages, server verdicts on paths that hold no value yet.
+        <Section title="errors without a field">
+          {orphanErrors.map((key) => (
+            <div key={key}>
+              <span style={styles.path}>{key === "" ? "(root)" : key}</span>{" "}
+              <span style={styles.error}>
+                {(state.errors[key] ?? []).join(", ")}
+              </span>
+            </div>
+          ))}
+        </Section>
+      )}
+
+      <Section title="error channels">
+        <div style={styles.muted}>
+          schema {Object.keys(state.schemaErrors).length} · server{" "}
+          {Object.keys(state.serverErrors).length}
+        </div>
+        {Object.entries(state.serverErrors).map(([key, messages]) => (
+          <div key={key}>
+            <span style={styles.path}>{key === "" ? "(root)" : key}</span>{" "}
+            <span style={styles.error}>{messages.join(", ")}</span>{" "}
+            <span style={styles.muted}>
+              {/* The channels are FLAT maps keyed by path string: an own-key
+                  read, not a path walk, decides whether the schema speaks
+                  at this key. Walking the map as a path read the root ""
+                  as the whole map (always "behind") and split a nested key
+                  into segments it never had (always "showing"). */}
+              {Object.hasOwn(state.schemaErrors, key)
+                ? "(behind a schema error)"
+                : "(showing)"}
+            </span>
+          </div>
+        ))}
+      </Section>
+
+      <Section title="diff vs initial">
+        <pre style={styles.pre}>
+          {Object.keys(diff).length === 0
+            ? "clean"
+            : JSON.stringify(diff, jsonReplacer, 2)}
+        </pre>
+      </Section>
+
+      <Section title="time travel">
+        <button
+          type="button"
+          style={styles.button}
+          onClick={() => setHeld(form.snapshot())}
+        >
+          snapshot
+        </button>{" "}
+        <button
+          type="button"
+          style={styles.button}
+          disabled={held === null}
+          onClick={() => {
+            if (held !== null) form.restore(held);
+          }}
+        >
+          restore
+        </button>{" "}
+        <span style={styles.muted}>
+          {held === null ? "nothing held" : "snapshot held"}
+        </span>
+      </Section>
+    </div>
+  );
+};
+
+const DevtoolsPanel = <TSchema extends z.ZodType, D extends PathDepth>({
+  form,
+  position = "bottom-right",
+  defaultOpen = false,
+  label = "formstand",
+}: FormstandDevtoolsProps<TSchema, D>) => {
+  const state = useDevtoolsState(form);
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
     <div style={{ ...styles.root, ...anchorFor(position) }}>
       {open ? (
-        <div style={styles.panel}>
-          <div style={styles.header}>
-            <strong>{label}</strong>
-            <span style={styles.muted}>
-              {state.mode}
-              {state.isSubmitting ? " · submitting" : ""}
-              {state.isValidatingForm ? " · validating" : ""}
-              {state.submitCount > 0 ? ` · submits ${state.submitCount}` : ""}
-            </span>
-            <button
-              type="button"
-              style={styles.button}
-              onClick={() => setOpen(false)}
-            >
-              close
-            </button>
-          </div>
-
-          <Section title={`fields (${rows.length})`}>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={{ ...styles.th, width: "38%" }}>path</th>
-                  <th style={styles.th}>value</th>
-                  <th style={{ ...styles.th, width: "26%" }}>state</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.path}>
-                    <td style={{ ...styles.td, ...styles.path }}>{row.path}</td>
-                    <td style={styles.td}>
-                      {preview(row.value)}
-                      {row.error === undefined ? null : (
-                        <div style={styles.error}>{row.error.join(", ")}</div>
-                      )}
-                    </td>
-                    <td style={{ ...styles.td, ...styles.flag }}>
-                      {flags(row)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Section>
-
-          {orphanErrors.length === 0 ? null : (
-            // Errors with no field of their own: the root "" key, array-level
-            // messages, server verdicts on paths that hold no value yet.
-            <Section title="errors without a field">
-              {orphanErrors.map((key) => (
-                <div key={key}>
-                  <span style={styles.path}>{key === "" ? "(root)" : key}</span>{" "}
-                  <span style={styles.error}>
-                    {(state.errors[key] ?? []).join(", ")}
-                  </span>
-                </div>
-              ))}
-            </Section>
-          )}
-
-          <Section title="error channels">
-            <div style={styles.muted}>
-              schema {Object.keys(state.schemaErrors).length} · server{" "}
-              {Object.keys(state.serverErrors).length}
-            </div>
-            {Object.entries(state.serverErrors).map(([key, messages]) => (
-              <div key={key}>
-                <span style={styles.path}>{key === "" ? "(root)" : key}</span>{" "}
-                <span style={styles.error}>{messages.join(", ")}</span>{" "}
-                <span style={styles.muted}>
-                  {getAtPath(state.schemaErrors, key) === undefined
-                    ? "(showing)"
-                    : "(behind a schema error)"}
-                </span>
-              </div>
-            ))}
-          </Section>
-
-          <Section title="diff vs initial">
-            <pre style={styles.pre}>
-              {Object.keys(diff).length === 0
-                ? "clean"
-                : JSON.stringify(diff, null, 2)}
-            </pre>
-          </Section>
-
-          <Section title="time travel">
-            <button
-              type="button"
-              style={styles.button}
-              onClick={() => setHeld(form.snapshot())}
-            >
-              snapshot
-            </button>{" "}
-            <button
-              type="button"
-              style={styles.button}
-              disabled={held === null}
-              onClick={() => {
-                if (held !== null) form.restore(held);
-              }}
-            >
-              restore
-            </button>{" "}
-            <span style={styles.muted}>
-              {held === null ? "nothing held" : "snapshot held"}
-            </span>
-          </Section>
-        </div>
+        <OpenPanel
+          form={form}
+          state={state}
+          label={label}
+          onClose={() => setOpen(false)}
+        />
       ) : (
         <button
           type="button"

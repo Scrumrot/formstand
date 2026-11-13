@@ -94,6 +94,52 @@ describe("FormstandDevtools", () => {
     expect(form.getField("name")).toBe("ada");
   });
 
+  it("labels a server error by an own-key read of the schema channel", async () => {
+    // The channels are flat maps keyed by path: the root "" and a nested
+    // key both used to be misread by a path walk over the map (root
+    // always "behind", nested always "showing").
+    const nested = createForm(
+      z.object({ profile: z.object({ name: z.string().min(2, "short") }) }),
+      { initialValues: { profile: { name: "a" } } },
+    );
+    render(<FormstandDevtools form={nested} defaultOpen />);
+    await act(async () => {
+      await nested.validate();
+      nested.setError("profile.name", "taken");
+      nested.setError("", "account limit reached");
+    });
+    expect(screen.getByText("(behind a schema error)")).toBeTruthy();
+    expect(screen.getByText("(showing)")).toBeTruthy();
+  });
+
+  it("renders a bigint value and diff instead of throwing", () => {
+    const big = createForm(z.object({ amount: z.bigint() }), {
+      initialValues: { amount: 10n },
+    });
+    render(<FormstandDevtools form={big} defaultOpen />);
+    expect(screen.getByText("10n")).toBeTruthy();
+    act(() => {
+      big.setValue("amount", 11n);
+    });
+    expect(screen.getByText(/"amount": "11n"/)).toBeTruthy();
+  });
+
+  it("derives rows and the diff only while open", () => {
+    const form = makeForm();
+    const getFieldState = vi.fn(form.getFieldState);
+    const diff = vi.fn(form.diff);
+    const watched = { ...form, getFieldState, diff } as typeof form;
+    render(<FormstandDevtools form={watched} label="checkout" />);
+    act(() => {
+      form.setValue("name", "grace");
+    });
+    expect(getFieldState).not.toHaveBeenCalled();
+    expect(diff).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /checkout/ }));
+    expect(getFieldState).toHaveBeenCalled();
+    expect(diff).toHaveBeenCalled();
+  });
+
   it("renders nothing in a production build", () => {
     // The panel would otherwise leak the whole form state into a shipped page.
     vi.stubEnv("NODE_ENV", "production");

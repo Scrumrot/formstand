@@ -80,6 +80,16 @@
   every render while its sibling hooks memoize; it keeps its identity
   until one of its fields changes. A paths tuple that changes length now
   throws the hook's own message, ahead of React's hooks-count error.
+- `FormstandDevtools` labelled a server error as "(showing)" or "(behind
+  a schema error)" by walking the flat schema-error map as a path, so a
+  root verdict always read as behind and a nested key always as
+  showing. It reads the key directly now.
+- `FormstandDevtools` threw on a `bigint` value (`z.bigint()`), in the
+  value preview and in the diff; a bigint renders as its literal
+  spelling (`10n`).
+- `FormstandDevtools` walked every leaf through `getFieldState` and ran
+  `diff()` on every store write while collapsed; a collapsed panel now
+  keeps only its store subscription.
 
 ## 0.25.0 — 2026-11-12
 
