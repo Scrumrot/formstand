@@ -30,7 +30,7 @@ const form = createForm(schema, {
 | `initialValues` | `z.input<TSchema>` | required; also the baseline for dirtiness |
 | `mode` | `ValidationMode` | `"onChange" \| "onBlur" \| "onSubmit" \| "onTouched" \| "all"`, default `"onBlur"` |
 | `reValidateMode` | `ValidationMode` | mode used after the first submit attempt, default `"onChange"` |
-| `validateOnMount` | `boolean` | validate at creation so `useIsValid` reflects the initial values (async schemas validate in the background) |
+| `validateOnMount` | `boolean` | validate at creation, and again after `reset()` and `adoptValues()`, so `useIsValid` reflects the values the form holds (async schemas validate in the background) |
 | `devtools` | `boolean \| string` | connect the store to the Redux DevTools extension through zustand's devtools middleware, so every state write is inspectable and time-travelable. A string names the instance (`"checkout"`), which keeps several forms distinguishable; `true` uses `"formstand"`. Off by default, non-production only, and inert when the extension is not installed. See [Devtools](../devtools#compared-with-the-redux-devtools-option) |
 | `pathDepth` | `PathDepth` literal (`0`–`25`) | **type-level only**: the typed-path depth budget in segments, default `9`. Widens or narrows the `FieldPath` union for this form (`Form<TSchema, D>`); the runtime ignores it. Constrained to the `PathDepth` union (0–25), so an out-of-range literal or a `number`-typed variable fails to compile. Raising it costs compile time. See [Typed paths](../typed-paths#how-path-segments-are-interpreted) |
 
@@ -57,7 +57,7 @@ const form = createForm(schema, {
 | `handleSubmit(onValid, onInvalid?, options?)` / `handleSubmit(onValid, options)` | returns an event handler that calls `preventDefault()` and runs `submit` |
 | `getField(path)` | typed one-shot value read |
 | `getFieldState(path)` | typed one-shot read of a field's full slice, a [`FieldSnapshot`](#fieldsnapshot-tvalue) |
-| `watchField(path, listener)` | subscribe to one field's [`FieldSnapshot`](#fieldsnapshot-tvalue); returns an unsubscribe function |
+| `watchField(path, listener)` | subscribe to one field's [`FieldSnapshot`](#fieldsnapshot-tvalue); `listener(snapshot, prev)`; returns an unsubscribe function |
 | `watchValue(path, listener)` | subscribe to one path's value (`Object.is`-compared); `listener(next, prev)` |
 | `watchValues(listener)` | subscribe to the **whole values object**; `listener(values, prev)` fires on any value change. The name is `watchValue` plus "s" as in "all the values". It is not a multi-path `watchValue`; that would be a new API |
 | `diff()` / `dirtyFields()` | PATCH-style helpers, derived by comparing `values` against `initialValues`: minimal divergent paths (objects recurse to the changed leaves; arrays report their base path). Reverting a field drops it |

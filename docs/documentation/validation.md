@@ -34,6 +34,8 @@ The error map starts empty, so a never-validated form reads as valid: `useIsVali
 const form = useForm(schema, { initialValues, validateOnMount: true });
 ```
 
+The pass runs again whenever the form takes a new baseline: after `reset()` (unless `keepErrors` asks for the error map as it was) and after `adoptValues()`, which is how a persisted draft lands. The gate follows the values the form actually holds, not only the ones it was created with.
+
 ::: warning
 `validateOnMount` surfaces errors for untouched fields immediately. Gate error display on `touched` if you don't want messages shown before the user interacts. (Submitting re-validates regardless, so an invalid form can't be submitted either way.)
 :::

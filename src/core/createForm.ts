@@ -189,9 +189,15 @@ export type Form<
   getField: <P extends FieldPath<z.input<TSchema>, D>>(
     path: P,
   ) => FieldValue<z.input<TSchema>, P>;
+  // The listener gets the previous snapshot too, the way watchValue
+  // passes the previous value, so "did the error just appear" and "did
+  // the field just become dirty" need no ref in the caller.
   watchField: <P extends FieldPath<z.input<TSchema>, D>>(
     path: P,
-    listener: (snapshot: FieldSnapshot<FieldValue<z.input<TSchema>, P>>) => void,
+    listener: (
+      snapshot: FieldSnapshot<FieldValue<z.input<TSchema>, P>>,
+      previous: FieldSnapshot<FieldValue<z.input<TSchema>, P>>,
+    ) => void,
   ) => () => void;
   watchValue: <P extends FieldPath<z.input<TSchema>, D>>(
     path: P,
@@ -1207,7 +1213,16 @@ export const createForm = <
               fresh.flatMap((path) => Object.entries(errorsFor(path))),
             ),
             fresh,
-            parsed.kind === "full" ? parsed.errors : null,
+            // The prune map describes the values the batch STARTED with.
+            // A skip scope (an index into an empty array) still reads as
+            // fresh after an unrelated change, so a batch can commit under
+            // changed values; pruning with the stale map then dropped
+            // errors committed elsewhere in flight (an email error landing
+            // while a wizard step with such a path validated). The prune
+            // rides only while the whole values reference held.
+            parsed.kind === "full" && live.values === valuesAtStart
+              ? parsed.errors
+              : null,
           )),
       isValidating: omitKeys(state.isValidating, ownedKeys),
     }));
@@ -1468,16 +1483,24 @@ export const createForm = <
     }
   };
 
-  if (options.validateOnMount === true) {
-    // Async schemas route themselves: validate() returns a "pending" result
-    // whose background pass writes the error map when it settles. Nobody
-    // awaits that promise, so a rejecting pass is reported here instead of
-    // surfacing as an unhandled rejection with no pointer to the form.
+  // The validateOnMount pass, run at creation and again whenever the form
+  // takes a NEW BASELINE (reset(), adoptValues()). The option exists so a
+  // validity gate reflects the values the form holds; a rebase replaces
+  // those values and clears the errors the creation pass wrote, so a
+  // persisted draft adopted over the initial values used to open a
+  // useIsValid gate for an invalid draft. Async schemas route themselves:
+  // validate() returns a "pending" result whose background pass writes the
+  // error map when it settles. Nobody awaits that promise, so a rejecting
+  // pass is reported here instead of surfacing as an unhandled rejection
+  // with no pointer to the form.
+  const judgeBaseline = (): void => {
+    if (options.validateOnMount !== true) return;
     const result = validate();
     if (result.kind === "pending") {
       void result.promise.catch(reportBackgroundFailure);
     }
-  }
+  };
+  judgeBaseline();
 
   return Object.freeze({
     schema,
@@ -1495,7 +1518,10 @@ export const createForm = <
       >,
     watchField: <P extends FieldPath<z.input<TSchema>, D>>(
       path: P,
-      listener: (snapshot: FieldSnapshot<FieldValue<z.input<TSchema>, P>>) => void,
+      listener: (
+        snapshot: FieldSnapshot<FieldValue<z.input<TSchema>, P>>,
+        previous: FieldSnapshot<FieldValue<z.input<TSchema>, P>>,
+      ) => void,
     ) => {
       const ref: { current: FieldSnapshot<unknown> } = {
         current: snapshotField(store.getState(), path),
@@ -1503,8 +1529,12 @@ export const createForm = <
       return store.subscribe((state) => {
         const next = snapshotField(state, path);
         if (!shallowFieldEqual(ref.current, next)) {
+          const prev = ref.current;
           ref.current = next;
-          listener(next as FieldSnapshot<FieldValue<z.input<TSchema>, P>>);
+          listener(
+            next as FieldSnapshot<FieldValue<z.input<TSchema>, P>>,
+            prev as FieldSnapshot<FieldValue<z.input<TSchema>, P>>,
+          );
         }
       });
     },
@@ -1735,6 +1765,7 @@ export const createForm = <
         isValidating: emptyBools,
         isValidatingForm: false,
       }));
+      judgeBaseline();
     },
     reset: (nextInitial, resetOptions) => {
       sequences.clear();
@@ -1774,6 +1805,9 @@ export const createForm = <
           isValidatingForm: false,
         };
       });
+      // keepErrors asks for the error map as it was; the baseline pass
+      // would overwrite it with the initial values' verdict.
+      if (resetOptions?.keepErrors !== true) judgeBaseline();
     },
     resetField: (path: string) => {
       // slotAtPath, not getAtPath: a path addressing NO slot in
@@ -1920,6 +1954,13 @@ export const createForm = <
     },
     snapshot: () => store.getState(),
     restore: (snap) => {
+      // A snapshot is a whole state put back, so a pass that started before
+      // it judged values the snapshot may not hold. The full-pass guard
+      // (values reference) already drops such a write, but a subschema
+      // pass compares only its own slot and could still commit a verdict
+      // the snapshot never had. Disown every in-flight pass, as reset() and
+      // adoptValues() do; the flags are cleared below either way.
+      sequences.clear();
       // A snapshot restores PRIOR array references — exactly the recurring
       // references stale op records could falsely chain against.
       clearArrayOpsUnder(store, "");

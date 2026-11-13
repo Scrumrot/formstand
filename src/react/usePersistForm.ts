@@ -27,7 +27,10 @@ import {
 // if `form`, `options.key` or `options.storage` changes — not on every
 // render, mirroring
 // useForm's locked-options rule; pass a stable options object or accept
-// that later edits to it are ignored until the key or form changes.
+// that later edits to it are ignored until the key or form changes. A
+// resubscribe finds the draft the previous subscription flushed and leaves
+// the form alone (persistForm skips a draft the form already holds), so an
+// inline storage object costs a resubscribe per render and nothing else.
 export const usePersistForm = <
   TSchema extends z.ZodType,
   D extends PathDepth = DefaultPathDepth,

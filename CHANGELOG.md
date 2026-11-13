@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `watchField` listeners receive the previous snapshot as a second
+  argument, `listener(snapshot, prev)`, the way `watchValue` passes the
+  previous value.
+
+### Fixed
+
+- `validateOnMount` judges every baseline the form takes: the pass runs
+  again after `reset()` (unless `keepErrors`) and after `adoptValues()`,
+  so a persisted draft adopted over the initial values no longer opens a
+  `useIsValid` gate for an invalid draft.
+- `validateFieldsAsync` pruned live errors with a stale full-form map
+  when a batch mixed a full-parse path with an index into an empty array
+  and the values changed in flight; the prune now rides only while the
+  whole values reference held.
+- `restore()` disowns in-flight async passes the way `reset()` and
+  `adoptValues()` do, so a pass started before the restore cannot commit
+  a verdict onto the restored state.
+- `persistForm`'s gap fill fills a nullable-but-required key the draft
+  lacks, no longer splices one union variant's key into another, and no
+  longer resurrects a `z.record` key the draft removed.
+- A manual `load()` no longer writes the draft it just read straight
+  back to storage.
+- The auto-apply skips a draft the form already holds, so
+  `usePersistForm` with an inline `storage` object (a resubscribe per
+  render) no longer re-adopts the draft every render, wiping errors and
+  dirty state and looping with `useFormValues`; StrictMode's second
+  mount adopts nothing either.
+
 ## 0.26.0 — 2026-11-12
 
 ### Added

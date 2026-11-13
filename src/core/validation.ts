@@ -417,6 +417,33 @@ export const fieldSchemaForIntrospection = (
   );
 };
 
+// Does the schema accept undefined at this field: optional, defaulted or
+// prefaulted, looked for through a nullable wrapper (.nullable().optional()
+// and .optional().nullable() both take it). persistForm's gap fill asks
+// this rather than isClearableSchema: a nullable-but-required key does not
+// accept the hole JSON leaves behind, so an absent one must be filled.
+export const schemaAcceptsUndefined = (schema: z.ZodType): boolean =>
+  schema instanceof z.ZodOptional ||
+  schema instanceof z.ZodDefault ||
+  schema instanceof z.ZodPrefault ||
+  (schema instanceof z.ZodNullable &&
+    schemaAcceptsUndefined(schema.unwrap() as z.ZodType));
+
+// Whether the schema at `path` is a plain object, read through the
+// transparent wrappers. A union's keys belong to whichever variant a
+// value holds and a record's keys are data, so a gap fill that walks the
+// initial values' keys must stop at both; a path the walk cannot place
+// answers true, the same safer-guess bias the fill applies to a key it
+// cannot place.
+export const isObjectSchemaAt = (schema: z.ZodType, path: string): boolean => {
+  const sub = fieldSchemaForIntrospection(schema, path);
+  const strip = (s: z.ZodType): z.ZodType => {
+    const inner = unwrapForWalk(s);
+    return inner === null ? s : strip(inner);
+  };
+  return sub === null || strip(sub) instanceof z.ZodObject;
+};
+
 // setAtPath's absent-slot resolver, from the schema: the container the
 // schema declares at `prefix` (wrappers looked through, like the
 // introspection walk above), or null where it declares a leaf, a union,

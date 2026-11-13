@@ -6,7 +6,8 @@ import { isPlainObject } from "./equality";
 import type { DefaultPathDepth, PathDepth } from "./fieldPath";
 import {
   fieldSchemaForIntrospection,
-  isClearableSchema,
+  isObjectSchemaAt,
+  schemaAcceptsUndefined,
   schemaAllowsKindChangeAt,
 } from "./validation";
 
@@ -187,10 +188,15 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
   // applying it wholesale erased the key's initial value from values AND
   // initialValues (reset() could not bring it back, and the user met zod's
   // generic message instead of the author's). Fill the gap from the initial
-  // values, but only where the schema says the key is REQUIRED: an optional
-  // key absent from the draft may have been cleared on purpose (JSON drops
-  // undefined), and filling it would undo that edit. Objects recurse so a
-  // nested gain is covered; arrays are left alone (row counts differ for
+  // values, but only where the schema does NOT accept undefined there: an
+  // optional key absent from the draft may have been cleared on purpose
+  // (JSON drops undefined), and filling it would undo that edit, while a
+  // nullable-but-required key cannot hold the hole at all. Objects recurse
+  // so a nested gain is covered, but only while the schema says the
+  // container IS a plain object: under a union the draft's keys belong to
+  // whichever variant it holds (walking the initial values' variant spliced
+  // its key into another variant), and a record key the draft lacks was
+  // removed on purpose. Arrays are left alone (row counts differ for
   // ordinary reasons). A key the schema walk cannot place is filled too:
   // the initial value is the author's default, the safer guess.
   const fillRequiredGaps = (
@@ -199,6 +205,7 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
     path: string,
   ): unknown => {
     if (!isPlainObject(draft) || !isPlainObject(initial)) return draft;
+    if (!isObjectSchemaAt(schema, path)) return draft;
     return Object.keys(initial).reduce<Record<string, unknown>>(
       (acc, key) => {
         const childPath = joinPath(path, key);
@@ -208,13 +215,20 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
         }
         if (initial[key] === undefined) return acc;
         const sub = fieldSchemaForIntrospection(schema, childPath);
-        return sub !== null && isClearableSchema(sub)
+        return sub !== null && schemaAcceptsUndefined(sub)
           ? acc
           : { ...acc, [key]: initial[key] };
       },
       draft,
     );
   };
+
+  // Armed while a draft is being written into the form. The values watcher
+  // below fires synchronously inside the write, so a manual load() used to
+  // schedule a write of the very draft it had just read. (The auto-apply at
+  // construction runs before the watcher exists; only a later load() meets
+  // it.) A sanctioned mutable ref, like `cleared` below.
+  const applying = { current: false };
 
   // "edit" (and its alias "restore") is a plain values write (dirty vs the
   // original initials); "adopt" and "manual" rebase via adoptValues so the
@@ -225,10 +239,28 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
       form.getState().initialValues,
       "",
     ) as z.input<TSchema>;
-    if (apply === "edit" || apply === "restore") {
-      form.setValues(filled);
-    } else {
-      form.adoptValues(filled);
+    applying.current = true;
+    try {
+      if (apply === "edit" || apply === "restore") {
+        form.setValues(filled);
+      } else {
+        form.adoptValues(filled);
+      }
+    } finally {
+      applying.current = false;
+    }
+  };
+
+  // Is the draft already what the form holds, compared in stored form (the
+  // keys a previous apply filled were written back, so they read equal)?
+  // A non-serializable values tree cannot be compared and counts as new.
+  const isCurrent = (values: unknown): boolean => {
+    try {
+      return (
+        JSON.stringify(values) === JSON.stringify(form.getState().values)
+      );
+    } catch {
+      return false;
     }
   };
 
@@ -248,7 +280,7 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
   const flexibleAt = (path: string): boolean =>
     schemaAllowsKindChangeAt(schema, path);
 
-  const inspect = (): LoadOutcome => {
+  const inspect = (skipWhenCurrent: boolean): LoadOutcome => {
     // Every storage touch is guarded: private-mode/security errors read as
     // "no draft", corrupt JSON as an ignored one — load never throws.
     const raw = ((): string | null => {
@@ -336,6 +368,14 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
           reason: `its shape conflicts with the form's initial values at "${conflict}" (set the version option when the schema changes)`,
         };
       }
+      // The auto-apply skips a draft the form already holds: a resubscribe
+      // (usePersistForm after dispose() flushed the values), StrictMode's
+      // second mount, or initial values equal to the draft. Applying again
+      // would only rebase, clearing errors and dirty state, and with an
+      // inline storage object every render resubscribed, every resubscribe
+      // re-adopted and every adopt re-rendered. A caller's load() applies
+      // regardless: that call asks for the rebase.
+      if (skipWhenCurrent && isCurrent(values)) return { kind: "applied" };
       applyDraft(values);
       return { kind: "applied" };
     } catch {
@@ -343,8 +383,8 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
     }
   };
 
-  const load = (): boolean => {
-    const outcome = inspect();
+  const loadWith = (skipWhenCurrent: boolean): boolean => {
+    const outcome = inspect(skipWhenCurrent);
     if (outcome.kind === "ignored" && isDevBuild()) {
       console.warn(
         `[formstand] persistForm: ignored the draft under "${options.key}": ${outcome.reason}. The next edit overwrites it.`,
@@ -352,6 +392,7 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
     }
     return outcome.kind === "applied";
   };
+  const load = (): boolean => loadWith(false);
 
   const writeDraft = (values: z.input<TSchema>): void => {
     // Quota/private-mode setItem errors just skip this write. The wrapper is
@@ -377,7 +418,7 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
   // Auto-apply BEFORE subscribing, so applying the draft doesn't immediately
   // schedule a write of the values we just read.
   if (apply !== "manual") {
-    load();
+    loadWith(true);
   }
 
   // Armed by clear(): the usual after-submit pair is clear() then reset(),
@@ -390,6 +431,7 @@ export const persistForm = <TSchema extends z.ZodType, D extends PathDepth = Def
   const cleared = { current: false };
 
   const unsubscribe = form.watchValues((values) => {
+    if (applying.current) return;
     if (cleared.current && values === form.getState().initialValues) return;
     cleared.current = false;
     writes.schedule(() => writeDraft(values));
