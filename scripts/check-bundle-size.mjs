@@ -16,15 +16,25 @@ import path from "node:path";
 import { gzipSync } from "node:zlib";
 
 // { label, resolve the file(s), gzip budget in bytes }
+//
+// A library entry is measured TOGETHER with the chunks it imports (the
+// `./chunk-*.js` files tsup's code splitting emits for code shared between
+// entries): what a consumer ships is the entry plus its chunks, and the
+// split between them is an accounting detail that moves whenever another
+// entry starts or stops sharing a module. The devtools panel dropping its
+// one import from path.ts moved 5 kB of raw source from a shared chunk into
+// index.js and read as growth here while the total was unchanged.
+//
+// Re-based on 2026-11-12 for the November review fixes (the async passes
+// release their flags on rejection, full-parse passes prune stale errors,
+// persist fills required gaps and asks the schema about kind changes,
+// submit takes an options object, createFormHooks binds every hook):
+// the ESM entry plus its chunks measured 23.2 kB, the CJS entry 22.8 kB.
 const BUDGETS = [
-  // Raised by 1 kB each on 2026-11-12 for the November review fixes: the
-  // async passes release their flags on rejection, full-parse passes
-  // prune stale errors, persist fills required gaps and asks the schema
-  // about kind changes, and the handle gained flush().
-  { label: "formstand (ESM)", file: "dist/index.js", budget: 22_000 },
-  { label: "formstand (CJS)", file: "dist/index.cjs", budget: 23_500 },
-  { label: "formstand/devtools", file: "dist/devtools/index.js", budget: 3_300 },
-  { label: "formstand/testing", file: "dist/testing/index.js", budget: 600 },
+  { label: "formstand (ESM)", file: "dist/index.js", budget: 24_500 },
+  { label: "formstand (CJS)", file: "dist/index.cjs", budget: 24_000 },
+  { label: "formstand/devtools", file: "dist/devtools/index.js", budget: 3_600 },
+  { label: "formstand/testing", file: "dist/testing/index.js", budget: 900 },
   {
     label: "playground main chunk",
     glob: { dir: "examples/dist/assets", prefix: "index-", suffix: ".js" },
@@ -50,6 +60,19 @@ const resolveFile = (entry) => {
 
 const gzipBytes = (file) => gzipSync(fs.readFileSync(file)).length;
 
+// The sibling chunks an entry pulls in, by its own import/require/export
+// statements (tsup emits them as `./chunk-<hash>.js` / `.cjs` next to the
+// entry). One level is enough: chunks never import further chunks here, and
+// a nested one would show up in the entry's own list on the next build.
+const chunkImports = (file) => {
+  const source = fs.readFileSync(file, "utf8");
+  const dir = path.dirname(file);
+  const found = [
+    ...source.matchAll(/(?:from|require\()\s*["'](\.\/chunk-[^"']+)["']/g),
+  ].map(([, chunk]) => path.join(dir, chunk));
+  return [...new Set(found)].filter((chunk) => fs.existsSync(chunk));
+};
+
 const kb = (bytes) => `${(bytes / 1024).toFixed(1)} kB`;
 
 const results = BUDGETS.map((entry) => {
@@ -57,7 +80,12 @@ const results = BUDGETS.map((entry) => {
   if (file === null || !fs.existsSync(file)) {
     return { ...entry, file, size: null };
   }
-  return { ...entry, file, size: gzipBytes(file) };
+  const chunks = entry.file === undefined ? [] : chunkImports(file);
+  return {
+    ...entry,
+    file,
+    size: [file, ...chunks].reduce((sum, part) => sum + gzipBytes(part), 0),
+  };
 });
 
 results.forEach(({ label, file, size, budget }) => {
