@@ -3,6 +3,7 @@ import {
   type ContainerKind,
   type ContainerKindAt,
   type PathSegment,
+  getAtPath,
   parsePath,
 } from "./path";
 import type { ErrorMap } from "./types";
@@ -212,7 +213,16 @@ const unwrapForWalk = (s: z.ZodType): z.ZodType | null => {
     return s.def.innerType as z.ZodType;
   }
   // Form values are z.input, so a pipe is traversed through its input side.
-  if (s instanceof z.ZodPipe) return s.def.in as z.ZodType;
+  // A preprocess pipe's input side is a transform with no children, so its
+  // output side is the only place the keys live.
+  if (s instanceof z.ZodPipe) {
+    const input = s.def.in as z.ZodType;
+    return input instanceof z.ZodTransform ? (s.def.out as z.ZodType) : input;
+  }
+  // A lazy schema's children live behind its getter. The budgeted walks
+  // cannot loop on a recursive schema; the path-bounded ones stop at the
+  // path's end.
+  if (s instanceof z.ZodLazy) return s.def.getter() as z.ZodType;
   return null;
 };
 
@@ -379,13 +389,55 @@ const hasChecks = (s: z.ZodType): boolean => {
 // members rarely disagree on a shared key's wrapper, and the heuristic
 // fallback is what a miss costs). The last segment's own wrapper is kept:
 // it is exactly what the two introspection helpers read.
+// Does this union option claim the discriminant value the live object
+// holds? Read from the option's own shape (a literal or an enum at the
+// discriminator key), so no zod internals are relied on.
+const optionClaims = (
+  option: z.ZodType,
+  discriminator: string,
+  tag: unknown,
+): boolean => {
+  const strip = (s: z.ZodType): z.ZodType => {
+    const inner = unwrapForWalk(s);
+    return inner === null ? s : strip(inner);
+  };
+  const node = strip(option);
+  if (!(node instanceof z.ZodObject)) return false;
+  const shape: Readonly<Record<string, z.ZodType | undefined>> = node.shape;
+  const at = Object.hasOwn(shape, discriminator)
+    ? shape[discriminator]
+    : undefined;
+  if (at === undefined) return false;
+  const leaf = strip(at);
+  if (leaf instanceof z.ZodLiteral) {
+    return (leaf.def.values as readonly unknown[]).includes(tag);
+  }
+  if (leaf instanceof z.ZodEnum) {
+    return Object.values(leaf.def.entries as Record<string, unknown>).includes(
+      tag,
+    );
+  }
+  return false;
+};
+
+// `values`, when given, resolves a discriminated union against the variant
+// the live value holds: a key SHARED by several variants (amount on a card
+// and on a cash variant, nullable on one of them) used to read the first
+// variant's wrapper whatever was active, so clearing the field on the
+// other variant wrote the wrong empty. Without values (or when no variant
+// claims the live tag) the first declaring member still answers.
 export const fieldSchemaForIntrospection = (
   schema: z.ZodType,
   path: string,
+  values?: unknown,
 ): z.ZodType | null => {
-  const childOf = (s: z.ZodType, segment: PathSegment): z.ZodType | null => {
+  const childOf = (
+    s: z.ZodType,
+    segment: PathSegment,
+    holder: unknown,
+  ): z.ZodType | null => {
     const inner = unwrapForWalk(s);
-    if (inner !== null) return childOf(inner, segment);
+    if (inner !== null) return childOf(inner, segment, holder);
     if (s instanceof z.ZodObject && typeof segment === "string") {
       const shape: Readonly<Record<string, z.ZodType | undefined>> = s.shape;
       return Object.hasOwn(shape, segment) ? (shape[segment] ?? null) : null;
@@ -402,19 +454,52 @@ export const fieldSchemaForIntrospection = (
     if (s instanceof z.ZodRecord) {
       return s.valueType as z.ZodType;
     }
+    // An intersection's keys live on either side; the left side answers
+    // first, the way zod merges them.
+    if (s instanceof z.ZodIntersection) {
+      return (
+        childOf(s.def.left as z.ZodType, segment, holder) ??
+        childOf(s.def.right as z.ZodType, segment, holder)
+      );
+    }
     if (s instanceof z.ZodDiscriminatedUnion || s instanceof z.ZodUnion) {
       const options = s.def.options as readonly z.ZodType[];
-      return options.reduce<z.ZodType | null>(
-        (found, option) => found ?? childOf(option, segment),
+      const discriminator =
+        s instanceof z.ZodDiscriminatedUnion ? s.def.discriminator : null;
+      const tag =
+        discriminator !== null && typeof holder === "object" && holder !== null
+          ? (holder as Record<string, unknown>)[discriminator]
+          : undefined;
+      const live =
+        discriminator === null || tag === undefined
+          ? undefined
+          : options.find((option) => optionClaims(option, discriminator, tag));
+      const candidates = live === undefined ? options : [live];
+      return candidates.reduce<z.ZodType | null>(
+        (found, option) => found ?? childOf(option, segment, holder),
         null,
       );
     }
     return null;
   };
-  return parsePath(path).reduce<z.ZodType | null>(
-    (current, segment) => (current === null ? null : childOf(current, segment)),
-    schema,
-  );
+  const segments = parsePath(path);
+  return segments.reduce<Readonly<{ s: z.ZodType | null; prefix: string }>>(
+    (acc, segment) =>
+      acc.s === null
+        ? acc
+        : {
+            s: childOf(
+              acc.s,
+              segment,
+              values === undefined ? undefined : getAtPath(values, acc.prefix),
+            ),
+            prefix:
+              acc.prefix === ""
+                ? String(segment)
+                : `${acc.prefix}.${String(segment)}`,
+          },
+    { s: schema, prefix: "" },
+  ).s;
 };
 
 // Does the schema accept undefined at this field: optional, defaulted or
@@ -429,19 +514,33 @@ export const schemaAcceptsUndefined = (schema: z.ZodType): boolean =>
   (schema instanceof z.ZodNullable &&
     schemaAcceptsUndefined(schema.unwrap() as z.ZodType));
 
-// Whether the schema at `path` is a plain object, read through the
-// transparent wrappers. A union's keys belong to whichever variant a
-// value holds and a record's keys are data, so a gap fill that walks the
-// initial values' keys must stop at both; a path the walk cannot place
-// answers true, the same safer-guess bias the fill applies to a key it
-// cannot place.
+// Whether a gap fill may walk the keys of the value at `path`: false only
+// where the schema PROVABLY shapes the keys some other way. A union's keys
+// belong to whichever variant a value holds, a record's, map's or set's
+// keys are data, an array's or tuple's slots are rows, and a scalar leaf
+// has no keys. Everything else answers true: a plain object, an
+// intersection of objects, a lazy or preprocessed object, and a path the
+// walk cannot place, the same safer-guess bias the fill applies to a key
+// it cannot place. (An earlier spelling asked "is this a ZodObject" and
+// stopped filling under lazy, intersection and preprocess roots.)
 export const isObjectSchemaAt = (schema: z.ZodType, path: string): boolean => {
   const sub = fieldSchemaForIntrospection(schema, path);
+  if (sub === null) return true;
   const strip = (s: z.ZodType): z.ZodType => {
     const inner = unwrapForWalk(s);
     return inner === null ? s : strip(inner);
   };
-  return sub === null || strip(sub) instanceof z.ZodObject;
+  const node = strip(sub);
+  return !(
+    node instanceof z.ZodUnion ||
+    node instanceof z.ZodDiscriminatedUnion ||
+    node instanceof z.ZodRecord ||
+    node instanceof z.ZodMap ||
+    node instanceof z.ZodSet ||
+    node instanceof z.ZodArray ||
+    node instanceof z.ZodTuple ||
+    isLeafSchema(node)
+  );
 };
 
 // setAtPath's absent-slot resolver, from the schema: the container the

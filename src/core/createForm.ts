@@ -526,10 +526,20 @@ const scopeParse = (
 // useIsValid read false for a form the schema accepted. Pruning never ADDS
 // an entry outside the scope: a full parse run on behalf of one field still
 // surfaces nothing for fields the user has not reached.
+// A key present in both maps takes the parse's CURRENT list: a cross-field
+// rule that keys a dynamic message onto another field ("must equal 2"
+// after a changed to 2) used to keep the old message there, since only
+// absence was read from the full map. reuseErrorRefs keeps list identity
+// when the messages are equal.
 const pruneUnreported = (prev: ErrorMap, full: ErrorMap): ErrorMap => {
   const entries = Object.entries(prev);
   const kept = entries.filter(([k]) => Object.hasOwn(full, k));
-  return kept.length === entries.length ? prev : Object.fromEntries(kept);
+  const unchanged =
+    kept.length === entries.length &&
+    kept.every(([k, list]) => full[k] === list);
+  return unchanged
+    ? prev
+    : Object.fromEntries(kept.map(([k, list]) => [k, full[k] ?? list]));
 };
 
 // The one rule for a list-valued error map handed in by the app: an empty
@@ -1594,6 +1604,11 @@ export const createForm = <
       ) {
         return;
       }
+      // A write the path walker REFUSES (a string key into an array, a key
+      // through a Date) hands the same values back; treat it as the no-op
+      // its warning announces, like the identity guard above.
+      const next = setAtPath(currentValues, path, value, kindAt);
+      if (next === currentValues) return;
       // A value write outside the array ops breaks every op chain whose
       // array it could rebuild — drop those records at the source so a
       // stale (or recurring, e.g. reset-restored) array reference can never
@@ -1601,7 +1616,7 @@ export const createForm = <
       clearArrayOpsUnder(store, path);
       store.setState((state) => ({
         ...state,
-        values: setAtPath(state.values, path, value, kindAt),
+        values: next,
         ...errorChannels(state, {
           serverErrors: releaseSpine(state.serverErrors, path),
         }),

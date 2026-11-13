@@ -26,7 +26,7 @@ Everything exported from the main entry is public, with the type split the decla
 
 **Persistence.** `persistForm`, `PersistOptions`, `PersistHandle`, `PersistStorage`. The stored draft's shape is versioned through the `version` option, which is how a schema change invalidates old drafts deliberately.
 
-**The structural form contracts.** `FieldFormApi`, `FormStateApi` and `FieldArrayFormApi` are what the hooks and components accept in place of a `Form`, so reusable components can be written against them. They follow one rule: a member added after the contract shipped is **optional** and is probed before use, so a hand-rolled implementation written against an earlier version keeps working and simply lacks the behaviour the new member backs. `validateField`, `setError`, `clearErrors`, `setTouched` and `setValue` on `FieldArrayFormApi` are the current examples.
+**The structural form contracts.** `FieldFormApi`, `FormStateApi` and `FieldArrayFormApi` are what the hooks and components accept in place of a `Form`, so reusable components can be written against them. They follow one rule: a member added after the contract shipped is **optional** and is probed before use, so a hand-rolled implementation written against an earlier version keeps working and simply lacks the behaviour the new member backs. `validateField`, `validateFieldAsync`, `setError`, `clearErrors`, `setTouched` and `setValue` on `FieldArrayFormApi` are the current examples.
 
 ## The `formstand/testing` and `formstand/devtools` entries
 

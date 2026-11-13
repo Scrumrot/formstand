@@ -153,7 +153,7 @@ const form = createForm(schema, {
 });
 ```
 
-Every state write shows up inspectable and time-travelable, named per form so several forms stay distinguishable (`devtools: true` uses the name "formstand"). It is off by default and **active only in non-production builds** (`process.env.NODE_ENV !== "production"`, matching zustand's own devtools default), so leaving the option set will not stream a shipped form's state to an end user who happens to have the extension installed. With the option set but the extension absent, the middleware is inert.
+Every state write shows up inspectable and time-travelable, named per form so several forms stay distinguishable (`devtools: true` uses the name "formstand"). It is off by default and **active only where `process.env.NODE_ENV` is readable and not `"production"`** (a runtime with no `process`, such as a CDN or ESM import, counts as production; see [Devtools](./devtools)), so leaving the option set will not stream a shipped form's state to an end user who happens to have the extension installed. With the option set but the extension absent, the middleware is inert.
 
 ## Subscriptions outside React
 

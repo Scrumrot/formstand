@@ -103,6 +103,9 @@ type FieldSlice<TValue> = Readonly<{
   touched: boolean;
   dirty: boolean;
   isValidating: boolean;
+  // The field's schema for introspection, resolved against the live values
+  // (see fieldSchemaForIntrospection), or null without a schema.
+  schema: z.ZodType | null;
 }>;
 
 // The readable-error trap-guard for `useField<Values>(typedForm, "email")`:
@@ -181,6 +184,9 @@ export function useField<TValue = unknown>(
   pathArg: FieldPathArg<unknown>,
   options?: UseFieldOptions,
 ): UseFieldReturn<TValue> {
+  // Schema introspection wins over the runtime heuristic when the form
+  // carries its schema (Form<TSchema> does; a bare FieldFormApi may not).
+  const formSchema = (form as Readonly<{ schema?: z.ZodType }>).schema;
   const slice = useStore(
     form.store,
     useShallow((state): FieldSlice<TValue> => {
@@ -198,31 +204,33 @@ export function useField<TValue = unknown>(
         touched: flagAt(state.touched, p),
         dirty: isFieldDirty(value, initialValue),
         isValidating: flagAt(state.isValidating, p),
+        // Resolved inside the selector so a discriminant change re-reads
+        // the ACTIVE variant's wrapper for a key the variants share; the
+        // schema node is a stable reference, so the shallow compare holds.
+        schema:
+          formSchema === undefined
+            ? null
+            : fieldSchemaForIntrospection(formSchema, p, state.values),
       };
     }),
   );
   const path = slice.path;
 
-  // Schema introspection wins over the runtime heuristic when the form
-  // carries its schema (Form<TSchema> does; a bare FieldFormApi may not).
-  const formSchema = (form as Readonly<{ schema?: z.ZodType }>).schema;
+  const sub = slice.schema;
   const initialValue = slice.initialValue;
   const { emptyValue, clearable } = useMemo(() => {
-    if (formSchema !== undefined) {
-      const sub = fieldSchemaForIntrospection(formSchema, path);
-      if (sub !== null) {
-        return {
-          emptyValue: emptyValueForSchema(sub),
-          clearable: isClearableSchema(sub),
-        };
-      }
+    if (sub !== null) {
+      return {
+        emptyValue: emptyValueForSchema(sub),
+        clearable: isClearableSchema(sub),
+      };
     }
     // Schema-less heuristic: a null initial value is the one runtime signal
     // that null round-trips, so it drives both answers.
     return initialValue === null
       ? { emptyValue: null, clearable: true }
       : { emptyValue: undefined, clearable: false };
-  }, [formSchema, path, initialValue]);
+  }, [sub, initialValue]);
 
   const debounceMs = options?.debounceMs;
   // One debouncer per (form, path, debounceMs) identity, created lazily on

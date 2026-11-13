@@ -62,6 +62,20 @@
 - `fillAndBlurField` returns the fill's result when the blur gate did
   not validate (`mode: "onChange"`, or after a submit), instead of
   `undefined` for a pass it had started.
+- `persistForm`'s gap fill walks through lazy, intersection and
+  preprocess schemas again (the container check above stopped at them),
+  so a plain required key under those roots is filled as in 0.26.0.
+- `useField`'s `emptyValue` and `clearable` for a key shared by union
+  variants follow the variant the live discriminant selects, so clearing
+  a nullable field on the active variant writes `null` instead of the
+  first variant's `undefined`.
+- A write the path walker refuses (a string key into an array, a key
+  through a `Date`) no longer rebuilds the values spine, so watchers do
+  not fire, the op log is kept and spine server verdicts stay, matching
+  the "value left unchanged" warning.
+- A field-scoped pass that ran the full parse takes the parse's current
+  message for an out-of-scope key it already held, so a cross-field rule
+  with a dynamic message no longer shows the stale text.
 
 ## 0.26.0 — 2026-11-12
 

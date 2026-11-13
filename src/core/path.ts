@@ -148,11 +148,14 @@ const writeIntoArray = (
   prefix: readonly PathSegment[],
 ): readonly unknown[] => {
   const length = Math.max(arr.length, index + 1);
-  return Array.from({ length }, (_, i) =>
-    i === index
-      ? writeSegments(arr[i], rest, value, kindAt, [...prefix, index])
-      : arr[i],
-  );
+  const child = writeSegments(arr[index], rest, value, kindAt, [
+    ...prefix,
+    index,
+  ]);
+  // A refused write deeper down hands the same slot back; the array is
+  // then unchanged too, so callers see the same reference (see setValue).
+  if (index < arr.length && child === arr[index]) return arr;
+  return Array.from({ length }, (_, i) => (i === index ? child : arr[i]));
 };
 
 const refusesHugeIndex = (index: number): boolean => {
@@ -201,10 +204,18 @@ const writeSegments = (
       return obj;
     }
     const key = String(head);
-    return {
-      ...obj,
-      [key]: writeSegments(obj[key], rest, value, kindAt, [...prefix, key]),
-    };
+    const child = writeSegments(obj[key], rest, value, kindAt, [
+      ...prefix,
+      key,
+    ]);
+    // Same reference back from a refused write below: keep this object
+    // too, so a refused write rebuilds no spine (watchers used to fire,
+    // the op log was cleared and spine server verdicts released although
+    // "value left unchanged" had just been warned). An undefined written
+    // over an ABSENT key is a real change (it creates the key), so the
+    // own-key check keeps that write.
+    if (child === obj[key] && Object.hasOwn(obj, key)) return obj;
+    return { ...obj, [key]: child };
   }
 
   // Absent (or non-container) value: create a container. The schema's
