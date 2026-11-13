@@ -74,15 +74,17 @@ export type ParsedNumberText =
   | Readonly<{ kind: "empty" }>
   | Readonly<{ kind: "number"; value: number }>
   // Text that doesn't parse to a finite number — partial entries ("-",
-  // "1.", "1e") or Infinity.
+  // "1e") or Infinity. A trailing point ("1.") is a number (1): the
+  // text input keeps the point, the form already holds the value.
   | Readonly<{ kind: "invalid" }>;
 
 // Plain decimal notation: an optional sign, digits with an optional
-// fraction (a bare ".5" included; a trailing "1." is a partial entry, as
-// the type above says, not the number 1), an optional exponent. Number()
-// alone also reads hex, octal and binary literals ("0x10" stored 16) and
-// the Infinity spellings, none of which a person means in a number field.
-const DECIMAL_TEXT = /^[+-]?(\d+(\.\d+)?|\.\d+)([eE][+-]?\d+)?$/;
+// fraction (a bare ".5" included, and a trailing "1." reads as 1: the
+// number is live while a text input keeps the point on screen), an
+// optional exponent. Number() alone also reads hex, octal and binary
+// literals ("0x10" stored 16) and the Infinity spellings, none of which a
+// person means in a number field.
+const DECIMAL_TEXT = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
 
 // The single rule for turning user-typed text into a numeric field value:
 // whitespace counts as empty (Number("  ") is 0), only decimal notation

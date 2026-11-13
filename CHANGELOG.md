@@ -48,8 +48,6 @@
   step value that changed while an async rule was in flight is validated
   again instead of advancing on the stale verdict. With no steps defined
   `next()` no longer sets the index to -1.
-- `parseNumberText("1.")` is a partial entry, as the docs and the type
-  comment always said, not the number 1.
 - `dateToInputText` reads a date-only string (a persisted draft's
   `"2026-03-01"`) as the calendar date it spells; the Date constructor
   parsed it as UTC midnight, which rendered the previous day west of UTC.

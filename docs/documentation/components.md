@@ -171,7 +171,7 @@ The paths tuple is part of the hook contract: it expands to exactly that many `u
 A controlled `<input type="number">` coerces away intermediate text like `-` or `1e` mid-keystroke. `NumberField` avoids this by rendering a `type="text"` input with `inputMode="decimal"` and keeping the raw text locally while you type:
 
 - Each keystroke that parses to a **finite** number is pushed to the form immediately.
-- Partial entries (`-`, `1.`, `1e`) are kept as local text and the form value is left untouched.
+- Partial entries (`-`, `1e`) are kept as local text and the form value is left untouched. A trailing decimal point (`1.`) keeps its text while the form already holds `1`.
 - Whitespace-only text counts as **empty** and writes the field's `emptyValue` (`Number("  ")` would otherwise be `0`).
 - `Infinity` is rejected, kept as text and never pushed.
 - On blur, the display snaps to the canonical form value.

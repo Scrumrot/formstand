@@ -165,9 +165,10 @@ describe("useFormSteps", () => {
 });
 
 describe("input text helpers", () => {
-  it("parseNumberText reads a trailing dot as a partial entry", () => {
-    expect(parseNumberText("1.")).toEqual({ kind: "invalid" });
-    expect(parseNumberText("85000.")).toEqual({ kind: "invalid" });
+  it("parseNumberText reads a trailing point as the number, as documented", () => {
+    expect(parseNumberText("1.")).toEqual({ kind: "number", value: 1 });
+    expect(parseNumberText("85000.")).toEqual({ kind: "number", value: 85000 });
+    expect(parseNumberText("1e")).toEqual({ kind: "invalid" });
     expect(parseNumberText("1.5")).toEqual({ kind: "number", value: 1.5 });
     expect(parseNumberText(".5")).toEqual({ kind: "number", value: 0.5 });
     expect(parseNumberText("1e3")).toEqual({ kind: "number", value: 1000 });
