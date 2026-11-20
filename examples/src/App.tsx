@@ -303,7 +303,7 @@ const BLURBS: Readonly<Record<TabKey, string>> = {
   onboardingShadcn:
     "The Onboarding feature module over shadcn/ui: collapsible sections with dirty/valid badges.",
   genMui:
-    "formstand-gen's untouched --layout module --ui mui --sections panel output; CI regenerates it and fails on drift.",
+    "formstand-gen's untouched --layout module --ui mui --sections panel output, with the emergency contacts array as the CLI's default table; CI regenerates it and fails on drift.",
   genKitchenSink:
     "Every schema kind and wrapper the CLI supports in one form, tuple included, as untouched --layout module output.",
   genDeepNest:

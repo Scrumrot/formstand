@@ -166,6 +166,24 @@ the CLI from two UI targets to six, and make the docs match.
   2.95 MB to 381 kB), accessibility wiring on every hand-rolled demo through
   one shared helper, coverage thresholds raised to within three points of
   measured.
+- Tables for arrays of objects (formstand-cli 0.26.0, 2026-11-12): an array
+  whose rows are flat objects, every field a scalar within the path budget
+  and none carrying a component override, generates as a table by default
+  in both layouts and every kit. One column per row field with the label
+  in the header, a `{Stem}Row` component per row binding each cell through
+  `useField` (or `useVariantField` for an array inside a union variant), a
+  Remove column, and the array-level error plus the Add button under the
+  table; antd goes through its data-driven `Table` with one cell component
+  per column. Rows that hold a nested object, array, union or tuple, or an
+  overridden leaf, keep the card layout; `layout: "cards"` in the config
+  opts a tabular array back out, and `layout: "table"` on rows the table
+  cannot host is a generation-time error naming the field. Custom
+  templates render the cells with the plain controls, named through
+  `aria-label`, because a template describes a labeled field and a cell
+  has no label of its own. The playground's generated Onboarding demos
+  show the emergency contacts array as that table in MUI, Chakra, Mantine
+  and Ant Design. Shipped under `### Changed` because the default moved,
+  so the CLI's 1.0 soak counts from this release.
 
 ## Now
 
@@ -184,21 +202,6 @@ the CLI from two UI targets to six, and make the docs match.
   root audit; the docs build, the link check, three painted pages from the
   preview server and the dev server were checked under it. The override
   goes when VitePress 2 lands.
-- **Tables for arrays of objects, the next CLI cycle (started
-  2026-11-10).** An array whose rows are flat objects, every field a
-  scalar within the path budget and none carrying a component override,
-  generates as a table by default: one column per row field with the
-  label in the header, a `{Stem}Row` component per row binding each cell
-  through `useField` (or `useVariantField` for an array inside a union
-  variant), a Remove column, and the array-level error plus the Add
-  button under the table. Rows that hold a nested object, array, union or
-  tuple, or an overridden leaf, keep the card layout, and
-  `fields: { "crew": { layout: "cards" } }` opts a tabular array back
-  out; `layout: "table"` on rows the table cannot host is a
-  generation-time error naming the field. Every kit, antd through its
-  data-driven `Table` with one cell component per column. Order: the
-  single-file layout, then the module layout, then the docs and the
-  playground.
 
 ## Toward 1.0
 
@@ -272,6 +275,18 @@ people who ask for formstand.
   and generated files in users' repos have it baked in. If it ever moves it
   needs the deprecation policy below, and `fs-` is a poor replacement because
   it reads as "filesystem" to JS developers.
+- **Ejecting the store: generated output with no formstand dependency.**
+  Raised on 2026-11-10 alongside tables: the generated files would carry
+  their own zustand store and bindings so a consumer installs zod and
+  zustand only. Parked. The runtime behind `useField` (typed paths, the
+  validation scheduler with its async scope, field-array row ids, the
+  introspection that decides empty values and containers) is close to
+  nine thousand lines, so an eject is either that much vendored code in
+  every generated project, where no patch release can reach it, or a
+  second binding target that reimplements a subset and drifts from the
+  library with every fix. zod and zustand stay peer dependencies either
+  way, so the saving is one package. What would reopen it: a consumer who
+  cannot take a runtime dependency at all, which no one has asked for.
 
 ## Internal debt
 
