@@ -151,6 +151,16 @@ counterparts, and is honest about what has none.
 Each of these is covered properly in the
 [documentation](https://scrumrot.github.io/formstand/documentation/).
 
+## With a coding agent
+
+The docs are published for agents as well as people. [llms.txt](https://scrumrot.github.io/formstand/llms.txt) indexes every documentation page at a plain-markdown URL, and [llms-full.txt](https://scrumrot.github.io/formstand/llms-full.txt) is the whole set in one file. The repository also ships a [skill](./skills/formstand/SKILL.md) that teaches an assistant the library's shapes, the generator's flags, and the mistakes an assistant trained on other form libraries makes here:
+
+```bash
+npx skills add Scrumrot/formstand
+```
+
+Or copy `skills/formstand/` into your agent's skills folder (`.claude/skills/` for Claude Code).
+
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md). Note the repo has three independent npm roots

@@ -58,3 +58,5 @@ When something is wrong, [the devtools panel](./devtools) shows you the form rat
 **Have a schema and want the form now?** Go straight to [formstand-cli](./cli/), or try the [Schema builder](https://scrumrot.github.io/formstand/examples/#/schema-builder), which runs the real generator in your browser.
 
 **Looking for a specific signature?** The [API reference](./api/) lists every method, hook, component, and type.
+
+**Working with a coding agent?** Every page here is also served as plain markdown at its URL plus `.md`. [llms.txt](https://scrumrot.github.io/formstand/llms.txt) indexes them one line per page, [llms-full.txt](https://scrumrot.github.io/formstand/llms-full.txt) is the whole set in one file, and the repository ships a [skill](https://github.com/Scrumrot/formstand/tree/main/skills/formstand) that teaches an agent the library's shapes and the mistakes to avoid: `npx skills add Scrumrot/formstand` installs it.

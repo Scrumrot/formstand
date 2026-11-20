@@ -13,7 +13,7 @@
 // dash), so a reimplementation would be a second thing to keep in sync.
 //
 // Run AFTER `npm run docs:build`.
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 
 const root = process.cwd();
@@ -60,6 +60,13 @@ const problems = [];
 
 const check = (file, raw, target) => {
   const [page, anchor] = target.split("#");
+  // A file the build emits as itself rather than as a page: llms.txt and
+  // the per-page markdown copies that generate-llms-txt.mjs writes. Its
+  // presence is the whole check, since plain text has no anchor ids.
+  const asFile = join(dist, page);
+  if (page !== "" && existsSync(asFile) && statSync(asFile).isFile()) {
+    return;
+  }
   const html = htmlFor(page);
   if (html === undefined) {
     problems.push(`${relative(root, file)} -> ${raw}: no such page`);

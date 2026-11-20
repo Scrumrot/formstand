@@ -184,6 +184,20 @@ the CLI from two UI targets to six, and make the docs match.
   show the emergency contacts array as that table in MUI, Chakra, Mantine
   and Ant Design. Shipped under `### Changed` because the default moved,
   so the CLI's 1.0 soak counts from this release.
+- The agent-facing surface (2026-11-20): every documentation page is
+  published as plain markdown at its URL plus `.md`, with `llms.txt` (an
+  index, one line per page, in sidebar order) and `llms-full.txt` (the
+  whole set in one file) at the site root, written by
+  `scripts/generate-llms-txt.mjs` after the VitePress build from the same
+  sidebar module the site reads, so a new page is indexed with no second
+  edit; each rendered page points at its copy through the `alternate` and
+  `describedby` link relations the llms.txt convention names. Beside it,
+  `skills/formstand/SKILL.md`, an Agent Skills file that teaches an
+  assistant the library's shapes, the generator's flags and the mistakes
+  an assistant trained on react-hook-form makes here, installable with
+  `npx skills add Scrumrot/formstand`. Decided as the first step toward
+  outside use: new library adoption now runs through assistants, and one
+  that has not seen formstand writes `register` shapes against it.
 
 ## Now
 
