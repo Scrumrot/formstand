@@ -298,3 +298,25 @@ describe("CheckboxField", () => {
     expect(label?.textContent).toContain("I agree");
   });
 });
+
+describe("parseNumberText on a long digit run", () => {
+  // CodeQL alert 5: the decimal pattern let a dotless digit run split
+  // between two digit groups every possible way, quadratic on a run that
+  // fails at its end (80,000 digits and a letter took nine seconds; the
+  // bound below is generous for a loaded CI runner and still two orders
+  // of magnitude under the old cost).
+  it("rejects 80,000 digits and a letter in linear time", () => {
+    const text = `${"0".repeat(80_000)}a`;
+    const started = performance.now();
+    expect(parseNumberText(text)).toEqual({ kind: "invalid" });
+    expect(performance.now() - started).toBeLessThan(100);
+  });
+
+  it("still accepts the same shapes", () => {
+    expect(parseNumberText("1.")).toEqual({ kind: "number", value: 1 });
+    expect(parseNumberText(".5")).toEqual({ kind: "number", value: 0.5 });
+    expect(parseNumberText("-1.5e3")).toEqual({ kind: "number", value: -1500 });
+    expect(parseNumberText("0x10")).toEqual({ kind: "invalid" });
+    expect(parseNumberText("1e")).toEqual({ kind: "invalid" });
+  });
+});

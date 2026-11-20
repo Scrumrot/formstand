@@ -83,8 +83,11 @@ export type ParsedNumberText =
 // number is live while a text input keeps the point on screen), an
 // optional exponent. Number() alone also reads hex, octal and binary
 // literals ("0x10" stored 16) and the Infinity spellings, none of which a
-// person means in a number field.
-const DECIMAL_TEXT = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
+// person means in a number field. The fraction digits sit under the
+// point: an earlier `\d+\.?\d*` let a dotless digit run split between
+// the two groups every possible way, which was quadratic on a long run
+// that fails at its end (80,000 digits and a letter took nine seconds).
+const DECIMAL_TEXT = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
 
 // The single rule for turning user-typed text into a numeric field value:
 // whitespace counts as empty (Number("  ") is 0), only decimal notation

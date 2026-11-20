@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- `parseNumberText` (and so `NumberField` and `numberInputProps`) read a
+  long digit run that fails at its end in quadratic time; the decimal
+  pattern no longer lets a dotless run split between two digit groups.
+  It accepts exactly the strings it did before.
+
 ## 0.26.2 — 2026-11-13
 
 ### Fixed
